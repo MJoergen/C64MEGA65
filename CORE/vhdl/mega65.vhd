@@ -313,6 +313,16 @@ signal hr_crt_readdata            : std_logic_vector(15 downto 0);
 signal hr_crt_readdatavalid       : std_logic;
 signal hr_crt_waitrequest         : std_logic;
 
+signal hr_buf_write               : std_logic;
+signal hr_buf_read                : std_logic;
+signal hr_buf_address             : std_logic_vector(31 downto 0);
+signal hr_buf_writedata           : std_logic_vector(15 downto 0);
+signal hr_buf_byteenable          : std_logic_vector( 1 downto 0);
+signal hr_buf_burstcount          : std_logic_vector( 7 downto 0);
+signal hr_buf_readdata            : std_logic_vector(15 downto 0);
+signal hr_buf_readdatavalid       : std_logic;
+signal hr_buf_waitrequest         : std_logic;
+
 signal hr_hdmi_ff                 : std_logic;
 
 ---------------------------------------------------------------------------------------------
@@ -357,8 +367,10 @@ subtype C_MENU_OSM_SCALING is natural range 91 downto 83;
 -- RAMs for the C64
 signal qnice_c64_ram_we             : std_logic;
 signal qnice_c64_ram_data           : std_logic_vector(7 downto 0);  -- The actual RAM of the C64
+signal qnice_c64_mount_buf_ram_wait : std_logic;
 signal qnice_c64_mount_buf_ram_we   : std_logic;
-signal qnice_c64_mount_buf_ram_data : std_logic_vector(7 downto 0);  -- Disk mount buffer
+signal qnice_c64_mount_buf_ram_ce   : std_logic;
+signal qnice_c64_mount_buf_ram_data : std_logic_vector(15 downto 0);  -- Disk mount buffer
 
 -- Custom Kernal access: C64 ROM
 signal qnice_c64rom_we              : std_logic;
@@ -402,6 +414,16 @@ signal qnice_crt_qnice_we           : std_logic;
 signal qnice_crt_qnice_data         : std_logic_vector(15 downto 0);
 signal qnice_crt_qnice_wait         : std_logic;
 
+signal qnice_buf_write              : std_logic;
+signal qnice_buf_read               : std_logic;
+signal qnice_buf_address            : std_logic_vector(31 downto 0);
+signal qnice_buf_writedata          : std_logic_vector(15 downto 0);
+signal qnice_buf_byteenable         : std_logic_vector( 1 downto 0);
+signal qnice_buf_burstcount         : std_logic_vector( 7 downto 0);
+signal qnice_buf_readdata           : std_logic_vector(15 downto 0);
+signal qnice_buf_readdatavalid      : std_logic;
+signal qnice_buf_waitrequest        : std_logic;
+
 begin
 
    -- MMCME2_ADV clock generators
@@ -442,42 +464,40 @@ begin
       end if;
    end process;
 
-   i_avm_arbit : entity work.avm_arbit
+   i_avm_arbit_general : entity work.avm_arbit_general
       generic map (
-         G_ADDRESS_SIZE  => 32,
-         G_DATA_SIZE     => 16
+         G_NUM_SLAVES   => 3,
+         G_ADDRESS_SIZE => 32,
+         G_DATA_SIZE    => 16
       )
       port map (
-         clk_i                  => hr_clk_i,
-         rst_i                  => hr_rst_i,
-         s0_avm_write_i         => hr_reu_write,
-         s0_avm_read_i          => hr_reu_read,
-         s0_avm_address_i       => hr_reu_address,
-         s0_avm_writedata_i     => hr_reu_writedata,
-         s0_avm_byteenable_i    => hr_reu_byteenable,
-         s0_avm_burstcount_i    => hr_reu_burstcount,
-         s0_avm_readdata_o      => hr_reu_readdata,
-         s0_avm_readdatavalid_o => hr_reu_readdatavalid,
-         s0_avm_waitrequest_o   => hr_reu_waitrequest,
-         s1_avm_write_i         => hr_crt_write,
-         s1_avm_read_i          => hr_crt_read,
-         s1_avm_address_i       => hr_crt_address,
-         s1_avm_writedata_i     => hr_crt_writedata,
-         s1_avm_byteenable_i    => hr_crt_byteenable,
-         s1_avm_burstcount_i    => hr_crt_burstcount,
-         s1_avm_readdata_o      => hr_crt_readdata,
-         s1_avm_readdatavalid_o => hr_crt_readdatavalid,
-         s1_avm_waitrequest_o   => hr_crt_waitrequest,
-         m_avm_write_o          => hr_core_write_o,
-         m_avm_read_o           => hr_core_read_o,
-         m_avm_address_o        => hr_core_address_o,
-         m_avm_writedata_o      => hr_core_writedata_o,
-         m_avm_byteenable_o     => hr_core_byteenable_o,
-         m_avm_burstcount_o     => hr_core_burstcount_o,
-         m_avm_readdata_i       => hr_core_readdata_i,
-         m_avm_readdatavalid_i  => hr_core_readdatavalid_i,
-         m_avm_waitrequest_i    => hr_core_waitrequest_i
-      ); -- i_avm_arbit
+         clk_i                 => hr_clk_i,
+         rst_i                 => hr_rst_i,
+         s_avm_write_i         => hr_reu_write         & hr_crt_write         & hr_buf_write,
+         s_avm_read_i          => hr_reu_read          & hr_crt_read          & hr_buf_read,
+         s_avm_address_i       => hr_reu_address       & hr_crt_address       & hr_buf_address,
+         s_avm_writedata_i     => hr_reu_writedata     & hr_crt_writedata     & hr_buf_writedata,
+         s_avm_byteenable_i    => hr_reu_byteenable    & hr_crt_byteenable    & hr_buf_byteenable,
+         s_avm_burstcount_i    => hr_reu_burstcount    & hr_crt_burstcount    & hr_buf_burstcount,
+         s_avm_readdata_o(3*16-1 downto 2*16) => hr_reu_readdata,
+         s_avm_readdata_o(2*16-1 downto 1*16) => hr_crt_readdata,
+         s_avm_readdata_o(1*16-1 downto 0*16) => hr_buf_readdata,
+         s_avm_readdatavalid_o(2) => hr_reu_readdatavalid,
+         s_avm_readdatavalid_o(1) => hr_crt_readdatavalid,
+         s_avm_readdatavalid_o(0) => hr_buf_readdatavalid,
+         s_avm_waitrequest_o(2)   => hr_reu_waitrequest,
+         s_avm_waitrequest_o(1)   => hr_crt_waitrequest,
+         s_avm_waitrequest_o(0)   => hr_buf_waitrequest,
+         m_avm_write_o         => hr_core_write_o,
+         m_avm_read_o          => hr_core_read_o,
+         m_avm_address_o       => hr_core_address_o,
+         m_avm_writedata_o     => hr_core_writedata_o,
+         m_avm_byteenable_o    => hr_core_byteenable_o,
+         m_avm_burstcount_o    => hr_core_burstcount_o,
+         m_avm_readdata_i      => hr_core_readdata_i,
+         m_avm_readdatavalid_i => hr_core_readdatavalid_i,
+         m_avm_waitrequest_i   => hr_core_waitrequest_i
+      ); -- i_avm_arbit_general
 
    ---------------------------------------------------------------------------------------------
    -- main_clk (C64 MiSTer Core clock)
@@ -794,6 +814,7 @@ begin
       qnice_c64_ram_we           <= '0';
       qnice_c64_qnice_ce         <= '0';
       qnice_c64_qnice_we         <= '0';
+      qnice_c64_mount_buf_ram_ce <= '0';
       qnice_c64_mount_buf_ram_we <= '0';
       qnice_prg_qnice_ce         <= '0';
       qnice_prg_qnice_we         <= '0';
@@ -826,8 +847,10 @@ begin
 
          -- Disk mount buffer RAM
          when C_DEV_C64_MOUNT =>
+            qnice_c64_mount_buf_ram_ce <= qnice_dev_ce_i;
             qnice_c64_mount_buf_ram_we <= qnice_dev_we_i;
-            qnice_dev_data_o           <= x"00" & qnice_c64_mount_buf_ram_data;
+            qnice_dev_data_o           <= qnice_c64_mount_buf_ram_data;
+            qnice_dev_wait_o           <= qnice_c64_mount_buf_ram_wait;
 
          -- PRG file loader (*.PRG)
          when C_DEV_C64_PRG =>
@@ -865,24 +888,28 @@ begin
       end case;
    end process core_specific_devices;
 
-   -- For now: Let's use a simple BRAM (using only 1 port will make a BRAM) for buffering
-   -- the disks that we are mounting. This will work for D64 only.
-   -- @TODO: Switch to HyperRAM at a later stage
-   mount_buf_ram : entity work.dualport_2clk_ram
-      generic map (
-         ADDR_WIDTH        => 18,
-         DATA_WIDTH        => 8,
-         MAXIMUM_SIZE      => 197376,        -- maximum size of any D64 image: non-standard 40-track incl. 768 error bytes
-         FALLING_A         => true
-      )
+   -- Disk images are stored in HyperRAM due to their size.
+   i_qnice2hyperram : entity work.qnice2hyperram
       port map (
-         -- QNICE only
-         clock_a           => qnice_clk_i,
-         address_a         => qnice_dev_addr_i(17 downto 0),
-         data_a            => qnice_dev_data_i(7 downto 0),
-         wren_a            => qnice_c64_mount_buf_ram_we,
-         q_a               => qnice_c64_mount_buf_ram_data
-      ); -- mount_buf_ram
+         clk_i                 => qnice_clk_i,
+         rst_i                 => qnice_rst_i,
+         s_qnice_wait_o        => qnice_c64_mount_buf_ram_wait,
+         s_qnice_address_i     => std_logic_vector(unsigned(qnice_dev_addr_i) + X"00300000"),
+         s_qnice_cs_i          => qnice_c64_mount_buf_ram_ce,
+         s_qnice_write_i       => qnice_c64_mount_buf_ram_we,
+         s_qnice_writedata_i   => qnice_dev_data_i,
+         s_qnice_byteenable_i  => "11",
+         s_qnice_readdata_o    => qnice_c64_mount_buf_ram_data,
+         m_avm_write_o         => qnice_buf_write,
+         m_avm_read_o          => qnice_buf_read,
+         m_avm_address_o       => qnice_buf_address,
+         m_avm_writedata_o     => qnice_buf_writedata,
+         m_avm_byteenable_o    => qnice_buf_byteenable,
+         m_avm_burstcount_o    => qnice_buf_burstcount,
+         m_avm_readdata_i      => qnice_buf_readdata,
+         m_avm_readdatavalid_i => qnice_buf_readdatavalid,
+         m_avm_waitrequest_i   => qnice_buf_waitrequest
+      ); -- i_qnice2hyperram
 
    -- PRG file loader
    i_prg_loader : entity work.prg_loader
@@ -1059,6 +1086,39 @@ begin
          m_avm_readdata_i      => hr_reu_readdata,
          m_avm_readdatavalid_i => hr_reu_readdatavalid
       ); -- main2hr_avm_fifo
+
+   qnice2hr_avm_fifo : entity work.avm_fifo
+      generic map (
+         G_WR_DEPTH     => 16,
+         G_RD_DEPTH     => 16,
+         G_FILL_SIZE    => 1,
+         G_ADDRESS_SIZE => 32,
+         G_DATA_SIZE    => 16
+      )
+      port map (
+         s_clk_i               => qnice_clk_i,
+         s_rst_i               => qnice_rst_i,
+         s_avm_waitrequest_o   => qnice_buf_waitrequest,
+         s_avm_write_i         => qnice_buf_write,
+         s_avm_read_i          => qnice_buf_read,
+         s_avm_address_i       => qnice_buf_address,
+         s_avm_writedata_i     => qnice_buf_writedata,
+         s_avm_byteenable_i    => qnice_buf_byteenable,
+         s_avm_burstcount_i    => qnice_buf_burstcount,
+         s_avm_readdata_o      => qnice_buf_readdata,
+         s_avm_readdatavalid_o => qnice_buf_readdatavalid,
+         m_clk_i               => hr_clk_i,
+         m_rst_i               => hr_rst_i,
+         m_avm_waitrequest_i   => hr_buf_waitrequest,
+         m_avm_write_o         => hr_buf_write,
+         m_avm_read_o          => hr_buf_read,
+         m_avm_address_o       => hr_buf_address,
+         m_avm_writedata_o     => hr_buf_writedata,
+         m_avm_byteenable_o    => hr_buf_byteenable,
+         m_avm_burstcount_o    => hr_buf_burstcount,
+         m_avm_readdata_i      => hr_buf_readdata,
+         m_avm_readdatavalid_i => hr_buf_readdatavalid
+      ); -- qnice2hr_avm_fifo
 
 end architecture synthesis;
 
