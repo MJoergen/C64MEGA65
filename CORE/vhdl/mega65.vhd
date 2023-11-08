@@ -365,8 +365,6 @@ constant C_MENU_VGA_15KHZCS   : natural := 77;
 subtype C_MENU_OSM_SCALING is natural range 91 downto 83;
 
 -- RAMs for the C64
-signal qnice_c64_ram_we             : std_logic;
-signal qnice_c64_ram_data           : std_logic_vector(7 downto 0);  -- The actual RAM of the C64
 signal qnice_c64_mount_buf_ram_wait : std_logic;
 signal qnice_c64_mount_buf_ram_we   : std_logic;
 signal qnice_c64_mount_buf_ram_ce   : std_logic;
@@ -811,7 +809,6 @@ begin
       -- avoid latches
       qnice_dev_data_o           <= x"EEEE";
       qnice_dev_wait_o           <= '0';
-      qnice_c64_ram_we           <= '0';
       qnice_c64_qnice_ce         <= '0';
       qnice_c64_qnice_we         <= '0';
       qnice_c64_mount_buf_ram_ce <= '0';
@@ -849,7 +846,7 @@ begin
          when C_DEV_C64_MOUNT =>
             qnice_c64_mount_buf_ram_ce <= qnice_dev_ce_i;
             qnice_c64_mount_buf_ram_we <= qnice_dev_we_i;
-            qnice_dev_data_o           <= qnice_c64_mount_buf_ram_data;
+            qnice_dev_data_o           <= X"00" & qnice_c64_mount_buf_ram_data(7 downto 0); -- TBD
             qnice_dev_wait_o           <= qnice_c64_mount_buf_ram_wait;
 
          -- PRG file loader (*.PRG)
@@ -894,11 +891,11 @@ begin
          clk_i                 => qnice_clk_i,
          rst_i                 => qnice_rst_i,
          s_qnice_wait_o        => qnice_c64_mount_buf_ram_wait,
-         s_qnice_address_i     => std_logic_vector(unsigned(qnice_dev_addr_i) + X"00300000"),
+         s_qnice_address_i     => "0000000000" & C_HMAP_BUF(9 downto 6) & qnice_dev_addr_i(17 downto 0),
          s_qnice_cs_i          => qnice_c64_mount_buf_ram_ce,
          s_qnice_write_i       => qnice_c64_mount_buf_ram_we,
          s_qnice_writedata_i   => qnice_dev_data_i,
-         s_qnice_byteenable_i  => "11",
+         s_qnice_byteenable_i  => "01", -- TBD: Rewrite to make use of the entire HyperRAM word.
          s_qnice_readdata_o    => qnice_c64_mount_buf_ram_data,
          m_avm_write_o         => qnice_buf_write,
          m_avm_read_o          => qnice_buf_read,

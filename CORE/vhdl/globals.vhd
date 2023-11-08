@@ -95,6 +95,7 @@ constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";    
 ----------------------------------------------------------------------------------------------------------
 
 constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework
+constant C_HMAP_BUF              : std_logic_vector(15 downto 0) := x"0180";     -- Contains disk buffer
 constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Contains CRT files
 
 ----------------------------------------------------------------------------------------------------------
