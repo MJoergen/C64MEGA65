@@ -26,6 +26,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V5.1-A14 | 02/04/24 | b272f0d | "Attack of the PETSCII Robots REU version" HyperRAM issue: Another attempt to fix issue #127
 | WIP-V5.1-A15 | 02/17/24 | 3ade5ea | "Attack of the PETSCII Robots REU version" HyperRAM issue: Another attempt to fix issue #127
 | WIP-V5.1-RC2 | 03/03/24 | 40c7b1a | Release Candidate 2
+| WIP-V5.1-A16 | 03/14/24 | 71e1e99 | Disable RTC. Part of debugging issue #133
 
 ## Version 5
 
