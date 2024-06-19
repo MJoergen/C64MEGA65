@@ -243,7 +243,7 @@ entity mega65_r6 is
       i2c_sda_io              : inout std_logic;
 
       -- Debug.
-      dbg_io_11_io            : inout std_logic;
+      dbg_11_io               : inout std_logic;
 
       -- SDRAM - 32M x 16 bit, 3.3V VCC. U44 = IS42S16320F-6BL
       sdram_clk_o             : out   std_logic;
@@ -536,7 +536,7 @@ begin
    vdac_psave_n_o        <= '1';
    hdmi_hiz_en_o         <= '0'; -- HDMI is 50 ohm terminated.
    hdmi_ls_oe_n_o        <= '0'; -- Enable HDMI output
-   dbg_io_11_io          <= 'Z';
+   dbg_11_io             <= 'Z';
 
    eth_clock_o           <= '0';
    eth_led2_o            <= '0';
