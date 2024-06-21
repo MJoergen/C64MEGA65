@@ -10,7 +10,7 @@ vcom -2008 \
    ../../../M2M/vhdl/memory/avm_arbit.vhd \
    ../../../M2M/vhdl/memory/avm_fifo.vhd \
    ../../../M2M/vhdl/2port2clk_ram.vhd \
-   ../../../M2M/vhdl/qnice2hyperram.vhd \
+   ../../../M2M/vhdl/qnice2avalon.vhd \
    ../crt_cacher.vhd \
    ../crt_parser.vhd \
    ../crt_loader.vhd \

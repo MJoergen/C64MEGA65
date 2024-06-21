@@ -133,7 +133,7 @@ begin
    qnice_mem_byteenable <= "10" when qnice_addr_i(0) = '1'
                      else "01";
 
-   i_qnice2hyperram : entity work.qnice2hyperram
+   i_qnice2avalon : entity work.qnice2avalon
       port map (
          clk_i                 => qnice_clk_i,
          rst_i                 => qnice_rst_i,
@@ -153,7 +153,7 @@ begin
          m_avm_readdata_i      => qnice_avm_readdata_i,
          m_avm_readdatavalid_i => qnice_avm_readdatavalid_i,
          m_avm_waitrequest_i   => qnice_avm_waitrequest_i
-      ); -- i_qnice2hyperram
+      ); -- i_qnice2avalon
 
 end architecture synthesis;
 

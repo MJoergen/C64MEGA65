@@ -11,7 +11,7 @@ SRC += ../../../M2M/vhdl/memory/avm_rom.vhd
 SRC += ../../../M2M/vhdl/memory/avm_memory.vhd
 SRC += ../../../M2M/vhdl/cdc_slow.vhd
 SRC += ../../../M2M/vhdl/cdc_stable.vhd
-SRC += ../../../M2M/vhdl/qnice2hyperram.vhd
+SRC += ../../../M2M/vhdl/qnice2avalon.vhd
 SRC += ../../../M2M/vhdl/tdp_ram.vhd
 
 SRC += ../../../../65c02/src/datapath/alu.vhd
