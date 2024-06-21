@@ -3,11 +3,11 @@
 --
 -- This module loads and caches the active banks into BRAM.
 --
--- This module runs entirely in the HyperRAM clock domain, and therefore the BRAM
+-- This module runs entirely in the external memory clock domain, and therefore the BRAM
 -- is placed outside this module.
 --
--- It acts as a master towards both the HyperRAM and the BRAM.
--- The maximum amount of addressable HyperRAM is 22 address bits @ 16 data bits, i.e. 8 MB of memory.
+-- It acts as a master towards both the external memory and the BRAM.
+-- The maximum amount of addressable external memory is 22 address bits @ 16 data bits, i.e. 8 MB of memory.
 -- Not all this memory will be available to the CRT file, though.
 -- The CRT file is stored in little-endian format, i.e. even address bytes are in bits 7-0 and
 -- odd address bytes are in bits 15-8.
@@ -47,7 +47,7 @@ entity crt_cacher is
       cache_addr_lo_o     : out std_logic_vector(G_CACHE_SIZE-1 downto 0);
       cache_addr_hi_o     : out std_logic_vector(G_CACHE_SIZE-1 downto 0);
 
-      -- Connect to HyperRAM
+      -- Connect to external memory
       avm_write_o         : out std_logic;
       avm_read_o          : out std_logic;
       avm_address_o       : out std_logic_vector(21 downto 0);
@@ -76,7 +76,7 @@ architecture synthesis of crt_cacher is
    signal state         : t_state := IDLE_ST;
 
    type mem_t is array (natural range <>) of std_logic_vector(22 downto 0);
-   -- Contains byte-address in HyperRAM of each bank location.
+   -- Contains byte-address in external memory of each bank location.
    signal lobanks : mem_t(0 to 63) := (others => (others => '0'));
    signal hibanks : mem_t(0 to 63) := (others => (others => '0'));
 
@@ -103,7 +103,7 @@ begin
                         or lo_load = '1'
              else '0';
 
-   -- Here we store the mapping from "Bank number" to "Address in HyperRAM".
+   -- Here we store the mapping from "Bank number" to "Address in external memory".
    p_banks : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -139,7 +139,7 @@ begin
                   -- Starting load to HI bank
                   avm_write_o        <= '0';
                   avm_read_o         <= '1';
-                  -- Convert byte address to word address used by HyperRAM
+                  -- Convert byte address to word address used by external memory
                   avm_address_o      <= hibanks(to_integer(bank_hi_i))(22 downto 1);
                   avm_burstcount_o   <= X"80"; -- Read 256 bytes
                   bram_address_o     <= (others => '1');
@@ -148,7 +148,7 @@ begin
                   -- Starting load to LO bank
                   avm_write_o        <= '0';
                   avm_read_o         <= '1';
-                  -- Convert byte address to word address used by HyperRAM
+                  -- Convert byte address to word address used by external memory
                   avm_address_o      <= lobanks(to_integer(bank_lo_i))(22 downto 1);
                   avm_burstcount_o   <= X"80"; -- Read 256 bytes
                   bram_address_o     <= (others => '1');
@@ -245,7 +245,7 @@ begin
                   end if;
                end loop;
                if not found_v then
-                  -- No, we must load the bank from HyperRAM
+                  -- No, we must load the bank from external memory
                   cache_addr_lo_o <= next_cache_addr_lo;
                   cache_ram_lo(to_integer(next_cache_addr_lo)) <= bank_lo_i;
                   -- The cache replacement policy is very simple:
@@ -269,7 +269,7 @@ begin
                   end if;
                end loop;
                if not found_v then
-                  -- No, we must load the bank from HyperRAM
+                  -- No, we must load the bank from external memory
                   cache_addr_hi_o <= next_cache_addr_hi;
                   cache_ram_hi(to_integer(next_cache_addr_hi)) <= bank_hi_i;
                   -- The cache replacement policy is very simple:

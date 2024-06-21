@@ -463,7 +463,7 @@ architecture synthesis of main is
          dma_dout    : out std_logic_vector( 7 downto 0);
          dma_din     : in  std_logic_vector( 7 downto 0);
          dma_we      : out std_logic;
-         -- Connect to the HyperRAM
+         -- Connect to the external memory
          ram_cycle   : in  std_logic;
          ram_addr    : out std_logic_vector(24 downto 0);
          ram_dout    : out std_logic_vector( 7 downto 0);
@@ -1436,7 +1436,7 @@ begin
 
    -- Consists of a three-stage pipeline:
    -- 1) i_avm_fifo does the CDC using a FIFO (as the name suggests) by utilizing Xilinx the specific "xpm_fifo_axis":
-   --    It connects to the raw HyperRAM Avalon Memory Mapped interface that M2M's arbiter offers and converts the
+   --    It connects to the raw external memory interface that M2M's arbiter offers and converts the
    --    signals into the core's clock domain
    -- 2) i_avm_cache optimizes latency, particularly for longer, subsequent RAM accesses
    -- 3) i_reu_mapper: Converts the Avalon interface into the interface that the REU expects PLUS

@@ -2,7 +2,7 @@
 -- Commodore 64 for MEGA65
 --
 -- This is a replacement for MiSTer's cartridge.v file. The reason for the replacement
--- is that we use a different mapping from Bank Number to HyperRAM address.
+-- is that we use a different mapping from Bank Number to external memory address.
 --
 -- done by MJoergen in 2023 and licensed under GPL v3
 ----------------------------------------------------------------------------------

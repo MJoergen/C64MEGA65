@@ -52,11 +52,11 @@ architecture synthesis of sw_cartridge_csr is
    signal qnice_csr_data          : std_logic_vector(15 downto 0);
    signal qnice_req_status        : std_logic_vector( 3 downto 0);
 
-   signal qnice_hr_ce             : std_logic;
-   signal qnice_hr_addr           : std_logic_vector(31 downto 0);
-   signal qnice_hr_wait           : std_logic;
-   signal qnice_hr_data           : std_logic_vector(15 downto 0);
-   signal qnice_hr_byteenable     : std_logic_vector( 1 downto 0);
+   signal qnice_mem_ce            : std_logic;
+   signal qnice_mem_addr          : std_logic_vector(31 downto 0);
+   signal qnice_mem_wait          : std_logic;
+   signal qnice_mem_data          : std_logic_vector(15 downto 0);
+   signal qnice_mem_byteenable    : std_logic_vector( 1 downto 0);
 
    constant C_ERROR_STRINGS : string_vector(0 to 15) := (
      "OK                 \n",
@@ -110,11 +110,11 @@ begin
       if qnice_ce_i = '1' then
          case qnice_csr is
             when '0' =>
-               qnice_wait_o <= qnice_hr_wait;
+               qnice_wait_o <= qnice_mem_wait;
                if qnice_addr_i(0) = '1' then
-                  qnice_data_o <= X"00" & qnice_hr_data(15 downto 8);
+                  qnice_data_o <= X"00" & qnice_mem_data(15 downto 8);
                else
-                  qnice_data_o <= X"00" & qnice_hr_data(7 downto 0);
+                  qnice_data_o <= X"00" & qnice_mem_data(7 downto 0);
                end if;
 
             when '1' =>
@@ -127,23 +127,23 @@ begin
       end if;
    end process p_read;
 
-   qnice_hr_ce <= qnice_ce_i and not qnice_csr;
-   qnice_hr_addr <= std_logic_vector(("00000" & unsigned(qnice_addr_i(27 downto 1))) +
+   qnice_mem_ce <= qnice_ce_i and not qnice_csr;
+   qnice_mem_addr <= std_logic_vector(("00000" & unsigned(qnice_addr_i(27 downto 1))) +
                                      ("0000000000" & unsigned(G_BASE_ADDRESS)));
-   qnice_hr_byteenable <= "10" when qnice_addr_i(0) = '1'
+   qnice_mem_byteenable <= "10" when qnice_addr_i(0) = '1'
                      else "01";
 
    i_qnice2hyperram : entity work.qnice2hyperram
       port map (
          clk_i                 => qnice_clk_i,
          rst_i                 => qnice_rst_i,
-         s_qnice_wait_o        => qnice_hr_wait,
-         s_qnice_address_i     => qnice_hr_addr,
-         s_qnice_cs_i          => qnice_hr_ce,
+         s_qnice_wait_o        => qnice_mem_wait,
+         s_qnice_address_i     => qnice_mem_addr,
+         s_qnice_cs_i          => qnice_mem_ce,
          s_qnice_write_i       => qnice_we_i,
          s_qnice_writedata_i   => qnice_data_i(7 downto 0) & qnice_data_i(7 downto 0),
-         s_qnice_byteenable_i  => qnice_hr_byteenable,
-         s_qnice_readdata_o    => qnice_hr_data,
+         s_qnice_byteenable_i  => qnice_mem_byteenable,
+         s_qnice_readdata_o    => qnice_mem_data,
          m_avm_write_o         => qnice_avm_write_o,
          m_avm_read_o          => qnice_avm_read_o,
          m_avm_address_o       => qnice_avm_address_o,

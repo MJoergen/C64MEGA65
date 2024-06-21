@@ -772,51 +772,51 @@ begin
          G_BOARD => "MEGA65_R5"
       )
       port map (
-         clk_i                   => clk_i,
+         clk_i                    => clk_i,
 
          -- Share clock and reset with the framework
-         main_clk_o              => main_clk,     -- CORE's 54 MHz clock
-         main_rst_o              => main_rst,     -- CORE's reset, synchronized
+         main_clk_o               => main_clk,     -- CORE's 54 MHz clock
+         main_rst_o               => main_rst,     -- CORE's reset, synchronized
 
          --------------------------------------------------------------------------------------------------------
          -- QNICE Clock Domain
          --------------------------------------------------------------------------------------------------------
 
          -- Provide QNICE clock to the core: for the vdrives as well as for RAMs and ROMs
-         qnice_clk_i             => qnice_clk,
-         qnice_rst_i             => qnice_rst,
+         qnice_clk_i              => qnice_clk,
+         qnice_rst_i              => qnice_rst,
 
          -- Video and audio mode control
-         qnice_dvi_o             => qnice_dvi,
-         qnice_video_mode_o      => qnice_video_mode,
-         qnice_scandoubler_o     => qnice_scandoubler,
-         qnice_csync_o           => qnice_csync,
-         qnice_audio_mute_o      => qnice_audio_mute,
-         qnice_audio_filter_o    => qnice_audio_filter,
-         qnice_zoom_crop_o       => qnice_zoom_crop,
-         qnice_ascal_mode_o      => qnice_ascal_mode,
-         qnice_ascal_polyphase_o => qnice_ascal_polyphase,
-         qnice_ascal_triplebuf_o => qnice_ascal_triplebuf,
-         qnice_retro15khz_o      => qnice_retro15khz,
-         qnice_osm_cfg_scaling_o => qnice_osm_cfg_scaling,
+         qnice_dvi_o              => qnice_dvi,
+         qnice_video_mode_o       => qnice_video_mode,
+         qnice_scandoubler_o      => qnice_scandoubler,
+         qnice_csync_o            => qnice_csync,
+         qnice_audio_mute_o       => qnice_audio_mute,
+         qnice_audio_filter_o     => qnice_audio_filter,
+         qnice_zoom_crop_o        => qnice_zoom_crop,
+         qnice_ascal_mode_o       => qnice_ascal_mode,
+         qnice_ascal_polyphase_o  => qnice_ascal_polyphase,
+         qnice_ascal_triplebuf_o  => qnice_ascal_triplebuf,
+         qnice_retro15khz_o       => qnice_retro15khz,
+         qnice_osm_cfg_scaling_o  => qnice_osm_cfg_scaling,
 
          -- Flip joystick ports
-         qnice_flip_joyports_o   => qnice_flip_joyports,
+         qnice_flip_joyports_o    => qnice_flip_joyports,
 
          -- On-Screen-Menu selections (in QNICE clock domain)
-         qnice_osm_control_i     => qnice_osm_control_m,
+         qnice_osm_control_i      => qnice_osm_control_m,
 
          -- QNICE general purpose register
-         qnice_gp_reg_i          => qnice_gp_reg,
+         qnice_gp_reg_i           => qnice_gp_reg,
 
          -- Core-specific devices
-         qnice_dev_id_i          => qnice_ramrom_dev,
-         qnice_dev_addr_i        => qnice_ramrom_addr,
-         qnice_dev_data_i        => qnice_ramrom_data_out,
-         qnice_dev_data_o        => qnice_ramrom_data_in,
-         qnice_dev_ce_i          => qnice_ramrom_ce,
-         qnice_dev_we_i          => qnice_ramrom_we,
-         qnice_dev_wait_o        => qnice_ramrom_wait,
+         qnice_dev_id_i           => qnice_ramrom_dev,
+         qnice_dev_addr_i         => qnice_ramrom_addr,
+         qnice_dev_data_i         => qnice_ramrom_data_out,
+         qnice_dev_data_o         => qnice_ramrom_data_in,
+         qnice_dev_ce_i           => qnice_ramrom_ce,
+         qnice_dev_we_i           => qnice_ramrom_we,
+         qnice_dev_wait_o         => qnice_ramrom_wait,
 
          --------------------------------------------------------------------------------------------------------
          -- Core Clock Domain
@@ -825,156 +825,156 @@ begin
          -- M2M's reset manager provides 2 signals:
          --    m2m:   Reset the whole machine: Core and Framework
          --    core:  Only reset the core
-         main_reset_m2m_i        => main_reset_m2m  or main_qnice_reset or main_rst,
-         main_reset_core_i       => main_reset_core or main_qnice_reset,
-         main_pause_core_i       => main_qnice_pause,
+         main_reset_m2m_i         => main_reset_m2m  or main_qnice_reset or main_rst,
+         main_reset_core_i        => main_reset_core or main_qnice_reset,
+         main_pause_core_i        => main_qnice_pause,
 
          -- On-Screen-Menu selections (in main clock domain)
-         main_osm_control_i      => main_osm_control_m,
+         main_osm_control_i       => main_osm_control_m,
 
          -- QNICE general purpose register (in main clock domain)
-         main_qnice_gp_reg_i     => main_qnice_gp_reg,
+         main_qnice_gp_reg_i      => main_qnice_gp_reg,
 
          -- Video output
-         video_clk_o             => video_clk,
-         video_rst_o             => video_rst,
-         video_ce_o              => video_ce,
-         video_ce_ovl_o          => video_ce_ovl,
-         video_red_o             => video_red,
-         video_green_o           => video_green,
-         video_blue_o            => video_blue,
-         video_vs_o              => video_vs,
-         video_hs_o              => video_hs,
-         video_hblank_o          => video_hblank,
-         video_vblank_o          => video_vblank,
+         video_clk_o              => video_clk,
+         video_rst_o              => video_rst,
+         video_ce_o               => video_ce,
+         video_ce_ovl_o           => video_ce_ovl,
+         video_red_o              => video_red,
+         video_green_o            => video_green,
+         video_blue_o             => video_blue,
+         video_vs_o               => video_vs,
+         video_hs_o               => video_hs,
+         video_hblank_o           => video_hblank,
+         video_vblank_o           => video_vblank,
 
          -- Audio output (Signed PCM)
-         main_audio_left_o       => main_audio_l,
-         main_audio_right_o      => main_audio_r,
+         main_audio_left_o        => main_audio_l,
+         main_audio_right_o       => main_audio_r,
 
          -- M2M Keyboard interface
-         main_kb_key_num_i       => main_key_num,
-         main_kb_key_pressed_n_i => main_key_pressed_n,
-         main_power_led_o        => main_power_led,
-         main_power_led_col_o    => main_power_led_col,
-         main_drive_led_o        => main_drive_led,
-         main_drive_led_col_o    => main_drive_led_col,
+         main_kb_key_num_i        => main_key_num,
+         main_kb_key_pressed_n_i  => main_key_pressed_n,
+         main_power_led_o         => main_power_led,
+         main_power_led_col_o     => main_power_led_col,
+         main_drive_led_o         => main_drive_led,
+         main_drive_led_col_o     => main_drive_led_col,
 
          -- Joysticks input
-         main_joy_1_up_n_i       => main_joy1_up_n_in,
-         main_joy_1_down_n_i     => main_joy1_down_n_in,
-         main_joy_1_left_n_i     => main_joy1_left_n_in,
-         main_joy_1_right_n_i    => main_joy1_right_n_in,
-         main_joy_1_fire_n_i     => main_joy1_fire_n_in,
-         main_joy_1_up_n_o       => main_joy1_up_n_out,
-         main_joy_1_down_n_o     => main_joy1_down_n_out,
-         main_joy_1_left_n_o     => main_joy1_left_n_out,
-         main_joy_1_right_n_o    => main_joy1_right_n_out,
-         main_joy_1_fire_n_o     => main_joy1_fire_n_out,
+         main_joy_1_up_n_i        => main_joy1_up_n_in,
+         main_joy_1_down_n_i      => main_joy1_down_n_in,
+         main_joy_1_left_n_i      => main_joy1_left_n_in,
+         main_joy_1_right_n_i     => main_joy1_right_n_in,
+         main_joy_1_fire_n_i      => main_joy1_fire_n_in,
+         main_joy_1_up_n_o        => main_joy1_up_n_out,
+         main_joy_1_down_n_o      => main_joy1_down_n_out,
+         main_joy_1_left_n_o      => main_joy1_left_n_out,
+         main_joy_1_right_n_o     => main_joy1_right_n_out,
+         main_joy_1_fire_n_o      => main_joy1_fire_n_out,
 
-         main_joy_2_up_n_i       => main_joy2_up_n_in,
-         main_joy_2_down_n_i     => main_joy2_down_n_in,
-         main_joy_2_left_n_i     => main_joy2_left_n_in,
-         main_joy_2_right_n_i    => main_joy2_right_n_in,
-         main_joy_2_fire_n_i     => main_joy2_fire_n_in,
-         main_joy_2_up_n_o       => main_joy2_up_n_out,
-         main_joy_2_down_n_o     => main_joy2_down_n_out,
-         main_joy_2_left_n_o     => main_joy2_left_n_out,
-         main_joy_2_right_n_o    => main_joy2_right_n_out,
-         main_joy_2_fire_n_o     => main_joy2_fire_n_out,
+         main_joy_2_up_n_i        => main_joy2_up_n_in,
+         main_joy_2_down_n_i      => main_joy2_down_n_in,
+         main_joy_2_left_n_i      => main_joy2_left_n_in,
+         main_joy_2_right_n_i     => main_joy2_right_n_in,
+         main_joy_2_fire_n_i      => main_joy2_fire_n_in,
+         main_joy_2_up_n_o        => main_joy2_up_n_out,
+         main_joy_2_down_n_o      => main_joy2_down_n_out,
+         main_joy_2_left_n_o      => main_joy2_left_n_out,
+         main_joy_2_right_n_o     => main_joy2_right_n_out,
+         main_joy_2_fire_n_o      => main_joy2_fire_n_out,
 
-         main_pot1_x_i           => main_pot1_x,
-         main_pot1_y_i           => main_pot1_y,
-         main_pot2_x_i           => main_pot2_x,
-         main_pot2_y_i           => main_pot2_y,
-         main_rtc_i              => main_rtc,
+         main_pot1_x_i            => main_pot1_x,
+         main_pot1_y_i            => main_pot1_y,
+         main_pot2_x_i            => main_pot2_x,
+         main_pot2_y_i            => main_pot2_y,
+         main_rtc_i               => main_rtc,
 
          --------------------------------------------------------------------------------------------------------
          -- Provide support for external memory (Avalon Memory Map)
          --------------------------------------------------------------------------------------------------------
 
-         hr_clk_i                => hr_clk,
-         hr_rst_i                => hr_rst,
-         hr_core_write_o         => hr_core_write,
-         hr_core_read_o          => hr_core_read,
-         hr_core_address_o       => hr_core_address,
-         hr_core_writedata_o     => hr_core_writedata,
-         hr_core_byteenable_o    => hr_core_byteenable,
-         hr_core_burstcount_o    => hr_core_burstcount,
-         hr_core_readdata_i      => hr_core_readdata,
-         hr_core_readdatavalid_i => hr_core_readdatavalid,
-         hr_core_waitrequest_i   => hr_core_waitrequest,
-         hr_high_i               => hr_high,
-         hr_low_i                => hr_low,
+         mem_clk_i                => hr_clk,
+         mem_rst_i                => hr_rst,
+         mem_core_write_o         => hr_core_write,
+         mem_core_read_o          => hr_core_read,
+         mem_core_address_o       => hr_core_address,
+         mem_core_writedata_o     => hr_core_writedata,
+         mem_core_byteenable_o    => hr_core_byteenable,
+         mem_core_burstcount_o    => hr_core_burstcount,
+         mem_core_readdata_i      => hr_core_readdata,
+         mem_core_readdatavalid_i => hr_core_readdatavalid,
+         mem_core_waitrequest_i   => hr_core_waitrequest,
+         mem_high_i               => hr_high,
+         mem_low_i                => hr_low,
 
          --------------------------------------------------------------------
          -- C64 specific ports that are not supported by the M2M framework
          --------------------------------------------------------------------
 
          -- CBM-488/IEC serial port
-         iec_reset_n_o           => iec_reset_n_o,
-         iec_atn_n_o             => iec_atn_n_o,
-         iec_clk_en_o            => iec_clk_en,
-         iec_clk_n_i             => iec_clk_n_i,
-         iec_clk_n_o             => iec_clk_n_o,
-         iec_data_en_o           => iec_data_en,
-         iec_data_n_i            => iec_data_n_i,
-         iec_data_n_o            => iec_data_n_o,
-         iec_srq_en_o            => iec_srq_en,
-         iec_srq_n_i             => iec_srq_n_i,
-         iec_srq_n_o             => iec_srq_n_o,
+         iec_reset_n_o            => iec_reset_n_o,
+         iec_atn_n_o              => iec_atn_n_o,
+         iec_clk_en_o             => iec_clk_en,
+         iec_clk_n_i              => iec_clk_n_i,
+         iec_clk_n_o              => iec_clk_n_o,
+         iec_data_en_o            => iec_data_en,
+         iec_data_n_i             => iec_data_n_i,
+         iec_data_n_o             => iec_data_n_o,
+         iec_srq_en_o             => iec_srq_en,
+         iec_srq_n_i              => iec_srq_n_i,
+         iec_srq_n_o              => iec_srq_n_o,
 
          -- C64 Expansion Port (aka Cartridge Port)
-         cart_en_o               => cart_en,      -- Enable port, active high
-         cart_phi2_o             => cart_phi2_o,
-         cart_dotclock_o         => cart_dotclock_o,
-         cart_dma_i              => cart_dma_i,
+         cart_en_o                => cart_en,      -- Enable port, active high
+         cart_phi2_o              => cart_phi2_o,
+         cart_dotclock_o          => cart_dotclock_o,
+         cart_dma_i               => cart_dma_i,
          --
-         cart_reset_oe_o         => cart_reset_oe,
-         cart_reset_i            => cart_reset_in,
-         cart_reset_o            => cart_reset_out,
+         cart_reset_oe_o          => cart_reset_oe,
+         cart_reset_i             => cart_reset_in,
+         cart_reset_o             => cart_reset_out,
          --
-         cart_game_oe_o          => cart_game_oe,
-         cart_game_i             => cart_game_in,
-         cart_game_o             => cart_game_out,
+         cart_game_oe_o           => cart_game_oe,
+         cart_game_i              => cart_game_in,
+         cart_game_o              => cart_game_out,
          --
-         cart_exrom_oe_o         => cart_exrom_oe,
-         cart_exrom_i            => cart_exrom_in,
-         cart_exrom_o            => cart_exrom_out,
+         cart_exrom_oe_o          => cart_exrom_oe,
+         cart_exrom_i             => cart_exrom_in,
+         cart_exrom_o             => cart_exrom_out,
          --
-         cart_nmi_oe_o           => cart_nmi_oe,
-         cart_nmi_i              => cart_nmi_in,
-         cart_nmi_o              => cart_nmi_out,
+         cart_nmi_oe_o            => cart_nmi_oe,
+         cart_nmi_i               => cart_nmi_in,
+         cart_nmi_o               => cart_nmi_out,
          --
-         cart_irq_oe_o           => cart_irq_oe,
-         cart_irq_i              => cart_irq_in,
-         cart_irq_o              => cart_irq_out,
+         cart_irq_oe_o            => cart_irq_oe,
+         cart_irq_i               => cart_irq_in,
+         cart_irq_o               => cart_irq_out,
          --
-         cart_roml_oe_o          => cart_roml_oe,
-         cart_roml_i             => cart_roml_in,
-         cart_roml_o             => cart_roml_out,
+         cart_roml_oe_o           => cart_roml_oe,
+         cart_roml_i              => cart_roml_in,
+         cart_roml_o              => cart_roml_out,
          --
-         cart_romh_oe_o          => cart_romh_oe,
-         cart_romh_i             => cart_romh_in,
-         cart_romh_o             => cart_romh_out,
+         cart_romh_oe_o           => cart_romh_oe,
+         cart_romh_i              => cart_romh_in,
+         cart_romh_o              => cart_romh_out,
          --
-         cart_ctrl_oe_o          => cart_ctrl_oe, -- 0 : tristate (i.e. input), 1 : output
-         cart_ba_i               => cart_ba_in,
-         cart_rw_i               => cart_rw_in,
-         cart_io1_i              => cart_io1_in,
-         cart_io2_i              => cart_io2_in,
-         cart_ba_o               => cart_ba_out,
-         cart_rw_o               => cart_rw_out,
-         cart_io1_o              => cart_io1_out,
-         cart_io2_o              => cart_io2_out,
+         cart_ctrl_oe_o           => cart_ctrl_oe, -- 0 : tristate (i.e. input), 1 : output
+         cart_ba_i                => cart_ba_in,
+         cart_rw_i                => cart_rw_in,
+         cart_io1_i               => cart_io1_in,
+         cart_io2_i               => cart_io2_in,
+         cart_ba_o                => cart_ba_out,
+         cart_rw_o                => cart_rw_out,
+         cart_io1_o               => cart_io1_out,
+         cart_io2_o               => cart_io2_out,
          --
-         cart_data_oe_o          => cart_data_oe, -- 0 : tristate (i.e. input), 1 : output
-         cart_d_i                => cart_d_in,
-         cart_d_o                => cart_d_out,
+         cart_data_oe_o           => cart_data_oe, -- 0 : tristate (i.e. input), 1 : output
+         cart_d_i                 => cart_d_in,
+         cart_d_o                 => cart_d_out,
          --
-         cart_addr_oe_o          => cart_addr_oe, -- 0 : tristate (i.e. input), 1 : output
-         cart_a_i                => cart_a_in,
-         cart_a_o                => cart_a_out
+         cart_addr_oe_o           => cart_addr_oe, -- 0 : tristate (i.e. input), 1 : output
+         cart_a_i                 => cart_a_in,
+         cart_a_o                 => cart_a_out
       ); -- mega65_core_inst
 
 end architecture synthesis;

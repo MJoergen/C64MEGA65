@@ -31,193 +31,193 @@ entity mega65_core is
       --------------------------------------------------------------------------------------------------------
 
       -- Get QNICE clock from the framework: for the vdrives as well as for RAMs and ROMs
-      qnice_clk_i             : in    std_logic;
-      qnice_rst_i             : in    std_logic;
+      qnice_clk_i              : in    std_logic;
+      qnice_rst_i              : in    std_logic;
 
       -- Video and audio mode control
-      qnice_dvi_o             : out   std_logic;             -- 0=HDMI (with sound), 1=DVI (no sound)
-      qnice_video_mode_o      : out   video_mode_type;       -- Defined in video_modes_pkg.vhd
-      qnice_osm_cfg_scaling_o : out   std_logic_vector(8 downto 0);
-      qnice_scandoubler_o     : out   std_logic;             -- 0 = no scandoubler, 1 = scandoubler
-      qnice_audio_mute_o      : out   std_logic;
-      qnice_audio_filter_o    : out   std_logic;
-      qnice_zoom_crop_o       : out   std_logic;
-      qnice_ascal_mode_o      : out   std_logic_vector(1 downto 0);
-      qnice_ascal_polyphase_o : out   std_logic;
-      qnice_ascal_triplebuf_o : out   std_logic;
-      qnice_retro15khz_o      : out   std_logic;             -- 0 = normal frequency, 1 = retro 15 kHz frequency
-      qnice_csync_o           : out   std_logic;             -- 0 = normal HS/VS, 1 = Composite Sync
+      qnice_dvi_o              : out   std_logic;             -- 0=HDMI (with sound), 1=DVI (no sound)
+      qnice_video_mode_o       : out   video_mode_type;       -- Defined in video_modes_pkg.vhd
+      qnice_osm_cfg_scaling_o  : out   std_logic_vector(8 downto 0);
+      qnice_scandoubler_o      : out   std_logic;             -- 0 = no scandoubler, 1 = scandoubler
+      qnice_audio_mute_o       : out   std_logic;
+      qnice_audio_filter_o     : out   std_logic;
+      qnice_zoom_crop_o        : out   std_logic;
+      qnice_ascal_mode_o       : out   std_logic_vector(1 downto 0);
+      qnice_ascal_polyphase_o  : out   std_logic;
+      qnice_ascal_triplebuf_o  : out   std_logic;
+      qnice_retro15khz_o       : out   std_logic;             -- 0 = normal frequency, 1 = retro 15 kHz frequency
+      qnice_csync_o            : out   std_logic;             -- 0 = normal HS/VS, 1 = Composite Sync
 
       -- Flip joystick ports
-      qnice_flip_joyports_o   : out   std_logic;
+      qnice_flip_joyports_o    : out   std_logic;
 
       -- On-Screen-Menu selections
-      qnice_osm_control_i     : in    std_logic_vector(255 downto 0);
+      qnice_osm_control_i      : in    std_logic_vector(255 downto 0);
 
       -- QNICE general purpose register
-      qnice_gp_reg_i          : in    std_logic_vector(255 downto 0);
+      qnice_gp_reg_i           : in    std_logic_vector(255 downto 0);
 
       -- Core-specific devices
-      qnice_dev_id_i          : in    std_logic_vector(15 downto 0);
-      qnice_dev_addr_i        : in    std_logic_vector(27 downto 0);
-      qnice_dev_data_i        : in    std_logic_vector(15 downto 0);
-      qnice_dev_data_o        : out   std_logic_vector(15 downto 0);
-      qnice_dev_ce_i          : in    std_logic;
-      qnice_dev_we_i          : in    std_logic;
-      qnice_dev_wait_o        : out   std_logic;
+      qnice_dev_id_i           : in    std_logic_vector(15 downto 0);
+      qnice_dev_addr_i         : in    std_logic_vector(27 downto 0);
+      qnice_dev_data_i         : in    std_logic_vector(15 downto 0);
+      qnice_dev_data_o         : out   std_logic_vector(15 downto 0);
+      qnice_dev_ce_i           : in    std_logic;
+      qnice_dev_we_i           : in    std_logic;
+      qnice_dev_wait_o         : out   std_logic;
 
       --------------------------------------------------------------------------------------------------------
-      -- HyperRAM Clock Domain
+      -- External memory Clock Domain
       --------------------------------------------------------------------------------------------------------
 
-      hr_clk_i                : in    std_logic;
-      hr_rst_i                : in    std_logic;
-      hr_core_write_o         : out   std_logic;
-      hr_core_read_o          : out   std_logic;
-      hr_core_address_o       : out   std_logic_vector(31 downto 0);
-      hr_core_writedata_o     : out   std_logic_vector(15 downto 0);
-      hr_core_byteenable_o    : out   std_logic_vector( 1 downto 0);
-      hr_core_burstcount_o    : out   std_logic_vector( 7 downto 0);
-      hr_core_readdata_i      : in    std_logic_vector(15 downto 0);
-      hr_core_readdatavalid_i : in    std_logic;
-      hr_core_waitrequest_i   : in    std_logic;
-      hr_high_i               : in    std_logic;             -- Core is too fast
-      hr_low_i                : in    std_logic;             -- Core is too slow
+      mem_clk_i                : in    std_logic;
+      mem_rst_i                : in    std_logic;
+      mem_core_write_o         : out   std_logic;
+      mem_core_read_o          : out   std_logic;
+      mem_core_address_o       : out   std_logic_vector(31 downto 0);
+      mem_core_writedata_o     : out   std_logic_vector(15 downto 0);
+      mem_core_byteenable_o    : out   std_logic_vector( 1 downto 0);
+      mem_core_burstcount_o    : out   std_logic_vector( 7 downto 0);
+      mem_core_readdata_i      : in    std_logic_vector(15 downto 0);
+      mem_core_readdatavalid_i : in    std_logic;
+      mem_core_waitrequest_i   : in    std_logic;
+      mem_high_i               : in    std_logic;             -- Core is too fast
+      mem_low_i                : in    std_logic;             -- Core is too slow
 
       --------------------------------------------------------------------------------------------------------
       -- Video Clock Domain
       --------------------------------------------------------------------------------------------------------
 
-      video_clk_o             : out   std_logic;
-      video_rst_o             : out   std_logic;
-      video_ce_o              : out   std_logic;
-      video_ce_ovl_o          : out   std_logic;
-      video_red_o             : out   std_logic_vector(7 downto 0);
-      video_green_o           : out   std_logic_vector(7 downto 0);
-      video_blue_o            : out   std_logic_vector(7 downto 0);
-      video_vs_o              : out   std_logic;
-      video_hs_o              : out   std_logic;
-      video_hblank_o          : out   std_logic;
-      video_vblank_o          : out   std_logic;
+      video_clk_o              : out   std_logic;
+      video_rst_o              : out   std_logic;
+      video_ce_o               : out   std_logic;
+      video_ce_ovl_o           : out   std_logic;
+      video_red_o              : out   std_logic_vector(7 downto 0);
+      video_green_o            : out   std_logic_vector(7 downto 0);
+      video_blue_o             : out   std_logic_vector(7 downto 0);
+      video_vs_o               : out   std_logic;
+      video_hs_o               : out   std_logic;
+      video_hblank_o           : out   std_logic;
+      video_vblank_o           : out   std_logic;
 
       --------------------------------------------------------------------------------------------------------
       -- Core Clock Domain
       --------------------------------------------------------------------------------------------------------
 
-      clk_i                   : in    std_logic;             -- 100 MHz clock
+      clk_i                    : in    std_logic;             -- 100 MHz clock
 
       -- Share clock and reset with the framework
-      main_clk_o              : out   std_logic;             -- CORE's clock
-      main_rst_o              : out   std_logic;             -- CORE's reset, synchronized
+      main_clk_o               : out   std_logic;             -- CORE's clock
+      main_rst_o               : out   std_logic;             -- CORE's reset, synchronized
 
       -- M2M's reset manager provides 2 signals:
       --    m2m:   Reset the whole machine: Core and Framework
       --    core:  Only reset the core
-      main_reset_m2m_i        : in    std_logic;
-      main_reset_core_i       : in    std_logic;
+      main_reset_m2m_i         : in    std_logic;
+      main_reset_core_i        : in    std_logic;
 
-      main_pause_core_i       : in    std_logic;
+      main_pause_core_i        : in    std_logic;
 
       -- On-Screen-Menu selections
-      main_osm_control_i      : in    std_logic_vector(255 downto 0);
+      main_osm_control_i       : in    std_logic_vector(255 downto 0);
 
       -- QNICE general purpose register converted to main clock domain
-      main_qnice_gp_reg_i     : in    std_logic_vector(255 downto 0);
+      main_qnice_gp_reg_i      : in    std_logic_vector(255 downto 0);
 
       -- Audio output (Signed PCM)
-      main_audio_left_o       : out   signed(15 downto 0);
-      main_audio_right_o      : out   signed(15 downto 0);
+      main_audio_left_o        : out   signed(15 downto 0);
+      main_audio_right_o       : out   signed(15 downto 0);
 
       -- M2M Keyboard interface (incl. power led and drive led)
-      main_kb_key_num_i       : in    integer range 0 to 79; -- cycles through all MEGA65 keys
-      main_kb_key_pressed_n_i : in    std_logic;             -- low active: debounced feedback: is kb_key_num_i pressed right now?
-      main_power_led_o        : out   std_logic;
-      main_power_led_col_o    : out   std_logic_vector(23 downto 0);
-      main_drive_led_o        : out   std_logic;
-      main_drive_led_col_o    : out   std_logic_vector(23 downto 0);
+      main_kb_key_num_i        : in    integer range 0 to 79; -- cycles through all MEGA65 keys
+      main_kb_key_pressed_n_i  : in    std_logic;             -- low active: debounced feedback: is kb_key_num_i pressed right now?
+      main_power_led_o         : out   std_logic;
+      main_power_led_col_o     : out   std_logic_vector(23 downto 0);
+      main_drive_led_o         : out   std_logic;
+      main_drive_led_col_o     : out   std_logic_vector(23 downto 0);
 
       -- Joysticks and paddles input
-      main_joy_1_up_n_i       : in    std_logic;
-      main_joy_1_down_n_i     : in    std_logic;
-      main_joy_1_left_n_i     : in    std_logic;
-      main_joy_1_right_n_i    : in    std_logic;
-      main_joy_1_fire_n_i     : in    std_logic;
-      main_joy_1_up_n_o       : out   std_logic;
-      main_joy_1_down_n_o     : out   std_logic;
-      main_joy_1_left_n_o     : out   std_logic;
-      main_joy_1_right_n_o    : out   std_logic;
-      main_joy_1_fire_n_o     : out   std_logic;
-      main_joy_2_up_n_i       : in    std_logic;
-      main_joy_2_down_n_i     : in    std_logic;
-      main_joy_2_left_n_i     : in    std_logic;
-      main_joy_2_right_n_i    : in    std_logic;
-      main_joy_2_fire_n_i     : in    std_logic;
-      main_joy_2_up_n_o       : out   std_logic;
-      main_joy_2_down_n_o     : out   std_logic;
-      main_joy_2_left_n_o     : out   std_logic;
-      main_joy_2_right_n_o    : out   std_logic;
-      main_joy_2_fire_n_o     : out   std_logic;
+      main_joy_1_up_n_i        : in    std_logic;
+      main_joy_1_down_n_i      : in    std_logic;
+      main_joy_1_left_n_i      : in    std_logic;
+      main_joy_1_right_n_i     : in    std_logic;
+      main_joy_1_fire_n_i      : in    std_logic;
+      main_joy_1_up_n_o        : out   std_logic;
+      main_joy_1_down_n_o      : out   std_logic;
+      main_joy_1_left_n_o      : out   std_logic;
+      main_joy_1_right_n_o     : out   std_logic;
+      main_joy_1_fire_n_o      : out   std_logic;
+      main_joy_2_up_n_i        : in    std_logic;
+      main_joy_2_down_n_i      : in    std_logic;
+      main_joy_2_left_n_i      : in    std_logic;
+      main_joy_2_right_n_i     : in    std_logic;
+      main_joy_2_fire_n_i      : in    std_logic;
+      main_joy_2_up_n_o        : out   std_logic;
+      main_joy_2_down_n_o      : out   std_logic;
+      main_joy_2_left_n_o      : out   std_logic;
+      main_joy_2_right_n_o     : out   std_logic;
+      main_joy_2_fire_n_o      : out   std_logic;
 
-      main_pot1_x_i           : in    std_logic_vector(7 downto 0);
-      main_pot1_y_i           : in    std_logic_vector(7 downto 0);
-      main_pot2_x_i           : in    std_logic_vector(7 downto 0);
-      main_pot2_y_i           : in    std_logic_vector(7 downto 0);
-      main_rtc_i              : in    std_logic_vector(64 downto 0);
+      main_pot1_x_i            : in    std_logic_vector(7 downto 0);
+      main_pot1_y_i            : in    std_logic_vector(7 downto 0);
+      main_pot2_x_i            : in    std_logic_vector(7 downto 0);
+      main_pot2_y_i            : in    std_logic_vector(7 downto 0);
+      main_rtc_i               : in    std_logic_vector(64 downto 0);
 
       -- CBM-488/IEC serial port
-      iec_reset_n_o           : out   std_logic;
-      iec_atn_n_o             : out   std_logic;
-      iec_clk_en_o            : out   std_logic;
-      iec_clk_n_i             : in    std_logic;
-      iec_clk_n_o             : out   std_logic;
-      iec_data_en_o           : out   std_logic;
-      iec_data_n_i            : in    std_logic;
-      iec_data_n_o            : out   std_logic;
-      iec_srq_en_o            : out   std_logic;
-      iec_srq_n_i             : in    std_logic;
-      iec_srq_n_o             : out   std_logic;
+      iec_reset_n_o            : out   std_logic;
+      iec_atn_n_o              : out   std_logic;
+      iec_clk_en_o             : out   std_logic;
+      iec_clk_n_i              : in    std_logic;
+      iec_clk_n_o              : out   std_logic;
+      iec_data_en_o            : out   std_logic;
+      iec_data_n_i             : in    std_logic;
+      iec_data_n_o             : out   std_logic;
+      iec_srq_en_o             : out   std_logic;
+      iec_srq_n_i              : in    std_logic;
+      iec_srq_n_o              : out   std_logic;
 
       -- C64 Expansion Port (aka Cartridge Port)
-      cart_en_o               : out   std_logic;             -- Enable port, active high
-      cart_phi2_o             : out   std_logic;
-      cart_dotclock_o         : out   std_logic;
-      cart_dma_i              : in    std_logic;
-      cart_reset_oe_o         : out   std_logic;
-      cart_reset_i            : in    std_logic;
-      cart_reset_o            : out   std_logic;
-      cart_game_oe_o          : out   std_logic;
-      cart_game_i             : in    std_logic;
-      cart_game_o             : out   std_logic;
-      cart_exrom_oe_o         : out   std_logic;
-      cart_exrom_i            : in    std_logic;
-      cart_exrom_o            : out   std_logic;
-      cart_nmi_oe_o           : out   std_logic;
-      cart_nmi_i              : in    std_logic;
-      cart_nmi_o              : out   std_logic;
-      cart_irq_oe_o           : out   std_logic;
-      cart_irq_i              : in    std_logic;
-      cart_irq_o              : out   std_logic;
-      cart_roml_oe_o          : out   std_logic;
-      cart_roml_i             : in    std_logic;
-      cart_roml_o             : out   std_logic;
-      cart_romh_oe_o          : out   std_logic;
-      cart_romh_i             : in    std_logic;
-      cart_romh_o             : out   std_logic;
-      cart_ctrl_oe_o          : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
-      cart_ba_i               : in    std_logic;
-      cart_rw_i               : in    std_logic;
-      cart_io1_i              : in    std_logic;
-      cart_io2_i              : in    std_logic;
-      cart_ba_o               : out   std_logic;
-      cart_rw_o               : out   std_logic;
-      cart_io1_o              : out   std_logic;
-      cart_io2_o              : out   std_logic;
-      cart_addr_oe_o          : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
-      cart_a_i                : in    unsigned(15 downto 0);
-      cart_a_o                : out   unsigned(15 downto 0);
-      cart_data_oe_o          : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
-      cart_d_i                : in    unsigned( 7 downto 0);
-      cart_d_o                : out   unsigned( 7 downto 0)
+      cart_en_o                : out   std_logic;             -- Enable port, active high
+      cart_phi2_o              : out   std_logic;
+      cart_dotclock_o          : out   std_logic;
+      cart_dma_i               : in    std_logic;
+      cart_reset_oe_o          : out   std_logic;
+      cart_reset_i             : in    std_logic;
+      cart_reset_o             : out   std_logic;
+      cart_game_oe_o           : out   std_logic;
+      cart_game_i              : in    std_logic;
+      cart_game_o              : out   std_logic;
+      cart_exrom_oe_o          : out   std_logic;
+      cart_exrom_i             : in    std_logic;
+      cart_exrom_o             : out   std_logic;
+      cart_nmi_oe_o            : out   std_logic;
+      cart_nmi_i               : in    std_logic;
+      cart_nmi_o               : out   std_logic;
+      cart_irq_oe_o            : out   std_logic;
+      cart_irq_i               : in    std_logic;
+      cart_irq_o               : out   std_logic;
+      cart_roml_oe_o           : out   std_logic;
+      cart_roml_i              : in    std_logic;
+      cart_roml_o              : out   std_logic;
+      cart_romh_oe_o           : out   std_logic;
+      cart_romh_i              : in    std_logic;
+      cart_romh_o              : out   std_logic;
+      cart_ctrl_oe_o           : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
+      cart_ba_i                : in    std_logic;
+      cart_rw_i                : in    std_logic;
+      cart_io1_i               : in    std_logic;
+      cart_io2_i               : in    std_logic;
+      cart_ba_o                : out   std_logic;
+      cart_rw_o                : out   std_logic;
+      cart_io1_o               : out   std_logic;
+      cart_io2_o               : out   std_logic;
+      cart_addr_oe_o           : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
+      cart_a_i                 : in    unsigned(15 downto 0);
+      cart_a_o                 : out   unsigned(15 downto 0);
+      cart_data_oe_o           : out   std_logic;             -- 0 : tristate (i.e. input), 1 : output
+      cart_d_i                 : in    unsigned( 7 downto 0);
+      cart_d_o                 : out   unsigned( 7 downto 0)
    );
 end entity mega65_core;
 
@@ -284,34 +284,34 @@ architecture synthesis of mega65_core is
    signal   main_prg_trigger_run      : std_logic;
 
    ---------------------------------------------------------------------------------------------
-   -- hr_clk
+   -- mem_clk
    ---------------------------------------------------------------------------------------------
 
-   signal   hr_core_speed : unsigned(1 downto 0);                        -- see clock.vhd for details
+   signal   mem_core_speed : unsigned(1 downto 0);                       -- see clock.vhd for details
 
-   signal   hr_reu_write         : std_logic;
-   signal   hr_reu_read          : std_logic;
-   signal   hr_reu_address       : std_logic_vector(31 downto 0);
-   signal   hr_reu_writedata     : std_logic_vector(15 downto 0);
-   signal   hr_reu_byteenable    : std_logic_vector( 1 downto 0);
-   signal   hr_reu_burstcount    : std_logic_vector( 7 downto 0);
-   signal   hr_reu_readdata      : std_logic_vector(15 downto 0);
-   signal   hr_reu_readdatavalid : std_logic;
-   signal   hr_reu_waitrequest   : std_logic;
+   signal   mem_reu_write         : std_logic;
+   signal   mem_reu_read          : std_logic;
+   signal   mem_reu_address       : std_logic_vector(31 downto 0);
+   signal   mem_reu_writedata     : std_logic_vector(15 downto 0);
+   signal   mem_reu_byteenable    : std_logic_vector( 1 downto 0);
+   signal   mem_reu_burstcount    : std_logic_vector( 7 downto 0);
+   signal   mem_reu_readdata      : std_logic_vector(15 downto 0);
+   signal   mem_reu_readdatavalid : std_logic;
+   signal   mem_reu_waitrequest   : std_logic;
 
-   signal   hr_c64_exp_port_mode : std_logic_vector( 1 downto 0);
+   signal   mem_c64_exp_port_mode : std_logic_vector( 1 downto 0);
 
-   signal   hr_crt_write         : std_logic;
-   signal   hr_crt_read          : std_logic;
-   signal   hr_crt_address       : std_logic_vector(31 downto 0);
-   signal   hr_crt_writedata     : std_logic_vector(15 downto 0);
-   signal   hr_crt_byteenable    : std_logic_vector( 1 downto 0);
-   signal   hr_crt_burstcount    : std_logic_vector( 7 downto 0);
-   signal   hr_crt_readdata      : std_logic_vector(15 downto 0);
-   signal   hr_crt_readdatavalid : std_logic;
-   signal   hr_crt_waitrequest   : std_logic;
+   signal   mem_crt_write         : std_logic;
+   signal   mem_crt_read          : std_logic;
+   signal   mem_crt_address       : std_logic_vector(31 downto 0);
+   signal   mem_crt_writedata     : std_logic_vector(15 downto 0);
+   signal   mem_crt_byteenable    : std_logic_vector( 1 downto 0);
+   signal   mem_crt_burstcount    : std_logic_vector( 7 downto 0);
+   signal   mem_crt_readdata      : std_logic_vector(15 downto 0);
+   signal   mem_crt_readdatavalid : std_logic;
+   signal   mem_crt_waitrequest   : std_logic;
 
-   signal   hr_hdmi_ff : std_logic;
+   signal   mem_hdmi_ff : std_logic;
 
    ---------------------------------------------------------------------------------------------
    -- qnice_clk
@@ -407,12 +407,12 @@ begin
    --            HDMI: Flicker-free: 0.25% slower
    clk_inst : entity work.clk
       port map (
-         sys_clk_i    => clk_i,         -- expects 100 MHz
+         sys_clk_i    => clk_i,          -- expects 100 MHz
 
-         core_speed_i => hr_core_speed, -- 0=PAL/original C64, 1=PAL/HDMI flicker-free, 2=NTSC
+         core_speed_i => mem_core_speed, -- 0=PAL/original C64, 1=PAL/HDMI flicker-free, 2=NTSC
 
-         main_clk_o   => main_clk_o,    -- core's clock
-         main_rst_o   => main_rst_o     -- core's reset, synchronized
+         main_clk_o   => main_clk_o,     -- core's clock
+         main_rst_o   => main_rst_o      -- core's reset, synchronized
       ); -- clk_inst
 
    -- Video clock is the same as core clock
@@ -420,25 +420,25 @@ begin
    video_rst_o <= main_rst_o;
 
    ---------------------------------------------------------------------------------------------
-   -- hr_clk (HyperRAM clock)
+   -- mem_clk (External memory clock)
    ---------------------------------------------------------------------------------------------
 
    -- Switch between two clock rates for the CORE, corresponding to frame rates that
    -- closely "embrace" the output rate of exactly 50 Hz (determined by the HDMI resolution).
-   hr_core_speed_proc : process (hr_clk_i)
+   mem_core_speed_proc : process (mem_clk_i)
    begin
-      if rising_edge(hr_clk_i) then
-         if hr_low_i = '1' then     -- the core is too slow ...
-            hr_core_speed <= "00";  -- ... switch to PAL original (50.124 Hz)
+      if rising_edge(mem_clk_i) then
+         if mem_low_i = '1' then     -- the core is too slow ...
+            mem_core_speed <= "00";  -- ... switch to PAL original (50.124 Hz)
          end if;
-         if hr_high_i = '1' then    -- the core is too fast ...
-            hr_core_speed <= "01";  -- ... switch to PAL slow (49.999 Hz)
+         if mem_high_i = '1' then    -- the core is too fast ...
+            mem_core_speed <= "01";  -- ... switch to PAL slow (49.999 Hz)
          end if;
-         if hr_hdmi_ff = '0' then
-            hr_core_speed <= "00";
+         if mem_hdmi_ff = '0' then
+            mem_core_speed <= "00";
          end if;
       end if;
-   end process hr_core_speed_proc;
+   end process mem_core_speed_proc;
 
    avm_arbit_inst : entity work.avm_arbit
       generic map (
@@ -447,35 +447,35 @@ begin
          G_DATA_SIZE    => 16
       )
       port map (
-         clk_i                  => hr_clk_i,
-         rst_i                  => hr_rst_i,
-         s0_avm_write_i         => hr_reu_write,
-         s0_avm_read_i          => hr_reu_read,
-         s0_avm_address_i       => hr_reu_address,
-         s0_avm_writedata_i     => hr_reu_writedata,
-         s0_avm_byteenable_i    => hr_reu_byteenable,
-         s0_avm_burstcount_i    => hr_reu_burstcount,
-         s0_avm_readdata_o      => hr_reu_readdata,
-         s0_avm_readdatavalid_o => hr_reu_readdatavalid,
-         s0_avm_waitrequest_o   => hr_reu_waitrequest,
-         s1_avm_write_i         => hr_crt_write,
-         s1_avm_read_i          => hr_crt_read,
-         s1_avm_address_i       => hr_crt_address,
-         s1_avm_writedata_i     => hr_crt_writedata,
-         s1_avm_byteenable_i    => hr_crt_byteenable,
-         s1_avm_burstcount_i    => hr_crt_burstcount,
-         s1_avm_readdata_o      => hr_crt_readdata,
-         s1_avm_readdatavalid_o => hr_crt_readdatavalid,
-         s1_avm_waitrequest_o   => hr_crt_waitrequest,
-         m_avm_write_o          => hr_core_write_o,
-         m_avm_read_o           => hr_core_read_o,
-         m_avm_address_o        => hr_core_address_o,
-         m_avm_writedata_o      => hr_core_writedata_o,
-         m_avm_byteenable_o     => hr_core_byteenable_o,
-         m_avm_burstcount_o     => hr_core_burstcount_o,
-         m_avm_readdata_i       => hr_core_readdata_i,
-         m_avm_readdatavalid_i  => hr_core_readdatavalid_i,
-         m_avm_waitrequest_i    => hr_core_waitrequest_i
+         clk_i                  => mem_clk_i,
+         rst_i                  => mem_rst_i,
+         s0_avm_write_i         => mem_reu_write,
+         s0_avm_read_i          => mem_reu_read,
+         s0_avm_address_i       => mem_reu_address,
+         s0_avm_writedata_i     => mem_reu_writedata,
+         s0_avm_byteenable_i    => mem_reu_byteenable,
+         s0_avm_burstcount_i    => mem_reu_burstcount,
+         s0_avm_readdata_o      => mem_reu_readdata,
+         s0_avm_readdatavalid_o => mem_reu_readdatavalid,
+         s0_avm_waitrequest_o   => mem_reu_waitrequest,
+         s1_avm_write_i         => mem_crt_write,
+         s1_avm_read_i          => mem_crt_read,
+         s1_avm_address_i       => mem_crt_address,
+         s1_avm_writedata_i     => mem_crt_writedata,
+         s1_avm_byteenable_i    => mem_crt_byteenable,
+         s1_avm_burstcount_i    => mem_crt_burstcount,
+         s1_avm_readdata_o      => mem_crt_readdata,
+         s1_avm_readdatavalid_o => mem_crt_readdatavalid,
+         s1_avm_waitrequest_o   => mem_crt_waitrequest,
+         m_avm_write_o          => mem_core_write_o,
+         m_avm_read_o           => mem_core_read_o,
+         m_avm_address_o        => mem_core_address_o,
+         m_avm_writedata_o      => mem_core_writedata_o,
+         m_avm_byteenable_o     => mem_core_byteenable_o,
+         m_avm_burstcount_o     => mem_core_burstcount_o,
+         m_avm_readdata_i       => mem_core_readdata_i,
+         m_avm_readdatavalid_i  => mem_core_readdatavalid_i,
+         m_avm_waitrequest_i    => mem_core_waitrequest_i
       ); -- avm_arbit_inst
 
    ---------------------------------------------------------------------------------------------
@@ -880,7 +880,7 @@ begin
 
    -- For now: Let's use a simple BRAM (using only 1 port will make a BRAM) for buffering
    -- the disks that we are mounting. This will work for D64 only.
-   -- @TODO: Switch to HyperRAM at a later stage
+   -- @TODO: Switch to external memory at a later stage
    mount_buf_ram_inst : entity work.dualport_2clk_ram
       generic map (
          ADDR_WIDTH   => 18,
@@ -922,8 +922,8 @@ begin
    -- Dual Clocks
    ---------------------------------------------------------------------------------------------
 
-   -- Clock Domain Crossing: CORE -> HyperRAM
-   cdc_main2hr_inst : entity work.cdc_stable
+   -- Clock Domain Crossing: CORE -> External memory
+   cdc_main2mem_inst : entity work.cdc_stable
       generic map (
          G_DATA_SIZE => 3
       )
@@ -931,10 +931,10 @@ begin
          src_clk_i              => main_clk_o,
          src_data_i(1 downto 0) => std_logic_vector(to_unsigned(c64_exp_port_mode, 2)),
          src_data_i(2)          => main_osm_control_i(C_MENU_HDMI_FF),
-         dst_clk_i              => hr_clk_i,
-         dst_data_o(1 downto 0) => hr_c64_exp_port_mode,
-         dst_data_o(2)          => hr_hdmi_ff
-      ); -- cdc_main2hr_inst
+         dst_clk_i              => mem_clk_i,
+         dst_data_o(1 downto 0) => mem_c64_exp_port_mode,
+         dst_data_o(2)          => mem_hdmi_ff
+      ); -- cdc_main2mem_inst
 
    -- Clock Domain Crossing: CORE -> QNICE
    cdc_main2qnice_inst : component xpm_cdc_array_single
@@ -1027,20 +1027,20 @@ begin
          main_hi_ram_data_o  => main_crt_hi_ram_data,
          main_ioe_ram_data_o => main_crt_ioe_ram_data,
          main_iof_ram_data_o => main_crt_iof_ram_data,
-         hr_clk_i            => hr_clk_i,
-         hr_rst_i            => hr_rst_i,
-         hr_write_o          => hr_crt_write,
-         hr_read_o           => hr_crt_read,
-         hr_address_o        => hr_crt_address,
-         hr_writedata_o      => hr_crt_writedata,
-         hr_byteenable_o     => hr_crt_byteenable,
-         hr_burstcount_o     => hr_crt_burstcount,
-         hr_readdata_i       => hr_crt_readdata,
-         hr_readdatavalid_i  => hr_crt_readdatavalid,
-         hr_waitrequest_i    => hr_crt_waitrequest
+         mem_clk_i           => mem_clk_i,
+         mem_rst_i           => mem_rst_i,
+         mem_write_o         => mem_crt_write,
+         mem_read_o          => mem_crt_read,
+         mem_address_o       => mem_crt_address,
+         mem_writedata_o     => mem_crt_writedata,
+         mem_byteenable_o    => mem_crt_byteenable,
+         mem_burstcount_o    => mem_crt_burstcount,
+         mem_readdata_i      => mem_crt_readdata,
+         mem_readdatavalid_i => mem_crt_readdatavalid,
+         mem_waitrequest_i   => mem_crt_waitrequest
       ); -- sw_cartridge_wrapper_inst
 
-   avm_fifo_main2hr_inst : entity work.avm_fifo
+   avm_fifo_main2mem_inst : entity work.avm_fifo
       generic map (
          G_WR_DEPTH     => 16,
          G_RD_DEPTH     => 16,
@@ -1060,18 +1060,18 @@ begin
          s_avm_burstcount_i    => main_avm_reu_burstcount,
          s_avm_readdata_o      => main_avm_reu_readdata,
          s_avm_readdatavalid_o => main_avm_reu_readdatavalid,
-         m_clk_i               => hr_clk_i,
-         m_rst_i               => hr_rst_i,
-         m_avm_waitrequest_i   => hr_reu_waitrequest,
-         m_avm_write_o         => hr_reu_write,
-         m_avm_read_o          => hr_reu_read,
-         m_avm_address_o       => hr_reu_address,
-         m_avm_writedata_o     => hr_reu_writedata,
-         m_avm_byteenable_o    => hr_reu_byteenable,
-         m_avm_burstcount_o    => hr_reu_burstcount,
-         m_avm_readdata_i      => hr_reu_readdata,
-         m_avm_readdatavalid_i => hr_reu_readdatavalid
-      ); -- avm_fifo_main2hr_inst
+         m_clk_i               => mem_clk_i,
+         m_rst_i               => mem_rst_i,
+         m_avm_waitrequest_i   => mem_reu_waitrequest,
+         m_avm_write_o         => mem_reu_write,
+         m_avm_read_o          => mem_reu_read,
+         m_avm_address_o       => mem_reu_address,
+         m_avm_writedata_o     => mem_reu_writedata,
+         m_avm_byteenable_o    => mem_reu_byteenable,
+         m_avm_burstcount_o    => mem_reu_burstcount,
+         m_avm_readdata_i      => mem_reu_readdata,
+         m_avm_readdatavalid_i => mem_reu_readdatavalid
+      ); -- avm_fifo_main2mem_inst
 
 end architecture synthesis;
 

@@ -2,7 +2,7 @@
 -- Commodore 64 for MEGA65
 --
 -- This module acts as a bridge connection between the RAM Expansion Unit of the C64
--- and the HyperRAM device of the MEGA65.
+-- and the external memory device of the MEGA65.
 --
 -- done by MJoergen in 2023 and licensed under GPL v3
 ----------------------------------------------------------------------------------
@@ -13,7 +13,7 @@ use ieee.numeric_std_unsigned.all;
 
 entity reu_mapper is
    generic (
-      -- Configure base address within the HyperRAM device
+      -- Configure base address within the external memory device
       G_BASE_ADDRESS : std_logic_vector(31 downto 0)
    );
    port (
@@ -73,8 +73,8 @@ architecture synthesis of reu_mapper is
 begin
 
    -- This is a massive hack!
-   -- In order to prevent delays when reading from the HyperRAM
-   -- this will preemptively read from HyperRAM as soon as the
+   -- In order to prevent delays when reading from the external memory
+   -- this will preemptively read from external memory as soon as the
    -- address changes. This has the effect to "warm up" the cache.
    -- At the same time we must block the read response, so it
    -- doesn't lead to a RAM access.

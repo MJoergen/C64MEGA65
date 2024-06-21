@@ -91,7 +91,7 @@ constant C_DEV_C64_KERNAL_C64    : std_logic_vector(15 downto 0) := x"0105";    
 constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";     -- Custom Kernal: (simulated) C1541
 
 ----------------------------------------------------------------------------------------------------------
--- HyperRAM memory map (in units of 4kW)
+-- External memory map (in units of 4kW)
 ----------------------------------------------------------------------------------------------------------
 
 constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework
@@ -121,10 +121,9 @@ constant C_VD_BUFFER          : vd_buf_array := (  C_DEV_C64_MOUNT,
 type crtrom_buf_array is array(natural range<>) of std_logic_vector;
 constant ENDSTR : character := character'val(0);
 
--- Cartridges and ROMs can be stored into QNICE devices, HyperRAM and SDRAM
+-- Cartridges and ROMs can be stored into QNICE devices and external memory
 constant C_CRTROMTYPE_DEVICE     : std_logic_vector(15 downto 0) := x"0000";
-constant C_CRTROMTYPE_HYPERRAM   : std_logic_vector(15 downto 0) := x"0001";
-constant C_CRTROMTYPE_SDRAM      : std_logic_vector(15 downto 0) := x"0002";           -- @TODO/RESERVED for future R4 boards
+constant C_CRTROMTYPE_MEMORY     : std_logic_vector(15 downto 0) := x"0001";
 
 -- Types of automatically loaded ROMs:
 -- If a mandatory file is missing, then the core outputs the missing file and goes fatal
@@ -137,9 +136,9 @@ constant C_CRTROMTYPE_OPTIONAL   : std_logic_vector(15 downto 0) := x"0004";
 --    C_CRTROMS_MAN_NUM   is 0
 --    C_CRTROMS_MAN       is (x"EEEE", x"EEEE", x"EEEE")
 -- Each entry of the array consists of two constants:
---    1) Type of CRT or ROM: Load to a QNICE device, load into HyperRAM, load into SDRAM
+--    1) Type of CRT or ROM: Load to a QNICE device, load into external memory
 --    2) If (1) = QNICE device, then this is the device ID
---       else it is a 4k window in HyperRAM or in SDRAM
+--       else it is a 4k window in external memory
 -- In case we are loading to a QNICE device, then the control and status register is located at the 4k window 0xFFFF.
 -- @TODO: See @TODO for more details about the control and status register
 constant C_CRTROMS_MAN_NUM       : natural := 2;                                       -- Amount of manually loadable ROMs and carts, maximum is 16

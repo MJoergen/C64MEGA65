@@ -1,21 +1,21 @@
 ----------------------------------------------------------------------------------
 -- Commodore 64 for MEGA65
 --
--- This module reads and parses the CRT file that is loaded into the HyperRAM device.
+-- This module reads and parses the CRT file that is loaded into the external memory.
 -- It stores decoded header information in various tables.
 -- Furthermore, it loads and caches the active banks into BRAM.
 --
--- This module runs entirely in the HyperRAM clock domain, and therefore the BRAM
+-- This module runs entirely in the external memory clock domain, and therefore the BRAM
 -- is placed outside this module.
 --
--- It acts as a master towards both the HyperRAM and the BRAM.
--- The maximum amount of addressable HyperRAM is 22 address bits @ 16 data bits, i.e. 8 MB of memory.
+-- It acts as a master towards both the external memory and the BRAM.
+-- The maximum amount of addressable external memory is 22 address bits @ 16 data bits, i.e. 8 MB of memory.
 -- Not all this memory will be available to the CRT file, though.
 -- The CRT file is stored in little-endian format, i.e. even address bytes are in bits 7-0 and
 -- odd address bytes are in bits 15-8.
 --
--- req_start_i   : Asserted when the entire CRT file has been loaded verbatim into HyperRAM.
--- req_address_i : The start address in HyperRAM (in units of 16-bit words).
+-- req_start_i   : Asserted when the entire CRT file has been loaded verbatim into external memory.
+-- req_address_i : The start address in external memory (in units of 16-bit words).
 -- req_length_i  : The length of the CRT file (in units of bytes).
 --
 -- done by MJoergen in 2023 and licensed under GPL v3
@@ -36,8 +36,8 @@ entity crt_loader is
 
       -- Control interface (QNICE)
       req_start_i         : in  std_logic;
-      req_address_i       : in  std_logic_vector(21 downto 0);     -- Address in HyperRAM of start of CRT file
-      req_length_i        : in  std_logic_vector(22 downto 0);     -- Length of CRT file in HyperRAM
+      req_address_i       : in  std_logic_vector(21 downto 0);     -- Address in external memory of start of CRT file
+      req_length_i        : in  std_logic_vector(22 downto 0);     -- Length of CRT file in external memory
       resp_status_o       : out std_logic_vector( 3 downto 0);
       resp_error_o        : out std_logic_vector( 3 downto 0);
       resp_address_o      : out std_logic_vector(22 downto 0) := (others => '0');
@@ -49,7 +49,7 @@ entity crt_loader is
       cache_addr_lo_o     : out std_logic_vector(G_CACHE_SIZE-1 downto 0);
       cache_addr_hi_o     : out std_logic_vector(G_CACHE_SIZE-1 downto 0);
 
-      -- Connect to HyperRAM
+      -- Connect to external memory
       avm_write_o         : out std_logic;
       avm_read_o          : out std_logic;
       avm_address_o       : out std_logic_vector(21 downto 0);

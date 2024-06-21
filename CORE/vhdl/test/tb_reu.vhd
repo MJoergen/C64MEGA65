@@ -184,7 +184,7 @@ begin
          cpu_write(X"DF06",  hr_addr(23 downto 16));
          cpu_write(X"DF07",   length( 7 downto  0));
          cpu_write(X"DF08",   length(15 downto  8));
-         cpu_write(X"DF01", X"90"); -- Write to HyperRAM
+         cpu_write(X"DF01", X"90"); -- Write to external memory
       end procedure write_to_hr;
 
       procedure read_from_hr(ram_addr : std_logic_vector(15 downto 0);
@@ -198,7 +198,7 @@ begin
          cpu_write(X"DF06",  hr_addr(23 downto 16));
          cpu_write(X"DF07",   length( 7 downto  0));
          cpu_write(X"DF08",   length(15 downto  8));
-         cpu_write(X"DF01", X"91"); -- Read from HyperRAM
+         cpu_write(X"DF01", X"91"); -- Read from external memory
       end procedure read_from_hr;
 
    begin
