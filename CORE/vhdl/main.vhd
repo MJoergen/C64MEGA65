@@ -121,12 +121,12 @@ entity main is
       c64_ram_data_i         : in  unsigned( 7 downto 0);    -- C64 RAM data in
 
       -- C64 IEC handled by QNICE
-      c64_clk_sd_i           : in  std_logic;                -- QNICE "sd card write clock" for floppy drive internal dual clock RAM buffer
-      c64_qnice_addr_i       : in  std_logic_vector(27 downto 0);
-      c64_qnice_data_i       : in  std_logic_vector(15 downto 0);
-      c64_qnice_data_o       : out std_logic_vector(15 downto 0);
-      c64_qnice_ce_i         : in  std_logic;
-      c64_qnice_we_i         : in  std_logic;
+      iec_clk_sd_i           : in  std_logic;                -- QNICE "sd card write clock" for floppy drive internal dual clock RAM buffer
+      iec_qnice_addr_i       : in  std_logic_vector(27 downto 0);
+      iec_qnice_data_i       : in  std_logic_vector(15 downto 0);
+      iec_qnice_data_o       : out std_logic_vector(15 downto 0);
+      iec_qnice_ce_i         : in  std_logic;
+      iec_qnice_we_i         : in  std_logic;
 
       -- CBM-488/IEC serial (hardware) port
       iec_hardware_port_en_i : in  std_logic;
@@ -745,7 +745,7 @@ begin
          cass_read   => '1',              -- default is '1' according to MiSTer's c1530.vhd
 
          -- Access custom Kernal: C64's Basic and DOS
-         c64rom_clk_i   => c64_clk_sd_i,
+         c64rom_clk_i   => iec_clk_sd_i,
          c64rom_we_i    => c64rom_we_i,
          c64rom_addr_i  => c64rom_addr_i,
          c64rom_data_i  => c64rom_data_i,
@@ -1320,7 +1320,7 @@ begin
          img_type       => iec_img_type,         -- 00=1541 emulated GCR(D64), 01=1541 real GCR mode (G64,D64), 10=1581 (D81)
 
          -- QNICE SD-Card/FAT32 interface
-         clk_sys        => c64_clk_sd_i,           -- "SD card" clock for writing to the drives' internal data buffers
+         clk_sys        => iec_clk_sd_i,           -- "SD card" clock for writing to the drives' internal data buffers
 
          sd_lba         => iec_sd_lba,
          sd_blk_cnt     => iec_sd_blk_cnt,
@@ -1385,7 +1385,7 @@ begin
          BLKSZ                => 1                    -- 1 = 256 bytes block size
       )
       port map (
-         clk_qnice_i          => c64_clk_sd_i,
+         clk_qnice_i          => iec_clk_sd_i,
          clk_core_i           => clk_main_i,
          reset_core_i         => not reset_core_n,
 
@@ -1423,11 +1423,11 @@ begin
 
          -- QNICE interface (MMIO, 4k-segmented)
          -- qnice_addr is 28-bit because we have a 16-bit window selector and a 4k window: 65536*4096 = 268.435.456 = 2^28
-         qnice_addr_i         => c64_qnice_addr_i,
-         qnice_data_i         => c64_qnice_data_i,
-         qnice_data_o         => c64_qnice_data_o,
-         qnice_ce_i           => c64_qnice_ce_i,
-         qnice_we_i           => c64_qnice_we_i
+         qnice_addr_i         => iec_qnice_addr_i,
+         qnice_data_i         => iec_qnice_data_i,
+         qnice_data_o         => iec_qnice_data_o,
+         qnice_ce_i           => iec_qnice_ce_i,
+         qnice_we_i           => iec_qnice_we_i
       ); -- vdrives_inst
 
    --------------------------------------------------------------------------------------------------

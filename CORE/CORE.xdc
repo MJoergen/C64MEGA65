@@ -9,9 +9,9 @@ set_case_analysis 0 [get_pins mega65_core_inst/mem_core_speed_reg[0]/Q]
 create_generated_clock -name main_clk [get_pins mega65_core_inst/clk_inst/i_clk_c64_orig/CLKOUT0]
 
 ## CDC in IEC drives, handled manually in the source code
-set_false_path -from [get_pins -hier id1_reg[*]/C]
-set_false_path -from [get_pins -hier id2_reg[*]/C]
-set_false_path -from [get_pins -hier busy_reg/C]
+set_false_path -from [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_gcr/id1_reg[*]/C]
+set_false_path -from [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_gcr/id2_reg[*]/C]
+set_false_path -to   [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/busy_sync/s1_reg[*]/D]
 set_false_path -to   [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_track/reset_sync/s1_reg[*]/D]
 set_false_path -to   [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_track/change_sync/s1_reg[*]/D]
 set_false_path -to   [get_pins mega65_core_inst/main_inst/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_track/save_sync/s1_reg[*]/D]

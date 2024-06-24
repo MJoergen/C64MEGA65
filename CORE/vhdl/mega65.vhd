@@ -353,10 +353,8 @@ architecture synthesis of mega65_core is
    subtype  C_MENU_OSM_SCALING is natural range 91 downto 83;
 
    -- RAMs for the C64
-   signal   qnice_c64_ram_we             : std_logic;
-   signal   qnice_c64_ram_data           : std_logic_vector(7 downto 0); -- The actual RAM of the C64
-   signal   qnice_c64_mount_buf_ram_we   : std_logic;
-   signal   qnice_c64_mount_buf_ram_data : std_logic_vector(7 downto 0); -- Disk mount buffer
+   signal   qnice_c64_ram_we   : std_logic;
+   signal   qnice_c64_ram_data : std_logic_vector(7 downto 0);           -- The actual RAM of the C64
 
    -- Custom Kernal access: C64 ROM
    signal   qnice_c64rom_we        : std_logic;
@@ -377,9 +375,12 @@ architecture synthesis of mega65_core is
    signal   qnice_c64_ramx_d_from : std_logic_vector(7 downto 0);
 
    -- QNICE signals passed down to main.vhd to handle IEC drives using vdrives.vhd
-   signal   qnice_c64_qnice_ce   : std_logic;
-   signal   qnice_c64_qnice_we   : std_logic;
-   signal   qnice_c64_qnice_data : std_logic_vector(15 downto 0);
+   signal   qnice_iec_qnice_ce   : std_logic;
+   signal   qnice_iec_qnice_we   : std_logic;
+   signal   qnice_iec_qnice_data : std_logic_vector(15 downto 0);
+
+   signal   qnice_iec_mount_buf_ram_we   : std_logic;
+   signal   qnice_iec_mount_buf_ram_data : std_logic_vector(7 downto 0); -- Disk mount buffer
 
    -- QNICE signals for the PRG loader
    signal   qnice_prg_qnice_ce         : std_logic;
@@ -408,9 +409,7 @@ begin
    clk_inst : entity work.clk
       port map (
          sys_clk_i    => clk_i,          -- expects 100 MHz
-
          core_speed_i => mem_core_speed, -- 0=PAL/original C64, 1=PAL/HDMI flicker-free, 2=NTSC
-
          main_clk_o   => main_clk_o,     -- core's clock
          main_rst_o   => main_rst_o      -- core's reset, synchronized
       ); -- clk_inst
@@ -631,13 +630,13 @@ begin
          c64_ram_we_o           => main_ram_we,
          c64_ram_data_i         => unsigned(main_ram_data_to_c64),
 
-         -- C64 IEC handled by QNICE
-         c64_clk_sd_i           => qnice_clk_i, -- "sd card write clock" for floppy drive internal dual clock RAM buffer
-         c64_qnice_addr_i       => qnice_dev_addr_i,
-         c64_qnice_data_i       => qnice_dev_data_i,
-         c64_qnice_data_o       => qnice_c64_qnice_data,
-         c64_qnice_ce_i         => qnice_c64_qnice_ce,
-         c64_qnice_we_i         => qnice_c64_qnice_we,
+         -- IEC handled by QNICE
+         iec_clk_sd_i           => qnice_clk_i, -- "sd card write clock" for floppy drive internal dual clock RAM buffer
+         iec_qnice_addr_i       => qnice_dev_addr_i,
+         iec_qnice_data_i       => qnice_dev_data_i,
+         iec_qnice_data_o       => qnice_iec_qnice_data,
+         iec_qnice_ce_i         => qnice_iec_qnice_ce,
+         iec_qnice_we_i         => qnice_iec_qnice_we,
 
          -- CBM-488/IEC serial (hardware) port
          iec_hardware_port_en_i => main_osm_control_i(C_MENU_IEC),
@@ -796,13 +795,13 @@ begin
 
    core_specific_devices_proc : process (all)
    begin
-      -- avoid latches
+      -- Avoid latches
       qnice_dev_data_o           <= x"EEEE";
       qnice_dev_wait_o           <= '0';
       qnice_c64_ram_we           <= '0';
-      qnice_c64_qnice_ce         <= '0';
-      qnice_c64_qnice_we         <= '0';
-      qnice_c64_mount_buf_ram_we <= '0';
+      qnice_iec_qnice_ce         <= '0';
+      qnice_iec_qnice_we         <= '0';
+      qnice_iec_mount_buf_ram_we <= '0';
       qnice_prg_qnice_ce         <= '0';
       qnice_prg_qnice_we         <= '0';
       qnice_prg_c64ram_d_frm     <= (others => '0');
@@ -827,16 +826,16 @@ begin
             qnice_c64_ramx_d_to <= qnice_dev_data_i(7 downto 0);
             qnice_dev_data_o    <= x"00" & qnice_c64_ramx_d_from;
 
-         -- C64 IEC drives
-         when C_VD_DEVICE =>
-            qnice_c64_qnice_ce <= qnice_dev_ce_i;
-            qnice_c64_qnice_we <= qnice_dev_we_i;
-            qnice_dev_data_o   <= qnice_c64_qnice_data;
+         -- IEC drives
+         when C_DEV_IEC_VDRIVES =>
+            qnice_iec_qnice_ce <= qnice_dev_ce_i;
+            qnice_iec_qnice_we <= qnice_dev_we_i;
+            qnice_dev_data_o   <= qnice_iec_qnice_data;
 
          -- Disk mount buffer RAM
-         when C_DEV_C64_MOUNT =>
-            qnice_c64_mount_buf_ram_we <= qnice_dev_we_i;
-            qnice_dev_data_o           <= x"00" & qnice_c64_mount_buf_ram_data;
+         when C_DEV_IEC_MOUNT =>
+            qnice_iec_mount_buf_ram_we <= qnice_dev_we_i;
+            qnice_dev_data_o           <= x"00" & qnice_iec_mount_buf_ram_data;
 
          -- PRG file loader (*.PRG)
          when C_DEV_C64_PRG =>
@@ -893,8 +892,8 @@ begin
          clock_a   => qnice_clk_i,
          address_a => qnice_dev_addr_i(17 downto 0),
          data_a    => qnice_dev_data_i(7 downto 0),
-         wren_a    => qnice_c64_mount_buf_ram_we,
-         q_a       => qnice_c64_mount_buf_ram_data
+         wren_a    => qnice_iec_mount_buf_ram_we,
+         q_a       => qnice_iec_mount_buf_ram_data
       ); -- mount_buf_ram_inst
 
    -- PRG file loader

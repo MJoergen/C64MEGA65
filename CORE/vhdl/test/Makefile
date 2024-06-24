@@ -11,6 +11,7 @@ SRC += ../../../M2M/vhdl/memory/avm_rom.vhd
 SRC += ../../../M2M/vhdl/memory/avm_memory.vhd
 SRC += ../../../M2M/vhdl/cdc_slow.vhd
 SRC += ../../../M2M/vhdl/cdc_stable.vhd
+SRC += ../../../M2M/vhdl/qnice_csr.vhd
 SRC += ../../../M2M/vhdl/qnice2avalon.vhd
 SRC += ../../../M2M/vhdl/tdp_ram.vhd
 
@@ -35,8 +36,8 @@ SRC += core_sim.vhd
 
 #CRT_FILE = Super_Mario_Bros_64_v1.2_-_Zeropaige.crt
 #CRT_FILE = Final_Cartridge_III,_The_\(USA,_Europe\)_\(May_88\)_\(Program\).crt
-CRT_FILE = ar4.crt
-CRT_DIR  = $(HOME)/Downloads
+CRT_FILE = Wormhole_GMod2.crt
+CRT_DIR  = $(HOME)/Documents/MEGA65/MEGA65-SD/c64/
 
 
 #DUT ?= crt_parser
@@ -51,7 +52,10 @@ SAVE = $(TB).gtkw
 
 XPM_TOP_DIR = ../../../../../fransschreuder/xpm_vhdl
 
+ROM_FILE = ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif
+
 sim: $(SRC) xpm-obj08.cf
+	xxd -r -p $(ROM_FILE).hex $(ROM_FILE).bin
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
 	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --wave=$(WAVE) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
