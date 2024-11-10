@@ -401,10 +401,8 @@ signal qnice_crt_qnice_wait         : std_logic;
 
 begin
 
-   -- MMCME2_ADV clock generators
-   --   C64 PAL: 31.528 MHz (main) and 63.056 MHz (video)
-   --            HDMI: Flicker-free: 0.25% slower
-   clk_gen : entity work.clk
+   -- Generate core clock
+   clk_gen_inst : entity work.clk
       port map (
          sys_clk_i         => clk_i,           -- expects 100 MHz
 
@@ -426,15 +424,14 @@ begin
    -- closely "embrace" the output rate of exactly 50 Hz (determined by the HDMI resolution).
    process (hr_clk_i)
    begin
-      if rising_edge(hr_clk_i) then
-         if hr_low_i = '1' then     -- the core is too slow ...
-            hr_core_speed <= "00";  -- ... switch to PAL original (50.124 Hz)
-         end if;
-         if hr_high_i = '1' then    -- the core is too fast ...
-            hr_core_speed <= "01";  -- ... switch to PAL slow (49.999 Hz)
-         end if;
-         if hr_hdmi_ff = '0' then
-            hr_core_speed <= "00";
+      if rising_edge(mem_clk_i) then
+         -- Only update core speed when no screen tearing is happening
+         if hr_low_i = '0' and hr_high_i = '0' then
+            if hr_hdmi_ff = '1' then
+               mem_core_speed <= "01"; -- PAL exact (50.000 Hz)
+            else
+               mem_core_speed <= "00"; -- PAL original (50.124 Hz)
+            end if;
          end if;
       end if;
    end process;
