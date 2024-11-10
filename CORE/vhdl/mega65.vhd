@@ -403,8 +403,7 @@ architecture synthesis of mega65_core is
 
 begin
 
-   -- MMCME2_ADV clock generators:
-   --   @TODO YOURCORE:       54 MHz
+   -- Generate core clock
    clk_gen_inst : entity work.clk
       port map (
          sys_clk_i    => clk_i,          -- expects 100 MHz
@@ -426,14 +425,13 @@ begin
    mem_core_speed_proc : process (mem_clk_i)
    begin
       if rising_edge(mem_clk_i) then
-         if mem_low_i = '1' then     -- the core is too slow ...
-            mem_core_speed <= "00";  -- ... switch to PAL original (50.124 Hz)
-         end if;
-         if mem_high_i = '1' then    -- the core is too fast ...
-            mem_core_speed <= "01";  -- ... switch to PAL slow (49.999 Hz)
-         end if;
-         if mem_hdmi_ff = '0' then
-            mem_core_speed <= "00";
+         -- Only update core speed when no screen tearing is happening
+         if mem_low_i = '0' and mem_high_i = '0' then
+            if mem_hdmi_ff = '1' then
+               mem_core_speed <= "01"; -- PAL exact (50.000 Hz)
+            else
+               mem_core_speed <= "00"; -- PAL original (50.124 Hz)
+            end if;
          end if;
       end if;
    end process mem_core_speed_proc;
