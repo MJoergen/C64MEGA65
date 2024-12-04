@@ -284,6 +284,22 @@ begin
                   bank_hi_o <= (others => '0');
                end if;
 
+            when 21 =>
+               -- COMAL 80 - (game=0, exrom=0 = 4 16k banks)
+               if ioe_i = '1' and wr_en_i = '1' then
+                  bank_lo_o <= "00000" & wr_data_i(1 downto 0);
+                  bank_hi_o <= "00000" & wr_data_i(1 downto 0);
+                  exrom_o   <= wr_data_i(6);
+                  game_o    <= wr_data_i(6);
+               end if;
+               if cart_loading_i = '1' then
+                  game_o       <= '0';
+                  exrom_o      <= '0';
+                  cart_disable <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+               end if;
+
             when 32 =>
                -- EASYFLASH - 1mb 128x8k/64x16k, XBank format(33) looks the same
                -- upd: original Easyflash(32) boots in ultimax mode.
