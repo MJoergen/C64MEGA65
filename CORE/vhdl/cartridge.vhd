@@ -379,6 +379,24 @@ begin
                   bank_lo_o <= (others => '0');
                end if;
 
+            when 83 =>
+               -- BMP-Data Turbo 2000, (game=0, exrom=0, one 16k bank)
+               if wr_en_i = '1' then
+                  if ioe_i = '1' then
+                      game_o       <= '0';
+                      exrom_o      <= '0';
+                  elsif iof_i = '1' then
+                      game_o       <= '1';
+                      exrom_o      <= '1';
+                  end if;
+               end if;
+               if cart_loading_i = '1' then
+                  game_o       <= '0';
+                  exrom_o      <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+               end if;
+
             when others =>
                null;
          end case;
