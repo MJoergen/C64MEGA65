@@ -327,6 +327,21 @@ begin
                   bank_hi_o    <= (others => '0');
                end if;
 
+            when 28 =>
+               -- Mikro Assembler - (game=1, exrom=0, one 8k bank, $9e00-$9fff
+               -- mirrored at $de00-$dfff)
+               if cart_loading_i = '1' then
+                  game_o       <= '1';
+                  exrom_o      <= '0';
+                  cart_disable <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+                  ioe_wr_ena_o <= '0';
+                  iof_wr_ena_o <= '0';
+                  ioe_ena      <= '1';
+                  iof_ena      <= '1';
+               end if;
+
             when 32 =>
                -- EASYFLASH - 1mb 128x8k/64x16k, XBank format(33) looks the same
                -- upd: original Easyflash(32) boots in ultimax mode.
