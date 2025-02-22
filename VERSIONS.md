@@ -12,8 +12,11 @@ WIP List of things that have been already done for V5.2:
 
 * Simulated cartridges (`*.crt`) are now also supporting COMAL 80 and
   Simons BASIC
-  (GitHub Pull Requests https://github.com/MJoergen/C64MEGA65/pull/168 and)
-   https://github.com/MJoergen/C64MEGA65/pull/169
+  (GitHub Pull Requests https://github.com/MJoergen/C64MEGA65/pull/168 and
+   https://github.com/MJoergen/C64MEGA65/pull/169)
+
+@TODO: MJoergen accepted more of them into the V5.2, add description here
+in release notes and tag them with V5.2 in GitHub
 
 ## Bugfixes
 
