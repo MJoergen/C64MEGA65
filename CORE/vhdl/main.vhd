@@ -937,7 +937,7 @@ begin
                -- Ultimax mode and VIC accesses the bus: we need to translate the address, see comment about "The PLA Dissected" above
                crt_addr_bus_o <= "11" & c64_ram_addr_o(13 downto 0);
             end if;
-            core_nmi_n     <= not crt_nmi;
+            core_nmi_n     <= (not crt_nmi) and restore_key_n;
 
          when others =>
             null;
