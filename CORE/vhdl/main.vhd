@@ -395,6 +395,7 @@ architecture synthesis of main is
    signal cart_dma_n           : std_logic;
    signal cart_exrom_n         : std_logic;
    signal cart_game_n          : std_logic;
+   signal cart_ultimax_unmapped: std_logic; -- allow cartridge in Ultimax mode to map $1000-$7FFF and $A000-$CFFF
    signal data_from_cart       : unsigned(7 downto 0);
 
    -- Hardware Expansion Port: Handle specifics of certain cartridges
@@ -591,7 +592,7 @@ begin
          c64_ram_data <= x"00";
 
       -- Access the hardware cartridge
-      elsif c64_exp_port_mode_i = C_EXP_PORT_HARDWARE and (cart_roml_n = '0' or cart_romh_n = '0') then
+      elsif c64_exp_port_mode_i = C_EXP_PORT_HARDWARE and (cart_roml_n = '0' or cart_romh_n = '0' or cart_ultimax_unmapped = '1') then
          c64_ram_data <= data_from_cart;
 
       -- Access the simulated cartridge
@@ -822,6 +823,7 @@ begin
       cart_exrom_n         <= '1';
       cart_game_n          <= '1';
       data_from_cart       <= x"00";
+      cart_ultimax_unmapped <= '0';
 
       -- memory access flags
       cart_roml_n          <= not core_roml;
@@ -854,7 +856,7 @@ begin
          cart_rw_o       <= not c64_ram_we;
          cart_phi2_o     <= core_phi2;
          cart_dotclock_o <= core_dotclk;
-
+         
          -- @TODO: When implementing this, we need to perform more research. It seems that just using
          -- the C64 cores's "cpuHasBus" signal leads to less compatibility than more. For example it
          -- seemed, that the Kung Fu Flash is not working at all any more.
@@ -864,7 +866,7 @@ begin
          cart_irq_n      <= cart_irq_i;
          cart_dma_n      <= cart_dma_i;
          cart_exrom_n    <= cart_exrom_i;
-         cart_game_n     <= cart_game_i;
+         cart_game_n     <= cart_game_i;         
 
          -- @TODO: As soon as we want to support DMA-enabled cartridges,
          -- we need to treat the address bus as a bi-directional port
@@ -877,10 +879,26 @@ begin
             -- RP4 whenever the VIC-II has the bus, so they are %1111 usually.
             cart_a_o     <= "11" & c64_ram_addr_o(13 downto 0);
          end if;
+         
+         -- In Ultimax mode, the memory areas $1000-$7FFF and $A000-$CFFF are unmapped, the internal
+         -- RAMs/ROMs are deactivated so if the CPU accesses these regions (read/write) and the Ultimax
+         -- mode cartridge does nothing, then you get kind of random behavior. But if the Ultimax
+         -- cartridge decodes these addresses and acts accordingly, it can map RAM/ROM into these regions.
+         -- cart_ultimax_unmapped is a flag that states: We are in Ultimax mode AND we are currently
+         -- accessing an unmapped memory area. We are using cart_a_o so that the VIC address translation
+         -- (see above) is being used if necessary
+         if ((cart_game_n = '0') and (cart_exrom_n = '1')) and
+            ((cart_a_o >= x"1000" and cart_a_o <= x"7FFF") or
+             (cart_a_o >= x"A000" and cart_a_o <= x"CFFF"))
+         then
+            cart_ultimax_unmapped <= '1';
+         else
+            cart_ultimax_unmapped <= '0';
+         end if;
 
          -- Switch the data lines bi-directionally so that the CPU can also
          -- write to the cartridge, e.g. for bank switching
-         if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0') then
+         if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or cart_ultimax_unmapped = '1') then
             cart_data_oe_o  <= '0';  -- input
             data_from_cart  <= cart_d_i;
          else
