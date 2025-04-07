@@ -37,7 +37,8 @@ Special thanks to Antti Lukats/Trenz Electronic for helping us to stabilize
 our HyperRAM controller
 
 Thanks to Carsten Elton Sørensen (csoren) for adding simulated cartridge
-support (.crt) for COMAL 80 and Simons BASIC
+support (.crt) for COMAL 80, Simons BASIC, Waterloo Structured BASIC,
+Mikro Assembler and BMP-Data Turbo 2000.
 
 C64MEGA65:
 ----------

@@ -1,22 +1,16 @@
 WIP Version 5.2 - MONTH DAY, YEAR
 =================================
 
-This is a maintenance release with the main purpose of stabilizing the HDMI
-output by fixing the "Jail Bars" problem that mainly happened on R6 boards and
-occasionally also on R3 boards. Moreover it contains a few bug fixes and minor
-enhancements.
-
-WIP List of things that have been already done for V5.2:
+This is a maintenance release primarily aimed at stabilizing HDMI output by
+fixing the "Jail Bars"/"Bar Code" issue, which mostly occurred on R6 boards
+and occasionally on R3 boards. Additionally, it includes several bug fixes
+and adds support for a few more simulated cartridge types.
 
 ## New Features
 
-* Simulated cartridges (`*.crt`) are now also supporting COMAL 80 and
-  Simons BASIC
-  (GitHub Pull Requests https://github.com/MJoergen/C64MEGA65/pull/168 and
-   https://github.com/MJoergen/C64MEGA65/pull/169)
-
-@TODO: MJoergen accepted more of them into the V5.2, add description here
-in release notes and tag them with V5.2 in GitHub
+* Simulated cartridges (`*.crt`) are now also supporting COMAL 80,
+  Simons BASIC, Waterloo Structured BASIC, Mikro Assembler and
+  BMP-Data Turbo 2000.
 
 ## Bugfixes
 
@@ -24,6 +18,13 @@ in release notes and tag them with V5.2 in GitHub
   cause was a problem with our HyperRAM controller.
   (Fixed GitHub issues https://github.com/MJoergen/C64MEGA65/issues/145 and
    https://github.com/MJoergen/C64MEGA65/issues/166)
+
+* Quite a few `.prg` files were not loading correctly.
+  (Fixed GitHub issues https://github.com/MJoergen/C64MEGA65/issues/144 and
+   https://github.com/MJoergen/C64MEGA65/issues/174)
+
+* The RESTORE key did not work as expected in simulated cartridge mode.
+  (Fixed GitHub issue https://github.com/MJoergen/C64MEGA65/issues/175)
 
 Version 5.1 - June 28, 2024
 ===========================
