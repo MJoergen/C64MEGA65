@@ -193,6 +193,20 @@ begin
                   iof_ena    <= '1';
                end if;
 
+            when 4 =>
+               -- Simons BASIC
+               -- One low 8k bank, one upper 8k bank which is enabled or disabled
+               -- by reading or writing the IO area respectively
+               if ioe_i = '1' then
+                  game_o <= not wr_en_i;
+               end if;
+               if cart_loading_i = '1' then
+                  game_o    <= '0';
+                  exrom_o   <= '0';
+                  bank_lo_o <= (others => '0');
+                  bank_hi_o <= (others => '0');
+               end if;
+               
             when 5 =>
                -- Ocean Type 1 - (game=0, exrom=0, 128k,256k or 512k in 8k banks)
                -- BANK is written to lower 6 bits of $DE00 - bit 8 is always set
@@ -284,6 +298,50 @@ begin
                   bank_hi_o <= (others => '0');
                end if;
 
+            when 21 =>
+               -- COMAL 80 - (game=0, exrom=0 = 4 16k banks)
+               if ioe_i = '1' and wr_en_i = '1' then
+                  bank_lo_o <= "00000" & wr_data_i(1 downto 0);
+                  bank_hi_o <= "00000" & wr_data_i(1 downto 0);
+                  exrom_o   <= wr_data_i(6);
+                  game_o    <= wr_data_i(6);
+               end if;
+               if cart_loading_i = '1' then
+                  game_o       <= '0';
+                  exrom_o      <= '0';
+                  cart_disable <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+               end if;
+
+            when 22 =>
+               -- Waterloo Structured BASIC (game=1, exrom=0, two 8k banks)
+               if ioe_i = '1' then
+                  bank_lo_o <= "000000" & addr_i(1);
+                  exrom_o   <= addr_i(0);
+               end if;
+               if cart_loading_i = '1' then
+                  game_o       <= '1';
+                  exrom_o      <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+               end if;
+
+            when 28 =>
+               -- Mikro Assembler - (game=1, exrom=0, one 8k bank, $9e00-$9fff
+               -- mirrored at $de00-$dfff)
+               if cart_loading_i = '1' then
+                  game_o       <= '1';
+                  exrom_o      <= '0';
+                  cart_disable <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
+                  ioe_wr_ena_o <= '0';
+                  iof_wr_ena_o <= '0';
+                  ioe_ena      <= '1';
+                  iof_ena      <= '1';
+               end if;
+
             when 32 =>
                -- EASYFLASH - 1mb 128x8k/64x16k, XBank format(33) looks the same
                -- upd: original Easyflash(32) boots in ultimax mode.
@@ -319,6 +377,24 @@ begin
                   game_o    <= '1';
                   exrom_o   <= '0';
                   bank_lo_o <= (others => '0');
+               end if;
+
+            when 83 =>
+               -- BMP-Data Turbo 2000, (game=0, exrom=0, one 16k bank)
+               if wr_en_i = '1' then
+                  if ioe_i = '1' then
+                      game_o       <= '0';
+                      exrom_o      <= '0';
+                  elsif iof_i = '1' then
+                      game_o       <= '1';
+                      exrom_o      <= '1';
+                  end if;
+               end if;
+               if cart_loading_i = '1' then
+                  game_o       <= '0';
+                  exrom_o      <= '0';
+                  bank_lo_o    <= (others => '0');
+                  bank_hi_o    <= (others => '0');
                end if;
 
             when others =>

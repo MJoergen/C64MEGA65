@@ -1,37 +1,44 @@
 Commodore 64 for MEGA65 aka C64MEGA65
 =====================================
 
-done in 2024 by
+done in 2025 by
     * MJoergen   github.com/MJoergen
     * sy2002     github.com/sy2002     www.sy2002.de
 
-C64MEGA65 is licensed under the terms of GNU/GPL v3, for more information please read the file LICENSE.
-Parts of C64MEGA65 are licensed under other Free-software licenses as described in the source code.
+C64MEGA65 is licensed under the terms of GNU/GPL v3, for more information
+please read the file LICENSE. Parts of C64MEGA65 are licensed under other
+Free-software licenses as described in the source code.
 
-Very special thanks to AmzokPhase101 for very patiently and with great thoroughness performing
-a lot of tests plus the most intense "demo marathon" series regression tests.
-The results of the "demo marathon" tests are documented in tests/demos.md.
+Very special thanks to AmzokPhase101 for very patiently and with great
+thoroughness performing a lot of tests plus the most intense "demo marathon"
+series regression tests. The results of the "demo marathon" tests are
+documented in tests/demos.md.
 
 Special thanks for countless hours of testing, sparring, advise and other
 valuable support (in alphabetical order): adtbm, deft & lydon
 
 Special thanks to Daniel Mantione for helping us to support the EasyFlash 1CR
 
-Special thanks to Thomas 'skoe' Giesel for helping us to support the EasyFlash 3
-and to the whole EasyFlash team (https://skoe.de/easyflash/aboutus/) for creating
-this wonderful cartridge which became a movement
+Special thanks to Thomas 'skoe' Giesel for helping us to support the
+EasyFlash 3 and to the whole EasyFlash team (https://skoe.de/easyflash/aboutus/)
+for creating this wonderful cartridge which became a movement
 
 Special thanks to dbf for supporting us in navigating all questions related
-to the MEGA65's PCB and its circuitry.
+to the MEGA65's PCB and its circuitry
 
-Special thanks to sho3string for helping us to understand retro cathode ray tube monitors
-and for writing the dedicated documentation doc/retrotubes.md
+Special thanks to sho3string for helping us to understand retro cathode ray
+tube monitors and for writing the dedicated documentation doc/retrotubes.md
 
-Special thanks to Adam Barnes for not only creating the most awesome Open Source HDMI core on the
-planet (see below) but also for patiently sharing his wisdom and tirelessly supporting us in improving
+Special thanks to Adam Barnes for not only creating the most awesome Open
+Source HDMI core on the planet (see below) but also for patiently sharing his
+wisdom and tirelessly supporting us in improving our HyperRAM controller
+
+Special thanks to Antti Lukats/Trenz Electronic for helping us to stabilize
 our HyperRAM controller
 
-Special thanks to Antti Lukats/Trenz Electronic for helping us to stabilize our HyperRAM controller
+Thanks to Carsten Elton Sørensen (csoren) for adding simulated cartridge
+support (.crt) for COMAL 80, Simons BASIC, Waterloo Structured BASIC,
+Mikro Assembler and BMP-Data Turbo 2000.
 
 C64MEGA65:
 ----------
