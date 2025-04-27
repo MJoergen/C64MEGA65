@@ -77,7 +77,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 
 constant SCR_WELCOME : string :=
 
-   "\n Commodore 64 for MEGA65 Version 5.2X1\n\n" &
+   "\n Commodore 64 for MEGA65 Version 5.2X2\n\n" &
 
    " MiSTer port 2024 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n\n" &
@@ -97,7 +97,7 @@ constant SCR_WELCOME : string :=
 
 constant HELP_1 : string :=
 
-   "\n Commodore 64 for MEGA65 Version 5.2X1\n\n" &
+   "\n Commodore 64 for MEGA65 Version 5.2X2\n\n" &
 
    " MiSTer port 2024 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n" &
@@ -129,7 +129,7 @@ constant HELP_1 : string :=
 
 constant HELP_2 : string :=
 
-   "\n Commodore 64 for MEGA65 Version 5.2X1\n\n" &
+   "\n Commodore 64 for MEGA65 Version 5.2X2\n\n" &
 
    " When browsing the menu:\n\n" &
 
@@ -160,7 +160,7 @@ constant HELP_2 : string :=
 
 constant HELP_3 : string :=
 
-   "\n Commodore 64 for MEGA65 Version 5.2X1\n\n" &
+   "\n Commodore 64 for MEGA65 Version 5.2X2\n\n" &
 
    " SID:\n\n" &
 
@@ -305,7 +305,7 @@ constant SEL_CORENAME      : std_logic_vector(15 downto 0) := x"0200";
 
 -- Currently this is only used in the debug console. Use the welcome screen and the
 -- help system to display the name and version of your core to the end user
-constant CORENAME          : string := "Commodore 64 for MEGA65 Version 5.2X1";
+constant CORENAME          : string := "Commodore 64 for MEGA65 Version 5.2X2";
 
 --------------------------------------------------------------------------------------------------------------------
 -- "Help" menu / Options menu  (Selectors 0x0300 .. 0x0312): DO NOT TOUCH
