@@ -5,11 +5,22 @@ builds that were not there in older builds. By finding the last known-to-work
 build, we have a better chance to hunt down problems. The name of the build
 can be checked in the "About & Help" menu of the core.
 
-## Version 5.2
+## Version 5.2Xn
+
+Special test builds for AmokPhaze101. They are branched directly from the V5.2
+release, so we might document them in a future inofficial.md for Version 5.3
+or Version 6.
+
 | Name          | Date     | Commit   | Comment
 |---------------|----------|----------|--------------------------------------
-| WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
+| V5.2X1        | 04/27/25 |          | Disable RTC via tape port
+
+## Version 5.2
+
+| Name          | Date     | Commit   | Comment
+|---------------|----------|----------|--------------------------------------
 | WIP-V5.1-A1   | 07/09/24 | f4df717b | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
+| WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
 
 ## Version 5.1
 

@@ -741,7 +741,7 @@ begin
          -- Cassette drive
          cass_write  => cass_write,       -- output
          cass_motor  => cass_motor,       -- output
-         cass_sense  => cass_rtc,         -- input
+         cass_sense  => '1',              -- input: low active
          cass_read   => '1',              -- default is '1' according to MiSTer's c1530.vhd
 
          -- Access custom Kernal: C64's Basic and DOS
