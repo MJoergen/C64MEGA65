@@ -14,7 +14,7 @@ or Version 6.
 | Name          | Date     | Commit  | Comment
 |---------------|----------|---------|--------------------------------------
 | V5.2X1        | 04/26/25 | 9b50d8c | Disable RTC via tape port
-| V5.2X2        | 04/27/25 | 480543b | New CIA version from MiSTer upstream: https://github.com/MiSTer-devel/C64_MiSTer/issues/162
+| V5.2X2        | 04/27/25 | 4add6e2 | New CIA version from MiSTer upstream: https://github.com/MiSTer-devel/C64_MiSTer/issues/162
 
 ## Version 5.2
 
