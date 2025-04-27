@@ -8,8 +8,8 @@ can be checked in the "About & Help" menu of the core.
 ## Version 5.2
 | Name          | Date     | Commit   | Comment
 |---------------|----------|----------|--------------------------------------
-| WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
 | WIP-V5.1-A1   | 07/09/24 | f4df717b | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
+| WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
 
 ## Version 5.1
 

@@ -7,7 +7,7 @@ great accuracy and sublime compatibility on your
 To get a glimpse of what the C64 core can do for you,
 [watch this trailer on YouTube](https://youtu.be/n3ke0alwjds?si=RT6c1nxfgn12dWsv).
 Go to the MEGA65 Filehost to
-[download the most recent version 5.1](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
+[download the most recent version 5.2](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
 of the C64 core.
 If you are in a hurry or have issues, read the
 [FAQ - Frequently Asked Questions](FAQ.md). If you are a
@@ -15,7 +15,7 @@ If you are in a hurry or have issues, read the
 and want to build the C64 core by yourself then head to our
 [developer documentation](doc/developer.md).
 You can also
-[learn more what's new in Version 5.1](VERSIONS.md).
+[learn more what's new in Version 5.2](VERSIONS.md).
 Otherwise, scroll down and enjoy the user's manual.
 
 ![Commodore64](doc/c64.jpg)
@@ -42,7 +42,7 @@ the C64 core.](https://c64.mega65.org)**
 Features
 --------
 
-With our [Release 5.1](VERSIONS.md), we are striving for a **retro C64 PAL
+With our [Release 5.2](VERSIONS.md), we are striving for a **retro C64 PAL
 experience**: The core turns your MEGA65 into a Commodore 64 with a C1541
 drive (you can mount `*.d64`) images. It supports the following hardware
 ports of the MEGA65:
@@ -127,9 +127,9 @@ Important: If you use VGA displays or analog retro monitors, please switch off
 
 ### Constraints and Roadmap
 
-Our Release 5.1 is a mature release. Thanks to all the folks who
+Our Release 5.2 is a mature release. Thanks to all the folks who
 [contributed](AUTHORS) to the core, it is incredibly compatible to an original
-Commodore 64. With our Release 5.1 you can play nearly all the available games
+Commodore 64. With our Release 5.2 you can play nearly all the available games
 and watch almost all demos ever written for the C64. You can plug nearly
 every hardware cartridge ever made for the C64 into the MEGA65's expansion
 port and enjoy working/playing with it and you can work with any IEC device
