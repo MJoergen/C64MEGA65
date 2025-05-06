@@ -133,7 +133,7 @@ and watch almost all demos ever written for the C64. You can plug nearly
 every hardware cartridge ever made for the C64 into the MEGA65's expansion
 port and enjoy working/playing with it and you can work with any IEC device
 (retro devices such as original 1541 or 1581 drives, printers, plotters
-and modern devices such as the SD2IEC and the Ultimate-II+). It happens more
+and modern devices such as the SD2IEC). It happens more
 often than not, that the core is recognized as real hardware by software.
 
 Yet, at this moment, our MEGA65 version of the MiSTer core is still lacking
@@ -584,7 +584,7 @@ IEC devices
 
 The C64 for MEGA65 core supports the MEGA65's hardware IEC port so that you
 can attach real 1541 & 1581 drives as well as printers, plotters or modern
-devices such as the SD2IEC and the Ultimate-II+. You can copy from virtual
+devices such as the SD2IEC. You can copy from virtual
 disks (`*.d64`) to real disks and the other way around.
 
 IMPORTANT: The built-in simulated 1541 disk drive that works with `*.d64`
