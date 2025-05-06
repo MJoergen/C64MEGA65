@@ -51,8 +51,7 @@ ports of the MEGA65:
 * Expansion port for C64 cartridges: Games, freezers, fast loader
   cartridges, GeoRAM, multi-function flash cartridges, etc.
 * IEC port so that you can attach real 1541 & 1581 drives as well as
-  printers, plotters or modern devices such as the SD2IEC and the
-  Ultimate-II+
+  printers, plotters or modern devices such as the SD2IEC
 
 Additionally, the C64 for MEGA65 core can simulate a 1750 REU with 512KB
 of RAM, it can simulate cartridges (by loading `*.crt` files) and it offers
