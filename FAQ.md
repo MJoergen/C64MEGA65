@@ -4,7 +4,10 @@ Please head to: https://c64.mega65.org/faq-and-other-stuff.html
 
 ## 1) Which core should I install? I am confused what R3/R3A/R4/R5/R6 means
 
-Please head to: https:/c64.mega65.org/installation.html
+Please head to: https://cores.mega65.org/mega65-revisions-and-cores.html
+
+And then read some specifics about the C64 core:
+https://c64.mega65.org/installation.html#differences-between-mega65-revisions
 
 ## 2) My MEGA65 or the C64 core is behaving somehow weirdly
 
@@ -67,7 +70,7 @@ Indeed, the core is not yet able to format disks. We do have this topic on our
 
 JiffyDOS is commercial software. The C64 core does not come with
 a pre-installed copy of JiffyDOS.
-[Learn here](doc/jiffy.md)
+[Learn here](https://c64.mega65.org/C64MEGA65DOCS/jiffydos-and-alternative-kernals.html)
 where to buy and how to install it.
 
 ## 8) My game or demo crashes
@@ -115,7 +118,7 @@ for MEGA65 core.
 ### LCD or TFT devices
 
 Make sure that you have 
-[switched-off HDMI: Flicker-free](README.md#important-advice-for-users-of-analog-vga-and-retro-15-khz-rgb-over-vga)
+[switched-off HDMI: Flicker-free](https://kugelblitz360.github.io/C64MEGA65DOCS/hdmi-and-analog-output.html#the-hdmi-flicker-free-option)
 when using retro monitors via the MEGA65's VGA out.
 
 ## 12) My mouse does not work
@@ -206,7 +209,7 @@ when it comes to **simulated** (`*.crt`) freezer cartridges.
 ### "Homebrew" cartridges: Never insert a barebone PCB
 
 Always make sure that you insert a cartridge that is
-[housed in a proper case](doc/cartridges.md#cartridge-cases) and never
+[housed in a proper case](https://kugelblitz360.github.io/C64MEGA65DOCS/c64-cartridges.html#important-safety-tips) and never
 insert a barebone PCB into the MEGA65's Expansion Port.
 
 ### Rare case: Zeta Wing cartridge is not working (maybe also relevant for other Protovision cartridges)
@@ -246,7 +249,7 @@ if you want to use.
 ### Switch-off HDMI: Flicker-free
 
 The "HDMI: Flicker-free" mode
-[very slightly changes the timing of the C64](https://c64.mega65.io/C64MEGA65DOCS/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
+[very slightly changes the timing of the C64](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
 While this is not a problem most of the time, it does lead to timing problems
 with certain games (for example Rainbow Arts games on original 5 1/4"
 disks) that are loaded via real 1541 floppys connected via the IEC port

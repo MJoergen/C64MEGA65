@@ -10,51 +10,52 @@ Go to the MEGA65 Filehost to
 [download the most recent version 6](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
 of the C64 core.
 If you are in a hurry or have issues, read the
-[FAQ - Frequently Asked Questions](FAQ.md). If you are a
-[developer](doc/developer.md)
+[FAQ - Frequently Asked Questions](FAQ.md). If you are a developer
 and want to build the C64 core by yourself then head to our
 [developer documentation](doc/developer.md).
 You can also
 [learn more what's new in Version 6](VERSIONS.md).
-Otherwise, scroll down and enjoy the user's manual.
+Otherwise, enjoy the [user's guide](https://c64.mega65.org).
 
 ![Commodore64](doc/c64.jpg)
+
+Credits
+-------
 
 This core is based on the
 [MiSTer](https://github.com/MiSTer-devel/C64_MiSTer) Commodore 64 core which
 itself is based on the work of [many others](AUTHORS).
 
-[MJoergen](https://github.com/MJoergen) and
-[sy2002](http://www.sy2002.de) ported the core to the MEGA65 and are working
-on-again and off-again at it since 2022. Special thanks to
-[Amokphaze101 aka Paich64](https://github.com/paich64) for ensuring that the
-core adheres to highest 
-[quality control standards](tests/README.md)
-and special thanks to
-[Kugelblitz360](https://github.com/Kugelblitz360) for the awesome
-[documentation](https://c64.mega65.org).
-
-The core uses the [MiSTer2MEGA65](https://github.com/sy2002/MiSTer2MEGA65)
-framework and [QNICE-FPGA](https://github.com/sy2002/QNICE-FPGA) for
-FAT32 support (loading ROMs, mounting disks) and for the
-on-screen-menu.
+* [MJoergen](https://github.com/MJoergen) and
+  [sy2002](http://www.sy2002.de) ported the core to the MEGA65 and are working
+  on-again and off-again at it since 2022.
+* Special thanks to
+  [Amokphaze101 aka Paich64](https://github.com/paich64) for ensuring that the
+  core adheres to highest [quality control standards](tests/README.md).
+* Special thanks to [Kugelblitz360](https://github.com/Kugelblitz360) for the
+  awesome [documentation](https://c64.mega65.org).
+* The core uses the [MiSTer2MEGA65](https://github.com/sy2002/MiSTer2MEGA65)
+  framework and [QNICE-FPGA](https://github.com/sy2002/QNICE-FPGA) for
+  FAT32 support (loading ROMs, mounting disks) and for the
+  on-screen-menu.
 
 Comprehensive user's guide
 --------------------------
 
 Starting with version 6 of the core, we removed the documentation in this
-README.md file and are pointing to the very
-[comprehensive and great user's guide for
-the C64 core.](https://c64.mega65.org).
+README.md file and are pointing to the very comprehensive and great user's
+guide for the C64 core.
+
+You might want to bookmark [https://c64.mega65.org](https://c64.mega65.org).
 
 Developers might find some additional resources in the
 [doc folder](https://github.com/MJoergen/C64MEGA65/tree/master/doc)
 interessting.
 
-Features
---------
+Features of the C64 for MEGA65 core
+-----------------------------------
 
-With our [Release 6](VERSIONS.md), we are striving for a **retro C64 PAL
+With our [Release 6](VERSIONS.md), we are striving for a **retro C64
 experience**: The core turns your MEGA65 into a Commodore 64 with a C1541
 drive (you can mount `*.d64`) images. It supports the following hardware
 ports of the MEGA65:
@@ -72,7 +73,7 @@ a Dual SID / Stereo SID experience.
 The C64 runs the original Commodore KERNAL and the C1541 runs the original
 Commodore DOS, which leads to authentic loading speeds. You will be surprised,
 how slowly the C64/C1541 were loading... :-) You can optionally
-[install JiffyDOS](doc/jiffy.md)
+[install JiffyDOS](https://c64.mega65.org/jiffydos-and-alternative-kernals.html)
 or use fast loader cartridges to speed up loading.
 
 And you will be amazed by the 99.9% compatibility that this core has when it
@@ -174,13 +175,13 @@ Installation
 3. Read the section "How do I install an alternative MEGA65 core?" on the
    [alternative MEGA65 cores](https://cores.mega65.org)
    website or read the section "Bitstream Utility" in the
-   [MEGA65 Starter Guide](https://files.mega65.org/news/MEGA65-Starter-Guide.pdf).
+   [MEGA65 Starter Guide](https://files.mega65.org?id=315bbad5-f97b-4070-bab4-3ff06d5ab8ba).
 4. The core supports FAT32 formatted SD cards to mount `.D64` disk images
    for the C1541 at drive 8.
 5. If you put your disk images into a folder called `/c64`, then the core will
    display this folder on startup. Otherwise the root folder will be shown.
    If you want the core to remember the settings, make sure you read the
-   section [Config file](https://c64.mega65.org/installation.html#config-file) below.
+   section [Config file](https://c64.mega65.org/installation.html#config-file) in the user's guide.
 6. Optional: Install [JiffyDOS](https://c64.mega65.org/jiffydos-and-alternative-kernals.html) and install the Real-Time-Clock
    (RTC) [driver for GEOS](doc/RTC.md).
 7. Press the <kbd>Help</kbd> key on your MEGA65 keyboard as soon as the core
