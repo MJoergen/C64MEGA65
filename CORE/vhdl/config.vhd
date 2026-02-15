@@ -79,7 +79,7 @@ constant SCR_WELCOME : string :=
 
    "\n Commodore 64 for MEGA65 Version WIP-V6-A1\n\n" &
 
-   " MiSTer port 2024 by MJoergen & sy2002\n" &
+   " MiSTer port 2026 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n\n" &
 
    " While the C64 is running: Press HELP\n" &
@@ -99,7 +99,7 @@ constant HELP_1 : string :=
 
    "\n Commodore 64 for MEGA65 Version WIP-V6-A1\n\n" &
 
-   " MiSTer port 2024 by MJoergen & sy2002\n" &
+   " MiSTer port 2026 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n" &
 
    " Quickstart:\n\n" &
