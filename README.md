@@ -22,10 +22,9 @@ Otherwise, enjoy the [user's guide](https://c64.mega65.org).
 Credits
 -------
 
-This core is based on the
-[MiSTer](https://github.com/MiSTer-devel/C64_MiSTer) Commodore 64 core which
-itself is based on the work of [many others](AUTHORS).
-
+* This core is based on the
+  [MiSTer](https://github.com/MiSTer-devel/C64_MiSTer) Commodore 64 core which
+  itself is based on the work of [many others](AUTHORS).
 * [MJoergen](https://github.com/MJoergen) and
   [sy2002](http://www.sy2002.de) ported the core to the MEGA65 and are working
   on-again and off-again at it since 2022.
