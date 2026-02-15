@@ -5,10 +5,17 @@ builds that were not there in older builds. By finding the last known-to-work
 build, we have a better chance to hunt down problems. The name of the build
 can be checked in the "About & Help" menu of the core.
 
-## Version 5.2
+## Version 6
+
 | Name          | Date     | Commit   | Comment
 |---------------|----------|----------|--------------------------------------
-| WIP-V5.1-A1   | 07/09/24 | f4df717b | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
+| WIP-V6-A1     |          |          | 
+
+## Version 5.2
+
+| Name          | Date     | Commit   | Comment
+|---------------|----------|----------|--------------------------------------
+| WIP-V5.2-A1   | 07/09/24 | f4df717b | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
 | WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
 
 ## Version 5.1

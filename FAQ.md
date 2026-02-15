@@ -1,22 +1,10 @@
 # FAQ - Frequently Asked Questions
 
+Please head to: https://c64.mega65.org/faq-and-other-stuff.html 
+
 ## 1) Which core should I install? I am confused what R3/R3A/R4/R5/R6 means
 
-There are different MEGA65 models on the market.
-
-Download Version 5.1
-[here](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241). In
-the ZIP file you will find multiple variants of the core: One for each
-supported MEGA65 model:
-
-* If your MEGA65 was manufactured before 2024, then install the "R3/R3A" core
-which is`C64MEGA65-V5.1-R3.cor`.
-
-* Otherwise install the "R6" core, which is
-`C64MEGA65-V5.1-R6.cor`.
-
-Learn more about the different MEGA65 models
-[here](doc/models.md).
+Please head to: https:/c64.mega65.org/installation.html
 
 ## 2) My MEGA65 or the C64 core is behaving somehow weirdly
 
@@ -25,68 +13,15 @@ section as the underlying hardware bug that haunts older boards is fixed.
 
 **The "HDMI back powering problem" is the root of all evil!**
 
-The evil things that can happen range from display problems over SD card
-problems (such as problems mounting the SD card, reading from the SD card)
-to issues around the system's overall stability.
-
-If your MEGA65 is connected to any HDMI device: Never switch-on this device
-before you have successfully switched-on your MEGA65. Or to put it the other
-way round: **Always switch-on your MEGA65 first** and **THEN** switch-on your
-HDMI device (monitor, frame grabber, etc.).
-
-For the C64 core this means: While your MEGA65 and your HDMI device are
-switched off: Hold the <kbd>No Scroll</kbd> key while you switch on the MEGA65
-and while the HDMI device is still off. Now, you can switch on your HDMI
-device and use the MEGA65's core selection menu to select the C64 core. You
-can also use the key combination <kbd>No Scroll</kbd> + &lt;number of the
-C64 core in the core menu&gt; to directly select the C64 core.
-
-The reason for this problem is a bug on the MEGA65's mainboard revisions R3
-and R3A.
-
-Another way to resolve the issue is to put a cheap HDMI switch between the
-MEGA65 and your device. You will find two Amazon links to devices that are
-known to work
-[here in Dan's MEGA65 Welcome Guide](https://dansanderson.com/mega65/welcome/hardware-issues.html?highlight=hdmi#failure-to-boot-and-keyboard-lights-glow-when-off).
+Please head to: https://c64.mega65.org/faq-and-other-stuff.html#unexplainable-general-weird-behaviour
 
 ## 3) The keyboard is not working
 
-If your keyboard is working while you are using the MEGA65 core but you cannot
-type properly while using the C64 core and the <kbd>Help</kbd> menu works fine
-then please check if you have an **Amiga Mouse** or a joystick or other device
-with activated auto-fire connected to port #1. If so, please remove it and you
-will be able to type properly.
+Please head to: https://c64.mega65.org/faq-and-other-stuff.html#the-keyboard-is-not-working
 
 ## 4) SD card errors
 
-Most SD card problems can be resolved by considering these possible causes:
-
-1. Are you having an [HDMI back powering problem](FAQ.md#2-my-mega65-or-the-c64-core-is-behaving-somehow-weirdly)?
-
-2. Is your card formatted as something other than `FAT32`?
-
-   Error `EE12` means "No or illegal partition table entry found (e.g. no FAT32 partition)".
-   Some operating systems, for example MacOS format 8GB SD cards with FAT16 instead of FAT32.
-
-   Stick to `FAT32`. Don't use any improved or more modern version of
-   file-system. On Windows and Linux it is normally quite
-   straightforward to format an SD card as `FAT32`. If you are on a
-   Mac, scroll down and read "Formatting SD cards on a Mac".
-
-3. Is your card larger than 32GB? The core cannot handle SD cards larger than 32 GB.
-
-4. Are you using a cheap no-name card?
-
-5. Please try to re-format your card and then copy everything on the card from scratch
-
-6. If (1) to (5) do not help: Use another card: There is empiric evidence suggesting
-   that SanDisk and Verbatim SD cards work better than others as long as they are
-   not larger than 32GB and as long as they are `FAT32` formatted.
-
-If you have a `Error code: 2704` in conjunction with an SD card error then
-[this](https://discord.com/channels/719326990221574164/794775503818588200/1114834752281772043)
-post on Discord might be interesting for you. But the bottom line is also in
-this case: Step (5) or step (6) will solve the issue.
+Please head to: Please head to: https://c64.mega65.org/faq-and-other-stuff.html#important-information-about-micro-sd-cards
 
 ### Formatting SD cards on a Mac
 
@@ -114,12 +49,12 @@ a REU such as
 and the core offers disk writing abilities for the simulated 1541, so
 that you can save your game states or your work in GEOS. The core also
 let's you use original Commodore
-[hardware cartridges](README.md#hardware-cartridges) plugged into the MEGA65
+[hardware cartridges](https://c64.mega65.org/c64-cartridges.html) plugged into the MEGA65
 Expansion Port,
-[simulate cartridges using CRT files](README.md#simulated-cartridges) and
-[use retro Commodore peripherals](README.md#iec-devices)
+[simulate cartridges using CRT files](https://c64.mega65.org/c64-cartridges.html#specific-virtual-cartridge-compatibility) and
+[use retro Commodore peripherals](https://c64.mega65.org/working-with-disks-and-drives.html#connecting-an-external-drive)
 by plugging them into the MEGA65's IEC port. You can even
-[work with retro 15 kHz cathode ray tube monitors](doc/retrotubes.md).
+[work with retro 15 kHz cathode ray tube monitors](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes).
 
 ## 6) I cannot format a disk image (`*.d64`)
 
@@ -137,65 +72,16 @@ where to buy and how to install it.
 
 ## 8) My game or demo crashes
 
-* Are you having an [HDMI back powering problem](FAQ.md#2-my-mega65-or-the-c64-core-is-behaving-somehow-weirdly)?
-
-* Make sure you are using the newest version of the core. Right now this is
-  [Version 5.1](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241).
-  The only officially supported place to get cores is the
-  [MEGA65 FileHost](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241),
-  so make sure you downloaded your copy there. Do not use any Alpha or Beta versions
-  any more. Also double-check by pressing <kbd>Help</kbd> and then choosing the menu
-  item "About & Help" that you are really running Version 5.1.
-
-* If the game or demo is not designed for the REU, you absolutely need to
-  switch-off the REU before running the game or demo. Learn more about this
-  important fact
-  [here](README.md#512-kb-ram-expansion-unit-1750-reu).
-
-* Double-check that you have the appropriate setting for "Expansion Port": If you
-  are for exampling simulating a cartridge using a `.crt` file and then while doing so
-  directly load a `.prg` file, then this might lead to a crash. But it might also work,
-  if you are for example simulating a certain freezer cartridge.
-  
-* Power-cycle your MEGA65 (while making sure that you are not running into any
-  [HDMI back powering problem](FAQ.md#2-my-mega65-or-the-c64-core-is-behaving-somehow-weirdly).
-  The reset is not perfect and sometimes "stuff" remains in memory or in registers
-  that prevents games or demos from starting.
-  
-* If you use [JiffyDOS](doc/jiffy.md) or any other fastloader (for example
-  by using a freezer cartridge): Switch everything back to the C64's
-  [standard Kernal](README.md#commodore-kernals-and-jiffydos) and try
-  this very game or demo again.
-
-* Try to run with deactivated "HDMI: Flicker-free", but don't forget to
-  reactivate this afterwards, because your experience is 10x better with
-  Flicker-free ON (at least when you're on HDMI). Learn more
-  [here](README.md#flicker-free-hdmi).
-  
-* If you are using real 1541 hardware via the IEC port, please also read
-  the [section about IEC devices below](FAQ.md#13-can-i-use-iec-devices).
-  
-* Many modern games and demos are mainly tested on the C64C, so try to run the
-  game or demo using the setting "CIA: Use 8521 (C64C)".  
-
-* If you are loading from a large storage device such as the SD2IEC, try
-  the simulated 1541 drive using a `*.d64` disk image instead.
-
-* Some games or demos don't like additional devices at the IEC port other than
-  one drive #8. Try if switching off "IEC: Use hardware port" helps.
-
-* [Create an issue](https://github.com/MJoergen/C64MEGA65/issues/new/choose)
-  here on the official C64MEGA65 GitHub repository or post your problem in the
-  [#c64-core](https://discord.com/channels/719326990221574164/794775503818588200)
-  channel on Discord.
+Head to https://c64.mega65.org/faq-and-other-stuff.html#loading-and-running-games
+and then scroll down to "A game or demo does not run correctly".
 
 ## 9) No image or no sound via HDMI
 
-1. Make sure you are running [Version 5.1](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
+1. Make sure you are running [Version 6](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
    of the core.
 
 2. Try everything that is described
-   [here](https://github.com/MJoergen/C64MEGA65#hdmi-compatibility).
+   [here](https://c64.mega65.org/hdmi-and-analog-output#hdmi-troubleshooting).
 
 3. [Create an issue](https://github.com/MJoergen/C64MEGA65/issues/new/choose)
    here on the official C64MEGA65 GitHub repository or post your problem in the
@@ -204,20 +90,25 @@ where to buy and how to install it.
 
 ## 10) The VGA output looks strange or flickers or I lose VGA sync
 
-1. Always try the "auto-adjust" (or similarly named feature) of your screen
-   first. This resolves 90% of all issues.
+Always try the "auto-adjust" (or similarly named feature) of your screen
+first. This resolves 90% of all issues.
 
-2. Switch-off "HDMI: Flicker-free" and learn more about the issue
-   that the flicker-free mode sometimes creates on VGA systems
-   [here](README.md#important-advice-for-users-of-analog-vga-and-retro-15-khz-rgb-over-vga).
+It is highly recommended to switch off
+[HDMI: Flicker-free](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option)
+when using analog VGA monitors or monitors that work with the
+[retro 15 kHZ RGB over VGA" signal](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes).
 
-3. If your monitor supports it, try to use the [retro "15 kHz RGB" mode](doc/retrotubes.md)
+Otherwise you might encounter strange visual effects that range from a blurry
+image over "underwater" blurry movement of your screen to sporadic flickers
+and sometimes to a complete loss of VGA sync every few seconds or minutes.
+
+If your monitor supports it, try to use the [retro "15 kHz RGB" mode](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes).
 
 ## 11) My retro monitor does not work with the core
 
 ### Analog devices
 
-There is a [dedicated documentation](doc/retrotubes.md) that explains you how to
+There is a [dedicated documentation](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes) that explains you how to
 connect retro displays with cathode ray tubes to the MEGA65 using the Commodore 64
 for MEGA65 core.
 
@@ -244,23 +135,14 @@ feature is on our roadmap.
 
 ## 13) Can I use cartridges?
 
-Yes, from
-[Version 5](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
-on, the core supports both real
-[hardware cartridges](README.md#hardware-cartridges) that
-you can insert into the MEGA65's Expansion Port and
-[simulated cartridges](README.md#simulated-cartridges)
-that you can load as `*.crt` files from your SD card.
-
-The core is able to run more than 99% of all game
-cartridges.
+Yes, head to https://c64.mega65.org/c64-cartridges.html to learn more.
 
 ### Do not do a "hard-reset" when working with cartridges
 
 If you are not sure what the difference between a "hard-reset" (aka
 "long-reset") and a "soft-reset" (aka "short-reset") is, then
-[please read here](README.md#hard-reset-vs-soft-reset). You will recognize a
-hard-reset when the power LED of the MEGA65 turns blue.
+[please read here](https://c64.mega65.org/resetting-the-core.html).
+You will recognize a hard-reset when the power LED of the MEGA65 turns blue.
 
 Do not use hard-reset reset for any hardware cartridge. Instead always use the
 soft-reset. Otherwise you will experience very odd behavior.
@@ -292,34 +174,31 @@ is not being shown after you pressed <kbd>Help</kbd>, then instead of the
 dedicated C64 core, the standard MEGA65 core is currently running which
 is the reason why your hardware cartridge is not working.
 
-Here is why: The core in slot #0 (which is the MEGA65 core) decides, which
-core needs to be started if a hardware cartridge is inserted into the MEGA65's
-Expansion Port. The old version that most of the MEGA65 have installed is
-buggy and needs to be updated.
+You have two options when you own such a MEGA65:
 
-[Learn how to update or how to use a workaround here](README.md#core-0-update).
+1. [Update CORE #0 as described here](https://mega65.atlassian.net/l/cp/1fkp5zvQ)
+
+2. Manually boot the C64 for MEGA65 core using the <kbd>No Scroll</kbd>
+   mechanism and then insert your cartridge **while the MEGA65 is switched on
+   and while the C64 core is running** and then press the reset button.
+   While we cannot officially endorse this option - do it at your own risk - 
+   the MEGA65's hardware is way more robust than the original C64's hardware
+   was, particularly when it comes to the Expansion Port. There are certain
+   mechanisms in place that shield the inner guts of the MEGA65 from the
+   Expansion Port. A lot of MEGA65 users have used this option for a while
+   and until now, no damaged MEGA65 due to this workaround are known.
+
 And if you are interested in the technical details about how your MEGA65
 handles the whole multi core functionality during startup, then
 [head to this MEGA65 Wiki article](https://mega65.atlassian.net/wiki/spaces/MEGA65/pages/158924822/MEGA65+System+Startup+Flow).
 
 ### My hardware freezer or flash cartridge does not work
 
-The core does support certain sophisticated hardware cartridges such
-as the Action Replay, EasyFlash 1CR, EasyFlash 3, Epyx Fast Load,
-Final Cartridge III, Kung Fu Flash, PowerCartridge and Super Snapshot.
-But they are not all created equal and you sometimes need to apply
-work-arounds to make them work.
-
-Make sure you read the
-[dedicated hardware cartridge documentation](doc/cartridges.md)
-to learn more and **exactly** follow the instructions there.
+Head to https://c64.mega65.org/c64-cartridges.html#specific-physical-cartridge-compatibility
 
 ### A certain simulated freezer (`*.crt`) does not work
 
-While Version 5.1 - the most recent version of the core - does support
-quite a bunch of **hardware** freezer and flash cartridges very well,
-support for **simulated** (`*.crt`) freezer cartridges is still in
-its infancy.
+Head to https://c64.mega65.org/c64-cartridges.html#specific-virtual-cartridge-compatibility
 
 [This is a list of known issues](https://github.com/MJoergen/C64MEGA65/issues?q=is%3Aissue+is%3Aopen+simcrt)
 when it comes to **simulated** (`*.crt`) freezer cartridges.
@@ -347,10 +226,13 @@ you are already running a proper MEGA65 CORE #0 version on your machine
 
 ## 14) Can I use IEC devices?
 
-Yes, from Version 5 on, you can connect floppy drives (such as the original
+Yes, you can connect floppy drives (such as the original
 1541 and 1581), hard disks, printers, plotters or modern devices such as the
 SD2IEC and the Ultimate-II+ to your MEGA65. All CBM-Bus/IEEE-488 bus/IEC Bus
 compliant devices are supposed to work.
+
+Make sure you
+[activate the IEC port](https://kugelblitz360.github.io/C64MEGA65DOCS/the-main-menu.html#iec-use-hardware-port).
 
 ### Avoid device number conflicts
 
@@ -364,7 +246,7 @@ if you want to use.
 ### Switch-off HDMI: Flicker-free
 
 The "HDMI: Flicker-free" mode
-[very slightly changes the timing of the C64](README.md#flicker-free-hdmi).
+[very slightly changes the timing of the C64](https://c64.mega65.io/C64MEGA65DOCS/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
 While this is not a problem most of the time, it does lead to timing problems
 with certain games (for example Rainbow Arts games on original 5 1/4"
 disks) that are loaded via real 1541 floppys connected via the IEC port
@@ -382,7 +264,6 @@ retro monitor, because with "HDMI: Flicker-free" OFF, the output on HDMI
 will be slightly jerky due to the misalignment of the C64's retro
 output frequency and the frequencies that modern HDMI monitors are
 actually able to display.
-[Learn more here](README.md#flicker-free-hdmi).
 
 ## 15) How many files in a folder can the file browser handle?
 
@@ -401,11 +282,11 @@ digits are. Don't forget to go to the folder `m` and remove `mover.sh`.
 
 Make sure that you have a `/c64` folder on your SD card and make sure that
 you copy the `c64mega65` file that came with the
-[ZIP file that contains Version 5.1](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
+[ZIP file that contains Version 6](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
 to this very folder.
 
 When going from an older version of the C64 core to a newer version
-(for example from Version 4 to Version 5.1) you always need to overwrite your
+(for example from Version 5.2 to Version 6) you always need to overwrite your
 old `c64mega65` file by the new one that came with the
 [ZIP file](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241).
 
@@ -413,7 +294,7 @@ Important: Even if you have a `c64/c64mega65` file on your SD card: The core wil
 not save any settings in case you switched between SD cards during a certain session.
 Next time you power-on the core, it will resume saving the settings until you switch
 between SD cards for the next time.
-[Learn more details here](README.md#config-file).
+[Learn more details here](https://c64.mega65.org/installation.html#config-file).
 
 Currently, we cannot automate this manual chore and need to ask users to copy the
 `c64mega65` file.
@@ -423,12 +304,14 @@ this by following
 
 ## 17) How can I work with GEOS?
 
-GEOS works very well on the MEGA65 using Version 5.1 of the core. AmokPhaze101 wrote
+GEOS works very well on the MEGA65 using Version 6 of the core. AmokPhaze101 wrote
 a great step-by-step documentation:
 
 1. Download GEOS [using this download link](https://github.com/MJoergen/C64MEGA65/raw/master/doc/assets/geos.zip)
 2. Work with AmokPhaze101's tutorial: [View and download PDF](https://github.com/MJoergen/C64MEGA65/blob/master/doc/GEOS_WITH_THE_C64_CORE.pdf)
 3. Learn how to use the [Real Time Clock](doc/RTC.md)
+
+Read the full docs: https://c64.mega65.org/geos-on-the-mega65-c64-core.html
 
 ## 18) What do the two LEDs signal?
 
@@ -438,7 +321,7 @@ labeled "Drive":
 * Both leds blinking like ambulance lights: The core has a fatal error.
 * Power green: Machine is powered on, core is running.
 * Power blue: You pressed the reset button long enough to initiate a so
-  called "Hard-reset" [(learn more)](README.md#hard-reset-vs-soft-reset).
+  called "Hard-reset" [(learn more)](https://c64.mega65.org/resetting-the-core.html).
 * Drive off: No access to simulated 1541 drive.
 * Drive green: The currently running C64 software is reading from or writing
   to the simulated 1541 drive.
@@ -446,7 +329,7 @@ labeled "Drive":
   drive failed.
 * Drive yellow: The C64 core is writing changes made by the simulated 1541
   drive to the disk image file (`*.d64`) on the SD card.
-  [Learn more](https://github.com/MJoergen/C64MEGA65/blob/V5.1-release/README.md#writing-to-disk-images)
+  [Learn more](https://c64.mega65.org/working-with-disks-and-drives.html#led-information-of-disk-status--disk-flush)
   about how this mechanism works.
 
 ## 19) Which features are on the roadmap?
@@ -466,19 +349,19 @@ on Discord to discuss feature requests and the future of the C64 for MEGA65 core
 Yes. Please visit this website, it contains a list of MEGA65 cores that
 will be constantly updated:
 
-https://sy2002.github.io/m65cores/
+https://cores.mega65.org
 
 If you are interested in making your own core or in porting cores from other
 projects such as MiSTer: The website is also sharing additional information
 about how to get started with doing this and about the
-[MiSTer2MEGA65 framework](https://github.com/sy2002/MiSTer2MEGA65).
+[MiSTer2MEGA65 framework](https://github.com/sy2002/MiSTer2MEGA65/wiki).
 
 ## 22) I am a total newby and want to learn FPGA development and making or porting cores
 
 If you own a MEGA65, then
 [this short article](https://files.mega65.org?ar=898d573b-d30d-4438-8893-09455bd16400)
 is a smooth start to FPGA development. It uses some of the tutorials of the
-[MiSTer2MEGA65 framework](https://github.com/sy2002/MiSTer2MEGA65)
+[MiSTer2MEGA65 framework](https://github.com/sy2002/MiSTer2MEGA65/wiki)
 and some resources from the web to get you started.
 
 Moreover, the

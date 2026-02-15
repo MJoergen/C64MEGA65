@@ -1,3 +1,18 @@
+Version 6 - MONTH DAY, 2026
+===========================
+
+@TODO: WORK-IN-PROGRESS RELEASE NOTES
+@TODO: ENSURE README.MD AND FAQ.MD are up-to-date regarding V6
+
+## @TODO: Don't forget to put these closed issues into VERSIONS.md
+
+## New Features
+
+
+## Bugfixes
+
+
+
 Version 5.2 - April 28, 2025
 ============================
 
