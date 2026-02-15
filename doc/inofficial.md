@@ -7,16 +7,16 @@ can be checked in the "About & Help" menu of the core.
 
 ## Version 6
 
-| Name          | Date     | Commit   | Comment
-|---------------|----------|----------|--------------------------------------
-| WIP-V6-A1     | 02/15/26 |          | Support IDE64 (issue #176), disable RTC by default (issue #187)
+| Name          | Date     | Commit  | Comment
+|---------------|----------|---------|--------------------------------------
+| WIP-V6-A1     | 02/15/26 | b8d2971 | Support IDE64 (issue #176), disable RTC by default (issue #187)
 
 ## Version 5.2
 
-| Name          | Date     | Commit   | Comment
-|---------------|----------|----------|--------------------------------------
-| WIP-V5.2-A1   | 07/09/24 | f4df717b | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
-| WIP-V5.2-A2   | 03/16/25 | 7f96970d | Fix PRG loader problems
+| Name          | Date     | Commit  | Comment
+|---------------|----------|---------|--------------------------------------
+| WIP-V5.2-A1   | 07/09/24 | f4df717 | Fix HDMI jailbar issue #145, which was in reality a HyperRAM issue
+| WIP-V5.2-A2   | 03/16/25 | 7f96970 | Fix PRG loader problems
 
 ## Version 5.1
 
