@@ -9,6 +9,8 @@ Version 6 - MONTH DAY, 2026
 
 ## New Features
 
+* Added support for the IDE64
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
 
 ## Bugfixes
 
