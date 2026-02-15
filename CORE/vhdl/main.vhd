@@ -743,7 +743,13 @@ begin
          -- Cassette drive
          cass_write  => cass_write,       -- output
          cass_motor  => cass_motor,       -- output
-         cass_sense  => cass_rtc,         -- input
+         
+         --@TODO: This is a temporary fix for https://github.com/MJoergen/C64MEGA65/issues/187
+         --We need to make the RTC configurable and then either connect cass_rtc to cass_sense when
+         --the user activates the RTC in the OSM or '1' (since low active) when it is NOT active.  
+         --cass_sense  => cass_rtc,         -- input
+         cass_sense  => '1',
+         
          cass_read   => '1',              -- default is '1' according to MiSTer's c1530.vhd
 
          -- Access custom Kernal: C64's Basic and DOS
