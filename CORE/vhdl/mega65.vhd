@@ -918,7 +918,8 @@ begin
    -- Clock Domain Crossing: CORE -> HyperRAM
    i_cdc_main2hr : entity work.cdc_stable
       generic map (
-         G_DATA_SIZE => 3
+         G_REGISTER_SRC => true,
+         G_DATA_SIZE    => 3
       )
       port map (
          src_clk_i              => main_clk_o,
@@ -932,7 +933,8 @@ begin
    -- Clock Domain Crossing: CORE -> QNICE
    i_cdc_main2qnice : xpm_cdc_array_single
       generic map (
-         WIDTH => 1
+         DEST_SYNC_FF => 2,
+         WIDTH        => 1
       )
       port map (
          src_clk           => main_clk_o,
@@ -945,7 +947,8 @@ begin
    -- Clock Domain Crossing: QNICE -> CORE
    i_cdc_qnice2main : xpm_cdc_array_single
       generic map (
-         WIDTH => 2
+         DEST_SYNC_FF => 2,
+         WIDTH        => 2
       )
       port map (
          src_clk           => qnice_clk_i,

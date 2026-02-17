@@ -725,7 +725,8 @@ begin
    -- Clock domain crossing: SYS to CORE
    i_sys2main: xpm_cdc_array_single
       generic map (
-         WIDTH => 2
+         DEST_SYNC_FF => 2,
+         WIDTH        => 2
       )
       port map (
          src_clk     => clk_i,
@@ -748,7 +749,8 @@ begin
    -- Clock domain crossing: CORE to QNICE
    i_main2qnice: xpm_cdc_array_single
       generic map (
-         WIDTH => 16
+         DEST_SYNC_FF => 2,
+         WIDTH        => 16
       )
       port map (
          src_clk                => main_clk_i,
@@ -775,7 +777,8 @@ begin
    -- Clock domain crossing: QNICE to CORE
    i_qnice2main: xpm_cdc_array_single
       generic map (
-         WIDTH => 615
+         DEST_SYNC_FF => 2,
+         WIDTH        => 615
       )
       port map (
          src_clk                    => qnice_clk,

@@ -271,7 +271,8 @@ begin
    -- Clock domain crossing: QNICE to VIDEO
    i_qnice2video: xpm_cdc_array_single
       generic map (
-         WIDTH => 46
+         DEST_SYNC_FF => 2,
+         WIDTH        => 46
       )
       port map (
          src_clk                => qnice_clk_i,
@@ -297,7 +298,8 @@ begin
    -- Clock domain crossing: QNICE to AUDIO
    i_qnice2audio: xpm_cdc_array_single
       generic map (
-         WIDTH => 2
+         DEST_SYNC_FF => 2,
+         WIDTH        => 2
       )
       port map (
          src_clk     => qnice_clk_i,
@@ -445,7 +447,8 @@ begin
    -- Clock domain crossing: VIDEO to QNICE
    i_video2qnice: xpm_cdc_array_single
       generic map (
-         WIDTH => 136
+         DEST_SYNC_FF => 2,
+         WIDTH        => 136
       )
       port map (
          src_clk                  => video_clk_i,
@@ -482,7 +485,8 @@ begin
    -- Clock domain crossing: QNICE to HDMI
    i_qnice2hdmi: xpm_cdc_array_single
       generic map (
-         WIDTH => 47
+         DEST_SYNC_FF => 2,
+         WIDTH        => 47
       )
       port map (
          src_clk                => qnice_clk_i,

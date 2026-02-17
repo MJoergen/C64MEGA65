@@ -236,7 +236,8 @@ begin
 
    i_cdc_q2m_img_mounted: xpm_cdc_array_single
       generic map (
-         WIDTH => 3 * VDNUM
+         DEST_SYNC_FF => 2,
+         WIDTH        => 3 * VDNUM
       )
       port map (
          src_clk                                      => clk_qnice_i,
@@ -251,7 +252,8 @@ begin
 
    i_cdc_qnice2main: xpm_cdc_array_single
       generic map (
-         WIDTH => 35
+         DEST_SYNC_FF => 2,
+         WIDTH        => 35
       )
       port map (
          src_clk                       => clk_qnice_i,
@@ -272,7 +274,8 @@ begin
 
    i_cdc_main2qnice: xpm_cdc_array_single
       generic map (
-         WIDTH => 1 + VDNUM
+         DEST_SYNC_FF => 2,
+         WIDTH        => 1 + VDNUM
       )
       port map (
          src_clk                             => clk_core_i,
