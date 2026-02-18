@@ -299,8 +299,6 @@ signal hr_reu_readdata            : std_logic_vector(15 downto 0);
 signal hr_reu_readdatavalid       : std_logic;
 signal hr_reu_waitrequest         : std_logic;
 
-signal hr_c64_exp_port_mode       : std_logic_vector( 1 downto 0);
-
 signal hr_crt_write               : std_logic;
 signal hr_crt_read                : std_logic;
 signal hr_crt_address             : std_logic_vector(31 downto 0);
@@ -919,15 +917,13 @@ begin
    i_cdc_main2hr : entity work.cdc_stable
       generic map (
          G_REGISTER_SRC => true,
-         G_DATA_SIZE    => 3
+         G_DATA_SIZE    => 1
       )
       port map (
-         src_clk_i              => main_clk_o,
-         src_data_i(1 downto 0) => std_logic_vector(to_unsigned(c64_exp_port_mode, 2)),
-         src_data_i(2)          => main_osm_control_i(C_MENU_HDMI_FF),
-         dst_clk_i              => hr_clk_i,
-         dst_data_o(1 downto 0) => hr_c64_exp_port_mode,
-         dst_data_o(2)          => hr_hdmi_ff
+         src_clk_i     => main_clk_o,
+         src_data_i(0) => main_osm_control_i(C_MENU_HDMI_FF),
+         dst_clk_i     => hr_clk_i,
+         dst_data_o(0) => hr_hdmi_ff
       ); -- i_cdc_main2hr
 
    -- Clock Domain Crossing: CORE -> QNICE
