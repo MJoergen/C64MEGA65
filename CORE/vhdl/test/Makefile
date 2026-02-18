@@ -56,10 +56,13 @@ SAVE = $(TB).gtkw
 
 XPM_TOP_DIR = ../../../../../fransschreuder/xpm_vhdl
 
-sim: $(SRC) xpm-obj08.cf
+sim: $(SRC) xpm-obj08.cf ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
 	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --wave=$(WAVE) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
+
+../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin: ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex
+	xxd -r -p ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 
 xpm-obj08.cf:
 	ghdl -a --work=xpm --std=08 ${XPM_TOP_DIR}/src/xpm/xpm_VCOMP.vhd
@@ -114,4 +117,6 @@ clean:
 	rm -rf xpm-obj08.cf
 	rm -rf $(TB)
 	rm -rf $(WAVE)
+	rm -rf ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
+	rm -rf output.txt
 
