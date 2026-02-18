@@ -124,7 +124,7 @@ begin
 
    p_read : process (all)
       variable error_index_v : natural range 0 to 7;
-      variable char_index_v  : natural range 1 to 32;
+      variable char_index_v  : natural range 0 to 31;
    begin
       error_index_v := to_integer(unsigned(qnice_resp_error_i(2 downto 0)));
       char_index_v  := to_integer(unsigned(qnice_addr_i(4 downto 0)));

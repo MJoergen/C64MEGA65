@@ -189,7 +189,7 @@ begin
    i_avm_rom : entity work.avm_rom
       generic map (
          G_INIT_FILE    => G_FILE_NAME,
-         G_ADDRESS_SIZE => 16,
+         G_ADDRESS_SIZE => 20,
          G_DATA_SIZE    => 16
       )
       port map (
@@ -197,7 +197,7 @@ begin
          rst_i               => hr_rst,
          avm_write_i         => hr_write,
          avm_read_i          => hr_read,
-         avm_address_i       => hr_address(15 downto 0),
+         avm_address_i       => hr_address(19 downto 0),
          avm_writedata_i     => hr_writedata,
          avm_byteenable_i    => hr_byteenable,
          avm_burstcount_i    => hr_burstcount,

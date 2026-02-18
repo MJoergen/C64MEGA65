@@ -103,17 +103,18 @@ begin
 
    i_cpu_65c02 : entity work.cpu_65c02
       port map (
-         clk_i     => main_clk_i,
-         rst_i     => main_rst_i or main_reset_core_i,
-         ce_i      => main_ce and not main_bank_wait_i,
-         nmi_i     => '0',
-         irq_i     => '0',
-         addr_o    => main_ram_addr_o,
-         wr_en_o   => main_wr_en,
-         wr_data_o => main_ram_data_o,
-         rd_en_o   => open,
-         rd_data_i => main_ram_data_to_c64,
-         debug_o   => open
+         clk_i       => main_clk_i,
+         rst_i       => main_rst_i or main_reset_core_i or main_loading_i,
+         ce_i        => main_ce and not main_bank_wait_i,
+         nmi_i       => '0',
+         irq_i       => '0',
+         addr_o      => main_ram_addr_o,
+         wr_en_o     => main_wr_en,
+         wr_data_o   => main_ram_data_o,
+         rd_en_o     => open,
+         rd_data_i   => main_ram_data_to_c64,
+         ioport_in_i => (others => '1'),
+         debug_o     => open
       ); -- i_cpu_65c02
 
    i_cartridge : entity work.cartridge

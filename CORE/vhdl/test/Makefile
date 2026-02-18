@@ -13,6 +13,7 @@ SRC += ../../../M2M/vhdl/cdc_slow.vhd
 SRC += ../../../M2M/vhdl/cdc_stable.vhd
 SRC += ../../../M2M/vhdl/qnice2hyperram.vhd
 SRC += ../../../M2M/vhdl/tdp_ram.vhd
+SRC += ../../../M2M/vhdl/qnice_csr.vhd
 
 SRC += ../../../../65c02/src/datapath/alu.vhd
 SRC += ../../../../65c02/src/datapath/ar.vhd
@@ -27,7 +28,8 @@ SRC += ../../../../65c02/src/datapath/xr.vhd
 SRC += ../../../../65c02/src/datapath/yr.vhd
 SRC += ../../../../65c02/src/datapath/zp.vhd
 SRC += ../../../../65c02/src/control/control.vhd
-SRC += ../../../../65c02/src/control/microcode.vhd
+SRC += ../../../../65c02/src/control/microcode_6502.vhd
+SRC += ../../../../65c02/src/control/microcode_65c02.vhd
 SRC += ../../../../65c02/src/cpu_65c02.vhd
 
 SRC += qnice_sim.vhd
@@ -35,8 +37,11 @@ SRC += core_sim.vhd
 
 #CRT_FILE = Super_Mario_Bros_64_v1.2_-_Zeropaige.crt
 #CRT_FILE = Final_Cartridge_III,_The_\(USA,_Europe\)_\(May_88\)_\(Program\).crt
-CRT_FILE = ar4.crt
-CRT_DIR  = $(HOME)/Downloads
+#CRT_FILE = ar4.crt
+#CRT_DIR  = $(HOME)/Downloads
+#CRT_FILE = last_ninja_remix_ef_patched2.crt
+CRT_FILE = SoulForce/SoulForce_GMod2.crt
+CRT_DIR  = $(HOME)/Documents/FPGA/MEGA65_1/MEGA65-SD/c64
 
 
 #DUT ?= crt_parser
