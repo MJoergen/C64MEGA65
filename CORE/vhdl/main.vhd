@@ -642,11 +642,11 @@ begin
       cia1_pb_o     => cia1_pb_out,
 
       -- external memory
-      ramaddr       => c64_ram_addr_o,
-      ramdin        => c64_ram_data,
-      ramdout       => c64_ram_data_o,
-      ramce         => c64_ram_ce,
-      ramwe         => c64_ram_we,
+      ramaddr       => c64_ram_addr_o,     -- output
+      ramdin        => c64_ram_data,       -- input
+      ramdout       => c64_ram_data_o,     -- output
+      ramce         => c64_ram_ce,         -- output
+      ramwe         => c64_ram_we,         -- output
 
       io_cycle      => open,
       ext_cycle     => sim_ext_cycle,
@@ -689,13 +689,13 @@ begin
       --         tape_play   => open,
 
       -- dma access
-      dma_req       => core_dma,
-      dma_cycle     => reu_dma_cycle,
-      dma_addr      => unsigned(reu_dma_addr),
-      dma_dout      => unsigned(reu_dma_dout),
-      dma_din       => reu_dma_din,
-      dma_we        => reu_dma_we,
-      irq_ext_n     => not reu_irq,
+      dma_req       => core_dma,                -- input
+      dma_cycle     => reu_dma_cycle,           -- output
+      dma_addr      => unsigned(reu_dma_addr),  -- input
+      dma_dout      => unsigned(reu_dma_dout),  -- input
+      dma_din       => reu_dma_din,             -- output
+      dma_we        => reu_dma_we,              -- input
+      irq_ext_n     => not reu_irq,             -- input
 
       -- paddle interface
       pot1          => pot1_x_i,
