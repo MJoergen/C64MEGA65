@@ -372,6 +372,7 @@ architecture synthesis of main is
   signal   core_iof             : std_logic;
   signal   core_nmi_n           : std_logic;
   signal   core_nmi_ack         : std_logic;
+  signal   core_ba              : std_logic;
   signal   core_irq_n           : std_logic;
   signal   core_dma             : std_logic;
   signal   core_exrom_n         : std_logic;
@@ -675,6 +676,7 @@ begin
       irq_n         => core_irq_n,         -- input: low active
       nmi_n         => core_nmi_n,         -- input
       nmi_ack       => core_nmi_ack,       -- output
+      ba            => core_ba,            -- output
       roml          => core_roml,          -- output. CPU access to 0x8000-0x9FFF
       romh          => core_romh,          -- output. CPU access to 0xA000-0xBFFF or 0xE000-0xFFFF (ultimax)
       umaxromh      => core_umax_romh,     -- output
@@ -866,7 +868,7 @@ begin
       -- @TODO: When implementing this, we need to perform more research. It seems that just using
       -- the C64 cores's "cpuHasBus" signal leads to less compatibility than more. For example it
       -- seemed, that the Kung Fu Flash is not working at all any more.
-      cart_ba_o       <= '1';
+      cart_ba_o       <= core_ba; -- MFJ
 
       cart_nmi_n      <= cart_nmi_i;
       cart_irq_n      <= cart_irq_i;
@@ -925,6 +927,7 @@ begin
         core_nmi_n   <= cart_nmi_n and restore_key_n;
         core_io_ext  <= core_ioe or core_iof;
         core_io_data <= data_from_cart;
+        core_dma     <= not cart_dma_n; -- MFJ
 
       -- Simulate 1750 REU 512KB
       when C_EXP_PORT_REU =>
