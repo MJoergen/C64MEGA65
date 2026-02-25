@@ -10,6 +10,7 @@ can be checked in the "About & Help" menu of the core.
 | Name          | Date     | Commit  | Comment
 |---------------|----------|---------|--------------------------------------
 | WIP-V6-A1     | 02/15/26 | b8d2971 | Support IDE64 (issue #176), disable RTC by default (issue #187)
+| WIP-V6-A2     | 02/25/26 | 71023b4 | Connect BA and DMA pins on Cartridge Port
 
 ## Version 5.2
 
