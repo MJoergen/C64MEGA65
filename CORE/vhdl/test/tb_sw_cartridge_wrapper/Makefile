@@ -1,36 +1,36 @@
-SRC += ../crt_parser.vhd
-SRC += ../crt_cacher.vhd
-SRC += ../crt_loader.vhd
-SRC += ../sw_cartridge_csr.vhd
-SRC += ../sw_cartridge_wrapper.vhd
-SRC += ../cartridge.vhd
-SRC += ../../../M2M/vhdl/memory/axi_fifo.vhd
-SRC += ../../../M2M/vhdl/memory/avm_fifo.vhd
-SRC += ../../../M2M/vhdl/memory/avm_arbit.vhd
-SRC += ../../../M2M/vhdl/memory/avm_rom.vhd
-SRC += ../../../M2M/vhdl/memory/avm_memory.vhd
-SRC += ../../../M2M/vhdl/cdc_slow.vhd
-SRC += ../../../M2M/vhdl/cdc_stable.vhd
-SRC += ../../../M2M/vhdl/qnice2hyperram.vhd
-SRC += ../../../M2M/vhdl/tdp_ram.vhd
-SRC += ../../../M2M/vhdl/qnice_csr.vhd
+SRC += ../../crt_parser.vhd
+SRC += ../../crt_cacher.vhd
+SRC += ../../crt_loader.vhd
+SRC += ../../sw_cartridge_csr.vhd
+SRC += ../../sw_cartridge_wrapper.vhd
+SRC += ../../cartridge.vhd
+SRC += ../../../../M2M/vhdl/memory/axi_fifo.vhd
+SRC += ../../../../M2M/vhdl/memory/avm_fifo.vhd
+SRC += ../../../../M2M/vhdl/memory/avm_arbit.vhd
+SRC += ../../../../M2M/vhdl/memory/avm_rom.vhd
+SRC += ../../../../M2M/vhdl/memory/avm_memory.vhd
+SRC += ../../../../M2M/vhdl/cdc_slow.vhd
+SRC += ../../../../M2M/vhdl/cdc_stable.vhd
+SRC += ../../../../M2M/vhdl/qnice2hyperram.vhd
+SRC += ../../../../M2M/vhdl/tdp_ram.vhd
+SRC += ../../../../M2M/vhdl/qnice_csr.vhd
 
-SRC += ../../../../65c02/src/datapath/alu.vhd
-SRC += ../../../../65c02/src/datapath/ar.vhd
-SRC += ../../../../65c02/src/datapath/datapath.vhd
-SRC += ../../../../65c02/src/datapath/hi.vhd
-SRC += ../../../../65c02/src/datapath/lo.vhd
-SRC += ../../../../65c02/src/datapath/mr.vhd
-SRC += ../../../../65c02/src/datapath/pc.vhd
-SRC += ../../../../65c02/src/datapath/sp.vhd
-SRC += ../../../../65c02/src/datapath/sr.vhd
-SRC += ../../../../65c02/src/datapath/xr.vhd
-SRC += ../../../../65c02/src/datapath/yr.vhd
-SRC += ../../../../65c02/src/datapath/zp.vhd
-SRC += ../../../../65c02/src/control/control.vhd
-SRC += ../../../../65c02/src/control/microcode_6502.vhd
-SRC += ../../../../65c02/src/control/microcode_65c02.vhd
-SRC += ../../../../65c02/src/cpu_65c02.vhd
+SRC += ../../../../../65c02/src/datapath/alu.vhd
+SRC += ../../../../../65c02/src/datapath/ar.vhd
+SRC += ../../../../../65c02/src/datapath/datapath.vhd
+SRC += ../../../../../65c02/src/datapath/hi.vhd
+SRC += ../../../../../65c02/src/datapath/lo.vhd
+SRC += ../../../../../65c02/src/datapath/mr.vhd
+SRC += ../../../../../65c02/src/datapath/pc.vhd
+SRC += ../../../../../65c02/src/datapath/sp.vhd
+SRC += ../../../../../65c02/src/datapath/sr.vhd
+SRC += ../../../../../65c02/src/datapath/xr.vhd
+SRC += ../../../../../65c02/src/datapath/yr.vhd
+SRC += ../../../../../65c02/src/datapath/zp.vhd
+SRC += ../../../../../65c02/src/control/control.vhd
+SRC += ../../../../../65c02/src/control/microcode_6502.vhd
+SRC += ../../../../../65c02/src/control/microcode_65c02.vhd
+SRC += ../../../../../65c02/src/cpu_65c02.vhd
 
 SRC += qnice_sim.vhd
 SRC += core_sim.vhd
@@ -40,8 +40,9 @@ SRC += core_sim.vhd
 #CRT_FILE = ar4.crt
 #CRT_DIR  = $(HOME)/Downloads
 #CRT_FILE = last_ninja_remix_ef_patched2.crt
-CRT_FILE = SoulForce/SoulForce_GMod2.crt
-CRT_DIR  = $(HOME)/Documents/FPGA/MEGA65_1/MEGA65-SD/c64
+CRT_FILE = SoulForce_GMod2.crt
+#CRT_DIR  = $(HOME)/Documents/FPGA/MEGA65_1/MEGA65-SD/c64/SoulForce
+CRT_DIR  = $(HOME)/Documents/PRIVATE/MEGA65/C64
 
 
 #DUT ?= crt_parser
@@ -54,15 +55,15 @@ SRC += $(TB).vhd
 WAVE = $(TB).ghw
 SAVE = $(TB).gtkw
 
-XPM_TOP_DIR = ../../../../../fransschreuder/xpm_vhdl
+XPM_TOP_DIR = ../../../../../../fransschreuder/xpm_vhdl
 
-sim: $(SRC) xpm-obj08.cf ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
+sim: $(SRC) xpm-obj08.cf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
 	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --wave=$(WAVE) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
 
-../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin: ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex
-	xxd -r -p ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
+../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin: ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex
+	xxd -r -p ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 
 xpm-obj08.cf:
 	ghdl -a --work=xpm --std=08 ${XPM_TOP_DIR}/src/xpm/xpm_VCOMP.vhd
@@ -117,6 +118,6 @@ clean:
 	rm -rf xpm-obj08.cf
 	rm -rf $(TB)
 	rm -rf $(WAVE)
-	rm -rf ../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
+	rm -rf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 	rm -rf output.txt
 
