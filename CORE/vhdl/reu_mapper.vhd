@@ -23,7 +23,7 @@ entity reu_mapper is
       reu_ext_cycle_o     : out std_logic; -- To REU
       reu_addr_i          : in  std_logic_vector(24 downto 0);  -- 32 MB
       reu_dout_i          : in  std_logic_vector(7 downto 0);
-      reu_din_o           : out std_logic_vector(7 downto 0);
+      reu_din_o           : out std_logic_vector(7 downto 0) := X"00";
       reu_we_i            : in  std_logic;
       reu_cs_i            : in  std_logic;
 

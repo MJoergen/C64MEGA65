@@ -154,7 +154,7 @@ constant m65_up_crsr       : integer := 73;  -- cursor up
 constant m65_left_crsr     : integer := 74;  -- cursor left
 constant m65_restore       : integer := 75;
 
-signal key_pressed_n : std_logic_vector(79 downto 0);
+signal key_pressed_n : std_logic_vector(79 downto 0) := (others => '1');
 
 constant C_AK_DELAY : natural := 5_250_000; -- about 1/6 of a second
 type t_autokey_state is (IDLE_ST,

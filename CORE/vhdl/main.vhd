@@ -249,7 +249,7 @@ architecture synthesis of main is
 
   -- Generic MiSTer C64 signals
   signal   c64_pause     : std_logic;
-  signal   c64_drive_led : std_logic;
+  signal   c64_drive_led : std_logic_vector(G_VDNUM - 1 downto 0);
 
   -- directly connect the C64's CIA1 to the emulated keyboard matrix within keyboard.vhd
   signal   cia1_pa_in  : std_logic_vector(7 downto 0);
@@ -322,7 +322,7 @@ architecture synthesis of main is
   signal   vga_blue  : unsigned(7 downto 0);
 
   -- clock enable to derive the C64's pixel clock from the core's main clock : divide by 4
-  signal   video_ce : std_logic_vector(1 downto 0);
+  signal   video_ce : std_logic_vector(1 downto 0) := "00";
 
   -- RESET SEMANTICS
   --
@@ -501,6 +501,49 @@ architecture synthesis of main is
     );
   end component rtcf83;
 
+  component iec_drive is
+    generic (
+      PARPORT : integer;
+      DUALROM : integer;
+      DRIVES  : integer
+    );
+    port (
+      clk          : in  std_logic;
+      reset        : in  std_logic_vector(G_VDNUM - 1 downto 0);
+      ce           : in  std_logic;
+      pause        : in  std_logic;
+      img_mounted  : in  std_logic_vector(G_VDNUM - 1 downto 0);
+      img_readonly : in  std_logic;
+      img_size     : in  std_logic_vector(31 downto 0);
+      img_type     : in  std_logic_vector(1 downto 0);
+      led          : out std_logic_vector(G_VDNUM - 1 downto 0);
+      iec_atn_i    : in  std_logic;
+      iec_data_i   : in  std_logic;
+      iec_clk_i    : in  std_logic;
+      iec_data_o   : out std_logic;
+      iec_clk_o    : out std_logic;
+      par_data_i   : in  std_logic_vector(7 downto 0);
+      par_stb_i    : in  std_logic;
+      par_data_o   : out std_logic_vector(7 downto 0);
+      par_stb_o    : out std_logic;
+      clk_sys      : in  std_logic;
+      sd_lba       : out vd_vec_array(G_VDNUM - 1 downto 0)(31 downto 0);
+      sd_blk_cnt   : out vd_vec_array(G_VDNUM - 1 downto 0)(5 downto 0);
+      sd_rd        : out vd_std_array(G_VDNUM - 1 downto 0);
+      sd_wr        : out vd_std_array(G_VDNUM - 1 downto 0);
+      sd_ack       : in  vd_std_array(G_VDNUM - 1 downto 0);
+      sd_buff_addr : in  std_logic_vector(13 downto 0);
+      sd_buff_dout : in  std_logic_vector(7 downto 0);
+      sd_buff_din  : out vd_vec_array(G_VDNUM - 1 downto 0)(7 downto 0);
+      sd_buff_wr   : in  std_logic;
+      rom_addr_i   : in  std_logic_vector(15 downto 0);
+      rom_data_i   : in  std_logic_vector(7 downto 0);
+      rom_data_o   : out std_logic_vector(7 downto 0);
+      rom_wr_i     : in  std_logic;
+      rom_std_i    : in  std_logic
+    );
+  end component iec_drive;
+
 begin
 
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
@@ -516,7 +559,7 @@ begin
 
   -- the drive led is on if either the C64 is writing to the virtual disk (cached in RAM)
   -- or if the dirty cache is dirty and/orcurrently being flushed to the SD card
-  drive_led_o     <= c64_drive_led when unsigned(cache_dirty) = 0 else
+  drive_led_o     <= c64_drive_led(0) when unsigned(cache_dirty) = 0 else
                      '1';
 
   --------------------------------------------------------------------------------------------------
@@ -1318,7 +1361,7 @@ begin
     iec_drives_reset(i) <= (not reset_core_n) or (not vdrives_mounted(i));
   end generate iec_drv_reset_gen;
 
-  iec_drive_inst : entity work.iec_drive
+  iec_drive_inst : component iec_drive
     generic map (
       PARPORT => 0, -- Parallel C1541 port for faster (~20x) loading time using DolphinDOS
       DUALROM => 1, -- Two switchable ROMs: Standard DOS and JiffyDOS
