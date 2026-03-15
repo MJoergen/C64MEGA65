@@ -99,7 +99,7 @@ begin
       c64_ram_data_o         => c64_ram_data_out,
       c64_ram_we_o           => c64_ram_we,
       c64_ram_data_i         => c64_ram_data_in,
-      c64_clk_sd_i           => '0',
+      c64_clk_sd_i           => clk_main,
       c64_qnice_addr_i       => (others => '0'),
       c64_qnice_data_i       => X"0000",
       c64_qnice_data_o       => open,
@@ -122,19 +122,19 @@ begin
       cart_dotclock_o        => open,
       cart_dma_i             => '0',
       cart_reset_oe_o        => open,
-      cart_reset_i           => '0',
+      cart_reset_i           => '1',
       cart_reset_o           => open,
       cart_game_oe_o         => open,
-      cart_game_i            => '0',
+      cart_game_i            => '1',
       cart_game_o            => open,
       cart_exrom_oe_o        => open,
-      cart_exrom_i           => '0',
+      cart_exrom_i           => '1',
       cart_exrom_o           => open,
       cart_nmi_oe_o          => open,
-      cart_nmi_i             => '0',
+      cart_nmi_i             => '1',
       cart_nmi_o             => open,
       cart_irq_oe_o          => open,
-      cart_irq_i             => '0',
+      cart_irq_i             => '1',
       cart_irq_o             => open,
       cart_roml_oe_o         => open,
       cart_roml_i            => '0',
@@ -205,8 +205,29 @@ begin
   c64_ram_proc : process (clk_main)
     type     ram_type is array (natural range 0 to 65535) of unsigned(7 downto 0);
     variable ram_v : ram_type := (others => x"EE");
+    variable first_v : boolean := true;
   begin
     if rising_edge(clk_main) then
+      if first_v and c64_ram_we = '0' and c64_ram_addr = X"E5CD" then
+        report "INJECT!!!";
+        -- Inject LOAD"*",8 RUN
+        ram_v(16#0277#) := X"4C";
+        ram_v(16#0278#) := X"4F";
+        ram_v(16#0279#) := X"41";
+        ram_v(16#027A#) := X"44";
+        ram_v(16#027B#) := X"22";
+        ram_v(16#027C#) := X"2A";
+        ram_v(16#027D#) := X"22";
+        ram_v(16#027E#) := X"2C";
+        ram_v(16#027F#) := X"38";
+        ram_v(16#0280#) := X"0D";
+        ram_v(16#0281#) := X"52";
+        ram_v(16#0282#) := X"55";
+        ram_v(16#0283#) := X"4E";
+        ram_v(16#0284#) := X"0D";
+        ram_v(16#00C6#) := X"0E";
+        first_v := false;
+      end if;
       if c64_ram_we = '1' then
         ram_v(to_integer(c64_ram_addr)) := c64_ram_data_out;
       end if;

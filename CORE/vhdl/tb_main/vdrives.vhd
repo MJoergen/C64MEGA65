@@ -17,8 +17,9 @@ end package vdrives_pkg;
 
 library ieee;
   use ieee.std_logic_1164.all;
-  use ieee.numeric_std.all;
+  use ieee.numeric_std_unsigned.all;
   use work.vdrives_pkg.all;
+  use std.textio.all;
 
 entity vdrives is
   generic (
@@ -60,7 +61,7 @@ entity vdrives is
     -- MiSTer's "SD block level access" interface, which runs in QNICE's clock domain using a dedicated signal
     -- on Mister's side such as "clk_sys" (<== oddly deep down in MiSTer code "clk_sys" is not the core, but the "sd write", i.e. QNICE)
     sd_lba_i         : in    vd_vec_array(VDNUM - 1 downto 0)(31 downto 0);
-    sd_blk_cnt_i     : in    vd_vec_array(VDNUM - 1 downto 0)(5 downto 0); -- number of blocks-1, total size ((sd_blk_cnt+1)*(1<<(BLKSZ+7))) must be <= 16384!
+    sd_blk_cnt_i     : in    vd_vec_array(VDNUM - 1 downto 0)(5 downto 0); -- number of blocks-1
     sd_rd_i          : in    vd_std_array(VDNUM - 1 downto 0);
     sd_wr_i          : in    vd_std_array(VDNUM - 1 downto 0);
     sd_ack_o         : out   vd_std_array(VDNUM - 1 downto 0);
@@ -84,7 +85,82 @@ end entity vdrives;
 
 architecture simulation of vdrives is
 
+  type slv8_vector_type is array (natural range <>) of std_logic_vector(7 downto 0);
+
 begin
+
+  img_proc : process
+    variable reset_core_d : std_logic;
+  begin
+    img_readonly_o <= '0';
+    img_size_o     <= to_stdlogicvector(174848, 32);
+    img_type_o     <= "00";
+    img_mounted_o  <= "0";
+    wait until falling_edge(reset_core_i);
+
+    report "Mount image";
+    wait until rising_edge(clk_core_i);
+    img_mounted_o  <= "1";
+    wait until rising_edge(clk_core_i);
+    img_mounted_o  <= "0";
+    wait until rising_edge(clk_core_i);
+
+    wait;
+  end process img_proc;
+
+  qnice_data_o     <= x"0000";
+
+  drive_mounted_o  <= "1";
+  cache_dirty_o    <= "0";
+  cache_flushing_o <= "0";
+
+
+  sd_proc : process
+    variable disk_v      : slv8_vector_type(0 to 174848-1);
+    type     char_file_type is file of character;
+    file     ramfile     : char_file_type;
+    variable char        : character;
+    variable i           : natural := 0;
+  begin
+
+    report "Reading disk";
+    file_open(ramfile, "fREUd.d64");
+    while not endfile(ramfile) loop
+       read(ramfile, char);
+       disk_v(i) := to_stdlogicvector(character'pos(char), 8);
+       i := i + 1;
+    end loop;
+    file_close(ramfile);
+    report "Closing disk, i=" & to_string(i);
+
+    main_loop : loop
+      sd_buff_addr_o <= (others => '0');
+      sd_buff_dout_o <= (others => '0');
+      sd_buff_wr_o   <= '0';
+      sd_ack_o       <= "0";
+      wait until rising_edge(clk_qnice_i);
+
+      if sd_rd_i(0) then
+        report "DISK READ: lba=" & to_hstring(sd_lba_i(0)) & ", blk_cnt=" & to_hstring(sd_blk_cnt_i(0));
+        sector_loop : for s in 0 to to_integer(sd_blk_cnt_i(0)) loop
+          byte_loop : for b in 0 to 255 loop
+            sd_buff_addr_o <= to_stdlogicvector(s*256 + b, AW + 1);
+            sd_buff_dout_o <= disk_v(to_integer(sd_lba_i(0) + s)*256 + b);
+            sd_buff_wr_o   <= '1';
+            wait until rising_edge(clk_qnice_i);
+          end loop byte_loop;
+        end loop sector_loop;
+
+        report "DISK ACK";
+        sd_buff_addr_o <= (others => '0');
+        sd_buff_dout_o <= (others => '0');
+        sd_buff_wr_o   <= '0';
+        sd_ack_o       <= "1";
+        wait until rising_edge(clk_qnice_i);
+      end if;
+
+    end loop main_loop;
+  end process sd_proc;
 
 end architecture simulation;
 

@@ -34,6 +34,7 @@ vcom -2008 \
     ../../../M2M/vhdl/memory/avm_pause.vhd \
     ../../../M2M/vhdl/memory/avm_memory_pause.vhd \
     ../../../M2M/vhdl/memory/avm_cache.vhd \
+    ../../C64_MiSTerMEGA65/rtl/fmt.vhd \
     ../../C64_MiSTerMEGA65/rtl/video_sync.vhd \
     ../../C64_MiSTerMEGA65/rtl/t65/T65_Pack.vhd \
     ../../C64_MiSTerMEGA65/rtl/t65/T65_MCode.vhd \
