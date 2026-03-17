@@ -7,8 +7,9 @@ can be checked in the "About & Help" menu of the core.
 
 ## Version 5.3
 
-| Name          | Date     | Commit  | Comment
-|---------------|----------|---------|--------------------------------------
+| Name          | Date     | Commit   | Comment
+|---------------|----------|----------|--------------------------------------
+| WIP-V5.3-A4   | 03/17/26 | e284373  | Attempt to make fREUd demo work with real REU.
 | WIP-V5.3-A3   | 08/12/24 | d92c2535 | Fix SIMCRT issues #69 and #138.
 | WIP-V5.3-A2   | 06/12/24 | 517025fc | Attempt again to fix issue #143: TeensyROM is not booting its menu
 | WIP-V5.3-A1   | 06/12/24 | 03960c66 | Attempt to fix issue #143: TeensyROM is not booting its menu
