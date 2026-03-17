@@ -209,7 +209,7 @@ begin
   begin
     if rising_edge(clk_main) then
       if first_v and c64_ram_we = '0' and c64_ram_addr = X"E5CD" then
-        report "INJECT!!!";
+        report "INJECT LOAD'*',8 and RUN";
         -- Inject LOAD"*",8 RUN
         ram_v(16#0277#) := X"4C";
         ram_v(16#0278#) := X"4F";
