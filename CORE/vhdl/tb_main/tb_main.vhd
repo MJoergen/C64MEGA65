@@ -1,6 +1,7 @@
 library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
+  use work.fmt.f;
 
 entity tb_main is
 end entity tb_main;
@@ -11,10 +12,10 @@ architecture simulation of tb_main is
   signal reset_soft : std_logic := '1';
   signal reset_hard : std_logic := '1';
 
-  signal c64_ram_addr      : unsigned(15 downto 0);
-  signal c64_ram_data_out  : unsigned( 7 downto 0);
-  signal c64_ram_we        : std_logic;
-  signal c64_ram_data_in   : unsigned( 7 downto 0);
+  signal c64_ram_addr     : unsigned(15 downto 0);
+  signal c64_ram_data_out : unsigned( 7 downto 0);
+  signal c64_ram_we       : std_logic;
+  signal c64_ram_data_in  : unsigned( 7 downto 0);
 
   signal avm_waitrequest   : std_logic;
   signal avm_write         : std_logic;
@@ -25,6 +26,16 @@ architecture simulation of tb_main is
   signal avm_burstcount    : std_logic_vector( 7 downto 0);
   signal avm_readdata      : std_logic_vector(15 downto 0);
   signal avm_readdatavalid : std_logic;
+
+  signal video_ce     : std_logic;
+  signal video_ce_ovl : std_logic;
+  signal video_red    : std_logic_vector(7 downto 0);
+  signal video_green  : std_logic_vector(7 downto 0);
+  signal video_blue   : std_logic_vector(7 downto 0);
+  signal video_vs     : std_logic;
+  signal video_hs     : std_logic;
+  signal video_hblank : std_logic;
+  signal video_vblank : std_logic;
 
 begin
 
@@ -82,15 +93,15 @@ begin
       pot1_y_i               => X"FF",
       pot2_x_i               => X"FF",
       pot2_y_i               => X"FF",
-      video_ce_o             => open,
-      video_ce_ovl_o         => open,
-      video_red_o            => open,
-      video_green_o          => open,
-      video_blue_o           => open,
-      video_vs_o             => open,
-      video_hs_o             => open,
-      video_hblank_o         => open,
-      video_vblank_o         => open,
+      video_ce_o             => video_ce,
+      video_ce_ovl_o         => video_ce_ovl,
+      video_red_o            => video_red,
+      video_green_o          => video_green,
+      video_blue_o           => video_blue,
+      video_vs_o             => video_vs,
+      video_hs_o             => video_hs,
+      video_hblank_o         => video_hblank,
+      video_vblank_o         => video_vblank,
       audio_left_o           => open,
       audio_right_o          => open,
       drive_led_o            => open,
@@ -203,9 +214,11 @@ begin
   ---------------------------------------
 
   c64_ram_proc : process (clk_main)
+    --
+
     type     ram_type is array (natural range 0 to 65535) of unsigned(7 downto 0);
-    variable ram_v : ram_type := (others => x"EE");
-    variable first_v : boolean := true;
+    variable ram_v   : ram_type := (others => x"EE");
+    variable first_v : boolean  := true;
   begin
     if rising_edge(clk_main) then
       if first_v and c64_ram_we = '0' and c64_ram_addr = X"E5CD" then
@@ -226,7 +239,7 @@ begin
         ram_v(16#0283#) := X"4E";
         ram_v(16#0284#) := X"0D";
         ram_v(16#00C6#) := X"0E";
-        first_v := false;
+        first_v         := false;
       end if;
       if c64_ram_we = '1' then
         ram_v(to_integer(c64_ram_addr)) := c64_ram_data_out;
@@ -260,6 +273,54 @@ begin
       avm_readdatavalid_o => avm_readdatavalid,
       avm_waitrequest_o   => avm_waitrequest
     ); -- avm_memory_pause_inst : entity work.avm_memory_pause
+
+  video_proc : process
+    --
+
+    type     char_file_type is file of character;
+    file     video_file : char_file_type;
+    variable b_v        : std_logic_vector(7 downto 0);
+    variable x_v        : natural := 0;
+    variable last_x_v   : natural;
+    variable y_v        : natural := 0;
+    variable last_y_v   : natural;
+    variable f_v        : natural := 0;
+  begin
+    file_open(video_file, "frames/frame_" & f(f_v, "0>3u") & ".bin", write_mode);
+    main_loop : loop
+      wait until rising_edge(clk_main);
+      if video_ce then
+        if not video_hblank and not video_vblank then
+          b_v := video_red(7 downto 5) & video_green(7 downto 5) & video_blue(7 downto 6);
+          write(video_file, character'val(to_integer(unsigned(b_v))));
+          x_v := x_v + 1;
+        end if;
+
+        if video_hs then
+          if x_v > 0 then
+            last_x_v := x_v;
+            x_v      := 0;
+            y_v      := y_v + 1;
+          end if;
+        end if;
+
+        if video_vs then
+          if y_v > 0 then
+            last_y_v := y_v;
+            y_v      := 0;
+            f_v      := f_v + 1;
+
+            file_close(video_file);
+            report "x=" & to_string(last_x_v) & ", y=" & to_string(last_y_v);
+            file_open(video_file, "frames/frame_" & f(f_v, "0>3u") & ".bin", write_mode);
+          end if;
+          y_v := 0;
+        end if;
+      end if;
+    end loop;
+
+    wait;
+  end process video_proc;
 
 end architecture simulation;
 
