@@ -221,7 +221,7 @@ begin
     variable first_v : boolean  := true;
   begin
     if rising_edge(clk_main) then
-      if first_v and c64_ram_we = '0' and c64_ram_addr = X"E5CD" then
+      if first_v and now >= 1000 ms then
         report "INJECT LOAD'*',8 and RUN";
         -- Inject LOAD"*",8 RUN
         ram_v(16#0277#) := X"4C";
@@ -286,7 +286,7 @@ begin
     variable last_y_v   : natural;
     variable f_v        : natural := 0;
   begin
-    file_open(video_file, "frames/frame_" & f(f_v, "0>3u") & ".bin", write_mode);
+    file_open(video_file, "frames/frame_" & f(f_v, "0>4u") & ".bin", write_mode);
     main_loop : loop
       wait until rising_edge(clk_main);
       if video_ce then
@@ -311,8 +311,8 @@ begin
             f_v      := f_v + 1;
 
             file_close(video_file);
-            report "x=" & to_string(last_x_v) & ", y=" & to_string(last_y_v);
-            file_open(video_file, "frames/frame_" & f(f_v, "0>3u") & ".bin", write_mode);
+--            report "x=" & to_string(last_x_v) & ", y=" & to_string(last_y_v);
+            file_open(video_file, "frames/frame_" & f(f_v, "0>4u") & ".bin", write_mode);
           end if;
           y_v := 0;
         end if;

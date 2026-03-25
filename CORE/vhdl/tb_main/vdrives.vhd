@@ -142,6 +142,8 @@ begin
 
       if sd_rd_i(0) then
         report "DISK READ: lba=" & to_hstring(sd_lba_i(0)) & ", blk_cnt=" & to_hstring(sd_blk_cnt_i(0));
+        sd_ack_o       <= "1";
+        wait until rising_edge(clk_qnice_i);
         sector_loop : for s in 0 to to_integer(sd_blk_cnt_i(0)) loop
           byte_loop : for b in 0 to 255 loop
             sd_buff_addr_o <= to_stdlogicvector(s*256 + b, AW + 1);
@@ -155,7 +157,7 @@ begin
         sd_buff_addr_o <= (others => '0');
         sd_buff_dout_o <= (others => '0');
         sd_buff_wr_o   <= '0';
-        sd_ack_o       <= "1";
+        sd_ack_o       <= "0";
         wait until rising_edge(clk_qnice_i);
       end if;
 

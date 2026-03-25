@@ -12,256 +12,11 @@ add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cp
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/so_n
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/r_w_n
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/sync
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ef
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/mf
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/xf
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ml_n
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/vp_n
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/vda
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/vpa
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/a
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/din
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/dout
-add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/regs
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/debug
 add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/nmi_ack
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ABC
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/X
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Y
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/P
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/AD
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/DL
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/PwithB
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BAH
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BAL
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/PBR
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/DBR
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/PC
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/S
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/EF_i
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/MF_i
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/XF_i
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/IR
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/MCycle
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/DO_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Mode_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BCD_en_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ALU_Op_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Write_Data_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Set_Addr_To_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/PCAdder
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/RstCycle
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/IRQCycle
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/NMICycle
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/IRQReq
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/NMIReq
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/SO_n_o
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/IRQ_n_o
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/NMI_n_o
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/NMIAct
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Break
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BusA
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BusA_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BusB
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BusB_r
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ALU_Q
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/P_Out
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LCycle
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ALU_Op
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Set_BusA_To
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Set_Addr_To
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Write_Data
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Jump
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BAAdd
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BAQuirk
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/BreakAtNA
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/ADAdd
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/AddY
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/PCAdd
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Inc_S
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Dec_S
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDA
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDP
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDX
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDY
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDS
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDDI
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDALU
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDAD
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDBAL
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/LDBAH
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/SaveP
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Write
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Res_n_i
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/Res_n_d
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/rdy_mod
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/really_rdy
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/WRn_i
-add wave -noupdate -group cpu_6510 -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/NMI_entered
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/clk
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/phi
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/enaData
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/enaPixel
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSync
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/ba
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/ba_dma
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/mode6569
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/mode6567old
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/mode6567R8
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/mode6572
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/turbo_en
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/turbo_state
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/variant
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/reset
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/cs
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/we
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/lp_n
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/aRegisters
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/diRegisters
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/di
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/diColor
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/do
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/vicAddr
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/irq_n
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/hSync
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/vSync
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/colorIndex
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/debugX
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/debugY
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/vicRefresh
-add wave -noupdate -group {vic II} /tb_main/main_inst/fpga64_sid_iec_inst/vic/addrValid
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/lastLineFlag
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/vicCycle
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/sprite
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shiftChars
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shiftLoadEna
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/idle
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterIrqDone
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterEnable
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/badLine
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baLoc
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baCnt
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baChars
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSprite04
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSprite15
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSprite26
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSprite37
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/baSpriteLast
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/refreshCounter
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MX
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MY
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ME
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MXE
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MYE
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MPRIO
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCColorDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCColor
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/BMM
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/BMMDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ECM
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ECMDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCM
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCMDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/DEN
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/RSEL
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/CSEL
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/RES
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/VM
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/CB
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/EC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/B0C
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/B1C
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/B2C
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/B3C
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MM0
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MM1
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/spriteColors
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MainBorder
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/TBBorder
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/setTBBorder
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/hBlack
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/vBlanking
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/hBlanking
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/xscroll
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/yscroll
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterCmp
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/vicAddrReg
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/vicAddrLoc
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ColCounter
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ColRestart
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/RowCounter
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/IRST
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ERST
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/IMBC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/EMBC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/IMMC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/EMMC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ILP
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/ELP
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/IRQ
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/collision
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2M
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2D
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2DDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2Mhit
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2Dhit
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/M2MClr
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterX
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterY
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterY_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/cycleLast
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/cycleLastDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rasterXDelay
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/lightPenHit
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/lpX
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/lpY
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/resetLightPenIrq
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/resetIMMC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/resetIMBC
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/resetRasterIrq
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/charStore
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/nextChar
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/waitingChar
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/waitingChar_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/waitingPixels
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/waitingPixels_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shiftingChar
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shiftingChar_d
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shiftingPixels
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/currentPixels
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/currentPixels_d
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/shifting_ff
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MPtr
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MPixels
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MPixelStore
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MActive
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MActive_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MDMA
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MDMA_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCnt
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCnt_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCBase
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCBase_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MXE_ff
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MYE_ff
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MYE_ff_next
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MC_ff
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MShift_stop
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCurrentPixel_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/MCurrentPixel
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/pixelBgFlag
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/we_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/rd_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/addr_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/di_r
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/myWr_phi1
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/myWr_a
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/myWr_b
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/myWr_c
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/myRd
-add wave -noupdate -group {vic II} -expand -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic/turbo_reg
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/clk
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/reset
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/cfg
@@ -308,41 +63,6 @@ add wave -noupdate -group main /tb_main/main_inst/c64_cia_ver_i
 add wave -noupdate -group main /tb_main/main_inst/c64_exp_port_mode_i
 add wave -noupdate -group main /tb_main/main_inst/kb_key_num_i
 add wave -noupdate -group main /tb_main/main_inst/kb_key_pressed_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_up_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_down_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_left_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_right_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_fire_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_1_up_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_1_down_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_1_left_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_1_right_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_1_fire_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_2_up_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_2_down_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_2_left_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_2_right_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_2_fire_n_i
-add wave -noupdate -group main /tb_main/main_inst/joy_2_up_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_2_down_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_2_left_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_2_right_n_o
-add wave -noupdate -group main /tb_main/main_inst/joy_2_fire_n_o
-add wave -noupdate -group main /tb_main/main_inst/pot1_x_i
-add wave -noupdate -group main /tb_main/main_inst/pot1_y_i
-add wave -noupdate -group main /tb_main/main_inst/pot2_x_i
-add wave -noupdate -group main /tb_main/main_inst/pot2_y_i
-add wave -noupdate -group main /tb_main/main_inst/video_ce_o
-add wave -noupdate -group main /tb_main/main_inst/video_ce_ovl_o
-add wave -noupdate -group main /tb_main/main_inst/video_red_o
-add wave -noupdate -group main /tb_main/main_inst/video_green_o
-add wave -noupdate -group main /tb_main/main_inst/video_blue_o
-add wave -noupdate -group main /tb_main/main_inst/video_vs_o
-add wave -noupdate -group main /tb_main/main_inst/video_hs_o
-add wave -noupdate -group main /tb_main/main_inst/video_hblank_o
-add wave -noupdate -group main /tb_main/main_inst/video_vblank_o
-add wave -noupdate -group main /tb_main/main_inst/audio_left_o
-add wave -noupdate -group main /tb_main/main_inst/audio_right_o
 add wave -noupdate -group main /tb_main/main_inst/drive_led_o
 add wave -noupdate -group main /tb_main/main_inst/drive_led_col_o
 add wave -noupdate -group main /tb_main/main_inst/c64_ram_addr_o
@@ -355,58 +75,6 @@ add wave -noupdate -group main /tb_main/main_inst/c64_qnice_data_i
 add wave -noupdate -group main /tb_main/main_inst/c64_qnice_data_o
 add wave -noupdate -group main /tb_main/main_inst/c64_qnice_ce_i
 add wave -noupdate -group main /tb_main/main_inst/c64_qnice_we_i
-add wave -noupdate -group main /tb_main/main_inst/iec_hardware_port_en_i
-add wave -noupdate -group main /tb_main/main_inst/iec_reset_n_o
-add wave -noupdate -group main /tb_main/main_inst/iec_atn_n_o
-add wave -noupdate -group main /tb_main/main_inst/iec_clk_en_o
-add wave -noupdate -group main /tb_main/main_inst/iec_clk_n_i
-add wave -noupdate -group main /tb_main/main_inst/iec_clk_n_o
-add wave -noupdate -group main /tb_main/main_inst/iec_data_en_o
-add wave -noupdate -group main /tb_main/main_inst/iec_data_n_i
-add wave -noupdate -group main /tb_main/main_inst/iec_data_n_o
-add wave -noupdate -group main /tb_main/main_inst/iec_srq_en_o
-add wave -noupdate -group main /tb_main/main_inst/iec_srq_n_i
-add wave -noupdate -group main /tb_main/main_inst/iec_srq_n_o
-add wave -noupdate -group main /tb_main/main_inst/cart_en_o
-add wave -noupdate -group main /tb_main/main_inst/cart_phi2_o
-add wave -noupdate -group main /tb_main/main_inst/cart_dotclock_o
-add wave -noupdate -group main /tb_main/main_inst/cart_dma_i
-add wave -noupdate -group main /tb_main/main_inst/cart_reset_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_reset_i
-add wave -noupdate -group main /tb_main/main_inst/cart_reset_o
-add wave -noupdate -group main /tb_main/main_inst/cart_game_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_game_i
-add wave -noupdate -group main /tb_main/main_inst/cart_game_o
-add wave -noupdate -group main /tb_main/main_inst/cart_exrom_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_exrom_i
-add wave -noupdate -group main /tb_main/main_inst/cart_exrom_o
-add wave -noupdate -group main /tb_main/main_inst/cart_nmi_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_nmi_i
-add wave -noupdate -group main /tb_main/main_inst/cart_nmi_o
-add wave -noupdate -group main /tb_main/main_inst/cart_irq_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_irq_i
-add wave -noupdate -group main /tb_main/main_inst/cart_irq_o
-add wave -noupdate -group main /tb_main/main_inst/cart_roml_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_roml_i
-add wave -noupdate -group main /tb_main/main_inst/cart_roml_o
-add wave -noupdate -group main /tb_main/main_inst/cart_romh_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_romh_i
-add wave -noupdate -group main /tb_main/main_inst/cart_romh_o
-add wave -noupdate -group main /tb_main/main_inst/cart_ctrl_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_ba_i
-add wave -noupdate -group main /tb_main/main_inst/cart_rw_i
-add wave -noupdate -group main /tb_main/main_inst/cart_io1_i
-add wave -noupdate -group main /tb_main/main_inst/cart_io2_i
-add wave -noupdate -group main /tb_main/main_inst/cart_ba_o
-add wave -noupdate -group main /tb_main/main_inst/cart_rw_o
-add wave -noupdate -group main /tb_main/main_inst/cart_io1_o
-add wave -noupdate -group main /tb_main/main_inst/cart_io2_o
-add wave -noupdate -group main /tb_main/main_inst/cart_addr_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_a_i
-add wave -noupdate -group main /tb_main/main_inst/cart_a_o
-add wave -noupdate -group main /tb_main/main_inst/cart_data_oe_o
-add wave -noupdate -group main /tb_main/main_inst/cart_d_i
-add wave -noupdate -group main /tb_main/main_inst/cart_d_o
 add wave -noupdate -group main /tb_main/main_inst/avm_waitrequest_i
 add wave -noupdate -group main /tb_main/main_inst/avm_write_o
 add wave -noupdate -group main /tb_main/main_inst/avm_read_o
@@ -416,35 +84,6 @@ add wave -noupdate -group main /tb_main/main_inst/avm_byteenable_o
 add wave -noupdate -group main /tb_main/main_inst/avm_burstcount_o
 add wave -noupdate -group main /tb_main/main_inst/avm_readdata_i
 add wave -noupdate -group main /tb_main/main_inst/avm_readdatavalid_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_loading_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_id_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_exrom_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_game_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_size_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_bank_laddr_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_bank_size_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_bank_num_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_bank_raddr_i
-add wave -noupdate -group main /tb_main/main_inst/cartridge_bank_wr_i
-add wave -noupdate -group main /tb_main/main_inst/crt_bank_wait_i
-add wave -noupdate -group main /tb_main/main_inst/crt_lo_ram_data_i
-add wave -noupdate -group main /tb_main/main_inst/crt_hi_ram_data_i
-add wave -noupdate -group main /tb_main/main_inst/crt_ioe_ram_data_i
-add wave -noupdate -group main /tb_main/main_inst/crt_iof_ram_data_i
-add wave -noupdate -group main /tb_main/main_inst/crt_addr_bus_o
-add wave -noupdate -group main /tb_main/main_inst/crt_ioe_we_o
-add wave -noupdate -group main /tb_main/main_inst/crt_iof_we_o
-add wave -noupdate -group main /tb_main/main_inst/crt_bank_lo_o
-add wave -noupdate -group main /tb_main/main_inst/crt_bank_hi_o
-add wave -noupdate -group main /tb_main/main_inst/c64rom_we_i
-add wave -noupdate -group main /tb_main/main_inst/c64rom_addr_i
-add wave -noupdate -group main /tb_main/main_inst/c64rom_data_i
-add wave -noupdate -group main /tb_main/main_inst/c64rom_data_o
-add wave -noupdate -group main /tb_main/main_inst/c1541rom_we_i
-add wave -noupdate -group main /tb_main/main_inst/c1541rom_addr_i
-add wave -noupdate -group main /tb_main/main_inst/c1541rom_data_i
-add wave -noupdate -group main /tb_main/main_inst/c1541rom_data_o
-add wave -noupdate -group main /tb_main/main_inst/rtc_i
 add wave -noupdate -group main -group Internal /tb_main/main_inst/c64_pause
 add wave -noupdate -group main -group Internal /tb_main/main_inst/c64_drive_led
 add wave -noupdate -group main -group Internal /tb_main/main_inst/cia1_pa_in
@@ -485,16 +124,6 @@ add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_sd_buf_add
 add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_sd_buf_data_in
 add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_sd_buf_data_out
 add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_sd_buf_wr
-add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_par_stb_in
-add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_par_stb_out
-add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_par_data_in
-add wave -noupdate -group main -group Internal /tb_main/main_inst/iec_par_data_out
-add wave -noupdate -group main -group Internal /tb_main/main_inst/vga_hs
-add wave -noupdate -group main -group Internal /tb_main/main_inst/vga_vs
-add wave -noupdate -group main -group Internal /tb_main/main_inst/vga_red
-add wave -noupdate -group main -group Internal /tb_main/main_inst/vga_green
-add wave -noupdate -group main -group Internal /tb_main/main_inst/vga_blue
-add wave -noupdate -group main -group Internal /tb_main/main_inst/video_ce
 add wave -noupdate -group main -group Internal /tb_main/main_inst/reset_core_n
 add wave -noupdate -group main -group Internal /tb_main/main_inst/reset_core_int_n
 add wave -noupdate -group main -group Internal /tb_main/main_inst/hard_reset_n
@@ -572,269 +201,148 @@ add wave -noupdate -group main -group Internal /tb_main/main_inst/cass_write
 add wave -noupdate -group main -group Internal /tb_main/main_inst/cass_motor
 add wave -noupdate -group main -group Internal /tb_main/main_inst/cass_rtc
 add wave -noupdate -group main -group Internal /tb_main/main_inst/rtcf83_sda
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/clk_qnice_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/clk_core_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/reset_core_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/img_mounted_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/img_readonly_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/img_size_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/img_type_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/drive_mounted_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/cache_dirty_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/cache_flushing_o
-add wave -noupdate -group vdrives -radix unsigned /tb_main/main_inst/vdrives_inst/sd_lba_i
-add wave -noupdate -group vdrives -radix unsigned /tb_main/main_inst/vdrives_inst/sd_blk_cnt_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_rd_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_wr_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_ack_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_buff_addr_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_buff_dout_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_buff_din_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/sd_buff_wr_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/qnice_addr_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/qnice_data_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/qnice_data_o
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/qnice_ce_i
-add wave -noupdate -group vdrives /tb_main/main_inst/vdrives_inst/qnice_we_i
-add wave -noupdate -radix unsigned /tb_main/main_inst/fpga64_sid_iec_inst/debug_proc/clk
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/clk}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/reset}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ce}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ph2_r}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ph2_f}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/iec_clk_in}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/iec_data_in}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/iec_atn_in}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/iec_clk_out}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/iec_data_out}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ext_en}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/rom_addr}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/rom_data}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/par_data_in}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/par_stb_in}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/par_data_out}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/par_stb_out}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ds}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/din}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/dout}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/mode}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/stp}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/mtr}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/freq}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/sync_n}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/byte_n}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/wps_n}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/tr00_sense_n}
-add wave -noupdate -group c1541_logic {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/act}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_do}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_irq}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_pa_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_pa_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_ca2_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_ca2_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_pb_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_pb_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_cb1_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_cb1_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_cb2_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_cb2_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_do}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_irq}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_pa_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_pa_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_ca2_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_ca2_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_pb_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_pb_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_cb1_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_cb1_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_cb2_o}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_cb2_oe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/soe}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_a}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_do}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_rw}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_irq_n}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_so_n}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ls42}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ram_cs}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc1_cs}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/uc3_cs}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/rom_cs}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/ram_do}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/extram_cs}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/extram_do}
-add wave -noupdate -group c1541_logic -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_logic/cpu_di}
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/clk
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/reset
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/ce
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/pause
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/gcr_mode
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/img_mounted
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/img_readonly
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/img_size
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/led
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/iec_atn_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/iec_data_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/iec_clk_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/iec_data_o
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/iec_clk_o
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/par_data_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/par_stb_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/par_data_o
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/par_stb_o
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/clk_sys
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_lba
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_blk_cnt
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_rd
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_wr
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_ack
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_buff_addr
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_buff_dout
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_buff_din
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/sd_buff_wr
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/rom_addr_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/rom_data_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/rom_data_o
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/rom_wr_i
-add wave -noupdate -group c1541_multi /tb_main/main_inst/iec_drive_inst/c1541/rom_std_i
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/iec_atn
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/iec_data
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/iec_clk
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/reset_drv
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/stdrom
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/qnice_rom2_do
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/qnice_rom1_do
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/ph2_r
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/ph2_f
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom_32k_i
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom_16k_i
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/empty8k
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom_sz
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom32k_main
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom16k_main
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/empty8k_main
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom_sz_main
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/mem_a
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/#ublk#121834457#201/state
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/rom_do
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/romstd_do
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/drv_addr
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/iec_data_d
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/iec_clk_d
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/ext_en
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/par_data_d
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/par_stb_d
-add wave -noupdate -group c1541_multi -expand -group Internal /tb_main/main_inst/iec_drive_inst/c1541/led_drv
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/clk}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/reset}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_mode}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/ce}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/ph2_r}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/ph2_f}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/img_mounted}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/img_readonly}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/img_size}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/drive_num}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/led}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/iec_atn_i}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/iec_data_i}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/iec_clk_i}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/iec_data_o}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/iec_clk_o}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/par_data_i}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/par_stb_i}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/par_data_o}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/par_stb_o}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/ext_en}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/rom_addr}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/rom_data}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/clk_sys}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_lba}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_blk_cnt}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_rd}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_wr}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_ack}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_buff_addr}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_buff_dout}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_buff_din}
-add wave -noupdate -group c1541_drv {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_buff_wr}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/mode}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/stp}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/mtr}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/act}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/freq}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/sd_busy}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/readonly}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/disk_present}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/ch_timeout}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/present}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/dgcr_do}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/dgcr_sd_buff_dout}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/dgcr_sync_n}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/dgcr_byte_n}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/dgcr_we}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_do}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_sd_buff_dout}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_sync_n}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_byte_n}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_we}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/gcr_di}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/we}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/track}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/busy}
-add wave -noupdate -group c1541_drv -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/save_track}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/clk}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/ce}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/dout}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/din}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/mode}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/mtr}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/freq}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sync_n}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/byte_n}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/track}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/busy}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/we}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_clk}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_lba}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_buff_addr}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_buff_dout}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_buff_din}
-add wave -noupdate -expand -group c1541_gcr {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sd_buff_wr}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/buff_addr}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/buff_do}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/buff_di}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sector}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sync_in_n}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/byte_in}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/byte_cnt}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/nibble}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/state}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/data_cks}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/gcr_byte_out}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/gcr_nibble_out}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/hdr_cks}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/id1}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/id2}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/sector_max}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/data_header}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/data_body}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/data}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/gcr_lut}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/gcr_nibble}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/nibble_out}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/old_track}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/bit_clk_en}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/mode_r2}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/autorise_write}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/autorise_count}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/sync_cnt}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/gcr_byte}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/bit_cnt}
-add wave -noupdate -expand -group c1541_gcr -expand -group Internal {/tb_main/main_inst/iec_drive_inst/c1541/drives[0]/c1541_drv/c1541_gcr/#ublk#142031842#185/gcr_bit_cnt}
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/clk32
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/clk32_speed
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/reset_n
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/bios
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pause
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pause_out
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pa_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pa_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pb_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pb_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ramAddr
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ramDin
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ramDout
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ramCE
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ramWE
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/io_cycle
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ext_cycle
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/refresh
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cia_mode
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/turbo_mode
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/turbo_speed
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ntscMode
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/hsync
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/vsync
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/r
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/g
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/b
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/game
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/exrom
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/io_rom
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/io_ext
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/io_data
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/irq_n
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/nmi_n
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/nmi_ack
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/ba
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/romL
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/romH
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/UMAXromH
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/UMAXnomap
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/IOE
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/IOF
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dotclk
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/phi0
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/phi2
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_req
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_cycle
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_addr
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_dout
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_din
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/dma_we
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/irq_ext_n
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pb_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pb_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pa2_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pa2_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/pc2_n_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/flag2_n_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/sp2_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/sp2_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/sp1_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/sp1_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cnt2_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cnt2_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cnt1_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/cnt1_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/iec_data_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/iec_data_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/iec_clk_o
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/iec_clk_i
+add wave -noupdate -expand -group fpga_sid_iec /tb_main/main_inst/fpga64_sid_iec_inst/iec_atn_o
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/sysCycle
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/preCycle
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/sysEnable
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/rfsh_cycle
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/dma_active
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/phi0_cpu
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuHasBus
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/baLoc
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/ba_dma
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/aec
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enableCpu
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enableVic
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enablePixel
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enableSid
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/irq_cia1
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/irq_cia2
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/irq_vic
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/systemWe
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/pulseWr_io
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/systemAddr
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_vic
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_sid
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_color
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_cia1
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_cia2
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cs_ram
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuWe
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuWe_pre
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuAddr
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuAddr_pre
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuDi
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuDo
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuDo_pre
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuIO
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/io_data_i
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/ioe_i
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/iof_i
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/io_enable
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu_cyc
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpu_cyc_s
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/turbo_m
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/reset
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enableCia_p
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/enableCia_n
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia1Do
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2Do
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pao
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia1_pbo
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2_pai
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2_pao
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2_pbi
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2_pbo
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cia2_pbe
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/todclk
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicColorIndex
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicBus
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicDi
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicDiAec
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicAddr
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicData
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/lastVicDi
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vicAddr1514
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/colorData
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/colorDataAec
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/turbo_en
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/turbo_state
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic_debugx
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic_debugy
+add wave -noupdate -expand -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuSync
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {276120441459 ps} 0}
+WaveRestoreCursors {{Cursor 1} {1024000 ps} 0}
 quietly wave cursor active 1
 configure wave -namecolwidth 198
 configure wave -valuecolwidth 100
@@ -850,4 +358,4 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits ns
 update
-WaveRestoreZoom {0 ps} {421050 us}
+WaveRestoreZoom {0 ps} {497421926400 ps}

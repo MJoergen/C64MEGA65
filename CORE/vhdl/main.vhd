@@ -544,6 +544,9 @@ architecture synthesis of main is
     );
   end component iec_drive;
 
+  signal iec_clk : std_logic;
+  signal iec_dat : std_logic;
+
 begin
 
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
@@ -1580,6 +1583,30 @@ begin
     ); -- rtcF83_inst
 
   cass_rtc <= not (rtcf83_sda and cass_motor);
+
+  iec_clk <= c64_iec_clk_out  and c64_iec_clk_in;
+  iec_dat <= c64_iec_data_out and c64_iec_data_in;
+
+  iec_proc : process (iec_clk, iec_dat, c64_iec_atn_out)
+    variable b   : std_logic_vector(7 downto 0);
+    variable cnt : natural := 0;
+  begin
+
+    if rising_edge(iec_clk) then
+      b := iec_dat & b(7 downto 1);
+      cnt := cnt + 1;
+
+      if cnt = 9 then
+        report "IEC: " & to_hstring(b);
+        cnt := 0;
+      end if;
+    end if;
+
+    if falling_edge(c64_iec_atn_out) then
+      report "ATN";
+      cnt := 0;
+    end if;
+  end process iec_proc;
 
 end architecture synthesis;
 
