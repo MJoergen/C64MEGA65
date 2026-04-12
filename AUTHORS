@@ -43,6 +43,10 @@ Thanks to Carsten Elton Sørensen (csoren) for adding simulated cartridge
 support (.crt) for COMAL 80, Simons BASIC, Waterloo Structured BASIC,
 Mikro Assembler and BMP-Data Turbo 2000.
 
+Thanks to Erik Scheffers (eriks5) for his REU bugfix that made the C64 now
+even more compatible, as we now can run the awesome fREUd demo by Hoaxers
+flawlessly.
+
 C64MEGA65:
 ----------
 

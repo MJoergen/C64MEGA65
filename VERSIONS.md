@@ -14,6 +14,10 @@ Version 6 - MONTH DAY, 2026
 
 ## Bugfixes
 
+* Increased REU compatibiltiy, fREUd demo by Hoaxers now works flawlessly, by
+  fixing a REU register map bug.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
+
 Version 5.2 - April 28, 2025
 ============================
 

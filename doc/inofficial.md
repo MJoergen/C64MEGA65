@@ -11,7 +11,7 @@ can be checked in the "About & Help" menu of the core.
 |---------------|----------|---------|--------------------------------------
 | WIP-V6-A1     | 02/15/26 | b8d2971 | Support IDE64 (issue #176), disable RTC by default (issue #187)
 | WIP-V6-A2     | 02/25/26 | 71023b4 | Connect BA and DMA pins on Cartridge Port
-| WIP-V6-A3     | 04/10/26 | 83915fd | Fix #180
+| WIP-V6-A3     | 04/10/26 | 83915fd | frREUd REU demo now works (issue #180) by implementing eriks5's REU register map fix
 
 ## Version 5.2
 
