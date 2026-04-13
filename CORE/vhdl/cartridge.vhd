@@ -286,9 +286,9 @@ begin
                end if;
 
             when 19 =>
-               -- Magic Desk - (game=1, exrom=0 = 4/8/16 8k banks)
+               -- Magic Desk - (game=1, exrom=0, up to 128 8k banks)
                if ioe_i = '1' and wr_en_i = '1' then
-                  bank_lo_o <= "000" & wr_data_i(3 downto 0);
+                  bank_lo_o <= wr_data_i(6 downto 0);
                   exrom_o   <= wr_data_i(7);
                end if;
                if cart_loading_i = '1' then
@@ -395,6 +395,21 @@ begin
                   exrom_o      <= '0';
                   bank_lo_o    <= (others => '0');
                   bank_hi_o    <= (others => '0');
+               end if;
+
+            when 85 =>
+               -- Magic Desk 16K / MD2 - (game=0, exrom=0, up to 128 16k banks)
+               if ioe_i = '1' and wr_en_i = '1' then
+                  bank_lo_o <= wr_data_i(6 downto 0);
+                  bank_hi_o <= wr_data_i(6 downto 0);
+                  game_o    <= wr_data_i(7);
+                  exrom_o   <= wr_data_i(7);
+               end if;
+               if cart_loading_i = '1' then
+                  game_o    <= '0';
+                  exrom_o   <= '0';
+                  bank_lo_o <= (others => '0');
+                  bank_hi_o <= (others => '0');
                end if;
 
             when others =>

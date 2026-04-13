@@ -77,8 +77,8 @@ architecture synthesis of crt_cacher is
 
    type mem_t is array (natural range <>) of std_logic_vector(22 downto 0);
    -- Contains byte-address in HyperRAM of each bank location.
-   signal lobanks : mem_t(0 to 63) := (others => (others => '0'));
-   signal hibanks : mem_t(0 to 63) := (others => (others => '0'));
+   signal lobanks : mem_t(0 to 127) := (others => (others => '0'));
+   signal hibanks : mem_t(0 to 127) := (others => (others => '0'));
 
    signal cart_valid_d  : std_logic;
    signal bank_lo_d     : std_logic_vector(6 downto 0);
@@ -109,12 +109,12 @@ begin
       if rising_edge(clk_i) then
          if cart_bank_wr_i = '1' then
             if cart_bank_laddr_i <= X"8000" then
-               lobanks(to_integer(cart_bank_num_i(5 downto 0))) <= cart_bank_raddr_i(22 downto 0);
+               lobanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0);
                if cart_bank_size_i > X"2000" then
-                  hibanks(to_integer(cart_bank_num_i(5 downto 0))) <= cart_bank_raddr_i(22 downto 0)+ ("000" & X"02000");
+                  hibanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0)+ ("000" & X"02000");
                end if;
             else
-               hibanks(to_integer(cart_bank_num_i(5 downto 0))) <= cart_bank_raddr_i(22 downto 0);
+               hibanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0);
             end if;
          end if;
       end if;
