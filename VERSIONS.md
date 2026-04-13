@@ -9,8 +9,12 @@ Version 6 - MONTH DAY, 2026
 
 ## New Features
 
-* Added support for the IDE64
+* Added support for the IDE64.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
+
+* Simulated cartridges (`*.crt`) are now supporting the new Magic Desk 2
+  format that is for example being used by SNK-Vs-Capcom Strong Edition.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
 
 ## Bugfixes
 
