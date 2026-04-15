@@ -51,6 +51,8 @@ architecture simulation of tb_sw_cartridge_wrapper is
    signal main_ram_addr        : std_logic_vector(15 downto 0);
    signal main_bank_lo         : std_logic_vector( 6 downto 0);
    signal main_bank_hi         : std_logic_vector( 6 downto 0);
+   signal main_crt_we          : std_logic;
+   signal main_crt_ram_data    : std_logic_vector( 7 downto 0);
 
    signal qnice_addr           : std_logic_vector(27 downto 0);
    signal qnice_writedata      : std_logic_vector(15 downto 0);
@@ -126,6 +128,8 @@ begin
          main_hi_ram_data_o  => main_hi_ram_data,
          main_ioe_ram_data_o => main_ioe_ram_data,
          main_iof_ram_data_o => main_iof_ram_data,
+         main_crt_we_i       => main_crt_we,
+         main_crt_ram_data_o => main_crt_ram_data,
          hr_clk_i            => hr_clk,
          hr_rst_i            => hr_rst,
          hr_write_o          => hr_write,
@@ -183,6 +187,8 @@ begin
          main_hi_ram_data_i  => main_hi_ram_data,
          main_ioe_ram_data_i => main_ioe_ram_data,
          main_iof_ram_data_i => main_iof_ram_data,
+         main_crt_we_o       => main_crt_we,
+         main_crt_ram_data_i => main_crt_ram_data,
          main_running_o      => main_running
       ); -- i_core_sim
 

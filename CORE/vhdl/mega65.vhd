@@ -249,6 +249,8 @@ signal main_crt_lo_ram_data       : std_logic_vector(15 downto 0);
 signal main_crt_hi_ram_data       : std_logic_vector(15 downto 0);
 signal main_crt_ioe_ram_data      : std_logic_vector( 7 downto 0);
 signal main_crt_iof_ram_data      : std_logic_vector( 7 downto 0);
+signal main_crt_we                : std_logic;
+signal main_crt_ram_data          : std_logic_vector( 7 downto 0);
 
 -- RAM Expansion Unit
 signal main_avm_reu_write         : std_logic;
@@ -723,6 +725,8 @@ begin
          crt_iof_we_o           => main_crt_iof_we,
          crt_bank_lo_o          => main_crt_bank_lo,
          crt_bank_hi_o          => main_crt_bank_hi,
+         crt_we_o               => main_crt_we,
+         crt_ram_data_i         => main_crt_ram_data,
 
          -- Custom Kernal: C64 ROM (in QNICE clock domain via c64_clk_sd_i)
          c64rom_we_i            => qnice_c64rom_we,
@@ -1019,6 +1023,8 @@ begin
       main_hi_ram_data_o   => main_crt_hi_ram_data,
       main_ioe_ram_data_o  => main_crt_ioe_ram_data,
       main_iof_ram_data_o  => main_crt_iof_ram_data,
+      main_crt_we_i        => main_crt_we,
+      main_crt_ram_data_o  => main_crt_ram_data,
       hr_clk_i             => hr_clk_i,
       hr_rst_i             => hr_rst_i,
       hr_write_o           => hr_crt_write,
