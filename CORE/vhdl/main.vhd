@@ -424,6 +424,7 @@ architecture synthesis of main is
   signal   crt_io_data    : std_logic_vector(7 downto 0);
   signal   crt_exrom      : std_logic;
   signal   crt_game       : std_logic;
+  signal   crt_roml_we    : std_logic;
   signal   crt_nmi        : std_logic;
   signal   crt_ioe_wr_ena : std_logic;
   signal   crt_iof_wr_ena : std_logic;
@@ -1093,6 +1094,7 @@ begin
       io_data_o      => crt_io_data,
       exrom_o        => crt_exrom,
       game_o         => crt_game,
+      roml_we_o      => crt_roml_we,
       freeze_key_i   => not restore_key_n,
       mod_key_i      => '0',
       nmi_o          => crt_nmi,

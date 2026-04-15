@@ -42,6 +42,7 @@ entity cartridge is
     io_data_o      : out   std_logic_vector(7 downto 0);
     exrom_o        : out   std_logic;
     game_o         : out   std_logic;
+    roml_we_o      : out   std_logic;
 
     freeze_key_i   : in    std_logic;
     mod_key_i      : in    std_logic;
@@ -57,7 +58,6 @@ architecture synthesis of cartridge is
   signal saved_d6     : std_logic;
   signal ioe_ena      : std_logic;
   signal iof_ena      : std_logic;
-  signal roml_we      : std_logic; -- TBD
 
   signal old_freeze : std_logic := '0';
   signal old_nmiack : std_logic := '0';
@@ -123,7 +123,7 @@ begin
             game_o       <= '1';
             iof_ena      <= '0';
             iof_wr_ena_o <= '0';
-            roml_we      <= '0';
+            roml_we_o    <= '0';
             allow_freeze <= '1';
           else
             if ioe_i = '1' and wr_en_i = '1' then
@@ -136,7 +136,7 @@ begin
                 game_o       <= not wr_data_i(0);
                 exrom_o      <= wr_data_i(1);
                 iof_wr_ena_o <= wr_data_i(5);
-                roml_we      <= wr_data_i(5);
+                roml_we_o    <= wr_data_i(5);
                 if wr_data_i(5) then
                   bank_lo_o <= (others => '0');
                 end if;
@@ -147,7 +147,7 @@ begin
             cart_disable <= '0';
             exrom_o      <= '1';
             game_o       <= '0';
-            roml_we      <= '0';
+            roml_we_o    <= '0';
             bank_lo_o    <= (others => '0');
             bank_hi_o    <= (others => '0');
             iof_wr_ena_o <= '0';
@@ -296,6 +296,52 @@ begin
             exrom_o   <= '0';
             bank_lo_o <= (others => '0');
             bank_hi_o <= (others => '0');
+          end if;
+
+        when 20 =>
+          -- Super Snapshot V5
+
+          -- Following comment copied from VICE:
+          -- - 64K ROM,8*8K Banks (4*16k)
+          -- - 32K RAM,4*8K Banks (8k stock, 32k optional)
+          --
+          -- note: apparently the hardware supports 128k ROMs too, but no such dump exists.
+          --
+          -- io1: (read)
+          --     cart ROM mirror from current 9e00-9eff page. RAM can NOT be mirrored here!
+          --
+          -- io1 (write)
+          --
+          -- there is one register mirrored from de00-deff (the software uses de00/de01)
+          --
+          -- bit 6-7  not connected
+          -- bit 5    rom/ram bank bit2 (address line 16) (unused, for 128k ROM)
+          -- bit 4    rom/ram bank bit1 (address line 15)
+          -- bit 3    !rom enable (0: enabled, 1: disabled)
+          --          note: disabling ROM also disables this register
+          -- bit 2    rom/ram bank bit0 (address line 14)
+          -- bit 1    !ram enable (0: enabled, 1: disabled), !EXROM (0: high, 1: low)
+          -- bit 0    GAME (0: low, 1: high)
+
+          if ioe_i = '1' and wr_en_i = '1' and cart_disable = '0' and freeze_crt = '0' then
+            roml_we_o    <= not wr_data_i(1);
+            bank_lo_o    <= "0000" & wr_data_i(5 downto 4) & wr_data_i(2);
+            bank_hi_o    <= "0000" & wr_data_i(5 downto 4) & wr_data_i(2);
+            game_o       <= wr_data_i(0) or wr_data_i(3);
+            exrom_o      <= (not wr_data_i(1)) or wr_data_i(3);
+            ioe_wr_ena_o <= wr_data_i(3);
+            cart_disable <= wr_data_i(3);
+          end if;
+
+          if cart_loading_i = '1' or freeze_crt = '1' then
+            -- Start up in ultimax mode
+            roml_we_o    <= '1';
+            bank_lo_o    <= (others => '0');
+            bank_hi_o    <= (others => '0');
+            game_o       <= '0';
+            exrom_o      <= '1';
+            ioe_wr_ena_o <= '0';
+            cart_disable <= '0';
           end if;
 
         when 21 =>
