@@ -602,17 +602,17 @@ begin
 
     -- Access the simulated cartridge
     elsif c64_exp_port_mode_i = C_EXP_PORT_SIMCRT and (cart_roml_n = '0' or cart_romh_n = '0' or core_ioe = '1' or core_iof = '1') then
-      c64_ram_data <= unsigned(crt_lo_ram_data_i(15 downto 8)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '1' else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '0' else
-                      unsigned(crt_hi_ram_data_i(15 downto 8)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '1' else
-                      unsigned(crt_hi_ram_data_i( 7 downto 0)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '0' else
-                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_ioe = '1'    and crt_addr_bus_o(0) = '1' and  crt_ioe_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_ioe = '1'    and crt_addr_bus_o(0) = '0' and  crt_ioe_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_iof = '1'    and crt_addr_bus_o(0) = '1' and  crt_iof_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_iof = '1'    and crt_addr_bus_o(0) = '0' and  crt_iof_wr_ena = '0' else
-                      unsigned(crt_ioe_ram_data_i) when core_ioe = '1'    and crt_ioe_wr_ena = '1' else
-                      unsigned(crt_iof_ram_data_i) when core_iof = '1'    and crt_iof_wr_ena = '1' else
-                      unsigned(crt_ram_data_i)     when crt_roml_we = '1'                          else
+      c64_ram_data <= unsigned(crt_ram_data_i)                 when cart_roml_n = '0' and crt_roml_we       = '1'                           else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '1'                           else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '0'                           else
+                      unsigned(crt_hi_ram_data_i(15 downto 8)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '1'                           else
+                      unsigned(crt_hi_ram_data_i( 7 downto 0)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '0'                           else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_ioe    = '1' and crt_addr_bus_o(0) = '1' and  crt_ioe_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_ioe    = '1' and crt_addr_bus_o(0) = '0' and  crt_ioe_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_iof    = '1' and crt_addr_bus_o(0) = '1' and  crt_iof_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_iof    = '1' and crt_addr_bus_o(0) = '0' and  crt_iof_wr_ena = '0' else
+                      unsigned(crt_ioe_ram_data_i)             when core_ioe    = '1'                             and  crt_ioe_wr_ena = '1' else
+                      unsigned(crt_iof_ram_data_i)             when core_iof    = '1'                             and  crt_iof_wr_ena = '1' else
                       x"EE";
 
     -- Standard access to the C64's RAM
@@ -1106,7 +1106,7 @@ begin
 
   crt_ioe_we_o    <= core_ioe and c64_ram_we;
   crt_iof_we_o    <= core_iof and c64_ram_we;
-  crt_we_o        <= crt_roml_we and c64_ram_we;
+  crt_we_o        <= core_roml and crt_roml_we and c64_ram_we;
 
   --------------------------------------------------------------------------------------------------
   -- Generate video output for the M2M framework

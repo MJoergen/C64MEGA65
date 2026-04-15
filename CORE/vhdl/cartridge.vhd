@@ -75,7 +75,7 @@ begin
   begin
     if rising_edge(clk_i) then
       io_rom_o   <= (ioe_i and ioe_ena) or
-                      (iof_i and iof_ena);
+                    (iof_i and iof_ena);
       io_ext_o   <= '0';
       io_data_o  <= X"FF";
 
@@ -330,6 +330,7 @@ begin
             game_o       <= wr_data_i(0) or wr_data_i(3);
             exrom_o      <= (not wr_data_i(1)) or wr_data_i(3);
             ioe_wr_ena_o <= wr_data_i(3);
+            ioe_ena      <= not wr_data_i(3);
             cart_disable <= wr_data_i(3);
           end if;
 
@@ -341,6 +342,7 @@ begin
             game_o       <= '0';
             exrom_o      <= '1';
             ioe_wr_ena_o <= '0';
+            ioe_ena      <= '1';
             cart_disable <= '0';
           end if;
 
