@@ -102,6 +102,11 @@ begin
    main_ce <= not main_ce when rising_edge(main_clk_i);
 
    i_cpu_65c02 : entity work.cpu_65c02
+      generic map (
+         G_SIM     => true,
+         G_VERBOSE => 1,
+         G_VARIANT => "6502"
+      )
       port map (
          clk_i       => main_clk_i,
          rst_i       => main_rst_i or main_reset_core_i or main_loading_i,

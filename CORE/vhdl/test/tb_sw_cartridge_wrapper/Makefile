@@ -30,6 +30,8 @@ SRC += ../../../../../65c02/src/datapath/zp.vhd
 SRC += ../../../../../65c02/src/control/control.vhd
 SRC += ../../../../../65c02/src/control/microcode_6502.vhd
 SRC += ../../../../../65c02/src/control/microcode_65c02.vhd
+SRC += ../../../../../65c02/src/fmt.vhd
+SRC += ../../../../../65c02/src/debug.vhd
 SRC += ../../../../../65c02/src/cpu_65c02.vhd
 
 SRC += qnice_sim.vhd
