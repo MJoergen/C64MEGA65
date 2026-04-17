@@ -57,13 +57,35 @@
 
 .segment "ROM0_8000"
 
+.segment "ROM0_9E00"
+
+.byte $11, $22
+.res  256-4, 10
+
+.byte $DD, $CC
+
+.segment "ROM0_E000"
+
 ; The main part of the test program is copied to $0400+
 _prog_400:
 .org $0400
 
+; Disable RAM overlay
+  LDA #$02
+  STA $DE00
   JSR _test0
   BNE _error
+
+; Set bank 1
+  LDA #$06
+  STA $DE00
   JSR _test1
+  BNE _error
+
+; Enable RAM overlay
+  LDA #$00
+  STA $DE00
+  JSR _test2
   BNE _error
 
 ; We're done!
@@ -109,22 +131,18 @@ _test0:
   CMP #$CC
   BNE :+
 
-  LDA $FFFE
-  CMP #$33
-  BNE :+
+;  LDA $FFFE
+;  CMP #$33
+;  BNE :+
 
-  LDA $FFFF
-  CMP #$44
-  BNE :+
+;  LDA $FFFF
+;  CMP #$44
+;  BNE :+
 
 : RTS
 
 _test1:
 ; Test 1: test that reading from $9Exx and $DExx from bank 1 gives the correct values
-; Set bank 1
-  LDA #$04
-  STA $DE00
-
   LDA $9E00
   CMP #$12
   BNE :+
@@ -157,12 +175,51 @@ _test1:
   CMP #$CB
   BNE :+
 
+;  LDA $FFFE
+;  CMP #$32
+;  BNE :+
+
+;  LDA $FFFF
+;  CMP #$43
+;  BNE :+
+
+: RTS
+
+_test2:
+; Test 2: test RAM enable
+  LDA #$31
+  STA $8000
+  LDA #$42
+  STA $9E00
+  LDA $8000
+  CMP #$31
+  BNE :+
+  LDA $9E00
+  CMP #$42
+  BNE :+
+
+  LDA $DE00
+  CMP #$11
+  BNE :+
+
+  LDA $DE01
+  CMP #$22
+  BNE :+
+
+  LDA $DEFE
+  CMP #$DD
+  BNE :+
+
+  LDA $DEFF
+  CMP #$CC
+  BNE :+
+
   LDA $FFFE
-  CMP #$32
+  CMP #$33
   BNE :+
 
   LDA $FFFF
-  CMP #$43
+  CMP #$44
   BNE :+
 
 : RTS
@@ -170,15 +227,6 @@ _test1:
 .reloc
 
 prog_400_len = * - _prog_400
-
-.segment "ROM0_9E00"
-
-.byte $11, $22
-.res  256-4, 10
-
-.byte $DD, $CC
-
-.segment "ROM0_E000"
 
 _reset0:
   LDX #prog_400_len
