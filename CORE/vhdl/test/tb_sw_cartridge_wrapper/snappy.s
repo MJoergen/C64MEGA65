@@ -25,8 +25,9 @@
 ;          -- bit 1    !ram enable (0: enabled, 1: disabled), !EXROM (0: high, 1: low)
 ;          -- bit 0    GAME (0: low, 1: high)
 
-.segment "CODE0_LO"
+.segment "CRT_HEADER"
 
+; Here is the global cartridge header
 ; All values are in big-endian.
 
 .byte "C64 CARTRIDGE   "   ; cartridge signature
@@ -40,77 +41,144 @@
 .byte 0,0,0,0,0,0,0        ; padding
 .byte 0,0,0,0,0,0,0,0      ; padding
 
+; Here is the first CHIP header (for ROM0)
+; All values are in big-endian.
+
+.segment "ROM0_HEADER"
+
 .byte "CHIP"
 .byte $00, $00, $40, $10   ; chip length
 .byte $00, $00             ; chip type (0 = ROM)
-.byte $00, $00             ; bank number
+.byte $00, $00             ; bank number (0)
 .byte $80, $00             ; load address
 .byte $40, $00             ; rom size
 
 ; Here starts the ROM0 data
 
-.org $8000
+.segment "ROM0_8000"
 
-.addr _start0
-.addr _start0
-.byte $c3, $c2, $cd, "80"
-
+; The main part of the test program is copied to $0400+
 _prog_400:
+.org $0400
+
+  JSR _test0
+  BNE _error
+  JSR _test1
+  BNE _error
+
+; We're done!
+  LDA #$00
+: JMP :-
+_error:
+  LDA #$FF
+: JMP :-
+
+
+
+_test0:
+; Test 0: test that reading from $9Exx and $DExx and $FFxx from bank 0 gives the correct values
+  LDA $9E00
+  CMP #$11
+  BNE :+
+
+  LDA $9E01
+  CMP #$22
+  BNE :+
+
+  LDA $9EFE
+  CMP #$DD
+  BNE :+
+
+  LDA $9EFF
+  CMP #$CC
+  BNE :+
+
   LDA $DE00
   CMP #$11
-  BNE _error0
+  BNE :+
 
   LDA $DE01
   CMP #$22
-  BNE _error0
-
-  LDA $DE02
-  CMP #$33
-  BNE _error0
-
-  LDA $DE03
-  CMP #$44
-  BNE _error0
-
-  LDA $DEFC
-  CMP #$FF
-  BNE _error0
-
-  LDA $DEFD
-  CMP #$EE
-  BNE _error0
+  BNE :+
 
   LDA $DEFE
   CMP #$DD
-  BNE _error0
+  BNE :+
 
   LDA $DEFF
   CMP #$CC
-  BNE _error0
+  BNE :+
 
-_success0:
-  JMP _success0
+  LDA $FFFE
+  CMP #$33
+  BNE :+
 
-_error0:
-  jmp _error0
-  BRK
+  LDA $FFFF
+  CMP #$44
+  BNE :+
+
+: RTS
+
+_test1:
+; Test 1: test that reading from $9Exx and $DExx from bank 1 gives the correct values
+; Set bank 1
+  LDA #$04
+  STA $DE00
+
+  LDA $9E00
+  CMP #$12
+  BNE :+
+
+  LDA $9E01
+  CMP #$23
+  BNE :+
+
+  LDA $9EFE
+  CMP #$DC
+  BNE :+
+
+  LDA $9EFF
+  CMP #$CB
+  BNE :+
+
+  LDA $DE00
+  CMP #$12
+  BNE :+
+
+  LDA $DE01
+  CMP #$23
+  BNE :+
+
+  LDA $DEFE
+  CMP #$DC
+  BNE :+
+
+  LDA $DEFF
+  CMP #$CB
+  BNE :+
+
+  LDA $FFFE
+  CMP #$32
+  BNE :+
+
+  LDA $FFFF
+  CMP #$43
+  BNE :+
+
+: RTS
+
+.reloc
 
 prog_400_len = * - _prog_400
 
-.segment "LO_9E00"
+.segment "ROM0_9E00"
 
-_9e00:
+.byte $11, $22
+.res  256-4, 10
 
-.byte $11, $22, $33, $44
-.res  256-8, 10
+.byte $DD, $CC
 
-.byte $FF, $EE, $DD, $CC
-
-.segment "CODE0_HI"
-
-.org $E000
-
-_start0:
+.segment "ROM0_E000"
 
 _reset0:
   LDX #prog_400_len
@@ -120,44 +188,49 @@ _reset0:
   BNE :-
   jmp $0400
 
-.segment "VECTORS0"
+.segment "ROM0_VECTORS"
 
 .addr 0
 .addr _reset0
-.addr 0
+.byte $33, $44
 
 
-.segment "CODE1_LO"
+.segment "ROM1_HEADER"
 
 ; All values are in big-endian.
 
 .byte "CHIP"
 .byte $00, $00, $40, $10   ; chip length
 .byte $00, $00             ; chip type (0 = ROM)
-.byte $00, $01             ; bank number
+.byte $00, $01             ; bank number(1)
 .byte $80, $00             ; load address
 .byte $40, $00             ; rom size
 
-; Here starts the ROM1 data
+.segment "ROM1_8000"
 
-.org $8000
+; Here starts the ROM1 data
 
 .addr _start1
 .addr _start1
 .byte $c3, $c2, $cd, "80"
 
-.segment "CODE1_HI"
+.segment "ROM1_9E00"
 
-.org $E000
+.byte $12, $23
+.res  256-4, 10
+
+.byte $DC, $CB
+
+.segment "ROM1_E000"
 
 _start1:
 
 _reset1:
   jmp _reset1
 
-.segment "VECTORS1"
+.segment "ROM1_VECTORS"
 
 .addr 0
 .addr _reset1
-.addr 0
+.byte $32, $43
 
