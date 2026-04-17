@@ -97,10 +97,13 @@ _error0:
 
 prog_400_len = * - _prog_400
 
-.org $9E00
-.byte $11, $22, $33, $44
+.segment "LO_9E00"
 
-.org $9EFC
+_9e00:
+
+.byte $11, $22, $33, $44
+.res  256-8, 10
+
 .byte $FF, $EE, $DD, $CC
 
 .segment "CODE0_HI"

@@ -48,6 +48,7 @@ architecture simulation of core_sim is
 
    constant C_ROM_FILE_NAME : string := "../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin";
 
+   signal main_ultimax         : std_logic;
    signal main_roml            : std_logic;
    signal main_romh            : std_logic;
    signal main_ioe             : std_logic;
@@ -66,6 +67,8 @@ architecture simulation of core_sim is
    signal main_ce              : std_logic := '0';
 
 begin
+
+   main_ultimax <= main_exrom and not main_game;
 
    main_ram_data_to_c64 <= main_lo_ram_data_i(15 downto 8) when main_roml = '1' and main_ram_addr_o(0) = '1' else
                            main_lo_ram_data_i( 7 downto 0) when main_roml = '1' and main_ram_addr_o(0) = '0' else
@@ -94,7 +97,8 @@ begin
 
    -- Simplified PLA
    main_roml <= '1' when main_ram_addr_o(15 downto 13) = "100"      -- 0x8000 - 0x9FFF
-                     and main_exrom = '0'
+                     and (main_ultimax = '1' or
+                          main_exrom   = '0')
            else '0';
    main_romh <= '1' when main_ram_addr_o(15 downto 13) = "101"      -- 0xA000 - 0xBFFF
                      and main_exrom = '0'

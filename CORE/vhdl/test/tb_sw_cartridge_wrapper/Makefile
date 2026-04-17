@@ -60,6 +60,7 @@ GENERIC ?= -gG_FILE_NAME=$(G_FILE_NAME)
 TB = tb_$(DUT)
 SRC += $(TB).vhd
 WAVE = $(TB).ghw
+FST  = $(TB).fst
 SAVE = $(TB).gtkw
 
 XPM_TOP_DIR = ../../../../../../fransschreuder/xpm_vhdl
@@ -67,7 +68,7 @@ XPM_TOP_DIR = ../../../../../../fransschreuder/xpm_vhdl
 sim: $(SRC) xpm-obj08.cf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin $(G_FILE_NAME)
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
-	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --wave=$(WAVE) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
+	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --fst=$(FST) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
 
 ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin: ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex
 	xxd -r -p ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
@@ -106,8 +107,8 @@ questa: $(SRC)
 	vcom -2008 $(SRC)
 	vsim $(TB)
 
-show: $(WAVE)
-	gtkwave $(WAVE) $(SAVE)
+show: $(FST)
+	gtkwave $(FST) $(SAVE)
 
 formal: $(DUT)_bmc/PASS
 $(DUT)_bmc/PASS: $(DUT).sby $(DUT).psl $(DUT).vhd
@@ -125,6 +126,7 @@ clean:
 	rm -rf xpm-obj08.cf
 	rm -rf $(TB)
 	rm -rf $(WAVE)
+	rm -rf $(FST)
 	rm -rf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 	rm -rf output.txt
 
