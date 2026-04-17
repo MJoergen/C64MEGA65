@@ -546,13 +546,13 @@ begin
 
    cartridge_ram : entity work.tdp_ram
       generic map (
-         ADDR_WIDTH => 13,         -- 8k bytes
+         ADDR_WIDTH => 15,         -- 32k bytes
          DATA_WIDTH => 8
       )
       port map (
          -- C64 MiSTer core
          clock_a    => main_clk_i,
-         address_a  => main_ram_addr_i(12 downto 0),
+         address_a  => main_bank_lo_i(1 downto 0) & main_ram_addr_i(12 downto 0),
          data_a     => main_ram_data_i,
          wren_a     => main_crt_we_i,
          q_a        => main_crt_ram_data_o,
