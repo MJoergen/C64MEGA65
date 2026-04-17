@@ -42,14 +42,19 @@ SRC += core_sim.vhd
 #CRT_FILE = ar4.crt
 #CRT_DIR  = $(HOME)/Downloads
 #CRT_FILE = last_ninja_remix_ef_patched2.crt
-CRT_FILE = SoulForce_GMod2.crt
+#CRT_FILE = SoulForce_GMod2.crt
 #CRT_DIR  = $(HOME)/Documents/FPGA/MEGA65_1/MEGA65-SD/c64/SoulForce
-CRT_DIR  = $(HOME)/Documents/PRIVATE/MEGA65/C64
+#CRT_DIR  = $(HOME)/Documents/PRIVATE/MEGA65/C64
+#CRT_DIR  = $(HOME)/Documents
+#CRT_FILE = snappyrom534/crt/snappyrom-5.34-pal.crt
+CRT_DIR  = .
+CRT_FILE = snappy.crt
 
 
+G_FILE_NAME=$(CRT_DIR)/$(CRT_FILE)
 #DUT ?= crt_parser
 DUT ?= sw_cartridge_wrapper
-GENERIC ?= -gG_FILE_NAME=$(CRT_DIR)/$(CRT_FILE)
+GENERIC ?= -gG_FILE_NAME=$(G_FILE_NAME)
 
 
 TB = tb_$(DUT)
@@ -59,7 +64,7 @@ SAVE = $(TB).gtkw
 
 XPM_TOP_DIR = ../../../../../../fransschreuder/xpm_vhdl
 
-sim: $(SRC) xpm-obj08.cf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
+sim: $(SRC) xpm-obj08.cf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin $(G_FILE_NAME)
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
 	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --wave=$(WAVE) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
@@ -122,4 +127,15 @@ clean:
 	rm -rf $(WAVE)
 	rm -rf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin
 	rm -rf output.txt
+
+PROG_SRC = snappy.s
+PROG_OBJ = $(PROG_SRC:.s=.o)
+LD_CFG   = ld.cfg
+
+%.o: %.s
+	ca65 $<
+
+./snappy.crt: $(PROG_OBJ) $(LD_CFG)
+	ld65 -C $(LD_CFG) $(PROG_OBJ)
+
 
