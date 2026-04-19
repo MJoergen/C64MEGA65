@@ -124,7 +124,7 @@ begin
   begin
 
     report "Reading disk";
-    file_open(ramfile, "fREUd.d64");
+    file_open(ramfile, "qbert.d64");
     while not endfile(ramfile) loop
        read(ramfile, char);
        disk_v(i) := to_stdlogicvector(character'pos(char), 8);

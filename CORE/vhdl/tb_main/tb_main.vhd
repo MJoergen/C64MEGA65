@@ -2,6 +2,7 @@ library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
   use work.fmt.f;
+  use std.textio.all;
 
 entity tb_main is
 end entity tb_main;
@@ -37,6 +38,10 @@ architecture simulation of tb_main is
   signal video_hblank : std_logic;
   signal video_vblank : std_logic;
 
+  signal kb_key_num       : integer range 0 to 79;   -- cycles through all MEGA65 keys
+  signal kb_key_pressed_n : std_logic := '1';        -- active low
+  constant m65_1          : integer := 56;
+
 begin
 
   clk_main   <= not clk_main after 16 ns; -- Approx 31 MHz
@@ -67,8 +72,8 @@ begin
       c64_sid_port_i         => "000",
       c64_cia_ver_i          => '0',
       c64_exp_port_mode_i    => 1,
-      kb_key_num_i           => 0,
-      kb_key_pressed_n_i     => '1',
+      kb_key_num_i           => kb_key_num,
+      kb_key_pressed_n_i     => kb_key_pressed_n,
       joy_1_up_n_i           => '1',
       joy_1_down_n_i         => '1',
       joy_1_left_n_i         => '1',
@@ -213,39 +218,63 @@ begin
   -- This holds the C64 RAM (64kB)
   ---------------------------------------
 
-  c64_ram_proc : process (clk_main)
+  c64_ram_proc : process
     --
 
     type     ram_type is array (natural range 0 to 65535) of unsigned(7 downto 0);
     variable ram_v   : ram_type := (others => x"EE");
-    variable first_v : boolean  := true;
+    variable inject1_v : boolean  := true;
+    variable inject2_v : boolean  := true;
+
+    type     char_file_type is file of character;
+    file     ramfile     : char_file_type;
+    variable char        : character;
+    variable addr : unsigned(15 downto 0);
   begin
-    if rising_edge(clk_main) then
-      if first_v and now >= 1000 ms then
-        report "INJECT LOAD'*',8 and RUN";
-        -- Inject LOAD"*",8 RUN
-        ram_v(16#0277#) := X"4C";
-        ram_v(16#0278#) := X"4F";
-        ram_v(16#0279#) := X"41";
-        ram_v(16#027A#) := X"44";
-        ram_v(16#027B#) := X"22";
-        ram_v(16#027C#) := X"2A";
-        ram_v(16#027D#) := X"22";
-        ram_v(16#027E#) := X"2C";
-        ram_v(16#027F#) := X"38";
-        ram_v(16#0280#) := X"0D";
-        ram_v(16#0281#) := X"52";
-        ram_v(16#0282#) := X"55";
-        ram_v(16#0283#) := X"4E";
-        ram_v(16#0284#) := X"0D";
-        ram_v(16#00C6#) := X"0E";
-        first_v         := false;
+    file_open(ramfile, "QB.prg");
+
+    read(ramfile, char);
+    addr(7 downto 0) := to_unsigned(character'pos(char), 8);
+    read(ramfile, char);
+    addr(15 downto 8) := to_unsigned(character'pos(char), 8);
+    report "QB: " & to_hstring(addr);
+
+    main_loop : loop
+      wait until rising_edge(clk_main);
+
+      if inject1_v and now >= 200 ms then
+        while not endfile(ramfile) loop
+          read(ramfile, char);
+          ram_v(to_integer(addr)) := to_unsigned(character'pos(char), 8);
+          addr := addr + 1;
+        end loop;
+
+        report "Inject SYS32752";
+        ram_v(16#0277#) := X"53";
+        ram_v(16#0278#) := X"59";
+        ram_v(16#0279#) := X"53";
+        ram_v(16#027A#) := X"33";
+        ram_v(16#027B#) := X"32";
+        ram_v(16#027C#) := X"37";
+        ram_v(16#027D#) := X"35";
+        ram_v(16#027E#) := X"32";
+        ram_v(16#027F#) := X"0D";
+        ram_v(16#00C6#) := X"09";
+        inject1_v       := false;
       end if;
+
+      if inject2_v and now >= 2500 ms then
+        report "Press 1";
+        kb_key_num       <= m65_1;
+        kb_key_pressed_n <= '0'; -- active low
+        inject2_v        := false;
+      end if;
+
       if c64_ram_we = '1' then
         ram_v(to_integer(c64_ram_addr)) := c64_ram_data_out;
       end if;
       c64_ram_data_in <= ram_v(to_integer(c64_ram_addr));
-    end if;
+    end loop main_loop;
   end process c64_ram_proc;
 
 

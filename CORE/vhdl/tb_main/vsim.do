@@ -25,6 +25,8 @@ vcom -2008 \
     ../../../../../fransschreuder/xpm_vhdl/src/xpm/xpm_cdc/hdl/xpm_cdc_array_single.vhd
 
 vcom -2008 \
+    ../../../../65c02/src/fmt.vhd \
+    ../../../../65c02/src/debug.vhd \
     ../../../M2M/vhdl/av_pipeline/video_modes_pkg.vhd \
     ../../../M2M/QNICE/vhdl/tools.vhd \
     ../globals.vhd \
@@ -61,7 +63,7 @@ vcom -2008 \
     tb_main.vhd
 
 vlog \
-    /opt/Xilinx/Vivado/2021.2/data/verilog/src/glbl.v
+    /opt/Xilinx/Vivado/2022.2/data/verilog/src/glbl.v
 
 # Run simulation
 vsim -voptargs=+acc -t ps tb_main glbl
