@@ -964,7 +964,8 @@ begin
    -- as well as QNICE can access it
    c64_ram : entity work.dualport_2clk_ram
       generic map (
-         ROM_FILE          => "../../CORE/ram_init.bin",
+         ROM_FILE          => "../../CORE/ram_init.hex",
+         ROM_FILE_HEX      => true,
          ROM_PRELOAD       => true,
          ADDR_WIDTH        => 16,
          DATA_WIDTH        => 8,
