@@ -964,6 +964,8 @@ begin
    -- as well as QNICE can access it
    c64_ram : entity work.dualport_2clk_ram
       generic map (
+         ROM_FILE          => "ram_init.bin",
+         ROM_PRELOAD       => true,
          ADDR_WIDTH        => 16,
          DATA_WIDTH        => 8,
          FALLING_A         => false,      -- C64 expects read/write to happen at the rising clock edge
