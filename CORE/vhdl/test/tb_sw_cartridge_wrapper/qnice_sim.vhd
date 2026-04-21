@@ -120,7 +120,7 @@ begin
       qnice_cpu_write(C_CRT_FS_LO,  qnice_length_i(15 downto  0));
       qnice_cpu_write(C_CRT_FS_HI,  qnice_length_i(31 downto 16));
       qnice_cpu_write(C_CRT_STATUS, C_CRT_ST_OK);
-      wait for 100 ns;
+      wait for 3 us;
       wait until falling_edge(qnice_clk_i);
 
       qnice_cpu_verify(C_CRT_PARSEST, C_STAT_PARSING);

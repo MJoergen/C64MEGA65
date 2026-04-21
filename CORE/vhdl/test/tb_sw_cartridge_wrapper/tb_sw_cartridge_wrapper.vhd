@@ -78,13 +78,13 @@ begin
    -- Clock and reset
    -------------------
 
-   hr_clk    <= hr_running    and not hr_clk    after  5 ns;
-   qnice_clk <= qnice_running and not qnice_clk after 10 ns;
-   main_clk  <= main_running  and not main_clk  after 15 ns;
+   hr_clk    <= hr_running    and not hr_clk    after 150 ns;
+   qnice_clk <= qnice_running and not qnice_clk after 200 ns;
+   main_clk  <= main_running  and not main_clk  after 250 ns;
 
-   hr_rst    <= '1', '0' after 100 ns;
-   qnice_rst <= '1', '0' after 100 ns;
-   main_rst  <= '1', '0' after 100 ns;
+   hr_rst    <= '1', '0' after 3 us;
+   qnice_rst <= '1', '0' after 3 us;
+   main_rst  <= '1', '0' after 3 us;
 
 
    -------------------

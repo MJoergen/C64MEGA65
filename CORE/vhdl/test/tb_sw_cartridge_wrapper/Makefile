@@ -47,9 +47,12 @@ SRC += core_sim.vhd
 #CRT_DIR  = $(HOME)/Documents/PRIVATE/MEGA65/C64
 #CRT_DIR  = $(HOME)/Documents
 #CRT_FILE = snappyrom534/crt/snappyrom-5.34-pal.crt
-CRT_DIR  = .
-CRT_FILE = snappy.crt
+#CRT_DIR  = .
+#CRT_FILE = snappy.crt
+CRT_DIR  = $(HOME)/Documents/ar
+CRT_FILE = Action_Replay_V6.0_6.0_1989_PAL.crt
 
+STOP_TIME = 500ms
 
 G_FILE_NAME=$(CRT_DIR)/$(CRT_FILE)
 #DUT ?= crt_parser
@@ -68,7 +71,7 @@ XPM_TOP_DIR = ../../../../../../fransschreuder/xpm_vhdl
 sim: $(SRC) xpm-obj08.cf ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin $(G_FILE_NAME)
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
-	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --fst=$(FST) --max-stack-alloc=2097151 --stop-time=3000us | tee output.txt
+	ghdl -r --std=08 $(TB) $(GENERIC) --assert-level=error --fst=$(FST) --max-stack-alloc=2097151 --stop-time=$(STOP_TIME) | tee output.txt
 
 ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin: ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex
 	xxd -r -p ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.hex ../../../../CORE/C64_MiSTerMEGA65/rtl/roms/std_C64.mif.bin

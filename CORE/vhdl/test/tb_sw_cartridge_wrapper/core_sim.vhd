@@ -66,11 +66,27 @@ architecture simulation of core_sim is
    signal main_crt_roml_we     : std_logic;
    signal main_ce              : std_logic := '0';
 
+   signal cia1_pra_in  : std_logic_vector(7 downto 0);
+   signal cia1_prb_in  : std_logic_vector(7 downto 0);
+   signal cia1_pra_out : std_logic_vector(7 downto 0);
+   signal cia1_prb_out : std_logic_vector(7 downto 0);
+   signal cia1_pra     : std_logic_vector(7 downto 0);
+   signal cia1_prb     : std_logic_vector(7 downto 0);
+   signal cia1_ddra    : std_logic_vector(7 downto 0);
+   signal cia1_ddrb    : std_logic_vector(7 downto 0);
+
+   signal main_cia_data : std_logic_vector(7 downto 0);
+   signal main_cia_en   : std_logic;
+
+   type slv8_vector is array (natural range <>) of std_logic_vector(7 downto 0);
+   signal keyboard_matrix : slv8_vector(0 to 7) := (others => (others => '1'));
+
 begin
 
    main_ultimax <= main_exrom and not main_game;
 
-   main_ram_data_to_c64 <= main_crt_ram_data_i             when main_roml = '1' and main_crt_roml_we = '1'   else
+   main_ram_data_to_c64 <= main_cia_data                   when main_cia_en = '1' else
+                           main_crt_ram_data_i             when main_roml = '1' and main_crt_roml_we = '1'   else
                            main_lo_ram_data_i(15 downto 8) when main_roml = '1' and main_ram_addr_o(0) = '1' else
                            main_lo_ram_data_i( 7 downto 0) when main_roml = '1' and main_ram_addr_o(0) = '0' else
                            main_hi_ram_data_i(15 downto 8) when main_romh = '1' and main_ram_addr_o(0) = '1' else
@@ -112,24 +128,88 @@ begin
 
    i_cpu_65c02 : entity work.cpu_65c02
       generic map (
-         G_SIM     => true,
-         G_VERBOSE => 2,
-         G_VARIANT => "6502"
+         G_LOG_NAME => "cpu.txt",
+         G_SIM      => true,
+         G_VERBOSE  => 2,
+         G_VARIANT  => "6502"
       )
       port map (
-         clk_i       => main_clk_i,
-         rst_i       => main_rst_i or main_reset_core_i or main_loading_i,
-         ce_i        => main_ce and not main_bank_wait_i,
-         nmi_i       => '0',
-         irq_i       => '0',
-         addr_o      => main_ram_addr_o,
-         wr_en_o     => main_wr_en,
-         wr_data_o   => main_ram_data_o,
-         rd_en_o     => open,
-         rd_data_i   => main_ram_data_to_c64,
-         ioport_in_i => (others => '1'),
-         debug_o     => open
+         clk_i        => main_clk_i,
+         rst_i        => main_rst_i or main_reset_core_i or main_loading_i,
+         ce_i         => main_ce and not main_bank_wait_i,
+         nmi_i        => '0',
+         irq_i        => '0',
+         addr_o       => main_ram_addr_o,
+         wr_en_o      => main_wr_en,
+         wr_data_o    => main_ram_data_o,
+         rd_en_o      => open,
+         rd_data_i    => main_ram_data_to_c64,
+         ioport_in_i  => (others => '1'),
+         debug_o      => open
       ); -- i_cpu_65c02
+
+
+   cia_rd_proc : process (all)
+   begin
+     main_cia_data <= X"FF";
+     main_cia_en   <= '0';
+     case main_ram_addr_o is
+       when X"DC00" => main_cia_en <= '1'; main_cia_data <= cia1_pra_in;
+       when X"DC01" => main_cia_en <= '1'; main_cia_data <= cia1_prb_in;
+       when X"DC02" => main_cia_en <= '1'; main_cia_data <= cia1_ddra;
+       when X"DC03" => main_cia_en <= '1'; main_cia_data <= cia1_ddrb;
+       when others  => null;
+     end case;
+   end process cia_rd_proc;
+
+   cia_wr_proc : process (main_clk_i)
+   begin
+     if rising_edge(main_clk_i) then
+       if main_wr_en = '1' then
+         case main_ram_addr_o is
+           when X"DC00" => cia1_pra  <= main_ram_data_o;
+           when X"DC01" => cia1_prb  <= main_ram_data_o;
+           when X"DC02" => cia1_ddra <= main_ram_data_o;
+           when X"DC03" => cia1_ddrb <= main_ram_data_o;
+           when others  => null;
+         end case;
+       end if;
+
+       if main_rst_i = '1' then
+         cia1_pra  <= X"00";
+         cia1_prb  <= X"00";
+         cia1_ddra <= X"00";
+         cia1_ddrb <= X"00";
+       end if;
+
+       cia1_pra_out <= cia1_pra or not cia1_ddra;
+       cia1_prb_out <= cia1_prb or not cia1_ddrb;
+     end if;
+   end process cia_wr_proc;
+
+   cia1_prb_in <= cia1_prb_out;
+
+   keyboard_proc : process (all)
+   begin
+     for i in 0 to 7 loop
+       cia1_pra_in(i) <= cia1_pra_out(i) and (and(cia1_prb_out or keyboard_matrix(i)));
+     end loop;
+   end process keyboard_proc;
+
+   keypress : process
+   begin
+     keyboard_matrix <= (others => X"FF");
+     wait for 400 ms;
+
+     report "Press F7";
+     keyboard_matrix <= (0 => X"F7", others => X"FF");
+     wait for 50 ms;
+
+     report "Release F7";
+     keyboard_matrix <= (others => X"FF");
+     wait;
+   end process keypress;
+
 
    i_cartridge : entity work.cartridge
       port map (

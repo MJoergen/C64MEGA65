@@ -1,21 +1,25 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Apr 17 11:58:53 2026
+[*] Tue Apr 21 13:14:30 2026
 [*]
-[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.fst"
-[dumpfile_mtime] "Fri Apr 17 10:01:54 2026"
-[dumpfile_size] 1120956
-[savefile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.gtkw"
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.fst"
+[dumpfile_mtime] "Tue Apr 21 12:53:42 2026"
+[dumpfile_size] 1028200
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.gtkw"
 [timestart] 0
 [size] 1920 1127
-[pos] -461 -264
-*-34.123196 20580000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -1
+*-29.998034 3924000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] tb_sw_cartridge_wrapper.
+[treeopen] tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.
+[treeopen] tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.
+[treeopen] tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.
+[treeopen] tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.
 [sst_width] 294
 [signals_width] 313
 [sst_expanded] 1
 [sst_vpaned_height] 326
-@800200
+@c00200
 -core_sim
 @28
 tb_sw_cartridge_wrapper.i_core_sim.main_clk_i
@@ -63,7 +67,214 @@ tb_sw_cartridge_wrapper.i_core_sim.main_ioe_wr_ena
 tb_sw_cartridge_wrapper.i_core_sim.main_iof_wr_ena
 @22
 tb_sw_cartridge_wrapper.i_core_sim.main_ram_data_to_c64[7:0]
-@1000200
+@28
+tb_sw_cartridge_wrapper.i_core_sim.main_ce
+@22
+tb_sw_cartridge_wrapper.i_core_sim.cia1_pra_in[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_prb_in[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_pra_out[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_prb_out[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_pra[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_prb[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_ddra[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.cia1_ddrb[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.main_cia_data[7:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.main_cia_en
+@22
+tb_sw_cartridge_wrapper.i_core_sim.keyboard_matrix.0[7:0]
+@1401200
 -core_sim
+@c00200
+-debug
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.clk_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.rst_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.ce_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.sync_i
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.invalid_i[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.addr_i[15:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.rd_data_i[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.wr_data_i[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.regs_i[31:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.ioport_i[23:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.mem_read_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.mem_write_i
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.debug_o[15:0]
+@420
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.clk_cnt
+@1401200
+-debug
+@c00200
+-cpu_65c02
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.clk_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.rst_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ce_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.nmi_i
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.nmi_ack_o
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.irq_i
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.addr_o[15:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.wr_en_o
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.wr_data_o[7:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.rd_en_o
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.rd_data_i[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_in_i[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_out_o[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_dir_o[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_o[15:0]
+@c00200
+-Internal
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ar_sel
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.hi_sel[2:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.lo_sel[2:0]
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.pc_sel[6:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.addr_sel[3:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.data_sel[2:0]
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.alu_sel[5:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sr_sel[3:0]
+@28
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sp_sel[1:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.xr_sel
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.yr_sel
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.mr_sel[1:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.reg_sel[2:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.zp_sel[1:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sri
+@22
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.rd_data[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_in[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.invalid[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ctl_debug[63:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.datapath_debug[111:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.last_pc[15:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ar[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.xr[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.yr[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sr[7:0]
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sp[7:0]
+@1401200
+-Internal
+-cpu_65c02
+@800200
+-sw_cartridge_csr
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_clk_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_rst_i
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_addr_i[27:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_data_i[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_ce_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_we_i
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_data_o[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_wait_o
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_req_length_o[22:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_req_valid_o
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_resp_status_i[3:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_resp_error_i[3:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_resp_address_i[22:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_write_o
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_read_o
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_address_o[31:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_writedata_o[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_byteenable_o[1:0]
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_burstcount_o[7:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_readdata_i[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_readdatavalid_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_waitrequest_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_hr_wait
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_csr_wait
+@1000200
+-sw_cartridge_csr
+@c00200
+-sw_cartridge_wrapper
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_clk_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_rst_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_write
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_read
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_address[31:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_writedata[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_byteenable[1:0]
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_burstcount[7:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_readdata[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_readdatavalid
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_qnice_waitrequest
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_write
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_read
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_address[31:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_writedata[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_byteenable[1:0]
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_burstcount[7:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_readdata[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_readdatavalid
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_crt_waitrequest
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_write_o
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_read_o
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_address_o[31:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_writedata_o[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_byteenable_o[1:0]
+@22
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_burstcount_o[7:0]
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_readdata_i[15:0]
+@28
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_readdatavalid_i
+tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_waitrequest_i
+@1401200
+-sw_cartridge_wrapper
+@800200
+-qnice_sim
+@28
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_clk_i
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_rst_i
+@22
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_addr_o[27:0]
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_writedata_o[15:0]
+@28
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_ce_o
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_we_o
+@22
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_readdata_i[15:0]
+@28
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_wait_i
+@22
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_length_i[31:0]
+@28
+tb_sw_cartridge_wrapper.i_qnice_sim.qnice_running_o
+@1000200
+-qnice_sim
 [pattern_trace] 1
 [pattern_trace] 0
