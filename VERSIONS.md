@@ -9,16 +9,24 @@ Version 6 - MONTH DAY, 2026
 
 ## New Features
 
+* @TODO: Add new features here
+
+## Improved Compatibility of the Core
+
 * Added hardware support for the IDE64.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
 
-* Simulated cartridges (`*.crt`) are supporting the following new features:
+* Simulated cartridges' (`*.crt`) improved compatibility:
 
-  Magic Desk 2 format that is for example being used by SNK-Vs-Capcom Strong
-  Edition (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
+  - Magic Desk 2 format that is for example being used by SNK-Vs-Capcom Strong
+    Edition (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
 
-  Snappy ROM freezer cartridge
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
+  - Snappy ROM freezer cartridge
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
+
+* Implemented proper RAM cold-start pattern, which raises compatibility with
+  some original software quite a bit. This also fixes Q-Bert.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
 
 ## Bugfixes
 
