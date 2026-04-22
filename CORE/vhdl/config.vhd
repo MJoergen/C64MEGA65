@@ -390,9 +390,9 @@ constant OPTM_ITEMS        : string :=
    " Expansion Port\n"          &
    "\n"                         &
    " Use hardware slot\n"       &
-   " Simulate 1750 REU 512KB\n" &
    " Simulate cartridge:\n"     &
    " CRT:%s\n"                  &  -- %s will be replaced by OPTM_S_CRTROM when no cartridge is loaded, otherwise by the filename of the cartridge
+   " Simulate 1750 REU 512KB\n" &
    "\n"                         &
    " C64 Configuration\n"       &
    "\n"                         &
@@ -510,6 +510,7 @@ constant OPTM_G_HDMI_ZOOM     : integer := 17;
 constant OPTM_G_VGA_MODES     : integer := 18;
 constant OPTM_G_OSM_MODE      : integer := 19;
 constant OPTM_G_ABOUT_HELP    : integer := 20;
+constant OPTM_G_REU           : integer := 21;
 
 constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,
                                              OPTM_G_LINE,
@@ -518,10 +519,10 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,
                                              OPTM_G_LINE,
                                              OPTM_G_HEADLINE,
                                              OPTM_G_LINE,
-                                             OPTM_G_EXP_PORT      + OPTM_G_STDSEL,
-                                             OPTM_G_EXP_PORT,
-                                             OPTM_G_EXP_PORT,
-                                             OPTM_G_MOUNT_CRT     + OPTM_G_LOAD_ROM,
+                                             OPTM_G_EXP_PORT      + OPTM_G_STDSEL,    -- Use hardware slot
+                                             OPTM_G_EXP_PORT,                         -- Simulate cartridge:
+                                             OPTM_G_MOUNT_CRT     + OPTM_G_LOAD_ROM,  -- CRT:%s
+                                             OPTM_G_REU           + OPTM_G_SINGLESEL, -- Simulate 1750 REU 512 kB
                                              OPTM_G_LINE,
                                              OPTM_G_HEADLINE,
                                              OPTM_G_LINE,

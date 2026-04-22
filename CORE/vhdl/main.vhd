@@ -56,10 +56,9 @@ entity main is
     c64_cia_ver_i          : in    std_logic;                    -- CIA version: 0=6526 "old", 1=8521 "new"
 
     -- Mode selection for Expansion Port (aka Cartridge Port):
-    -- 0: Use the MEGA65's actual hardware slot
-    -- 1: Simulate a 1750 REU with 512KB
-    -- 2: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
-    c64_exp_port_mode_i    : in    natural range 0 to 2;
+    -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port
+    -- bit 1: Simulate REU
+    c64_exp_port_mode_i    : in    std_logic_vector(1 downto 0);
 
     ---------------------------
     -- Commodore 64 I/O ports
@@ -257,9 +256,8 @@ architecture synthesis of main is
   signal   cia1_pb_in  : std_logic_vector(7 downto 0);
   signal   cia1_pb_out : std_logic_vector(7 downto 0);
 
-  constant C_EXP_PORT_HARDWARE : natural                           := 0;
-  constant C_EXP_PORT_REU      : natural                           := 1;
-  constant C_EXP_PORT_SIMCRT   : natural                           := 2;
+  constant C_SIM_CRT : natural                           := 0;
+  constant C_SIM_REU : natural                           := 1;
 
   -- signals for RAM
   signal   c64_ram_ce   : std_logic;
@@ -597,11 +595,11 @@ begin
       c64_ram_data <= x"00";
 
     -- Access the hardware cartridge
-    elsif c64_exp_port_mode_i = C_EXP_PORT_HARDWARE and (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
+    elsif c64_exp_port_mode_i = "00" and (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
       c64_ram_data <= data_from_cart;
 
     -- Access the simulated cartridge
-    elsif c64_exp_port_mode_i = C_EXP_PORT_SIMCRT and (cart_roml_n = '0' or cart_romh_n = '0' or core_ioe = '1' or core_iof = '1') then
+    elsif c64_exp_port_mode_i(C_SIM_CRT) = '1' and (cart_roml_n = '0' or cart_romh_n = '0' or core_ioe = '1' or core_iof = '1') then
       c64_ram_data <= unsigned(crt_ram_data_i)                 when cart_roml_n = '0' and crt_roml_we       = '1'                           else
                       unsigned(crt_lo_ram_data_i(15 downto 8)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '1'                           else
                       unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '0'                           else
@@ -844,7 +842,7 @@ begin
     cart_io2_n      <= not core_iof;
 
     -- Mode = Use hardware slot
-    if c64_exp_port_mode_i = C_EXP_PORT_HARDWARE then
+    if c64_exp_port_mode_i = "00" then
       -- Hardcoded to WRITE-ONLY (OUTPUT) for the time being
       cart_ctrl_oe_o  <= '1';
       cart_roml_oe_o  <= '1';
@@ -924,7 +922,7 @@ begin
     case c64_exp_port_mode_i is
 
       -- Use hardware slot
-      when C_EXP_PORT_HARDWARE =>
+      when "00" =>
         core_game_n  <= cart_game_n;
         core_exrom_n <= cart_exrom_n;
         core_irq_n   <= cart_irq_n;
@@ -934,14 +932,14 @@ begin
         core_dma     <= not cart_dma_n; -- MFJ
 
       -- Simulate 1750 REU 512KB
-      when C_EXP_PORT_REU =>
+      when "10" =>
         core_io_ext  <= reu_oe;
         core_io_data <= reu_dout;
         core_dma     <= reu_dma_req;
         reu_iof      <= core_iof;
 
       -- Simulated cartridge using data from .crt file
-      when C_EXP_PORT_SIMCRT =>
+      when "01" =>
         core_game_n  <= crt_game;
         core_exrom_n <= crt_exrom;
         core_dma     <= cartridge_loading_i or crt_bank_wait_i;
@@ -1035,7 +1033,7 @@ begin
   --------------------------------------------------------------------------------------------------
 
   -- REU configuration: "00":None, "01":512k, "10":2M, "11":16M
-  reu_cfg         <= "01" when c64_exp_port_mode_i = C_EXP_PORT_REU else
+  reu_cfg         <= "01" when c64_exp_port_mode_i = "10" else
                      "00";
 
   reu_inst : component reu

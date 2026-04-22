@@ -231,10 +231,9 @@ architecture synthesis of MEGA65_Core is
 signal c64_rom                    : std_logic_vector(1 downto 0); -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
 signal c64_ntsc                   : std_logic;               -- global switch: 0 = PAL mode, 1 = NTSC mode
 signal c64_clock_speed            : natural;                 -- clock speed depending on PAL/NTSC
-signal c64_exp_port_mode          : natural range 0 to 2;    -- Expansion Port:
-                                                             -- 0: Use hardware
-                                                             -- 1: Simulate REU
-                                                             -- 2: Simulate cartridge (.CRT file)
+signal c64_exp_port_mode          : std_logic_vector(1 downto 0);
+                                                             -- bit 0: Simulate cartridge (.CRT file)
+                                                             -- bit 1: Simulate REU
 
 -- C64 config settings
 signal sid_setup                  : std_logic_vector(1 downto 0);
@@ -319,8 +318,8 @@ signal hr_hdmi_ff                 : std_logic;
 
 -- OSM selections within qnice_osm_control_i
 constant C_MENU_EXP_PORT_HW   : natural := 7;
-constant C_MENU_EXP_PORT_REU  : natural := 8;
-constant C_MENU_EXP_PORT_CRT  : natural := 9;
+constant C_MENU_SIM_CRT       : natural := 8;
+constant C_MENU_SIM_REU       : natural := 10;
 constant C_MENU_FLIP_JOYS     : natural := 14;
 constant C_MENU_MONO_6581     : natural := 20;
 constant C_MENU_MONO_8580     : natural := 21;
@@ -494,12 +493,12 @@ begin
    c64_clock_speed   <= CORE_CLK_SPEED;
 
    -- Mode selection for Expansion Port (aka Cartridge Port):
-   -- 0: Use the MEGA65's actual hardware slot
-   -- 1: Simulate a 1750 REU with 512KB
-   -- 2: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
-   c64_exp_port_mode <= 1 when main_osm_control_i(C_MENU_EXP_PORT_REU)  else
-                        2 when main_osm_control_i(C_MENU_EXP_PORT_CRT)  else
-                        0;
+   -- bit 0 = 0: Use the MEGA65's actual hardware slot
+   -- bit 0 = 1: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
+   -- bit 1 = 0: No simulated REU
+   -- bit 1 = 1: Simulate a 1750 REU with 512KB
+   c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
+   c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
 
    -- SID version, 0=6581, 1=8580, low bit = left SID
    sid_setup <= "00" when main_osm_control_i(C_MENU_MONO_6581)    else
@@ -561,9 +560,8 @@ begin
          c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),
 
          -- Mode selection for Expansion Port (aka Cartridge Port):
-         -- 0: Use the MEGA65's actual hardware slot
-         -- 1: Simulate a 1750 REU with 512KB
-         -- 2: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
+         -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port
+         -- bit 1: Simulate REU
          c64_exp_port_mode_i    => c64_exp_port_mode,
 
          -- Current date/time from RTC
