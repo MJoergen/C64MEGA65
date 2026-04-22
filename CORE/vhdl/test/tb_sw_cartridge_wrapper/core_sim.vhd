@@ -65,6 +65,7 @@ architecture simulation of core_sim is
    signal main_game            : std_logic;
    signal main_crt_roml_we     : std_logic;
    signal main_ce              : std_logic := '0';
+   signal main_irq             : std_logic;
 
    signal cia1_pra_in  : std_logic_vector(7 downto 0);
    signal cia1_prb_in  : std_logic_vector(7 downto 0);
@@ -113,8 +114,8 @@ begin
 
    -- Simplified PLA
    main_roml <= '1' when main_ram_addr_o(15 downto 13) = "100"      -- 0x8000 - 0x9FFF
-                     and (main_ultimax = '1' or
-                          main_exrom   = '0')
+                     and (main_game  = '0' or
+                          main_exrom = '0')
            else '0';
    main_romh <= '1' when main_ram_addr_o(15 downto 13) = "101"      -- 0xA000 - 0xBFFF
                      and main_exrom = '0'
@@ -126,19 +127,31 @@ begin
 
    main_ce <= not main_ce when rising_edge(main_clk_i);
 
+   irq_proc : process
+   begin
+     main_irq <= '0';
+     wait for 16 ms;
+     wait until rising_edge(main_clk_i);
+     main_irq <= '1';
+     wait for 10 us;
+     wait until rising_edge(main_clk_i);
+   end process;
+
+
    i_cpu_65c02 : entity work.cpu_65c02
       generic map (
-         G_LOG_NAME => "cpu.txt",
-         G_SIM      => true,
-         G_VERBOSE  => 2,
-         G_VARIANT  => "6502"
+         G_ENABLE_IOPORT => true,
+         G_LOG_NAME      => "cpu.txt",
+         G_SIM           => true,
+         G_VERBOSE       => 2,
+         G_VARIANT       => "6502"
       )
       port map (
          clk_i        => main_clk_i,
          rst_i        => main_rst_i or main_reset_core_i or main_loading_i,
          ce_i         => main_ce and not main_bank_wait_i,
          nmi_i        => '0',
-         irq_i        => '0',
+         irq_i        => main_irq,
          addr_o       => main_ram_addr_o,
          wr_en_o      => main_wr_en,
          wr_data_o    => main_ram_data_o,

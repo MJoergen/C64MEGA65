@@ -1,19 +1,19 @@
 [*]
-[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Tue Apr 21 13:14:30 2026
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Wed Apr 22 05:05:07 2026
 [*]
-[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.fst"
-[dumpfile_mtime] "Tue Apr 21 12:53:42 2026"
-[dumpfile_size] 1028200
-[savefile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.gtkw"
-[timestart] 0
-[size] 1920 1127
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.fst"
+[dumpfile_mtime] "Wed Apr 22 05:02:13 2026"
+[dumpfile_size] 16260401
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sw_cartridge_wrapper/tb_sw_cartridge_wrapper.gtkw"
+[timestart] 112070590000000
+[size] 1920 1033
 [pos] -1 -1
-*-29.998034 3924000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-31.142981 112078250000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] tb_sw_cartridge_wrapper.
+[treeopen] tb_sw_cartridge_wrapper.i_core_sim.
 [treeopen] tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.
 [treeopen] tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.
-[treeopen] tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.
 [treeopen] tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.
 [sst_width] 294
 [signals_width] 313
@@ -69,6 +69,7 @@ tb_sw_cartridge_wrapper.i_core_sim.main_iof_wr_ena
 tb_sw_cartridge_wrapper.i_core_sim.main_ram_data_to_c64[7:0]
 @28
 tb_sw_cartridge_wrapper.i_core_sim.main_ce
+tb_sw_cartridge_wrapper.i_core_sim.main_irq
 @22
 tb_sw_cartridge_wrapper.i_core_sim.cia1_pra_in[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.cia1_prb_in[7:0]
@@ -104,11 +105,9 @@ tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.mem_read_i
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.mem_write_i
 @22
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.debug_o[15:0]
-@420
-tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.clk_cnt
 @1401200
 -debug
-@c00200
+@800200
 -cpu_65c02
 @28
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.clk_i
@@ -131,7 +130,9 @@ tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_in_i[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_out_o[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_dir_o[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_o[15:0]
-@c00200
+@420
+tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.debug_gen.debug_inst.clk_cnt
+@800200
 -Internal
 @28
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ar_sel
@@ -159,16 +160,15 @@ tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ioport_in[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.invalid[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ctl_debug[63:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.datapath_debug[111:0]
-tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.last_pc[15:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.ar[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.xr[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.yr[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sr[7:0]
 tb_sw_cartridge_wrapper.i_core_sim.i_cpu_65c02.sp[7:0]
-@1401200
+@1000200
 -Internal
 -cpu_65c02
-@800200
+@c00200
 -sw_cartridge_csr
 @28
 tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_clk_i
@@ -207,7 +207,7 @@ tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_read
 tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_avm_waitrequest_i
 tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_hr_wait
 tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.i_sw_cartridge_csr.qnice_csr_wait
-@1000200
+@1401200
 -sw_cartridge_csr
 @c00200
 -sw_cartridge_wrapper
@@ -255,7 +255,7 @@ tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_readdatavalid_i
 tb_sw_cartridge_wrapper.i_sw_cartridge_wrapper.hr_waitrequest_i
 @1401200
 -sw_cartridge_wrapper
-@800200
+@c00200
 -qnice_sim
 @28
 tb_sw_cartridge_wrapper.i_qnice_sim.qnice_clk_i
@@ -274,7 +274,7 @@ tb_sw_cartridge_wrapper.i_qnice_sim.qnice_wait_i
 tb_sw_cartridge_wrapper.i_qnice_sim.qnice_length_i[31:0]
 @28
 tb_sw_cartridge_wrapper.i_qnice_sim.qnice_running_o
-@1000200
+@1401200
 -qnice_sim
 [pattern_trace] 1
 [pattern_trace] 0
