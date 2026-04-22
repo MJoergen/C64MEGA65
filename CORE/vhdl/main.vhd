@@ -1104,8 +1104,12 @@ begin
       nmi_ack_i      => core_nmi_ack
     ); -- cartridge_inst
 
-  crt_ioe_we_o    <= core_ioe and c64_ram_we;
-  crt_iof_we_o    <= core_iof and c64_ram_we;
+  -- Values written to $9Fxx are also written to $Dxxx when crt_iox_wr_ena is set.
+  -- This is relevant for Action Replay cartridge, see this schematic:
+  -- https://www.zimmers.net/anonftp/pub/cbm/schematics/cartridges/c64/freezer/MK.gif
+  -- Input to PLA is "10101001" and the output is "0101" indicating access to cartridge RAM.
+  crt_ioe_we_o    <= (core_ioe or (core_roml and crt_ioe_wr_ena)) and c64_ram_we;
+  crt_iof_we_o    <= (core_iof or (core_roml and crt_iof_wr_ena)) and c64_ram_we;
   crt_we_o        <= core_roml and crt_roml_we and c64_ram_we;
 
   --------------------------------------------------------------------------------------------------

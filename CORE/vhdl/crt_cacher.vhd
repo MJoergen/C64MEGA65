@@ -110,6 +110,12 @@ begin
          if cart_bank_wr_i = '1' then
             if cart_bank_laddr_i <= X"8000" then
                lobanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0);
+
+               -- Default is to duplicate the bank from ROML to ROMH
+               -- This assumes the CRT file is laid out in such a way that ROML data comes
+               -- before ROMH data.
+               hibanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0);
+
                if cart_bank_size_i > X"2000" then
                   hibanks(to_integer(cart_bank_num_i(6 downto 0))) <= cart_bank_raddr_i(22 downto 0)+ ("000" & X"02000");
                end if;

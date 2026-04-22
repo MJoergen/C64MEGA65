@@ -466,12 +466,17 @@ begin
       end case;
 
       if rst_i = '1' then
-        ioe_ena   <= '0';
-        iof_ena   <= '0';
-        game_o    <= '1';
-        exrom_o   <= '1';
-        bank_lo_o <= (others => '0');
-        bank_hi_o <= (others => '0');
+        ioe_ena      <= '0';
+        iof_ena      <= '0';
+        game_o       <= '1';
+        exrom_o      <= '1';
+        bank_lo_o    <= (others => '0');
+        bank_hi_o    <= (others => '0');
+        nmi_o        <= '0';
+        allow_freeze <= '1'; -- Allow RESTORE key to generate NMI
+        saved_d6     <= '0';
+        ioe_wr_ena_o <= '0';
+        iof_wr_ena_o <= '0';
       end if;
     end if;
   end process cartridge_proc;
