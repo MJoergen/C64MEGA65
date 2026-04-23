@@ -285,7 +285,7 @@ OSM_SEL_PRE     INCRB
                 ; chooses to load a software cartridge
                 CMP     C64_OPTM_G_MOUNT_CRT, R8
                 RBRA    _OSM_SEL_PRE_R, !Z
-                MOVE    C64_OSM_EXP_PORT_CRT, R8
+                MOVE    C64_OSM_SIM_CRT, R8
                 RSUB    M2M$GET_SETTING, 1
                 CMP     1, R9                   ; already in sim crt mode?
                 RBRA    _OSM_SEL_PRE_R, Z       ; yes, then nothing to do
