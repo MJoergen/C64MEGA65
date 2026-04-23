@@ -595,7 +595,7 @@ begin
       c64_ram_data <= x"00";
 
     -- Access the hardware cartridge
-    elsif c64_exp_port_mode_i = "00" and (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
+    elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
       c64_ram_data <= data_from_cart;
 
     -- Access the simulated cartridge
@@ -794,7 +794,7 @@ begin
     cart_nmi_oe_o   <= '0';
     cart_irq_oe_o   <= '0';
 
-    -- For the time being, we are treating ROML and ROMH as WRITE-ONLY at all times, as soon as c64_exp_port_mode_i = C_EXP_PORT_HARDWARE,
+    -- For the time being, we are treating ROML and ROMH as WRITE-ONLY at all times, as soon as c64_exp_port_mode_i(C_SIM_CRT) = '0',
     -- so the "zero" here is just the deactivated output driver as long as the core is in a non-hardware cartridge mode
     -- and it will be switched to OUTPUT (WRITE-ONLY) in the code that follows below
     cart_roml_oe_o  <= '0';
@@ -842,7 +842,7 @@ begin
     cart_io2_n      <= not core_iof;
 
     -- Mode = Use hardware slot
-    if c64_exp_port_mode_i = "00" then
+    if c64_exp_port_mode_i(C_SIM_CRT) = '0' then
       -- Hardcoded to WRITE-ONLY (OUTPUT) for the time being
       cart_ctrl_oe_o  <= '1';
       cart_roml_oe_o  <= '1';
@@ -908,56 +908,42 @@ begin
 
   handle_cores_expansion_port_signals_proc : process (all)
   begin
-    core_game_n    <= '1';
-    core_exrom_n   <= '1';
     core_io_rom    <= '0';
-    core_io_ext    <= '0';
-    core_io_data   <= x"FF";
     core_irq_n     <= '1';
-    core_nmi_n     <= restore_key_n;
-    core_dma       <= '0';  -- @TODO: Currently we ignore the HW cartridge's DMA request
     reu_iof        <= '0';
     crt_addr_bus_o <= c64_ram_addr_o;
 
-    case c64_exp_port_mode_i is
-
-      -- Use hardware slot
-      when "00" =>
-        core_game_n  <= cart_game_n;
-        core_exrom_n <= cart_exrom_n;
-        core_irq_n   <= cart_irq_n;
-        core_nmi_n   <= cart_nmi_n and restore_key_n;
-        core_io_ext  <= core_ioe or core_iof;
-        core_io_data <= data_from_cart;
-        core_dma     <= not cart_dma_n; -- MFJ
-
-      -- Simulate 1750 REU 512KB
-      when "10" =>
-        core_io_ext  <= reu_oe;
-        core_io_data <= reu_dout;
-        core_dma     <= reu_dma_req;
-        reu_iof      <= core_iof;
-
+    if c64_exp_port_mode_i(C_SIM_CRT) = '1' then
       -- Simulated cartridge using data from .crt file
-      when "01" =>
-        core_game_n  <= crt_game;
-        core_exrom_n <= crt_exrom;
-        core_dma     <= cartridge_loading_i or crt_bank_wait_i;
-        core_io_rom  <= crt_io_rom;
-        core_io_ext  <= crt_io_ext;
-        core_io_data <= unsigned(crt_io_data);
-        if core_umax_romh = '1' then
-          -- Ultimax mode and VIC accesses the bus: we need to translate the address, see comment about "The PLA Dissected" above
-          crt_addr_bus_o <= "11" & c64_ram_addr_o(13 downto 0);
-        end if;
-        core_nmi_n <= (not crt_nmi) and restore_key_n;
+      core_game_n  <= crt_game;
+      core_exrom_n <= crt_exrom;
+      core_dma     <= cartridge_loading_i or crt_bank_wait_i;
+      core_io_rom  <= crt_io_rom;
+      core_io_ext  <= crt_io_ext;
+      core_io_data <= unsigned(crt_io_data);
+      if core_umax_romh = '1' then
+        -- Ultimax mode and VIC accesses the bus: we need to translate the address, see comment about "The PLA Dissected" above
+        crt_addr_bus_o <= "11" & c64_ram_addr_o(13 downto 0);
+      end if;
+      core_nmi_n <= (not crt_nmi) and restore_key_n;
+    else
+      -- Use hardware slot
+      core_game_n  <= cart_game_n;
+      core_exrom_n <= cart_exrom_n;
+      core_irq_n   <= cart_irq_n;
+      core_nmi_n   <= cart_nmi_n and restore_key_n;
+      core_io_ext  <= core_ioe or core_iof;
+      core_io_data <= data_from_cart;
+      core_dma     <= not cart_dma_n; -- MFJ
+    end if;
 
-      when others =>
-        null;
-
-    end case;
-
-  --
+    if c64_exp_port_mode_i(C_SIM_REU) = '1' then
+      -- Simulate 1750 REU 512KB
+      core_io_ext  <= reu_oe;
+      core_io_data <= reu_dout;
+      core_dma     <= reu_dma_req;
+      reu_iof      <= core_iof;
+    end if;
   end process handle_cores_expansion_port_signals_proc;
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
@@ -1033,7 +1019,7 @@ begin
   --------------------------------------------------------------------------------------------------
 
   -- REU configuration: "00":None, "01":512k, "10":2M, "11":16M
-  reu_cfg         <= "01" when c64_exp_port_mode_i = "10" else
+  reu_cfg         <= "01" when c64_exp_port_mode_i(C_SIM_REU) = '1' else
                      "00";
 
   reu_inst : component reu
