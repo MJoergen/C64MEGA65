@@ -16,6 +16,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A5     | 04/13/26 | 54211ed | Support SnappyROM cartridge (issue #94)
 | WIP-V6-A6     | 04/21/26 | 4975181 | Improve initial RAM contents (issue #125)
 | WIP-V6-A7     | 04/22/26 | 4409a19 | SIMCRT: Support for Action Replay (issue #69)
+| WIP-V6-A8     | 04/23/26 | adce33c | SIMCRT: Another fix for Action Replay (issue #69)
 
 ## Version 5.2
 
