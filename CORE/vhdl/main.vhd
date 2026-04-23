@@ -430,6 +430,8 @@ architecture synthesis of main is
   signal   crt_nmi        : std_logic;
   signal   crt_ioe_wr_ena : std_logic;
   signal   crt_iof_wr_ena : std_logic;
+  signal   crt_addr_9exx  : std_logic;
+  signal   crt_addr_9fxx  : std_logic;
 
   -- RAM Expansion Unit
   signal   sim_ext_cycle : std_logic;
@@ -1108,8 +1110,11 @@ begin
   -- This is relevant for Action Replay cartridge, see this schematic:
   -- https://www.zimmers.net/anonftp/pub/cbm/schematics/cartridges/c64/freezer/MK.gif
   -- Input to PLA is "10101001" and the output is "0101" indicating access to cartridge RAM.
-  crt_ioe_we_o    <= (core_ioe or (core_roml and crt_ioe_wr_ena)) and c64_ram_we;
-  crt_iof_we_o    <= (core_iof or (core_roml and crt_iof_wr_ena)) and c64_ram_we;
+  crt_addr_9exx   <= '1' when c64_ram_addr_o(12 downto 8) = "11110" else '0';
+  crt_addr_9fxx   <= '1' when c64_ram_addr_o(12 downto 8) = "11111" else '0';
+
+  crt_ioe_we_o    <= (core_ioe or (core_roml and crt_ioe_wr_ena and crt_addr_9exx)) and c64_ram_we;
+  crt_iof_we_o    <= (core_iof or (core_roml and crt_iof_wr_ena and crt_addr_9fxx)) and c64_ram_we;
   crt_we_o        <= core_roml and crt_roml_we and c64_ram_we;
 
   --------------------------------------------------------------------------------------------------
