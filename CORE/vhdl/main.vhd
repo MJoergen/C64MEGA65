@@ -909,17 +909,20 @@ begin
   end process handle_hardware_expansion_proc;
 
   handle_cores_expansion_port_signals_proc : process (all)
+    variable core_dma_v : std_logic;
   begin
     core_io_rom    <= '0';
     core_irq_n     <= '1';
     reu_iof        <= '0';
     crt_addr_bus_o <= c64_ram_addr_o;
 
+    core_dma_v := '0';
+
     if c64_exp_port_mode_i(C_SIM_CRT) = '1' then
       -- Simulated cartridge using data from .crt file
       core_game_n  <= crt_game;
       core_exrom_n <= crt_exrom;
-      core_dma     <= cartridge_loading_i or crt_bank_wait_i;
+      core_dma_v   := cartridge_loading_i or crt_bank_wait_i;
       core_io_rom  <= crt_io_rom;
       core_io_ext  <= crt_io_ext;
       core_io_data <= unsigned(crt_io_data);
@@ -936,16 +939,18 @@ begin
       core_nmi_n   <= cart_nmi_n and restore_key_n;
       core_io_ext  <= core_ioe or core_iof;
       core_io_data <= data_from_cart;
-      core_dma     <= not cart_dma_n; -- MFJ
+      core_dma_v   := not cart_dma_n; -- MFJ
     end if;
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
       -- Simulate 1750 REU 512KB
       core_io_ext  <= reu_oe;
       core_io_data <= reu_dout;
-      core_dma     <= reu_dma_req;
+      core_dma_v   := core_dma_v or reu_dma_req;
       reu_iof      <= core_iof;
     end if;
+
+    core_dma <= core_dma_v;
   end process handle_cores_expansion_port_signals_proc;
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
