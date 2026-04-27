@@ -765,6 +765,39 @@ begin
       c64rom_data_i => c64rom_data_i,
       c64rom_data_o => c64rom_data_o
     ); -- fpga64_sid_iec_inst
+    
+  --------------------------------------------------------------------------------------------------
+  -- Cartridge Port Timing Alignment & Duty Cycle Correction
+  --
+  -- On a physical C64, the VIC-II releases the AEC signal ~40ns before the 6510 CPU 
+  -- outputs the rising edge of PHI2. The C64's PLA uses this 40ns head-start to assert 
+  -- chip selects (like ROML/ROMH) so they are perfectly stable *before* the cartridge 
+  -- sees the PHI2 clock rise. 
+  --
+  -- Because this FPGA core evaluates AEC and PHI2 on the exact same 32MHz clock tick, 
+  -- it erases that physical 40ns setup margin. To prevent setup violations and bus 
+  -- contention with modern, edge-triggered cartridges (like IDUN), we must artificially 
+  -- restore this timing offset to the physical cartridge pins.
+  --
+  -- We do this in two steps:
+  -- 1. We create a 1-tick (~31.25ns) delayed version of PHI2 (core_phi2_prev).
+  -- 2. We output (core_phi2 AND core_phi2_prev) to the physical cart_phi2_o pin.
+  --
+  -- Using an AND gate (instead of just passing the delayed signal) is critical:
+  -- * Rising Edge: Delayed by ~31ns, restoring the necessary setup time for ROML/ROMH.
+  -- * Falling Edge: Drops instantly with the core, avoiding hold-time violations.
+  -- 
+  -- This shrinks the PHI2 high-phase from ~500ns to ~469ns. According to the official 
+  -- MOS 6510 Datasheet (Page 6, tPWH), the minimum required high-phase is 400ns. 
+  -- Therefore, this 469ns duty cycle is completely safe and within hardware spec.
+  --------------------------------------------------------------------------------------------------
+
+  delay_phi2_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      core_phi2_prev <= core_phi2;
+    end if;
+  end process delay_phi2_proc;
 
   --------------------------------------------------------------------------------------------------
   -- Expansion Port (aka Cartridge Port) handling:
@@ -866,8 +899,11 @@ begin
       cart_io1_o      <= cart_io1_n;
       cart_io2_o      <= cart_io2_n;
       cart_rw_o       <= not c64_ram_we;
-      cart_phi2_o     <= core_phi2;
       cart_dotclock_o <= core_dotclk;
+
+      -- Asymmetric delay to match physical 6510 setup/hold times 
+      -- (See "Cartridge Port Timing Alignment" comment above)
+      cart_phi2_o     <= core_phi2 and core_phi2_prev;      
 
       -- @TODO: When implementing this, we need to perform more research. It seems that just using
       -- the C64 cores's "cpuHasBus" signal leads to less compatibility than more. For example it
@@ -973,8 +1009,6 @@ begin
   begin
     if G_BOARD = "MEGA65_R3" or G_BOARD = "MEGA65_R4" then
       if rising_edge(clk_main_i) then
-        core_phi2_prev <= core_phi2;
-
         -- In contrast to what is written above in the comment RESET SEMANTICS, we cannot use
         -- reset_core_n here because as soon as cart_reset_counter is > 0 reset_core_n goes low
         -- and then cart_reset_counter would be reset back to 0 prematurely
