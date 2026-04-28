@@ -424,13 +424,13 @@ begin
    -- closely "embrace" the output rate of exactly 50 Hz (determined by the HDMI resolution).
    process (hr_clk_i)
    begin
-      if rising_edge(hr_clk_i) then
+      if rising_edge(mem_clk_i) then
          -- Only update core speed when no screen tearing is happening
          if hr_low_i = '0' and hr_high_i = '0' then
             if hr_hdmi_ff = '1' then
-               hr_core_speed <= "01"; -- PAL exact (50.000 Hz)
+               mem_core_speed <= "01"; -- PAL exact (50.000 Hz)
             else
-               hr_core_speed <= "00"; -- PAL original (50.124 Hz)
+               mem_core_speed <= "00"; -- PAL original (50.124 Hz)
             end if;
          end if;
       end if;
