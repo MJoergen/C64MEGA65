@@ -769,29 +769,31 @@ begin
   --------------------------------------------------------------------------------------------------
   -- Cartridge Port Timing Alignment & Duty Cycle Correction
   --
-  -- On a physical C64, the VIC-II releases the AEC signal ~40ns before the 6510 CPU 
-  -- outputs the rising edge of PHI2. The C64's PLA uses this 40ns head-start to assert 
-  -- chip selects (like ROML/ROMH) so they are perfectly stable *before* the cartridge 
-  -- sees the PHI2 clock rise. 
+  -- On a physical C64, the 6510 CPU establishes the Address bus and R/W line well 
+  -- before the rising edge of PHI2. Additionally, the VIC-II releases the AEC signal 
+  -- ~40ns early, giving the PLA time to assert chip selects (like ROML/ROMH). 
+  -- Cartridges rely on these physical head-starts so all signals are perfectly 
+  -- stable *before* the cycle officially begins.
   --
-  -- Because this FPGA core evaluates AEC and PHI2 on the exact same 32MHz clock tick, 
-  -- it erases that physical 40ns setup margin. To prevent setup violations and bus 
-  -- contention with modern, edge-triggered cartridges (like IDUN), we must artificially 
-  -- restore this timing offset to the physical cartridge pins.
+  -- Because this FPGA core evaluates AEC and PHI2 and updates the bus state on the
+  -- exact same 32MHz clock tick, it erases those physical setup margins. To prevent
+  -- setup violations with edge-triggered cartridges (like IDUN), we artificially
+  -- restore a timing offset to the physical cartridge pins.
   --
   -- We do this in two steps:
   -- 1. We create a 1-tick (~31.25ns) delayed version of PHI2 (core_phi2_prev).
   -- 2. We output (core_phi2 AND core_phi2_prev) to the physical cart_phi2_o pin.
   --
   -- Using an AND gate (instead of just passing the delayed signal) is critical:
-  -- * Rising Edge: Delayed by ~31ns, restoring the necessary setup time for ROML/ROMH.
+  -- * Rising Edge: Delayed by ~31ns, restoring setup time for Address, R/W,
+  --   ROML/ROMH, and IOE/IOF.
   -- * Falling Edge: Drops instantly with the core, avoiding hold-time violations.
   -- 
   -- This shrinks the PHI2 high-phase from ~500ns to ~469ns. According to the official 
   -- MOS 6510 Datasheet (Page 6, tPWH), the minimum required high-phase is 400ns. 
   -- Therefore, this 469ns duty cycle is completely safe and within hardware spec.
   --------------------------------------------------------------------------------------------------
-
+  
   delay_phi2_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
