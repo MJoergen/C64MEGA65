@@ -18,6 +18,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A7     | 04/22/26 | 4409a19 | SIMCRT: Support for Action Replay (issue #69)
 | WIP-V6-A8     | 04/23/26 | adce33c | SIMCRT: Another fix for Action Replay (issue #69)
 | WIP-V6-A9     | 04/25/26 | 05f2c25 | SIM REU: Allow parallel use with cartridges (issues #136 and #198)
+| WIP-V6-A10    | 05/01/26 | 6a33db8 | SIM REU: Use SDRAM on R6 and HyperRAM on R3 (issue #206)
 
 ## Version 5.2
 
