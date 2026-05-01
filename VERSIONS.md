@@ -19,6 +19,10 @@ Version 6 - MONTH DAY, 2026
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/136 and
    https://github.com/MJoergen/C64MEGA65/issues/198)
 
+  On 2024+ MEGA65s this feature works even better, smoother and more
+  compatible as it uses the built-in SDRAM instead of HyperRAM.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
+
 ## Improved Compatibility of the Core
 
 * Added hardware support for the IDE64.
@@ -57,7 +61,7 @@ fixing the "Jail Bars"/"Bar Code" issue, which mostly occurred on R6 boards
 and occasionally on R3 boards. Additionally, it includes several bug fixes
 and adds support for a few more simulated cartridge types.
 
-## New Features
+## New Features: All MEGA65
 
 * Simulated cartridges (`*.crt`) are now also supporting COMAL 80,
   Simons BASIC, Waterloo Structured BASIC, Mikro Assembler and
