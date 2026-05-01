@@ -33,6 +33,9 @@ entity clk_m2m is
       hr_delay_refclk_o : out std_logic;   -- MEGA65 HyperRAM @ 200 MHz
       hr_rst_o          : out std_logic;   -- MEGA65 HyperRAM reset, synchronized
 
+      sr_clk_o          : out std_logic;   -- MEGA65 SDRAM @ 166 MHz
+      sr_rst_o          : out std_logic;   -- MEGA65 SDRAM reset, synchronized
+
       audio_clk_o       : out std_logic;   -- Audio's 12.288 MHz clock
       audio_rst_o       : out std_logic;   -- Audio's reset, synchronized
 
@@ -48,6 +51,7 @@ signal qnice_clk_mmcm       : std_logic;
 signal hr_clk_mmcm          : std_logic;
 signal hr_clk_del_mmcm      : std_logic;
 signal hr_delay_refclk_mmcm : std_logic;
+signal sr_clk_mmcm          : std_logic;
 signal audio_clk_mmcm       : std_logic;
 
 signal sys_clk_9975_bg      : std_logic;
@@ -69,21 +73,24 @@ begin
    i_clk_qnice : PLLE2_BASE
       generic map (
          BANDWIDTH            => "OPTIMIZED",
-         CLKFBOUT_MULT        => 12,         -- 1200 MHz
+         CLKFBOUT_MULT        => 10,         -- 1000 MHz
          CLKFBOUT_PHASE       => 0.000,
          CLKIN1_PERIOD        => 10.0,       -- INPUT @ 100 MHz
-         CLKOUT0_DIVIDE       => 24,         -- QNICE @ 50 MHz
+         CLKOUT0_DIVIDE       => 20,         -- QNICE @ 50 MHz
          CLKOUT0_DUTY_CYCLE   => 0.500,
          CLKOUT0_PHASE        => 0.000,
-         CLKOUT1_DIVIDE       => 12,         -- HyperRAM @ 100 MHz
+         CLKOUT1_DIVIDE       => 10,         -- HyperRAM @ 100 MHz
          CLKOUT1_DUTY_CYCLE   => 0.500,
          CLKOUT1_PHASE        => 0.000,
-         CLKOUT2_DIVIDE       => 6,          -- HyperRAM @ 200 MHz
+         CLKOUT2_DIVIDE       => 5,          -- HyperRAM @ 200 MHz
          CLKOUT2_DUTY_CYCLE   => 0.500,
          CLKOUT2_PHASE        => 0.000,
-         CLKOUT3_DIVIDE       => 12,         -- HyperRAM @ 100 MHz phase delayed
+         CLKOUT3_DIVIDE       => 10,         -- HyperRAM @ 100 MHz phase delayed
          CLKOUT3_DUTY_CYCLE   => 0.500,
          CLKOUT3_PHASE        => 90.000,
+         CLKOUT4_DIVIDE       => 6,          -- SDRAM @ 166 MHz
+         CLKOUT4_DUTY_CYCLE   => 0.500,
+         CLKOUT4_PHASE        => 0.000,
          DIVCLK_DIVIDE        => 1,
          REF_JITTER1          => 0.010,
          STARTUP_WAIT         => "FALSE"
@@ -96,6 +103,7 @@ begin
          CLKOUT1             => hr_clk_mmcm,
          CLKOUT2             => hr_delay_refclk_mmcm,
          CLKOUT3             => hr_clk_del_mmcm,
+         CLKOUT4             => sr_clk_mmcm,
          LOCKED              => qnice_locked,
          PWRDWN              => '0',
          RST                 => '0'
@@ -152,6 +160,12 @@ begin
          O => hr_delay_refclk_o
       );
 
+   sr_clk_bufg : BUFG
+      port map (
+         I => sr_clk_mmcm,
+         O => sr_clk_o
+      );
+
    audio_clk_bufg : BUFG
       port map (
          I => audio_clk_mmcm,
@@ -186,6 +200,19 @@ begin
          src_arst  => not (qnice_locked and sys_rstn_i and core_rstn_i),
          dest_clk  => hr_clk_o,         -- 1-bit input: Destination clock.
          dest_arst => hr_rst_o          -- 1-bit output: src_rst synchronized to the destination clock domain.
+                                        -- This output is registered.
+      );
+
+   i_xpm_cdc_async_rst_sr : xpm_cdc_async_rst
+      generic map (
+         RST_ACTIVE_HIGH => 1,
+         DEST_SYNC_FF    => 6
+      )
+      port map (
+         -- 1-bit input: Source reset signal
+         src_arst  => not (qnice_locked and sys_rstn_i and core_rstn_i),
+         dest_clk  => sr_clk_o,         -- 1-bit input: Destination clock.
+         dest_arst => sr_rst_o          -- 1-bit output: src_rst synchronized to the destination clock domain.
                                         -- This output is registered.
       );
 

@@ -380,3 +380,13 @@ create_pblock pblock_vga
 add_cells_to_pblock pblock_vga [get_cells [list i_framework/i_av_pipeline/i_analog_pipeline/VGA_OUT_PHASE_SHIFTED.*]]
 resize_pblock pblock_vga -add SLICE_X0Y75:SLICE_X5Y99
 
+# Place HyperRAM controller
+create_pblock pblock_hr
+add_cells_to_pblock pblock_hr [get_cells [list i_framework/i_hyperram]]
+resize_pblock pblock_hr -add {SLICE_X0Y200:SLICE_X7Y224}
+
+# Place SDRAM controller
+create_pblock pblock_sr
+add_cells_to_pblock pblock_sr [get_cells [list i_framework/sdram_gen.sdram_inst]]
+resize_pblock pblock_sr -add {SLICE_X156Y100:SLICE_X163Y149}
+

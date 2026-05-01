@@ -102,6 +102,19 @@ port (
    hr_clk_p_o              : out   std_logic;
    hr_cs0_o                : out   std_logic;
 
+   -- SDRAM
+   sdram_clk_o             : out   std_logic;
+   sdram_cke_o             : out   std_logic;
+   sdram_ras_n_o           : out   std_logic;
+   sdram_cas_n_o           : out   std_logic;
+   sdram_we_n_o            : out   std_logic;
+   sdram_cs_n_o            : out   std_logic;
+   sdram_ba_o              : out   std_logic_vector(1 downto 0);
+   sdram_a_o               : out   std_logic_vector(12 downto 0);
+   sdram_dqml_o            : out   std_logic;
+   sdram_dqmh_o            : out   std_logic;
+   sdram_dq_io             : inout std_logic_vector(15 downto 0);
+
    -- Connect to CORE
    qnice_clk_o             : out   std_logic;
    qnice_rst_o             : out   std_logic;
@@ -179,6 +192,19 @@ port (
    hr_core_waitrequest_o   : out   std_logic;
    hr_high_o               : out   std_logic; -- Core is too fast
    hr_low_o                : out   std_logic; -- Core is too slow
+
+   -- Provide SDRAM to core (in SDRAM clock domain)
+   sr_clk_o                : out   std_logic;
+   sr_rst_o                : out   std_logic;
+   sr_core_write_i         : in    std_logic;
+   sr_core_read_i          : in    std_logic;
+   sr_core_address_i       : in    std_logic_vector(31 downto 0);
+   sr_core_writedata_i     : in    std_logic_vector(15 downto 0);
+   sr_core_byteenable_i    : in    std_logic_vector(1 downto 0);
+   sr_core_burstcount_i    : in    std_logic_vector(7 downto 0);
+   sr_core_readdata_o      : out   std_logic_vector(15 downto 0);
+   sr_core_readdatavalid_o : out   std_logic;
+   sr_core_waitrequest_o   : out   std_logic;
 
    -- QNICE control signals
    qnice_dvi_i             : in    std_logic;
@@ -428,6 +454,10 @@ signal hr_dq_in               : std_logic_vector(7 downto 0);
 signal hr_dq_out              : std_logic_vector(7 downto 0);
 signal hr_dq_oe_n             : std_logic_vector(7 downto 0);   -- Output enable for DQ
 
+signal sdram_dq_in            : std_logic_vector(15 downto 0);
+signal sdram_dq_out           : std_logic_vector(15 downto 0);
+signal sdram_dq_oe_n          : std_logic_vector(15 downto 0); -- Output enable for DQ
+
 signal scl_out                : std_logic_vector(7 downto 0);
 signal sda_out                : std_logic_vector(7 downto 0);
 
@@ -448,6 +478,8 @@ begin
          hr_clk_del_o      => hr_clk_del,
          hr_delay_refclk_o => hr_delay_refclk,
          hr_rst_o          => hr_rst,
+         sr_clk_o          => sr_clk_o,
+         sr_rst_o          => sr_rst_o,
          audio_clk_o       => audio_clk,
          audio_rst_o       => audio_rst,
          sys_pps_o         => sys_pps
@@ -1006,6 +1038,51 @@ begin
    end generate hr_d_gen;
    hr_rwds_in <= hr_rwds_io;
    hr_dq_in   <= hr_d_io;
+
+
+   ---------------------------------------------------------------------------------------------------------------
+   -- SDRAM controller
+   ---------------------------------------------------------------------------------------------------------------
+
+   sdram_gen : if G_BOARD = "MEGA65_R6" generate
+      sdram_inst : entity work.sdram
+         port map (
+            clk_i               => sr_clk_o,
+            rst_i               => sr_rst_o,
+            avm_waitrequest_o   => sr_core_waitrequest_o,
+            avm_write_i         => sr_core_write_i,
+            avm_read_i          => sr_core_read_i,
+            avm_address_i       => sr_core_address_i,
+            avm_writedata_i     => sr_core_writedata_i,
+            avm_byteenable_i    => sr_core_byteenable_i,
+            avm_burstcount_i    => sr_core_burstcount_i,
+            avm_readdata_o      => sr_core_readdata_o,
+            avm_readdatavalid_o => sr_core_readdatavalid_o,
+            sdram_a_o           => sdram_a_o,
+            sdram_ba_o          => sdram_ba_o,
+            sdram_cas_n_o       => sdram_cas_n_o,
+            sdram_cke_o         => sdram_cke_o,
+            sdram_clk_o         => sdram_clk_o,
+            sdram_cs_n_o        => sdram_cs_n_o,
+            sdram_dq_in_i       => sdram_dq_in,
+            sdram_dqmh_o        => sdram_dqmh_o,
+            sdram_dqml_o        => sdram_dqml_o,
+            sdram_dq_oe_n_o     => sdram_dq_oe_n,
+            sdram_dq_out_o      => sdram_dq_out,
+            sdram_ras_n_o       => sdram_ras_n_o,
+            sdram_we_n_o        => sdram_we_n_o
+         ); -- sdram_inst : entity work.sdram
+
+       sdram_dq_gen : for i in sdram_dq_io'range generate
+          sdram_dq_io(i) <= sdram_dq_out(i) when sdram_dq_oe_n(i) = '0' else
+                            'Z';
+       end generate sdram_dq_gen;
+
+       sdram_dq_in <= sdram_dq_io;
+    else generate
+       sr_core_waitrequest_o   <= '0';
+       sr_core_readdatavalid_o <= '0';
+    end generate sdram_gen;
 
 
    ---------------------------------------------------------------------------------------------------------------
