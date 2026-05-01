@@ -24,7 +24,7 @@
 -- Link to datasheet for "IS42S16320F-6BL":
 -- https://www.issi.com/WW/pdf/42-45R-S_86400F-16320F.pdf
 --
--- Created by Michael Jørgensen in 2024 (mjoergen.github.io/SDRAM).
+-- Created by Michael Jørgensen in 2024 (github.com/MJoergen/SDRAM).
 
 library ieee;
    use ieee.std_logic_1164.all;
