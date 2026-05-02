@@ -383,6 +383,22 @@ architecture synthesis of mega65_r4 is
    signal hr_high                : std_logic;
 
    ---------------------------------------------------------------------------------------------
+   -- SDRAM clock domain
+   ---------------------------------------------------------------------------------------------
+
+   signal sr_clk                 : std_logic;
+   signal sr_rst                 : std_logic;
+   signal sr_core_write          : std_logic;
+   signal sr_core_read           : std_logic;
+   signal sr_core_address        : std_logic_vector(31 downto 0);
+   signal sr_core_writedata      : std_logic_vector(15 downto 0);
+   signal sr_core_byteenable     : std_logic_vector(1 downto 0);
+   signal sr_core_burstcount     : std_logic_vector(7 downto 0);
+   signal sr_core_readdata       : std_logic_vector(15 downto 0);
+   signal sr_core_readdatavalid  : std_logic;
+   signal sr_core_waitrequest    : std_logic;
+
+   ---------------------------------------------------------------------------------------------
    -- qnice_clk
    ---------------------------------------------------------------------------------------------
 
@@ -515,17 +531,6 @@ begin
    pmod2_en_o            <= '0';
    qspidb_io             <= (others => 'Z');
    qspicsn_o             <= '1';
-   sdram_clk_o           <= '0';
-   sdram_cke_o           <= '0';
-   sdram_ras_n_o         <= '1';
-   sdram_cas_n_o         <= '1';
-   sdram_we_n_o          <= '1';
-   sdram_cs_n_o          <= '1';
-   sdram_ba_o            <= (others => '0');
-   sdram_a_o             <= (others => '0');
-   sdram_dqml_o          <= '0';
-   sdram_dqmh_o          <= '0';
-   sdram_dq_io           <= (others => 'Z');
 
 
    -----------------------------------------------------------------------------------------
@@ -594,6 +599,17 @@ begin
       hr_reset_o              => hr_reset_o,
       hr_clk_p_o              => hr_clk_p_o,
       hr_cs0_o                => hr_cs0_o,
+      sdram_clk_o             => sdram_clk_o,
+      sdram_cke_o             => sdram_cke_o,
+      sdram_ras_n_o           => sdram_ras_n_o,
+      sdram_cas_n_o           => sdram_cas_n_o,
+      sdram_we_n_o            => sdram_we_n_o,
+      sdram_cs_n_o            => sdram_cs_n_o,
+      sdram_ba_o              => sdram_ba_o,
+      sdram_a_o               => sdram_a_o,
+      sdram_dqml_o            => sdram_dqml_o,
+      sdram_dqmh_o            => sdram_dqmh_o,
+      sdram_dq_io             => sdram_dq_io,
 
       -- Connect to CORE
       qnice_clk_o             => qnice_clk,
@@ -665,6 +681,19 @@ begin
       hr_core_waitrequest_o   => hr_core_waitrequest,
       hr_high_o               => hr_high,
       hr_low_o                => hr_low,
+
+      -- Provide SDRAM to core (in SDRAM clock domain)
+      sr_clk_o                => sr_clk,
+      sr_rst_o                => sr_rst,
+      sr_core_write_i         => sr_core_write,
+      sr_core_read_i          => sr_core_read,
+      sr_core_address_i       => sr_core_address,
+      sr_core_writedata_i     => sr_core_writedata,
+      sr_core_byteenable_i    => sr_core_byteenable,
+      sr_core_burstcount_i    => sr_core_burstcount,
+      sr_core_readdata_o      => sr_core_readdata,
+      sr_core_readdatavalid_o => sr_core_readdatavalid,
+      sr_core_waitrequest_o   => sr_core_waitrequest,
 
       -- Audio
       audio_clk_o             => audio_clk,
@@ -854,6 +883,22 @@ begin
          hr_core_waitrequest_i   => hr_core_waitrequest,
          hr_high_i               => hr_high,
          hr_low_i                => hr_low,
+
+         --------------------------------------------------------------------------------------------------------
+         -- Provide support for external memory (Avalon Memory Map)
+         --------------------------------------------------------------------------------------------------------
+
+         sr_clk_i                => sr_clk,
+         sr_rst_i                => sr_rst,
+         sr_core_write_o         => sr_core_write,
+         sr_core_read_o          => sr_core_read,
+         sr_core_address_o       => sr_core_address,
+         sr_core_writedata_o     => sr_core_writedata,
+         sr_core_byteenable_o    => sr_core_byteenable,
+         sr_core_burstcount_o    => sr_core_burstcount,
+         sr_core_readdata_i      => sr_core_readdata,
+         sr_core_readdatavalid_i => sr_core_readdatavalid,
+         sr_core_waitrequest_i   => sr_core_waitrequest,
 
          --------------------------------------------------------------------
          -- C64 specific ports that are not supported by the M2M framework
