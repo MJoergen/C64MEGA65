@@ -384,14 +384,10 @@ architecture synthesis of main is
   signal   core_io_data         : unsigned(7 downto 0);
   signal   core_dotclk          : std_logic;
   signal   core_phi2            : std_logic;
+  signal   core_phi2_prev       : std_logic;
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
 
-  -- Cart-port output pipeline (see "Cartridge Port Timing Alignment" below).
-  -- Two stages of registered delay for PHI2, one stage for everything else.
-  -- This breaks combinational glitch paths from the buslogic muxes and
-  -- reproduces real-C64-style "ROML/address leads PHI2" timing at the connector.
-  signal   cart_phi2_d1_q       : std_logic;             -- core_phi2 delayed by 1 tick
-  signal   cart_phi2_d2_q       : std_logic;             -- core_phi2 delayed by 2 ticks
+  -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
   signal   cart_a_pre           : unsigned(15 downto 0); -- combinational, includes Ultimax override
   signal   cart_a_q             : unsigned(15 downto 0);
   signal   cart_roml_q          : std_logic;
@@ -399,8 +395,6 @@ architecture synthesis of main is
   signal   cart_io1_q           : std_logic;
   signal   cart_io2_q           : std_logic;
   signal   cart_rw_q            : std_logic;
-  signal   cart_ba_q            : std_logic;
-  signal   cart_dotclk_q        : std_logic;
 
   -- Hardware Expansion Port (aka Cartridge Port)
   signal   cart_roml_n    : std_logic;
@@ -696,18 +690,14 @@ begin
       nmi_n         => core_nmi_n,         -- input
       nmi_ack       => core_nmi_ack,       -- output
       ba            => core_ba,            -- output
-      roml          => core_roml,          -- output. CPU access to 0x8000-0x9FFF
-      romh          => core_romh,          -- output. CPU access to 0xA000-0xBFFF or 0xE000-0xFFFF (ultimax)
+      roml          => core_roml,          -- output: CPU access to 0x8000-0x9FFF
+      romh          => core_romh,          -- output: CPU access to 0xA000-0xBFFF or 0xE000-0xFFFF (ultimax)
       umaxromh      => core_umax_romh,     -- output
       umaxnomap     => core_umax_unmapped, -- output
-      ioe           => core_ioe,           -- output. aka IO1. CPU access to 0xDExx
-      iof           => core_iof,           -- output. aka IO2. CPU access to 0xDFxx
+      ioe           => core_ioe,           -- output: aka IO1. CPU access to 0xDExx
+      iof           => core_iof,           -- output: aka IO2. CPU access to 0xDFxx
       dotclk        => core_dotclk,        -- output
-      phi0          => open,               -- output
       phi2          => core_phi2,          -- output
-      --         freeze_key  => open,
-      --         mod_key     => open,
-      --         tape_play   => open,
 
       -- dma access
       dma_req       => core_dma,                -- input
@@ -782,65 +772,10 @@ begin
     ); -- fpga64_sid_iec_inst
     
   --------------------------------------------------------------------------------------------------
-  -- Cartridge Port Timing Alignment & Glitch Suppression
-  --
-  -- On a physical C64, the 6510 CPU establishes the address bus and the
-  -- associated control lines (R/W, BA, etc.) well before the rising edge
-  -- of PHI2. The VIC-II releases AEC ~40ns early, giving the PLA time to
-  -- assert chip selects (ROML/ROMH/IO1/IO2) before PHI2 rises. Cartridges
-  -- rely on these physical head-starts so all signals are stable *before*
-  -- the cycle officially begins. Edge-triggered cartridges (like the IDUN
-  -- cart's CPLD) sample the bus on PHI2+ROML+R/W with a tight ~40ns window.
-  --
-  -- Two issues exist in the MiSTer FPGA core, stemming from architectural decisions in
-  -- the MiSTer core's state machine. Since we do not want to touch this state machine
-  -- and architecture for the time being, we need to mitigate all this here in our wrapper
-  -- in main.vhd and this is why we are extensively documenting what we are doing:
-  --
-  -- (1) Combinational glitches at CPU<->VIC bus handoffs.
-  --     The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus,
-  --     aec, cpuAddr, vicAddr) that change on the same clock edge. During the
-  --     combinational propagation, the mux output briefly takes intermediate
-  --     values before settling. These transient glitches are visible at the
-  --     Expansion Port connector on address, ROML, ROMH, IO1, IO2, and R/W,
-  --     and corrupt edge-triggered cart sampling.
-  --
-  -- (2) PHI2 leads address, ROML, ROMH, IO1, IO2, R/W at the Expansion Port
-  --     connector instead of trailing them. core_phi2 rises one sysCycle before 
-  --     phi0_cpu rises and AEC drops, which is the opposite of real-C64 behavior.
-  --     On a real C64, address and chip selects are stable when PHI2 rises and
-  --     remain stable for ~30ns after PHI2 falls (hold time tAH).
-  --
-  -- Fix: pipeline all cart-port outputs through registers, with PHI2 being delayed
-  -- by going through two register stages while address/control signals go through one.
-  -- This produces the following at the Expansion Port connector:
-  --
-  --   * Address, ROML, ROMH, IO1, IO2, R/W are stable for ~530ns *before*
-  --     PHI2 rises (massive setup margin, exceeds real C64's ~40ns by an
-  --     order of magnitude but harmless: more setup time only helps the cart)
-  --   * The same signals remain stable for ~31ns *after* PHI2 falls
-  --     (hold time, matching real C64's ~30ns tAH)
-  --   * No combinational glitches reach the connector — everything passes
-  --     through registered stages, so transient values are filtered out
-  --   * BA and dotclock are also pipelined for uniform clock-to-pin timing,
-  --     though they don't suffer from issue (2) since they're not part of
-  --     the per-cycle CPU<->VIC handoff
-  --
-  -- The PHI2 falling edge is shaped using an AND gate with combinational
-  -- core_phi2: the AND falls when core_phi2 falls (sharp, undelayed),
-  -- preserving CPU-cycle-end timing while keeping the rising edge delayed.
-  -- This shrinks PHI2 high duration from 500ns to ~438ns, still safely above
-  -- the 6510 datasheet minimum tPWH of 400ns.
-  --
-  -- Note on the Ultimax-mode address override:
-  -- The `cart_a_pre` signal includes the Ultimax handling (overriding A14/A15
-  -- with "11" when core_umax_romh = '1') BEFORE registration. This way the
-  -- entire address value is computed combinationally and then registered as
-  -- one piece. If we instead registered the address and then applied the
-  -- Ultimax override combinationally on the registered output, the override
-  -- selector (core_umax_romh) and the registered address would be one tick
-  -- out of phase, creating a transient glitch on cart_a_o at every Ultimax-
-  -- related transition. Computing-then-registering avoids this.
+  -- Expansion Port (aka Cartridge Port) handling:
+  --    * MEGA65's hardware expansion port
+  --    * Simulated 1750 REU 512KB
+  --    * Simulateed cartridge using data from .crt file
   --------------------------------------------------------------------------------------------------
 
   -- Combinational pre-register address (includes Ultimax A14/A15 override).
@@ -849,32 +784,32 @@ begin
   cart_a_pre <= "11" & c64_ram_addr_o(13 downto 0) when core_umax_romh = '1'
                 else c64_ram_addr_o;
 
+  -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
+  -- vicAddr) that change on the same clock edge, producing combinational glitches during
+  -- CPU<->VIC bus handoffs. These glitches reach the Expansion Port connector on address,
+  -- ROML, ROMH, IO1, IO2, and R/W and would corrupt edge-triggered cart sampling.
+  --
+  -- We register all six signals here through a single flip-flop stage, which filters out
+  -- the transient values and presents only stable, post-settling values at the cart pin.
+  --
+  -- BA and dotclock are NOT registered because they come from clean register outputs in
+  -- the core (VIC-II output and clock divider respectively) with no combinational mux
+  -- upstream that could glitch.
+  --
+  -- PHI2 is NOT registered as it is already generated cart-port-faithful in fpga64_sid_iec.vhd
   cart_output_pipeline_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
-      -- PHI2: two-stage pipeline, deliberately one tick later than other outputs
-      cart_phi2_d1_q <= core_phi2;
-      cart_phi2_d2_q <= cart_phi2_d1_q;
-
-      -- All other cart-port outputs: single-stage registered
       cart_a_q       <= cart_a_pre;       -- includes Ultimax override
       cart_roml_q    <= cart_roml_n;
       cart_romh_q    <= cart_romh_n;
       cart_io1_q     <= cart_io1_n;
       cart_io2_q     <= cart_io2_n;
       cart_rw_q      <= not c64_ram_we;
-      cart_ba_q      <= core_ba;
-      cart_dotclk_q  <= core_dotclk;
     end if;
   end process cart_output_pipeline_proc;
 
-  --------------------------------------------------------------------------------------------------
-  -- Expansion Port (aka Cartridge Port) handling:
-  --    * MEGA65's hardware expansion port
-  --    * Simulated 1750 REU 512KB
-  --    * Simulateed cartridge using data from .crt file
-  --------------------------------------------------------------------------------------------------
-
+  -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
   begin
     -- C64 Expansion Port (aka Cartridge Port) control lines
@@ -962,33 +897,21 @@ begin
       cart_reset_o    <= reset_core_int_n when cart_reset_counter = 0 and cart_res_flckr_ign = 0 else '1';
       cart_reset_oe_o <= not cart_reset_o;
 
-      -- Connect physical output lines to the core's various output signals
+      -- Directly use the core's phi2, dotclock and BA signal for the physical output...
+      cart_phi2_o     <= core_phi2;
+      cart_dotclock_o <= core_dotclk;
+      cart_ba_o       <= core_ba;
+
+      -- ...but use registered versions of address, ROML, ROMH, IO1, IO2 and RW to avoid glitches.
+      --
+      -- See comment block before cart_output_pipeline_proc to understand the separation
+      -- of unregistered and registered signals here.
+      cart_a_o        <= cart_a_q;      -- Ultimax override is baked in via cart_a_pre
       cart_roml_o     <= cart_roml_q;
       cart_romh_o     <= cart_romh_q;
       cart_io1_o      <= cart_io1_q;
       cart_io2_o      <= cart_io2_q;
       cart_rw_o       <= cart_rw_q;
-      cart_dotclock_o <= cart_dotclk_q;
-
-      -- PHI2: registered with 2-tick delay (cart_phi2_d2_q) AND'd with live
-      -- core_phi2 to produce sharp falling edge.See comment block "Cartridge
-      -- Port Timing Alignment & Glitch Suppression" above.
-      cart_phi2_o     <= cart_phi2_d2_q and core_phi2;
-
-      -- The BA (Bus Available) signal is generated by the VIC-II to halt the CPU 
-      -- (via the RDY pin) 3 clock cycles before it takes over the bus for character 
-      -- or sprite fetches. Internally, this signal originates from the VIC-II module 
-      -- (video_vicii_656x), surfaces through fpga64_sid_iec as 'core_ba', and 
-      -- is routed directly here. 
-      --
-      -- We pass it straight to the physical port because external DMA devices 
-      -- (like the REU or Kung Fu Flash) monitor it to synchronize their own transfers. 
-      -- (Historically, using the core's idealized 'cpuHasBus' signal here broke 
-      -- compatibility because it lacked the physical 3-cycle warning).
-      --
-      -- Because BA is a macroscopic, multi-cycle warning signal, it does not require 
-      -- the strict sub-cycle phase delays we applied to PHI2.
-      cart_ba_o       <= cart_ba_q;
 
       -- Connect physical input lines (inputs are NOT pipelined - read combinationally)
       cart_nmi_n      <= cart_nmi_i;
@@ -1001,16 +924,13 @@ begin
       -- we need to treat the address bus as a bi-directional port
       cart_addr_oe_o  <= '1';
 
-      -- Address: registered output (Ultimax override is baked in via cart_a_pre)
-      cart_a_o <= cart_a_q;
-
       -- Switch the data lines bi-directionally so that the CPU can also
       -- write to the cartridge, e.g. for bank switching
       if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or core_umax_unmapped = '1') then
-        cart_data_oe_o <= '0';                                                                                                                  -- input
+        cart_data_oe_o <= '0';  -- input
         data_from_cart <= cart_d_i;
       else
-        cart_data_oe_o <= '1';                                                                                                                  -- output
+        cart_data_oe_o <= '1';  -- output
         if c64_ram_we = '0' then
           cart_d_o <= c64_ram_data_i;
         else
@@ -1085,6 +1005,8 @@ begin
   begin
     if G_BOARD = "MEGA65_R3" or G_BOARD = "MEGA65_R4" then
       if rising_edge(clk_main_i) then
+        core_phi2_prev <= core_phi2;
+
         -- In contrast to what is written above in the comment RESET SEMANTICS, we cannot use
         -- reset_core_n here because as soon as cart_reset_counter is > 0 reset_core_n goes low
         -- and then cart_reset_counter would be reset back to 0 prematurely
@@ -1093,7 +1015,7 @@ begin
           cart_res_flckr_ign <= 0;
 
         -- The reset duration is measured in multiples of phi2 cycles
-        elsif cart_reset_counter > 0 and cart_phi2_d1_q = '1' and core_phi2 = '0' then
+        elsif cart_reset_counter > 0 and core_phi2_prev = '1' and core_phi2 = '0' then
           cart_reset_counter <= cart_reset_counter - 1;
         end if;
 
