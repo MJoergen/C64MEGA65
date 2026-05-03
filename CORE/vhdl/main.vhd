@@ -791,42 +791,46 @@ begin
   -- *before* the cycle officially begins. Edge-triggered cartridges (like the
   -- IDUN cart's CPLD) sample the bus on PHI2+ROML+RW with a tight ~40ns window.
   --
-  -- Two issues exist in the MiSTer FPGA core, that are stemming from
-  -- architectural decisions in the MiSTer core's state machine. Since we
-  -- do not want to touch this state machine and architecture for the time
-  -- being, we need to mitigate all this here in our wrapper in main.vhd and
-  -- this is why we are extensively documenting what we are doing:
+  -- Two issues exist in the MiSTer FPGA core, stemming from architectural decisions in
+  -- the MiSTer core's state machine. Since we do not want to touch this state machine
+  -- and architecture for the time being, we need to mitigate all this here in our wrapper
+  -- in main.vhd and this is why we are extensively documenting what we are doing:
   --
   -- (1) Combinational glitches at CPU<->VIC bus handoffs.
   --     The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus,
   --     aec, cpuAddr, vicAddr) that change on the same clock edge. During the
   --     combinational propagation, the mux output briefly takes intermediate
   --     values before settling. These transient glitches are visible at the
-  --     cart connector and corrupt edge-triggered cart sampling.
+  --     Expansion Port connector on address, ROML, ROMH, IO1, IO2, and R/W,
+  --     and corrupt edge-triggered cart sampling.
   --
-  -- (2) PHI2 leads ROML/address at the connector instead of trailing them.
-  --     core_phi2 transitions one sysCycle before phi0_cpu/aec/ROML/address
-  --     transition, which is the opposite of real-C64 behavior. On a real C64,
-  --     ROML and address are stable when PHI2 rises and remain stable for ~30ns
-  --     after PHI2 falls (hold time tAH).
+  -- (2) PHI2 leads address, ROML, ROMH, IO1, IO2, R/W at the Expansion Port
+  --     connector instead of trailing them. core_phi2 rises one sysCycle before 
+  --     phi0_cpu rises and AEC drops, which is the opposite of real-C64 behavior.
+  --     On a real C64, address and chip selects are stable when PHI2 rises and
+  --     remain stable for ~30ns after PHI2 falls (hold time tAH).
   --
-  -- Fix: pipeline all cart-port outputs through registers, with PHI2 going
-  -- through two register stages while address/control signals go through one.
-  -- This produces the following at the cart connector:
+  -- Fix: pipeline all cart-port outputs through registers, with PHI2 being delayed
+  -- by going through two register stages while address/control signals go through one.
+  -- This produces the following at the Expansion Port connector:
   --
-  --   * Address/ROML/ROMH/IO/RW are stable for ~530ns *before* PHI2 rises
-  --     (massive setup margin, exceeds real C64's ~40ns by an order of magnitude
-  --     but harmless: more setup time only helps the cart)
-  --   * Address/ROML/etc remain stable for ~31ns *after* PHI2 falls
+  --   * Address, ROML, ROMH, IO1, IO2, R/W are stable for ~530ns *before*
+  --     PHI2 rises (massive setup margin, exceeds real C64's ~40ns by an
+  --     order of magnitude but harmless: more setup time only helps the cart)
+  --   * The same signals remain stable for ~31ns *after* PHI2 falls
   --     (hold time, matching real C64's ~30ns tAH)
   --   * No combinational glitches reach the connector — everything passes
   --     through registered stages, so transient values are filtered out
+  --   * BA and dotclock are also pipelined for uniform clock-to-pin timing,
+  --     though they don't suffer from issue (2) since they're not part of
+  --     the per-cycle CPU<->VIC handoff
   --
   -- The PHI2 falling edge is shaped using an AND gate with combinational
   -- core_phi2: the AND falls when core_phi2 falls (sharp, undelayed),
   -- preserving CPU-cycle-end timing while keeping the rising edge delayed.
   -- This shrinks PHI2 high duration from 500ns to ~438ns, still safely above
   -- the 6510 datasheet minimum tPWH of 400ns.
+
   --
   -- Note on the Ultimax-mode address override:
   -- The `cart_a_pre` signal includes the Ultimax handling (overriding A14/A15
