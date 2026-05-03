@@ -784,12 +784,13 @@ begin
   --------------------------------------------------------------------------------------------------
   -- Cartridge Port Timing Alignment & Glitch Suppression
   --
-  -- On a physical C64, the 6510 CPU establishes the Address bus and R/W line
-  -- well before the rising edge of PHI2. The VIC-II releases AEC ~40ns early,
-  -- giving the PLA time to assert chip selects (ROML/ROMH) before PHI2 rises.
-  -- Cartridges rely on these physical head-starts so all signals are stable
-  -- *before* the cycle officially begins. Edge-triggered cartridges (like the
-  -- IDUN cart's CPLD) sample the bus on PHI2+ROML+RW with a tight ~40ns window.
+  -- On a physical C64, the 6510 CPU establishes the address bus and the
+  -- associated control lines (R/W, BA, etc.) well before the rising edge
+  -- of PHI2. The VIC-II releases AEC ~40ns early, giving the PLA time to
+  -- assert chip selects (ROML/ROMH/IO1/IO2) before PHI2 rises. Cartridges
+  -- rely on these physical head-starts so all signals are stable *before*
+  -- the cycle officially begins. Edge-triggered cartridges (like the IDUN
+  -- cart's CPLD) sample the bus on PHI2+ROML+R/W with a tight ~40ns window.
   --
   -- Two issues exist in the MiSTer FPGA core, stemming from architectural decisions in
   -- the MiSTer core's state machine. Since we do not want to touch this state machine
@@ -830,7 +831,6 @@ begin
   -- preserving CPU-cycle-end timing while keeping the rising edge delayed.
   -- This shrinks PHI2 high duration from 500ns to ~438ns, still safely above
   -- the 6510 datasheet minimum tPWH of 400ns.
-
   --
   -- Note on the Ultimax-mode address override:
   -- The `cart_a_pre` signal includes the Ultimax handling (overriding A14/A15
