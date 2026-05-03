@@ -74,6 +74,7 @@ read_vhdl -vhdl2008 { \
       ../M2M/vhdl/controllers/M65/matrix_to_keynum.vhdl \
       ../M2M/vhdl/controllers/M65/mega65kbd_to_matrix.vhdl \
       ../M2M/vhdl/controllers/M65/mouse_input.vhdl \
+      ../M2M/vhdl/controllers/SDRAM/sdram.vhd \
       ../M2M/vhdl/debouncer.vhd \
       ../M2M/vhdl/debounce.vhd \
       ../M2M/vhdl/framework.vhd \
@@ -101,7 +102,6 @@ read_vhdl -vhdl2008 { \
       ../M2M/vhdl/qnice_wrapper.vhd \
       ../M2M/vhdl/ram_init.vhd \
       ../M2M/vhdl/reset_manager.vhd \
-      ../M2M/vhdl/sdram.vhd \
       ../M2M/vhdl/tdp_ram.vhd \
       ../M2M/vhdl/top_mega65-r6.vhd \
       ../M2M/vhdl/vdrives.vhd \
