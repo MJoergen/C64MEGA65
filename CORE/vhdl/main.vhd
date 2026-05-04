@@ -1466,7 +1466,7 @@ begin
   -- The result of stage (3) is then passed to i_main which uses these signals directly with MiSTer's i_reu
   reu_mapper_inst : entity work.reu_mapper
     generic map (
-      G_BASE_ADDRESS => X"0020_0000"  -- 2MW
+      G_BASE_ADDRESS => X"0" & C_HMAP_REU & X"000"
     )
     port map (
       clk_i               => clk_main_i,

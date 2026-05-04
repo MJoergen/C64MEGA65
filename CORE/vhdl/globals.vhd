@@ -95,7 +95,8 @@ constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";    
 ----------------------------------------------------------------------------------------------------------
 
 constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework
-constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Contains CRT files
+constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT
+constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"0300";     -- Used for SIMREU
 
 ----------------------------------------------------------------------------------------------------------
 -- Virtual Drive Management System
