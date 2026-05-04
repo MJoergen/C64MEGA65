@@ -49,7 +49,7 @@ Version 6 - MONTH DAY, 2026
 
 * Simulated cartridges (`*.crt`) are now supporting:
 
-  - Snappy ROM freezer cartridge
+  - Super Snapshot and Snappy ROM freezer cartridges
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
 
   - ActionReplay freezer cartridge
