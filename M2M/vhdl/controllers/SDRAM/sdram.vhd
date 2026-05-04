@@ -36,6 +36,9 @@ library unisim;
    use unisim.vcomponents.all;
 
 entity sdram is
+   generic (
+      G_CLOCK_SPEED_MHZ : natural
+   );
    port (
       clk_i               : in    std_logic;                     -- Main clock = 166 MHz
       rst_i               : in    std_logic;                     -- Synchronous reset
@@ -70,13 +73,11 @@ end entity sdram;
 
 architecture synthesis of sdram is
 
-   constant C_CLOCK_SPEED_MHZ : natural                     := 166;
-
    -- The below constants are taken from the datasheet.
 
    -- Power-on time set to 102 us (rather than 100 us), to allow some extra margin, and
    -- account for possible inaccuracies in clock frequency.
-   constant C_TIME_INIT_POWER_ON : natural                  := 102 * C_CLOCK_SPEED_MHZ;
+   constant C_TIME_INIT_POWER_ON : natural                  := 102 * G_CLOCK_SPEED_MHZ;
 
    -- CAS# latency
    constant C_TIME_CAC : natural                            := 3;
@@ -146,7 +147,7 @@ architecture synthesis of sdram is
    -- Interval between refresh commands (in clock cycles):
    -- We must send 8192 refresh commands in the span of 64 ms.
    -- Subtract small value to compensate for time spent in previous command
-   constant C_TIME_REFRESH : natural                        := C_CLOCK_SPEED_MHZ * 1000 * 64 / 8192 - 12;
+   constant C_TIME_REFRESH : natural                        := G_CLOCK_SPEED_MHZ * 1000 * 64 / 8192 - 12;
 
    -- Device commands:
    -- bit 2 : RAS#

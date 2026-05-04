@@ -478,12 +478,15 @@ begin
          hr_clk_del_o      => hr_clk_del,
          hr_delay_refclk_o => hr_delay_refclk,
          hr_rst_o          => hr_rst,
-         sr_clk_o          => sr_clk_o,
-         sr_rst_o          => sr_rst_o,
+         sr_clk_o          => open,               -- Ignore the 166 MHz clock
+         sr_rst_o          => open,
          audio_clk_o       => audio_clk,
          audio_rst_o       => audio_rst,
          sys_pps_o         => sys_pps
       ); -- i_clk_m2m
+
+   sr_clk_o <= hr_clk;                            -- Use 100 MHz clock for the SDRAM
+   sr_rst_o <= hr_rst;
 
    video_mode <= C_SVGA_800_600_60    when qnice_video_mode_i = C_VIDEO_SVGA_800_60   else
                  C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_720_5994 else
@@ -723,19 +726,19 @@ begin
       port map (
          clk_i                 => hr_clk,
          rst_i                 => hr_rst,
-         s_avm_write_i         => hr_dig_write         & hr_core_write_i         & hr_qnice_write,
-         s_avm_read_i          => hr_dig_read          & hr_core_read_i          & hr_qnice_read,
-         s_avm_address_i       => hr_dig_address       & hr_core_address_i       & hr_qnice_address,
-         s_avm_writedata_i     => hr_dig_writedata     & hr_core_writedata_i     & hr_qnice_writedata,
-         s_avm_byteenable_i    => hr_dig_byteenable    & hr_core_byteenable_i    & hr_qnice_byteenable,
-         s_avm_burstcount_i    => hr_dig_burstcount    & hr_core_burstcount_i    & hr_qnice_burstcount,
-         s_avm_readdata_o(3*16-1 downto 2*16) => hr_dig_readdata,
+         s_avm_write_i         => sr_core_write_i         & hr_core_write_i         & hr_qnice_write,
+         s_avm_read_i          => sr_core_read_i          & hr_core_read_i          & hr_qnice_read,
+         s_avm_address_i       => sr_core_address_i       & hr_core_address_i       & hr_qnice_address,
+         s_avm_writedata_i     => sr_core_writedata_i     & hr_core_writedata_i     & hr_qnice_writedata,
+         s_avm_byteenable_i    => sr_core_byteenable_i    & hr_core_byteenable_i    & hr_qnice_byteenable,
+         s_avm_burstcount_i    => sr_core_burstcount_i    & hr_core_burstcount_i    & hr_qnice_burstcount,
+         s_avm_readdata_o(3*16-1 downto 2*16) => sr_core_readdata_o,
          s_avm_readdata_o(2*16-1 downto 1*16) => hr_core_readdata_o,
          s_avm_readdata_o(1*16-1 downto 0*16) => hr_qnice_readdata,
-         s_avm_readdatavalid_o(2) => hr_dig_readdatavalid,
+         s_avm_readdatavalid_o(2) => sr_core_readdatavalid_o,
          s_avm_readdatavalid_o(1) => hr_core_readdatavalid_o,
          s_avm_readdatavalid_o(0) => hr_qnice_readdatavalid,
-         s_avm_waitrequest_o(2)   => hr_dig_waitrequest,
+         s_avm_waitrequest_o(2)   => sr_core_waitrequest_o,
          s_avm_waitrequest_o(1)   => hr_core_waitrequest_o,
          s_avm_waitrequest_o(0)   => hr_qnice_waitrequest,
          m_avm_write_o         => hr_write,
@@ -1046,18 +1049,21 @@ begin
 
    sdram_gen : if G_BOARD = "MEGA65_R6" generate
       sdram_inst : entity work.sdram
+         generic map (
+            G_CLOCK_SPEED_MHZ => 100          -- Same clock speed as HyperRAM
+         )
          port map (
-            clk_i               => sr_clk_o,
-            rst_i               => sr_rst_o,
-            avm_waitrequest_o   => sr_core_waitrequest_o,
-            avm_write_i         => sr_core_write_i,
-            avm_read_i          => sr_core_read_i,
-            avm_address_i       => sr_core_address_i,
-            avm_writedata_i     => sr_core_writedata_i,
-            avm_byteenable_i    => sr_core_byteenable_i,
-            avm_burstcount_i    => sr_core_burstcount_i,
-            avm_readdata_o      => sr_core_readdata_o,
-            avm_readdatavalid_o => sr_core_readdatavalid_o,
+            clk_i               => hr_clk,    -- 100 MHz
+            rst_i               => hr_rst,
+            avm_waitrequest_o   => hr_dig_waitrequest,
+            avm_write_i         => hr_dig_write,
+            avm_read_i          => hr_dig_read,
+            avm_address_i       => hr_dig_address,
+            avm_writedata_i     => hr_dig_writedata,
+            avm_byteenable_i    => hr_dig_byteenable,
+            avm_burstcount_i    => hr_dig_burstcount,
+            avm_readdata_o      => hr_dig_readdata,
+            avm_readdatavalid_o => hr_dig_readdatavalid,
             sdram_a_o           => sdram_a_o,
             sdram_ba_o          => sdram_ba_o,
             sdram_cas_n_o       => sdram_cas_n_o,
@@ -1080,8 +1086,8 @@ begin
 
        sdram_dq_in <= sdram_dq_io;
     else generate
-       sr_core_waitrequest_o   <= '0';
-       sr_core_readdatavalid_o <= '0';
+       hr_dig_waitrequest   <= '0';
+       hr_dig_readdatavalid <= '0';
     end generate sdram_gen;
 
 
