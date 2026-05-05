@@ -1,23 +1,23 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/mode
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/bcd_en
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/res_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/enable
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/clk
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/rdy
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/abort_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/irq_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/nmi_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/so_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/r_w_n
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/sync
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/a
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/din
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/dout
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/debug
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/nmi_ack
-add wave -noupdate -expand -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/debug_inst/debug_proc/clk_cnt_v
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/mode
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/bcd_en
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/res_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/enable
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/clk
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/rdy
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/abort_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/irq_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/nmi_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/so_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/r_w_n
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/sync
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/a
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/din
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/dout
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/debug
+add wave -noupdate -group cpu_6510 /tb_main/main_inst/fpga64_sid_iec_inst/cpu/cpu/nmi_ack
+add wave -noupdate -group cpu_6510 -radix unsigned /tb_main/main_inst/fpga64_sid_iec_inst/cpu/debug_inst/debug_proc/clk_cnt_v
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/clk
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/reset
 add wave -noupdate -group reu /tb_main/main_inst/reu_inst/cfg
@@ -85,6 +85,18 @@ add wave -noupdate -group main /tb_main/main_inst/avm_byteenable_o
 add wave -noupdate -group main /tb_main/main_inst/avm_burstcount_o
 add wave -noupdate -group main /tb_main/main_inst/avm_readdata_i
 add wave -noupdate -group main /tb_main/main_inst/avm_readdatavalid_i
+add wave -noupdate -group main /tb_main/main_inst/crt_bank_wait_i
+add wave -noupdate -group main /tb_main/main_inst/crt_lo_ram_data_i
+add wave -noupdate -group main /tb_main/main_inst/crt_hi_ram_data_i
+add wave -noupdate -group main /tb_main/main_inst/crt_ioe_ram_data_i
+add wave -noupdate -group main /tb_main/main_inst/crt_iof_ram_data_i
+add wave -noupdate -group main /tb_main/main_inst/crt_addr_bus_o
+add wave -noupdate -group main /tb_main/main_inst/crt_ioe_we_o
+add wave -noupdate -group main /tb_main/main_inst/crt_iof_we_o
+add wave -noupdate -group main /tb_main/main_inst/crt_bank_lo_o
+add wave -noupdate -group main /tb_main/main_inst/crt_bank_hi_o
+add wave -noupdate -group main /tb_main/main_inst/crt_we_o
+add wave -noupdate -group main /tb_main/main_inst/crt_ram_data_i
 add wave -noupdate -group main -group Internal /tb_main/main_inst/c64_pause
 add wave -noupdate -group main -group Internal /tb_main/main_inst/c64_drive_led
 add wave -noupdate -group main -group Internal /tb_main/main_inst/cia1_pa_in
@@ -342,8 +354,166 @@ add wave -noupdate -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64
 add wave -noupdate -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic_debugx
 add wave -noupdate -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/vic_debugy
 add wave -noupdate -group fpga_sid_iec -group Internal /tb_main/main_inst/fpga64_sid_iec_inst/cpuSync
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_clk_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_rst_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_addr_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_data_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_ce_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_we_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/qnice_wait_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_clk_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_rst_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_reset_core_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_loading_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_id_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_exrom_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_game_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_size_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_laddr_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_size_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_num_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_raddr_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_wr_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_lo_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_hi_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_bank_wait_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_ram_addr_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_ram_data_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_ioe_we_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_iof_we_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_lo_ram_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_hi_ram_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_ioe_ram_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_iof_ram_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_crt_we_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/main_crt_ram_data_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_clk_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_rst_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_write_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_read_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_address_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_writedata_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_byteenable_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_burstcount_o
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_readdata_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_readdatavalid_i
+add wave -noupdate -group sw_cartridge_wrapper /tb_main/sw_cartridge_wrapper_inst/hr_waitrequest_i
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_req_status
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_req_length
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_req_valid
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_resp_status
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_resp_error
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_resp_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_write
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_read
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_writedata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_byteenable
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_burstcount
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_readdata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_readdatavalid
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/qnice_avm_waitrequest
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_req_length
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_req_valid
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_resp_status
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_resp_error
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_resp_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_write
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_read
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_writedata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_byteenable
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_burstcount
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_readdata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_readdatavalid
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_qnice_waitrequest
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_write
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_read
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_writedata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_byteenable
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_burstcount
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_readdata
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_readdatavalid
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_crt_waitrequest
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bram_address
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bram_data
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bram_lo_wren
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bram_hi_wren
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_lo
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_hi
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_wait
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_cache_addr_lo
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_cache_addr_hi
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_loading
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_id
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_exrom
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_game
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_size
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_laddr
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_size
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_num
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_raddr
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/hr_bank_wr
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/main_resp_status
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/main_resp_status_d
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/main_reset_core
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/main_cache_addr_lo
+add wave -noupdate -group sw_cartridge_wrapper -group Internal /tb_main/sw_cartridge_wrapper_inst/main_cache_addr_hi
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/clk_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/rst_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/cart_loading_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/cart_id_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/cart_exrom_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/cart_game_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/cart_size_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/ioe_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/iof_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/wr_en_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/wr_data_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/addr_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/bank_lo_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/bank_hi_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/ioe_wr_ena_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/iof_wr_ena_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/io_rom_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/io_ext_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/io_data_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/exrom_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/game_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/roml_we_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/freeze_key_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/mod_key_i
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/nmi_o
+add wave -noupdate -group cartridge /tb_main/main_inst/cartridge_inst/nmi_ack_i
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/cart_disable
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/allow_freeze
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/saved_d6
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/ioe_ena
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/iof_ena
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/old_freeze
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/old_nmiack
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/freeze_req
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/freeze_ack
+add wave -noupdate -group cartridge -expand -group Internal /tb_main/main_inst/cartridge_inst/freeze_crt
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/clock_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/clen_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/address_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/data_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/wren_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/q_a
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/clock_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/clen_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/address_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/data_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/wren_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/q_b
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/ram
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/address_a_reg
+add wave -noupdate -expand -group iof_ram /tb_main/sw_cartridge_wrapper_inst/iof_ram/address_b_reg
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {2436198400000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {2013219665226 ps} 0}
 quietly wave cursor active 1
 configure wave -namecolwidth 198
 configure wave -valuecolwidth 100
@@ -359,4 +529,4 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits ns
 update
-WaveRestoreZoom {2434351827245 ps} {2437695458760 ps}
+WaveRestoreZoom {2013213098557 ps} {2013225864358 ps}

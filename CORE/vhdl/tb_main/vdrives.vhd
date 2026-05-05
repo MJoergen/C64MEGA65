@@ -123,15 +123,15 @@ begin
     variable i           : natural := 0;
   begin
 
-    report "Reading disk";
-    file_open(ramfile, "qbert.d64");
-    while not endfile(ramfile) loop
-       read(ramfile, char);
-       disk_v(i) := to_stdlogicvector(character'pos(char), 8);
-       i := i + 1;
-    end loop;
-    file_close(ramfile);
-    report "Closing disk, i=" & to_string(i);
+--    report "Reading disk";
+--    file_open(ramfile, "qbert.d64");
+--    while not endfile(ramfile) loop
+--       read(ramfile, char);
+--       disk_v(i) := to_stdlogicvector(character'pos(char), 8);
+--       i := i + 1;
+--    end loop;
+--    file_close(ramfile);
+--    report "Closing disk, i=" & to_string(i);
 
     main_loop : loop
       sd_buff_addr_o <= (others => '0');

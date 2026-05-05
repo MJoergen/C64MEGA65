@@ -75,15 +75,15 @@ architecture synthesis of avm_arbit is
    signal burstcount : std_logic_vector(7 downto 0);
 
    -- Debug counters. Not connected anywhere.
-   signal cnt                 : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s0_active_grant : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s1_active_grant : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s0_waiting      : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s1_waiting      : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s0_waiting_tot  : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s1_waiting_tot  : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s0_waiting_max  : integer range 0 to G_FREQ_HZ - 1;
-   signal cnt_s1_waiting_max  : integer range 0 to G_FREQ_HZ - 1;
+   signal cnt                 : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s0_active_grant : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s1_active_grant : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s0_waiting      : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s1_waiting      : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s0_waiting_tot  : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s1_waiting_tot  : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s0_waiting_max  : integer range 0 to 4*G_FREQ_HZ - 1;
+   signal cnt_s1_waiting_max  : integer range 0 to 4*G_FREQ_HZ - 1;
 
 begin
 

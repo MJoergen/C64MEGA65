@@ -37,7 +37,7 @@ architecture synthesis of axi_fifo is
 
 begin
 
-   i_xpm_fifo_axis : xpm_fifo_axis
+  i_xpm_fifo_axis : entity work.xpm_fifo_axis
       generic map (
          CDC_SYNC_STAGES      => 2,
          CLOCKING_MODE        => "independent_clock",
@@ -55,7 +55,8 @@ begin
          TID_WIDTH            => 1,
          TUSER_WIDTH          => G_USER_SIZE,
          USE_ADV_FEATURES     => "1404",
-         WR_DATA_COUNT_WIDTH  => G_FILL_SIZE
+         WR_DATA_COUNT_WIDTH  => G_FILL_SIZE,
+         EN_SIM_ASSERT_ERR    => "warning"
       )
       port map (
          almost_empty_axis  => open,

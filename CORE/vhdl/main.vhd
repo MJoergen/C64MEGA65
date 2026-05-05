@@ -360,7 +360,7 @@ architecture synthesis of main is
   signal   reset_core_int_n : std_logic                            := '1';
   signal   hard_reset_n     : std_logic                            := '1';
 
-  constant C_HARD_RST_DELAY : natural                              := 100_000; -- roundabout 1/30 of a second
+  constant C_HARD_RST_DELAY : natural                              := 1; -- 100_000; -- roundabout 1/30 of a second
   signal   hard_rst_counter : natural                              := 0;
   signal   hard_reset_n_d   : std_logic                            := '1';
   signal   cold_start_done  : std_logic                            := '0';
@@ -428,6 +428,8 @@ architecture synthesis of main is
   signal   crt_nmi        : std_logic;
   signal   crt_ioe_wr_ena : std_logic;
   signal   crt_iof_wr_ena : std_logic;
+  signal   crt_addr_9exx  : std_logic;
+  signal   crt_addr_9fxx  : std_logic;
 
   -- RAM Expansion Unit
   signal   sim_ext_cycle : std_logic;
@@ -1134,8 +1136,11 @@ begin
       nmi_ack_i      => core_nmi_ack
     ); -- cartridge_inst
 
-  crt_ioe_we_o    <= core_ioe and c64_ram_we;
-  crt_iof_we_o    <= core_iof and c64_ram_we;
+  crt_addr_9exx <= '1' when c64_ram_addr_o(12 downto 8) = "11110" else '0';
+  crt_addr_9fxx <= '1' when c64_ram_addr_o(12 downto 8) = "11111" else '0';
+
+  crt_ioe_we_o    <= (core_ioe or (core_roml and crt_ioe_wr_ena and crt_addr_9exx)) and c64_ram_we;
+  crt_iof_we_o    <= (core_iof or (core_roml and crt_iof_wr_ena and crt_addr_9fxx)) and c64_ram_we;
   crt_we_o        <= core_roml and crt_roml_we and c64_ram_we;
 
   --------------------------------------------------------------------------------------------------
