@@ -55,6 +55,9 @@ Version 6 - MONTH DAY, 2026
   - ActionReplay freezer cartridge
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/69)
 
+  - WIP: Final Cartridge III and Daniel Mantione's Final Cartridge III 101%
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/207)
+
   - Magic Desk 2 format that is for example being used by SNK-Vs-Capcom Strong
     Edition (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
 
