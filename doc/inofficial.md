@@ -20,7 +20,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A9     | 04/25/26 | 05f2c25 | SIM REU: Allow parallel use with cartridges (issues #136 and #198)
 | WIP-V6-A10    | 05/01/26 | 6a33db8 | SIM REU: Use SDRAM on R6 and HyperRAM on R3 (issue #206)
 | WIP-V6-A11    | 05/05/26 | 557e414 | SIM REU: Fix regression bugs (issue #198)
-| WIP-V6-A12    | 05/05/26 | 33f2b45 | Improved Expansion Port Timing and Idun support (issue #204)
+| WIP-V6-A12    | 05/05/26 | 1d8ec1c | Improved Expansion Port Timing and Idun support (issue #204). SIMCRT: Fix FC3 freezer firing on software NMI (issue #207)
 
 ## Version 5.2
 
