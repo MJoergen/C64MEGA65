@@ -68,7 +68,6 @@ port (
 
    --------------------------------------------------------------------------------------------------------
    -- HyperRAM Clock Domain.
-   -- Used here for SIMCRT.
    --------------------------------------------------------------------------------------------------------
 
    hr_clk_i                : in  std_logic;
@@ -84,23 +83,6 @@ port (
    hr_core_waitrequest_i   : in  std_logic;
    hr_high_i               : in  std_logic; -- Core is too fast
    hr_low_i                : in  std_logic; -- Core is too slow
-
-   --------------------------------------------------------------------------------------------------------
-   -- SDRAM Clock Domain. On the R3 board, this is routed to the HyperRAM.
-   -- Used here for SIMREU.
-   --------------------------------------------------------------------------------------------------------
-
-   sr_clk_i                : in  std_logic;
-   sr_rst_i                : in  std_logic;
-   sr_core_write_o         : out std_logic;
-   sr_core_read_o          : out std_logic;
-   sr_core_address_o       : out std_logic_vector(31 downto 0);
-   sr_core_writedata_o     : out std_logic_vector(15 downto 0);
-   sr_core_byteenable_o    : out std_logic_vector( 1 downto 0);
-   sr_core_burstcount_o    : out std_logic_vector( 7 downto 0);
-   sr_core_readdata_i      : in  std_logic_vector(15 downto 0);
-   sr_core_readdatavalid_i : in  std_logic;
-   sr_core_waitrequest_i   : in  std_logic;
 
    --------------------------------------------------------------------------------------------------------
    -- Video Clock Domain
@@ -308,6 +290,26 @@ signal main_prg_trigger_run       : std_logic;
 
 signal hr_core_speed              : unsigned(1 downto 0);    -- see clock.vhd for details
 
+signal hr_reu_write               : std_logic;
+signal hr_reu_read                : std_logic;
+signal hr_reu_address             : std_logic_vector(31 downto 0);
+signal hr_reu_writedata           : std_logic_vector(15 downto 0);
+signal hr_reu_byteenable          : std_logic_vector( 1 downto 0);
+signal hr_reu_burstcount          : std_logic_vector( 7 downto 0);
+signal hr_reu_readdata            : std_logic_vector(15 downto 0);
+signal hr_reu_readdatavalid       : std_logic;
+signal hr_reu_waitrequest         : std_logic;
+
+signal hr_crt_write               : std_logic;
+signal hr_crt_read                : std_logic;
+signal hr_crt_address             : std_logic_vector(31 downto 0);
+signal hr_crt_writedata           : std_logic_vector(15 downto 0);
+signal hr_crt_byteenable          : std_logic_vector( 1 downto 0);
+signal hr_crt_burstcount          : std_logic_vector( 7 downto 0);
+signal hr_crt_readdata            : std_logic_vector(15 downto 0);
+signal hr_crt_readdatavalid       : std_logic;
+signal hr_crt_waitrequest         : std_logic;
+
 signal hr_hdmi_ff                 : std_logic;
 
 ---------------------------------------------------------------------------------------------
@@ -436,6 +438,44 @@ begin
          end if;
       end if;
    end process;
+
+   i_avm_arbit : entity work.avm_arbit
+      generic map (
+         G_PREFER_SWAP  => true,
+         G_ADDRESS_SIZE => 32,
+         G_DATA_SIZE    => 16
+      )
+      port map (
+         clk_i                  => hr_clk_i,
+         rst_i                  => hr_rst_i,
+         s0_avm_write_i         => hr_reu_write,
+         s0_avm_read_i          => hr_reu_read,
+         s0_avm_address_i       => hr_reu_address,
+         s0_avm_writedata_i     => hr_reu_writedata,
+         s0_avm_byteenable_i    => hr_reu_byteenable,
+         s0_avm_burstcount_i    => hr_reu_burstcount,
+         s0_avm_readdata_o      => hr_reu_readdata,
+         s0_avm_readdatavalid_o => hr_reu_readdatavalid,
+         s0_avm_waitrequest_o   => hr_reu_waitrequest,
+         s1_avm_write_i         => hr_crt_write,
+         s1_avm_read_i          => hr_crt_read,
+         s1_avm_address_i       => hr_crt_address,
+         s1_avm_writedata_i     => hr_crt_writedata,
+         s1_avm_byteenable_i    => hr_crt_byteenable,
+         s1_avm_burstcount_i    => hr_crt_burstcount,
+         s1_avm_readdata_o      => hr_crt_readdata,
+         s1_avm_readdatavalid_o => hr_crt_readdatavalid,
+         s1_avm_waitrequest_o   => hr_crt_waitrequest,
+         m_avm_write_o          => hr_core_write_o,
+         m_avm_read_o           => hr_core_read_o,
+         m_avm_address_o        => hr_core_address_o,
+         m_avm_writedata_o      => hr_core_writedata_o,
+         m_avm_byteenable_o     => hr_core_byteenable_o,
+         m_avm_burstcount_o     => hr_core_burstcount_o,
+         m_avm_readdata_i       => hr_core_readdata_i,
+         m_avm_readdatavalid_i  => hr_core_readdatavalid_i,
+         m_avm_waitrequest_i    => hr_core_waitrequest_i
+      ); -- i_avm_arbit
 
    ---------------------------------------------------------------------------------------------
    -- main_clk (C64 MiSTer Core clock)
@@ -988,15 +1028,15 @@ begin
       main_crt_ram_data_o  => main_crt_ram_data,
       hr_clk_i             => hr_clk_i,
       hr_rst_i             => hr_rst_i,
-      hr_write_o           => hr_core_write_o,
-      hr_read_o            => hr_core_read_o,
-      hr_address_o         => hr_core_address_o,
-      hr_writedata_o       => hr_core_writedata_o,
-      hr_byteenable_o      => hr_core_byteenable_o,
-      hr_burstcount_o      => hr_core_burstcount_o,
-      hr_readdata_i        => hr_core_readdata_i,
-      hr_readdatavalid_i   => hr_core_readdatavalid_i,
-      hr_waitrequest_i     => hr_core_waitrequest_i
+      hr_write_o           => hr_crt_write,
+      hr_read_o            => hr_crt_read,
+      hr_address_o         => hr_crt_address,
+      hr_writedata_o       => hr_crt_writedata,
+      hr_byteenable_o      => hr_crt_byteenable,
+      hr_burstcount_o      => hr_crt_burstcount,
+      hr_readdata_i        => hr_crt_readdata,
+      hr_readdatavalid_i   => hr_crt_readdatavalid,
+      hr_waitrequest_i     => hr_crt_waitrequest
    ); -- i_sw_cartridge_wrapper
 
    main2hr_avm_fifo : entity work.avm_fifo
@@ -1019,17 +1059,17 @@ begin
          s_avm_burstcount_i    => main_avm_reu_burstcount,
          s_avm_readdata_o      => main_avm_reu_readdata,
          s_avm_readdatavalid_o => main_avm_reu_readdatavalid,
-         m_clk_i               => sr_clk_i,
-         m_rst_i               => sr_rst_i,
-         m_avm_waitrequest_i   => sr_core_waitrequest_i,
-         m_avm_write_o         => sr_core_write_o,
-         m_avm_read_o          => sr_core_read_o,
-         m_avm_address_o       => sr_core_address_o,
-         m_avm_writedata_o     => sr_core_writedata_o,
-         m_avm_byteenable_o    => sr_core_byteenable_o,
-         m_avm_burstcount_o    => sr_core_burstcount_o,
-         m_avm_readdata_i      => sr_core_readdata_i,
-         m_avm_readdatavalid_i => sr_core_readdatavalid_i
+         m_clk_i               => hr_clk_i,
+         m_rst_i               => hr_rst_i,
+         m_avm_waitrequest_i   => hr_reu_waitrequest,
+         m_avm_write_o         => hr_reu_write,
+         m_avm_read_o          => hr_reu_read,
+         m_avm_address_o       => hr_reu_address,
+         m_avm_writedata_o     => hr_reu_writedata,
+         m_avm_byteenable_o    => hr_reu_byteenable,
+         m_avm_burstcount_o    => hr_reu_burstcount,
+         m_avm_readdata_i      => hr_reu_readdata,
+         m_avm_readdatavalid_i => hr_reu_readdatavalid
       ); -- main2hr_avm_fifo
 
 end architecture synthesis;

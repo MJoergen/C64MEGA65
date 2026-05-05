@@ -316,24 +316,6 @@ architecture synthesis of mega65_r3 is
 
    signal hr_clk                 : std_logic;
    signal hr_rst                 : std_logic;
-   signal hr_core0_write         : std_logic;
-   signal hr_core0_read          : std_logic;
-   signal hr_core0_address       : std_logic_vector(31 downto 0);
-   signal hr_core0_writedata     : std_logic_vector(15 downto 0);
-   signal hr_core0_byteenable    : std_logic_vector(1 downto 0);
-   signal hr_core0_burstcount    : std_logic_vector(7 downto 0);
-   signal hr_core0_readdata      : std_logic_vector(15 downto 0);
-   signal hr_core0_readdatavalid : std_logic;
-   signal hr_core0_waitrequest   : std_logic;
-   signal hr_core1_write         : std_logic;
-   signal hr_core1_read          : std_logic;
-   signal hr_core1_address       : std_logic_vector(31 downto 0);
-   signal hr_core1_writedata     : std_logic_vector(15 downto 0);
-   signal hr_core1_byteenable    : std_logic_vector(1 downto 0);
-   signal hr_core1_burstcount    : std_logic_vector(7 downto 0);
-   signal hr_core1_readdata      : std_logic_vector(15 downto 0);
-   signal hr_core1_readdatavalid : std_logic;
-   signal hr_core1_waitrequest   : std_logic;
    signal hr_core_write          : std_logic;
    signal hr_core_read           : std_logic;
    signal hr_core_address        : std_logic_vector(31 downto 0);
@@ -636,19 +618,6 @@ begin
       hr_high_o               => hr_high,
       hr_low_o                => hr_low,
 
-      -- Provide SDRAM to core (not avaiable on R3 boards)
-      sr_clk_o                => open,
-      sr_rst_o                => open,
-      sr_core_write_i         => '0',
-      sr_core_read_i          => '0',
-      sr_core_address_i       => (others => '0'),
-      sr_core_writedata_i     => (others => '0'),
-      sr_core_byteenable_i    => (others => '0'),
-      sr_core_burstcount_i    => (others => '0'),
-      sr_core_readdata_o      => open,
-      sr_core_readdatavalid_o => open,
-      sr_core_waitrequest_o   => open,
-
       -- Audio
       audio_clk_o             => audio_clk,
       audio_reset_o           => audio_reset,
@@ -826,30 +795,17 @@ begin
 
          hr_clk_i                => hr_clk,
          hr_rst_i                => hr_rst,
-         hr_core_write_o         => hr_core0_write,
-         hr_core_read_o          => hr_core0_read,
-         hr_core_address_o       => hr_core0_address,
-         hr_core_writedata_o     => hr_core0_writedata,
-         hr_core_byteenable_o    => hr_core0_byteenable,
-         hr_core_burstcount_o    => hr_core0_burstcount,
-         hr_core_readdata_i      => hr_core0_readdata,
-         hr_core_readdatavalid_i => hr_core0_readdatavalid,
-         hr_core_waitrequest_i   => hr_core0_waitrequest,
+         hr_core_write_o         => hr_core_write,
+         hr_core_read_o          => hr_core_read,
+         hr_core_address_o       => hr_core_address,
+         hr_core_writedata_o     => hr_core_writedata,
+         hr_core_byteenable_o    => hr_core_byteenable,
+         hr_core_burstcount_o    => hr_core_burstcount,
+         hr_core_readdata_i      => hr_core_readdata,
+         hr_core_readdatavalid_i => hr_core_readdatavalid,
+         hr_core_waitrequest_i   => hr_core_waitrequest,
          hr_high_i               => hr_high,
          hr_low_i                => hr_low,
-
-         -- On R3 boards SDRAM is not present, so use HyperRAM instead.
-         sr_clk_i                => hr_clk,
-         sr_rst_i                => hr_rst,
-         sr_core_write_o         => hr_core1_write,
-         sr_core_read_o          => hr_core1_read,
-         sr_core_address_o       => hr_core1_address,
-         sr_core_writedata_o     => hr_core1_writedata,
-         sr_core_byteenable_o    => hr_core1_byteenable,
-         sr_core_burstcount_o    => hr_core1_burstcount,
-         sr_core_readdata_i      => hr_core1_readdata,
-         sr_core_readdatavalid_i => hr_core1_readdatavalid,
-         sr_core_waitrequest_i   => hr_core1_waitrequest,
 
          --------------------------------------------------------------------
          -- C64 specific ports that are not supported by the M2M framework
@@ -920,48 +876,6 @@ begin
          cart_a_i          => cart_a_in,
          cart_a_o          => cart_a_out
       ); -- CORE
-
-   -----------------------------------------------------------------------------------------------
-   -- On R3 boards SDRAM requests are merged with the HyperRAM requests using the below arbiter.
-   -----------------------------------------------------------------------------------------------
-
-   i_avm_arbit : entity work.avm_arbit
-      generic map (
-         G_PREFER_SWAP  => true,
-         G_ADDRESS_SIZE => 32,
-         G_DATA_SIZE    => 16
-      )
-      port map (
-         clk_i                  => hr_clk,
-         rst_i                  => hr_rst,
-         s0_avm_write_i         => hr_core0_write,          -- Cores HyperRAM request
-         s0_avm_read_i          => hr_core0_read,
-         s0_avm_address_i       => hr_core0_address,
-         s0_avm_writedata_i     => hr_core0_writedata,
-         s0_avm_byteenable_i    => hr_core0_byteenable,
-         s0_avm_burstcount_i    => hr_core0_burstcount,
-         s0_avm_readdata_o      => hr_core0_readdata,
-         s0_avm_readdatavalid_o => hr_core0_readdatavalid,
-         s0_avm_waitrequest_o   => hr_core0_waitrequest,
-         s1_avm_write_i         => hr_core1_write,          -- Cores SDRAM request
-         s1_avm_read_i          => hr_core1_read,
-         s1_avm_address_i       => hr_core1_address,
-         s1_avm_writedata_i     => hr_core1_writedata,
-         s1_avm_byteenable_i    => hr_core1_byteenable,
-         s1_avm_burstcount_i    => hr_core1_burstcount,
-         s1_avm_readdata_o      => hr_core1_readdata,
-         s1_avm_readdatavalid_o => hr_core1_readdatavalid,
-         s1_avm_waitrequest_o   => hr_core1_waitrequest,
-         m_avm_write_o          => hr_core_write,
-         m_avm_read_o           => hr_core_read,
-         m_avm_address_o        => hr_core_address,
-         m_avm_writedata_o      => hr_core_writedata,
-         m_avm_byteenable_o     => hr_core_byteenable,
-         m_avm_burstcount_o     => hr_core_burstcount,
-         m_avm_readdata_i       => hr_core_readdata,
-         m_avm_readdatavalid_i  => hr_core_readdatavalid,
-         m_avm_waitrequest_i    => hr_core_waitrequest
-      ); -- i_avm_arbit
 
 end architecture synthesis;
 
