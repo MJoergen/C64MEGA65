@@ -91,12 +91,13 @@ constant C_DEV_C64_KERNAL_C64    : std_logic_vector(15 downto 0) := x"0105";    
 constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";     -- Custom Kernal: (simulated) C1541
 
 ----------------------------------------------------------------------------------------------------------
--- HyperRAM memory map (in units of 4kW)
+-- HyperRAM memory map (in units of 4 kW = 8 kB)
 ----------------------------------------------------------------------------------------------------------
 
-constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework
-constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT
-constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"0300";     -- Used for SIMREU
+constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework (4 MB)
+constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (3.5 MB)
+constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"03C0";     -- Used for SIMREU (0.5 MB)
+constant C_HMAP_SIZE             : std_logic_vector(15 downto 0) := x"0400";     -- Total size of HyperRAM
 
 ----------------------------------------------------------------------------------------------------------
 -- Virtual Drive Management System
