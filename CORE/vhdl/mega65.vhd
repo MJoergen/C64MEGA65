@@ -279,6 +279,7 @@ signal main_crt_iof_we            : std_logic;
 signal main_crt_bank_lo           : std_logic_vector( 6 downto 0);
 signal main_crt_bank_hi           : std_logic_vector( 6 downto 0);
 signal main_crt_bank_wait         : std_logic;
+signal main_crt_ioe_page          : std_logic_vector( 4 downto 0);
 
 signal main_reset_core            : std_logic;
 signal main_reset_from_prgloader  : std_logic;
@@ -722,6 +723,7 @@ begin
          crt_bank_hi_o          => main_crt_bank_hi,
          crt_we_o               => main_crt_we,
          crt_ram_data_i         => main_crt_ram_data,
+         crt_ioe_page_o         => main_crt_ioe_page,
 
          -- Custom Kernal: C64 ROM (in QNICE clock domain via c64_clk_sd_i)
          c64rom_we_i            => qnice_c64rom_we,
@@ -1017,6 +1019,7 @@ begin
       main_ram_data_i      => std_logic_vector(main_ram_data_from_c64),
       main_ioe_we_i        => main_crt_ioe_we,
       main_iof_we_i        => main_crt_iof_we,
+      main_ioe_page_i      => main_crt_ioe_page,
       main_lo_ram_data_o   => main_crt_lo_ram_data,
       main_hi_ram_data_o   => main_crt_hi_ram_data,
       main_ioe_ram_data_o  => main_crt_ioe_ram_data,

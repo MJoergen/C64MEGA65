@@ -45,6 +45,10 @@ port (
    main_ram_data_i      : in  std_logic_vector( 7 downto 0);
    main_ioe_we_i        : in  std_logic;
    main_iof_we_i        : in  std_logic;
+   -- Magic Formel: 5-bit page index into the cart's 8 KB SRAM mapped at $DExx.
+   -- Stays at "00000" for all other cart_id values, which makes the ioe_ram
+   -- behave as a 256-byte window (matching Action Replay's $9Exx mirror).
+   main_ioe_page_i      : in  std_logic_vector( 4 downto 0);
    main_lo_ram_data_o   : out std_logic_vector(15 downto 0);
    main_hi_ram_data_o   : out std_logic_vector(15 downto 0);
    main_ioe_ram_data_o  : out std_logic_vector( 7 downto 0);
@@ -143,6 +147,15 @@ architecture synthesis of sw_cartridge_wrapper is
    signal main_reset_core         : std_logic_vector(65 downto 0);
    signal main_cache_addr_lo      : std_logic_vector(C_CACHE_SIZE-1 downto 0);
    signal main_cache_addr_hi      : std_logic_vector(C_CACHE_SIZE-1 downto 0);
+   signal main_id                 : std_logic_vector(15 downto 0);
+
+   -- cartridge_ram is a 32 KB BRAM shared between Action Replay (cart_id=1)
+   -- and Magic Formel (cart_id=14). The two cart_ids are mutually exclusive
+   -- per CRT file, so a main_id-keyed address/we mux on port A is sufficient.
+   signal cart_ram_addr           : std_logic_vector(14 downto 0);
+   signal cart_ram_we             : std_logic;
+   signal cart_ram_q              : std_logic_vector( 7 downto 0);
+   signal ioe_ram_q               : std_logic_vector( 7 downto 0);
 
 begin
 
@@ -405,7 +418,7 @@ begin
        src_data_i(56+C_CACHE_SIZE   downto 57)              => hr_cache_addr_lo,
        src_data_i(56+2*C_CACHE_SIZE downto 57+C_CACHE_SIZE) => hr_cache_addr_hi,
        dst_clk_i                => main_clk_i,
-       dst_data_o(15 downto  0) => main_id_o,
+       dst_data_o(15 downto  0) => main_id,
        dst_data_o(23 downto 16) => main_exrom_o,
        dst_data_o(31 downto 24) => main_game_o,
        dst_data_o(54 downto 32) => main_size_o,
@@ -504,6 +517,10 @@ begin
    -- Instantiate I/O memory
    -------------------------------------------------------------
 
+   -- 256-byte $DExx scratch RAM used by Action Replay for its $9Exx mirror.
+   -- For Magic Formel (cart_id=14) the IOE reads/writes are routed to the
+   -- bottom 8 KB of cartridge_ram instead (see mux below); the output is
+   -- selected per main_id so this BRAM's q is simply ignored in MF mode.
    ioe_ram : entity work.tdp_ram
       generic map (
          ADDR_WIDTH => 8,         -- 256 bytes
@@ -515,7 +532,7 @@ begin
          address_a  => main_ram_addr_i(7 downto 0),
          data_a     => main_ram_data_i,
          wren_a     => main_ioe_we_i,
-         q_a        => main_ioe_ram_data_o,
+         q_a        => ioe_ram_q,
 
          clock_b    => '0',
          address_b  => (others => '0'),
@@ -544,6 +561,17 @@ begin
          q_b        => open
       ); -- iof_ram
 
+   main_id_o <= main_id;
+
+   -- Magic Formel uses the bottom 8 KB of cartridge_ram as its 32-page
+   -- $DExx SRAM. Action Replay uses the full 32 KB as bank-switched RAM
+   -- behind ROML. The two cart_ids never coexist, so a single port A is
+   -- shared via a main_id-keyed mux.
+   cart_ram_addr <= "00" & main_ioe_page_i & main_ram_addr_i(7 downto 0)
+                       when main_id = x"000E" else
+                    main_bank_lo_i(1 downto 0) & main_ram_addr_i(12 downto 0);
+   cart_ram_we   <= main_ioe_we_i when main_id = x"000E" else main_crt_we_i;
+
    cartridge_ram : entity work.tdp_ram
       generic map (
          ADDR_WIDTH => 15,         -- 32k bytes
@@ -552,10 +580,10 @@ begin
       port map (
          -- C64 MiSTer core
          clock_a    => main_clk_i,
-         address_a  => main_bank_lo_i(1 downto 0) & main_ram_addr_i(12 downto 0),
+         address_a  => cart_ram_addr,
          data_a     => main_ram_data_i,
-         wren_a     => main_crt_we_i,
-         q_a        => main_crt_ram_data_o,
+         wren_a     => cart_ram_we,
+         q_a        => cart_ram_q,
 
          clock_b    => '0',
          address_b  => (others => '0'),
@@ -563,6 +591,9 @@ begin
          wren_b     => '0',
          q_b        => open
       ); -- cartridge_ram
+
+   main_crt_ram_data_o <= cart_ram_q;
+   main_ioe_ram_data_o <= cart_ram_q when main_id = x"000E" else ioe_ram_q;
 
 end architecture synthesis;
 

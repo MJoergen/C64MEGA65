@@ -217,6 +217,10 @@ entity main is
     crt_bank_hi_o          : out   std_logic_vector( 6 downto 0);
     crt_we_o               : out   std_logic;
     crt_ram_data_i         : in    std_logic_vector( 7 downto 0);
+    -- Magic Formel (cart_id=14): selects which 256-byte page of the cart's
+    -- 8 KB SRAM is currently visible at $DExx. Stays at "00000" for all
+    -- other cart_ids.
+    crt_ioe_page_o         : out   std_logic_vector( 4 downto 0);
 
     -- Access custom Kernal: C64's Basic and DOS (in QNICE clock domain via c64_clk_sd_i)
     c64rom_we_i            : in    std_logic;
@@ -1121,6 +1125,7 @@ begin
       exrom_o        => crt_exrom,
       game_o         => crt_game,
       roml_we_o      => crt_roml_we,
+      ram_page_o     => crt_ioe_page_o,
       freeze_key_i   => not restore_key_n,
       mod_key_i      => '0',
       nmi_o          => crt_nmi,

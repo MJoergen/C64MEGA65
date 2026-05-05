@@ -43,6 +43,11 @@ entity cartridge is
     exrom_o        : out   std_logic;
     game_o         : out   std_logic;
     roml_we_o      : out   std_logic;
+    -- Magic Formel: 5-bit page index into the cart's 8 KB SRAM (32 pages * 256 B
+    -- mirrored at $DE00). For all other cart_id values this stays at "00000",
+    -- which leaves the wrapper's ioe_ram window pointing at its bottom 256 B
+    -- (matching the original Action Replay $9Exx mirror behavior).
+    ram_page_o     : out   std_logic_vector(4 downto 0);
 
     freeze_key_i   : in    std_logic;
     mod_key_i      : in    std_logic;
@@ -66,11 +71,39 @@ architecture synthesis of cartridge is
   signal freeze_ack : std_logic;
   signal freeze_crt : std_logic;
 
+  -- Magic Formel (cart_id=14) state. Verified vs VICE magicformel.c.
+  -- The cart contains an MC6821 PIA whose address inputs are wired so that
+  -- A0..A5 -> D0..D5, A6..A7 -> RS0..RS1, CPU D1 -> D7, D6=0. Only the
+  -- minimal subset of the PIA is modeled: PRA (RS=00), PRB (RS=10) and CB2
+  -- (controlled via CRB at RS=11 in manual-output mode). DDRA/DDRB and the
+  -- handshake lines CA1/CA2/CB1 are not modeled.
+  signal mf_pia_window     : std_logic;                    -- IO2 write hits the PIA
+  signal mf_data           : std_logic_vector(7 downto 0); -- reconstructed PIA data byte
+  signal mf_pra            : std_logic_vector(7 downto 0);
+  signal mf_prb            : std_logic_vector(7 downto 0);
+  signal mf_cb2            : std_logic;                    -- PIA CB2 line (controls freeze)
+  signal mf_io1_enabled    : std_logic;                    -- PA4 inverted: IO1 paged SRAM enable
+  signal mf_kernal_enabled : std_logic;                    -- PB7: cart visible in Ultimax
+  signal mf_freeze_enabled : std_logic;                    -- set on freeze, cleared by CB2=1
+  signal mf_ram_page       : std_logic_vector(4 downto 0); -- 5-bit page index into 8 KB SRAM
+
 begin
 
   freeze_req <= not old_freeze and freeze_key_i;
   freeze_ack <= nmi_o and not old_nmiack and nmi_ack_i;
   freeze_crt <= freeze_ack and freeze_armed and not mod_key_i;
+
+  -- Magic Formel: the PIA only sees IO2 ($DFxx) accesses. Per VICE only the
+  -- store side matters; reads from $DFxx are not modeled (the firmware never
+  -- relies on PIA reads).
+  mf_pia_window <= iof_i and wr_en_i;
+  -- Address-as-data trick (verified vs VICE magicformel_io2_store):
+  --   data = (addr & 0x3f) | ((value & 2) << 6); D6 is hard-wired to 0.
+  mf_data       <= wr_data_i(1) & '0' & addr_i(5 downto 0);
+
+  -- Expose the SRAM page so the wrapper's ioe_ram can mirror $DExx into the
+  -- correct 256-byte window of the 8 KB cart SRAM.
+  ram_page_o <= mf_ram_page;
 
   cartridge_proc : process (clk_i)
   begin
@@ -272,6 +305,110 @@ begin
             game_o       <= '0';
             bank_lo_o    <= (others => '0');
             bank_hi_o    <= (others => '0');
+          end if;
+
+        when 14 =>
+          -- Magic Formel V2/V2E/Mod3. EPROM (32/64/128 KB in 8 KB banks at $E000)
+          -- + 8 KB SRAM (paged at $DExx) + MC6821 PIA + 7430 glue. Mapping logic
+          -- transcribed from VICE magicformel.c:
+          --
+          --   PA(3:0) -> romh_bank      (V2: 2 used, V2E: 3 used, Mod3: 4 used)
+          --   PA4 = 0 -> io1_enabled    (paged SRAM visible at $DExx)
+          --   PB7      -> kernal_enabled (cart visible -> Ultimax)
+          --   PB(4..0) -> ram_page, with bit-remap (see VICE mf_set_pb):
+          --       page(0) = PB(3), page(1) = PB(2), page(2) = PB(0),
+          --       page(3) = PB(1), page(4) = PB(4)
+          --
+          -- EXROM/GAME (per VICE change_config):
+          --   kernal_enabled OR freeze_enabled  -> Ultimax  (exrom=1, game=0)
+          --   else                              -> no cart  (exrom=1, game=1)
+          --
+          -- Freeze: magicformel_freeze sets kernal_enabled=1, romh_bank=1,
+          -- io1_enabled=1, freeze_enabled=1 (via freeze_flipflop). The freeze
+          -- is cleared by CB2=1 (manual output mode in CRB), or by any
+          -- subsequent PA/PB write while CB2=1.
+
+          if mf_pia_window = '1' then
+            case addr_i(7 downto 6) is
+
+              when "00" =>
+                -- RS=00 -> PRA
+                mf_pra            <= mf_data;
+                bank_lo_o         <= "000" & mf_data(3 downto 0);
+                bank_hi_o         <= "000" & mf_data(3 downto 0);
+                mf_io1_enabled    <= not mf_data(4);
+                ioe_wr_ena_o      <= not mf_data(4);
+                if mf_cb2 = '1' then
+                  mf_freeze_enabled <= '0';
+                end if;
+
+              when "10" =>
+                -- RS=10 -> PRB
+                mf_prb            <= mf_data;
+                mf_ram_page       <= mf_data(4) & mf_data(1) & mf_data(0) &
+                                     mf_data(2) & mf_data(3);
+                mf_kernal_enabled <= mf_data(7);
+                if mf_cb2 = '1' then
+                  mf_freeze_enabled <= '0';
+                end if;
+
+              when "11" =>
+                -- RS=11 -> CRB. We only model the bits that drive CB2:
+                --   CRB(5)=1 + CRB(4)=1 -> CB2 = CRB(3) (manual output mode)
+                --   CRB(5)=0            -> CB2 input mode, default high
+                if mf_data(5) = '1' and mf_data(4) = '1' then
+                  mf_cb2 <= mf_data(3);
+                  if mf_data(3) = '1' then
+                    mf_freeze_enabled <= '0';
+                  end if;
+                elsif mf_data(5) = '0' then
+                  mf_cb2 <= '1';
+                end if;
+
+              when others =>
+                -- RS=01 (CRA): not modeled
+                null;
+
+            end case;
+          end if;
+
+          -- EXROM/GAME from current kernal_enabled / freeze_enabled state.
+          if mf_kernal_enabled = '1' or mf_freeze_enabled = '1' then
+            exrom_o <= '1'; -- Ultimax: /EXROM=1
+            game_o  <= '0'; -- Ultimax: /GAME=0
+          else
+            exrom_o <= '1'; -- no cart visible
+            game_o  <= '1';
+          end if;
+
+          if cart_loading_i = '1' then
+            -- Match VICE magicformel_config_init: kernal_enabled=1 (Ultimax)
+            mf_pra            <= (others => '0');
+            mf_prb            <= (others => '0');
+            mf_cb2            <= '1';
+            mf_io1_enabled    <= '0';
+            mf_kernal_enabled <= '1';
+            mf_freeze_enabled <= '0';
+            mf_ram_page       <= (others => '0');
+            bank_lo_o         <= (others => '0');
+            bank_hi_o         <= (others => '0');
+            exrom_o           <= '1';
+            game_o            <= '0';
+            ioe_wr_ena_o      <= '0';
+          end if;
+
+          if freeze_crt = '1' then
+            -- Match VICE magicformel_freeze: bank 1, io1_enabled=1, kernal=1,
+            -- freeze=1. ram_page is left unchanged (PB is not touched here).
+            mf_pra            <= x"01";  -- PA4=0 (io1 ena), bank=1
+            mf_io1_enabled    <= '1';
+            mf_kernal_enabled <= '1';
+            mf_freeze_enabled <= '1';
+            bank_lo_o         <= "0000001";
+            bank_hi_o         <= "0000001";
+            exrom_o           <= '1';
+            game_o            <= '0';
+            ioe_wr_ena_o      <= '1';
           end if;
 
         when 15 =>
@@ -476,18 +613,28 @@ begin
       end case;
 
       if rst_i = '1' then
-        ioe_ena      <= '0';
-        iof_ena      <= '0';
-        game_o       <= '1';
-        exrom_o      <= '1';
-        bank_lo_o    <= (others => '0');
-        bank_hi_o    <= (others => '0');
-        nmi_o        <= '0';
-        allow_freeze <= '1'; -- Allow RESTORE key to generate NMI
-        saved_d6     <= '0';
-        ioe_wr_ena_o <= '0';
-        iof_wr_ena_o <= '0';
-        freeze_armed <= '0';
+        ioe_ena           <= '0';
+        iof_ena           <= '0';
+        game_o            <= '1';
+        exrom_o           <= '1';
+        bank_lo_o         <= (others => '0');
+        bank_hi_o         <= (others => '0');
+        nmi_o             <= '0';
+        allow_freeze      <= '1'; -- Allow RESTORE key to generate NMI
+        saved_d6          <= '0';
+        ioe_wr_ena_o      <= '0';
+        iof_wr_ena_o      <= '0';
+        freeze_armed      <= '0';
+        -- Magic Formel: VICE magicformel_reset() values (kernal_enabled=0).
+        -- magicformel_config_init() raises kernal_enabled=1, but that runs in
+        -- our model from the cart_loading_i path, not from the rst_i path.
+        mf_pra            <= (others => '0');
+        mf_prb            <= (others => '0');
+        mf_cb2            <= '1';
+        mf_io1_enabled    <= '0';
+        mf_kernal_enabled <= '0';
+        mf_freeze_enabled <= '0';
+        mf_ram_page       <= (others => '0');
       end if;
     end if;
   end process cartridge_proc;
