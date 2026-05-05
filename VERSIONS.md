@@ -25,12 +25,31 @@ Version 6 - MONTH DAY, 2026
 
 ## Improved Compatibility of the Core
 
-* Added hardware support for the IDE64.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
+* Generally improved hardware cartridge compatibility, thanks to two
+  fixes that benefit cartridges beyond the ones we explicitly tested:
+  more faithful timing on the Expansion Port (signals at the cart
+  connector now reproduce real-C64 setup and hold relationships), and
+  proper Ultimax-mode memory mapping (previously the C64 core saw floating
+  data in some memory ranges instead of cartridge-provided RAM/ROM).
+
+* Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
+  flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
+
+* Implemented proper RAM cold-start pattern, which raises compatibility with
+  some original software quite a bit. This also fixes Q-Bert.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
+
+* Hardware support for these cartridges:
+
+  - IDE64
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
+
+  - Idun
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/204)
 
 * Simulated cartridges (`*.crt`) are now supporting:
 
-  - Snappy ROM freezer cartridge
+  - Super Snapshot and Snappy ROM freezer cartridges
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
 
   - ActionReplay freezer cartridge
@@ -41,13 +60,6 @@ Version 6 - MONTH DAY, 2026
 
   - Improved Ocean Type 1 compatibility, so that for example Wonderboy works
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/138)
-
-* Increased REU compatibiltiy, fREUd demo by Hoaxers now works flawlessly.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
-
-* Implemented proper RAM cold-start pattern, which raises compatibility with
-  some original software quite a bit. This also fixes Q-Bert.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
 
 ## Bugfixes
 
