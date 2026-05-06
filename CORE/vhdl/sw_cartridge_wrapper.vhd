@@ -157,6 +157,18 @@ architecture synthesis of sw_cartridge_wrapper is
    signal cart_ram_q              : std_logic_vector( 7 downto 0);
    signal ioe_ram_q               : std_logic_vector( 7 downto 0);
 
+   -- Magic Formel power-up SRAM pattern. VICE primes the 8 KB cart SRAM via
+   -- ram_init_with_pattern with start=0xFF, value_invert=2, value_offset=1,
+   -- pattern_invert=0x100, pattern_invert_value=0xFF. That collapses to:
+   --   byte(i) = 0xFF when (i(1) XOR i(0) XOR i(8)) = 0 else 0x00
+   -- which gives the 4-byte period FF,00,00,FF inside each 256-byte block,
+   -- with consecutive 256-byte blocks XOR-flipped. We replicate it via a
+   -- write FSM on port B of cartridge_ram and hold the core in reset until
+   -- the fill is done.
+   signal mf_fill_active          : std_logic := '0';
+   signal mf_fill_addr            : unsigned(12 downto 0) := (others => '0');
+   signal mf_fill_data            : std_logic_vector( 7 downto 0);
+
 begin
 
    ---------------------------------------------------
@@ -452,20 +464,38 @@ begin
          main_reset_core    <= main_reset_core(64 downto 0) & '0';
          if main_resp_status = C_STAT_READY and main_resp_status_d /= C_STAT_READY then
             main_reset_core <= (others => '1');
+            -- Magic Formel: kick off the 0xFF/0xFE SRAM prime.
+            if main_id = x"000E" then
+               mf_fill_active <= '1';
+               mf_fill_addr   <= (others => '0');
+            end if;
          end if;
          -- Stay in reset until cache is ready
          if main_reset_core(65) = '1' and main_bank_wait_o = '1' then
             main_reset_core <= (others => '1');
          end if;
 
+         -- Magic Formel power-up fill: walks the bottom 8 KB of cart_ram.
+         if mf_fill_active = '1' then
+            if mf_fill_addr = "1111111111111" then
+               mf_fill_active <= '0';
+            end if;
+            mf_fill_addr <= mf_fill_addr + 1;
+         end if;
+
          -- see comment RESET SEMANTICS in main.vhd: minimum reset pulse length is 32 cycles
-         main_reset_core_o <= main_reset_core(65);
+         main_reset_core_o <= main_reset_core(65) or mf_fill_active;
 
          if main_rst_i = '1' then
             main_reset_core <= (others => '1');
+            mf_fill_active  <= '0';
+            mf_fill_addr    <= (others => '0');
          end if;
       end if;
    end process;
+
+   mf_fill_data <= x"FF" when (mf_fill_addr(1) xor mf_fill_addr(0) xor mf_fill_addr(8)) = '0'
+                   else x"00";
 
 
    -------------------------------------------------------------
@@ -585,10 +615,11 @@ begin
          wren_a     => cart_ram_we,
          q_a        => cart_ram_q,
 
-         clock_b    => '0',
-         address_b  => (others => '0'),
-         data_b     => (others => '0'),
-         wren_b     => '0',
+         -- Magic Formel power-up fill (writes the bottom 8 KB only)
+         clock_b    => main_clk_i,
+         address_b  => "00" & std_logic_vector(mf_fill_addr),
+         data_b     => mf_fill_data,
+         wren_b     => mf_fill_active,
          q_b        => open
       ); -- cartridge_ram
 
