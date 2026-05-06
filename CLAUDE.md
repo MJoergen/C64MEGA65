@@ -90,12 +90,13 @@ upstream wiki, because the answers had to come from reading the actual code.
 │                          sid/, t65/, iec_drive/, reu.v, cartridge.v, opl3/,
 │                          rtcF83.sv, sdram.v, c1351.v (mouse), c1530.vhd (tape)
 ├── M2M/                   ← MiSTer2MEGA65 framework (board-side; core-independent)
-│   ├── MEGA65-R{3,4,5,6}.xdc   per-board pin/timing constraints
-│   ├── common.xdc
+│   ├── MEGA65-R{3,4,5,6}.xdc   per-board pin constraints
+│   ├── common.xdc          timing constraints
 │   ├── vhdl/
-│   │   ├── top_mega65-r{3,4,5,6}.vhd   FPGA top entities, board-specific I/O
+│   │   ├── top_mega65-r{3,4,5,6}.vhd   FPGA top entities, board-specific I/O;
+│   │   │                  instantiates framework.vhd AND CORE/vhdl/mega65.vhd
 │   │   ├── framework.vhd   HAL: instantiates QNICE, AV pipeline, controllers,
-│   │   │                  resets — and your CORE/vhdl/mega65.vhd
+│   │   │                  resets
 │   │   ├── reset_manager.vhd, clk_m2m.vhd, ram_init.vhd, m2m_keyb.vhd
 │   │   ├── qnice_wrapper.vhd, qnice_arbit.vhd, qnice_csr.vhd
 │   │   │                    QNICE bus glue, MMIO arbitration, status registers
@@ -147,25 +148,27 @@ upstream wiki, because the answers had to come from reading the actual code.
 ```
         ┌────────────────────────────────────────────────────────────┐
         │  M2M/vhdl/top_mega65-rX.vhd     (one per board revision)    │
-        │  Pin I/O, board-specific glue                               │
-        │   └── M2M/vhdl/framework.vhd    (HAL: QNICE, AV pipeline,   │
-        │        ├── qnice + shell ROM     reset mgr, controllers,    │
-        │        ├── av_pipeline (ascal,   keyboard, joys, SD, etc.)  │
-        │        │   analog/digital)                                  │
-        │        ├── reset_manager                                    │
-        │        ├── HyperRAM / SDRAM ctrl                            │
-        │        └── CORE/vhdl/mega65.vhd  (entity MEGA65_Core)       │
-        │             ├── clk.vhd (MMCMs for core+video)              │
-        │             ├── config.vhd (menu/help text → ROM)           │
-        │             ├── sw_cartridge_wrapper / crt_loader/cacher    │
+        │  Pin I/O, board-specific glue; instantiates BOTH:           │
+        │                                                             │
+        │   ├── M2M/vhdl/framework.vhd    (HAL: QNICE, AV pipeline,   │
+        │   │     ├── qnice + shell ROM     reset mgr, controllers,   │
+        │   │     ├── av_pipeline (ascal,   keyboard, joys, SD, etc.) │
+        │   │     │   analog/digital)                                 │
+        │   │     ├── reset_manager                                   │
+        │   │     └── HyperRAM / SDRAM ctrl                           │
+        │   │                                                         │
+        │   └── CORE/vhdl/mega65.vhd  (entity MEGA65_Core)            │
+        │        ├── clk.vhd (MMCMs for core+video)                   │
+        │        ├── config.vhd (menu/help text → ROM)                │
+        │        ├── sw_cartridge_wrapper / crt_loader/cacher         │
+        │        ├── prg_loader                                       │
+        │        └── main.vhd  (entity main; main_clk domain)         │
+        │             ├── keyboard.vhd (MEGA65 → CIA matrix)          │
         │             ├── reu_mapper                                  │
-        │             ├── prg_loader                                  │
-        │             └── main.vhd  (entity main; main_clk domain)    │
-        │                  ├── keyboard.vhd (MEGA65 → CIA matrix)     │
-        │                  ├── fpga64_sid_iec  ← THE C64 (MiSTer)     │
-        │                  ├── reu (Verilog), rtcF83, opl3, ...       │
-        │                  ├── iec_drive (simulated 1541)             │
-        │                  └── cartridge.vhd (.crt logic)             │
+        │             ├── fpga64_sid_iec  ← THE C64 (MiSTer)          │
+        │             ├── reu (Verilog), rtcF83, opl3, ...            │
+        │             ├── iec_drive (simulated 1541)                  │
+        │             └── cartridge.vhd (.crt logic)                  │
         └────────────────────────────────────────────────────────────┘
 ```
 
@@ -173,7 +176,7 @@ upstream wiki, because the answers had to come from reading the actual code.
 - `CORE/` is core-dependent and **board-independent**.
 - `M2M/` is core-independent and **board-dependent**.
 - The contract between them is the entity `MEGA65_Core` declared in
-  `CORE/vhdl/mega65.vhd`. Framework instantiates it.
+  `CORE/vhdl/mega65.vhd`.
 
 ### 3.2 mega65.vhd — the top of the port
 
@@ -186,11 +189,9 @@ domain (heavy commenting in the file marks each section):
   exposes `qnice_dev_*` for core-specific devices (RAM, CRT cache, mount
   buffer, kernel ROMs — see `globals.vhd` `C_DEV_*` constants).
 - **HyperRAM clock domain (`hr_clk`)** — Avalon master for SIMCRT (cartridge
-  bank cache backing store). `hr_high_i / hr_low_i` from M2M tell us whether
-  the core is faster/slower than the HDMI fifo level (drives the dynamic
-  flicker-free clock-switching, see §3.5).
-- **SDRAM clock domain (`sr_clk`)** — Avalon master for SIMREU. On R3 this is
-  routed to the same HyperRAM (no SDRAM); on R4+ a real SDRAM is used.
+  bank cache backing store) and SIMREU. `hr_high_i / hr_low_i` from M2M tell
+  us whether the core is faster/slower than the HDMI fifo level (drives the
+  dynamic flicker-free clock-switching, see §3.5).
 - **Video clock domain** — RGB + HS/VS/blanks, plus `video_ce_o` (core pixel
   clock-enable) and `video_ce_ovl_o` (post-scandoubler CE for overlay).
 - **Core (main) clock domain** — keyboard, joys/paddles, audio, drive LED,
@@ -198,7 +199,7 @@ domain (heavy commenting in the file marks each section):
   enables and separate `_i`/`_o` directions), RTC.
 
 `mega65.vhd` is mostly **glue**: it instantiates `clk`, `main`, the CRT loader
-chain, the REU mapper, `prg_loader`, and a bunch of dual-port BRAMs that
+chain, `prg_loader`, and a bunch of dual-port BRAMs that
 QNICE writes from one side and the C64 reads from the other (C64 RAM, mount
 buffer, kernel ROMs, c1541 ROM, CRT cache). The OSM-bit constants
 (`C_MENU_*`) live here — they map menu group IDs to bits of
@@ -276,10 +277,11 @@ on `main_clk`). M2M splits it:
   `main_clk`, QNICE side at `qnice_clk` (see device `C_DEV_C64_RAM`). QNICE
   writes it during PRG loading.
 - **HyperRAM**: shared between M2M (ascal frame buffer + QNICE), the SIMCRT
-  bank cache, and (on R3) SIMREU. Layout in `globals.vhd`:
+  bank cache, and SIMREU. Layout in `globals.vhd`:
   `C_HMAP_M2M=0x0000`, `C_HMAP_CRT=0x0200`, `C_HMAP_REU=0x03C0` (units of
   4 kW = 8 kB).
-- **SDRAM (R4+)**: REU lives here on newer boards; less ascal contention.
+- **SDRAM (R4+)**: ascal frame buffer lives here on newer boards; frees
+  HyperRAM contention.
 - `.crt` files: **NOT** executed in place from HyperRAM (latency up to ~1500
   ns vs. 500 ns budget). Instead a BRAM bank cache (`crt_cacher.vhd`) holds
   the last 8 banks; on a bank switch (`$DExx/$DFxx` write) the CPU is paused
@@ -884,7 +886,7 @@ internalize them before debugging anything visual or timing-related:
 | Menu wiring → core        | `mega65.vhd` `C_MENU_*` constants → `main_osm_control_i`  |
 | Disk mount / vdrive       | `vdrives.vhd`, `M2M/rom/vdrives.asm`, `iec_drive/`        |
 | `.crt` won't load / parse | `crt_parser.vhd` (state machine + error codes), `sw_cartridge_wrapper.vhd` (QNICE side) |
-| `.crt` cart-id unsupported| `cartridge.vhd` `case to_integer(unsigned(cart_id_i))` at line 105 |
+| `.crt` cart-id unsupported| `cartridge.vhd` `case to_integer(unsigned(cart_id_i))` at line 109 |
 | `.crt` bank-switch broken | `cartridge.vhd` per-id branch + `crt_cacher.vhd` (BRAM cache fill, bank tables) |
 | `.crt` exec stalls / glitch| `crt_cacher.vhd` (bank_wait_o), `main.vhd:957` (DMA pause), HyperRAM contention |
 | Hardware cart port        | `main.vhd` `handle_hardware_expansion_proc` (lines 884–940), `cart_output_pipeline_proc` |
