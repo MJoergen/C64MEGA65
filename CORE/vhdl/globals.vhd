@@ -95,9 +95,9 @@ constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";    
 ----------------------------------------------------------------------------------------------------------
 
 constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework (4 MB)
-constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (3.5 MB)
-constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"03C0";     -- Used for SIMREU (0.5 MB)
-constant C_HMAP_SIZE             : std_logic_vector(15 downto 0) := x"0400";     -- Total size of HyperRAM
+constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (approx. 3.49 MB before SIMREU)
+constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"03BF";     -- Used for SIMREU (0.5 MB)
+constant C_HMAP_SIZE             : std_logic_vector(15 downto 0) := x"0400";     -- Total size of HyperRAM; final 8 kB is a guard for SIMREU bursts
 
 ----------------------------------------------------------------------------------------------------------
 -- Virtual Drive Management System
@@ -200,4 +200,3 @@ constant audio_att      : std_logic_vector( 4 downto 0) := "00000";
 constant audio_mix      : std_logic_vector( 1 downto 0) := "00"; -- 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
                                                    
 end package globals;
-

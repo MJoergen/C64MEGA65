@@ -275,8 +275,9 @@ on `main_clk`). M2M splits it:
   writes it during PRG loading.
 - **HyperRAM**: shared between M2M (ascal frame buffer + QNICE), the SIMCRT
   bank cache, and SIMREU. Layout in `globals.vhd`:
-  `C_HMAP_M2M=0x0000`, `C_HMAP_CRT=0x0200`, `C_HMAP_REU=0x03C0` (units of
-  4 kW = 8 kB).
+  `C_HMAP_M2M=0x0000`, `C_HMAP_CRT=0x0200`, `C_HMAP_REU=0x03BF` (units of
+  4 kW = 8 kB). The final 8 kB of HyperRAM is kept as a guard for SIMREU
+  bursts.
 - **SDRAM (R4+)**: ascal frame buffer lives here on newer boards; frees
   HyperRAM contention.
 - `.crt` files: **NOT** executed in place from HyperRAM (latency up to ~1500
@@ -613,7 +614,7 @@ QNICE writes raw .crt          cart_id, exrom, game,         crt_loader.vhd
 into HyperRAM at the           bank_lo/hi (live state)         ├ crt_parser.vhd
 G_BASE_ADDRESS offset                                            (reads HyperRAM,
 (= C_HMAP_CRT = 0x0200,                                          decodes hdr+CHIPs)
-3.5 MB pool from globals.vhd)                                  └ crt_cacher.vhd
+~3.49 MB pool from globals.vhd)                                └ crt_cacher.vhd
         │                            ▲                            (fills 2×8 KB
         │ start, length              │                             BRAM bank cache
         ▼                            │                             on demand)
@@ -709,12 +710,13 @@ From `CORE/vhdl/globals.vhd:97-100`:
 | Constant       | Offset (units of 8 KB) | Region       | Size   | Used by              |
 | -------------- | ---------------------- | ------------ | ------ | -------------------- |
 | `C_HMAP_M2M`   | `x"0000"`              | M2M          | 4 MB   | framework reserved   |
-| `C_HMAP_CRT`   | `x"0200"`              | SIMCRT       | 3.5 MB | `.crt` staging       |
-| `C_HMAP_REU`   | `x"03C0"`              | SIMREU       | 0.5 MB | simulated 1750 REU   |
+| `C_HMAP_CRT`   | `x"0200"`              | SIMCRT       | ~3.49 MB | `.crt` staging     |
+| `C_HMAP_REU`   | `x"03BF"`              | SIMREU       | 0.5 MB | simulated 1750 REU   |
+| implicit guard | `x"03FF"`              | guard        | 8 KB   | SIMREU burst overrun guard |
 | `C_HMAP_SIZE`  | `x"0400"`              | total        | 8 MB   |                      |
 
 `sw_cartridge_wrapper`'s `G_BASE_ADDRESS` is wired to `C_HMAP_CRT` from
-`mega65.vhd`. The 3.5 MB pool is the hard upper bound on a single `.crt`
+`mega65.vhd`. The ~3.49 MB pool is the hard upper bound on a single `.crt`
 file size; in practice the largest stock cartridge formats (1 MB
 EasyFlash, 8 MB GMod2 in theory) fit either trivially or not at all.
 
