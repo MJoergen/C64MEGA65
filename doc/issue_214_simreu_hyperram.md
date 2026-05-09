@@ -69,6 +69,38 @@ window around word range `0x200000..0x23FFFF`, so cache fills and dummy write
 beats stayed inside valid HyperRAM even when FC3 accessed the top of logical
 REU memory.
 
+## Why This Was Not Seen On R6
+
+R6 does not prove that the Alpha 12 memory map was safe. It only has a
+different external-memory topology, which makes this specific failure mode much
+harder to trigger visibly.
+
+There are two relevant phases:
+
+- In WIP-V6-A10 (`6a33db8`), SIMREU used SDRAM on R6 and HyperRAM on R3. In
+  that topology, R6 avoided this exact top-of-HyperRAM problem because the REU
+  backing store was not in HyperRAM at all.
+- Before Alpha 12, commit `54a72ba` swapped the roles again on newer boards:
+  the ascaler/video framebuffer moved to SDRAM, while the core-side external
+  memory path moved back to HyperRAM. That means Alpha 12 can still put SIMREU
+  at the top of HyperRAM on R6, but the most sensitive and bandwidth-heavy
+  HyperRAM user, the ascaler framebuffer, is no longer there.
+
+On R3, everything shares the same 8 MB HyperRAM: M2M/ascaler, QNICE, SIMCRT and
+SIMREU. If a legal top-of-REU access causes an extra cache or errata beat beyond
+the physical HyperRAM end, any resulting wraparound or undefined access is much
+more likely to hit data that is active in the same workflow.
+
+On R6, the ascaler framebuffer is in SDRAM. The same invalid extra HyperRAM beat
+may therefore affect a less active part of the HyperRAM map, or may not disturb
+anything that the FC3 freezer workflow immediately depends on. In other words,
+R6 can mask the symptom even though the top-of-HyperRAM placement is still
+architecturally unsafe.
+
+The 8 kB guard-band workaround is therefore still useful for all board
+revisions: it prevents the illegal physical HyperRAM access instead of relying
+on whether the overrun happens to corrupt something visible.
+
 ## Workaround Applied
 
 The short-term fix moves the SIMREU backing store down by one 8 kB map unit:
