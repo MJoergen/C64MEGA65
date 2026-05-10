@@ -976,10 +976,14 @@ begin
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
       -- Simulate 1750 REU 512KB
-      core_io_ext  <= reu_oe;
-      core_io_data <= reu_dout;
       core_dma_v   := core_dma_v or reu_dma_req;
-      reu_iof      <= core_iof;
+      if c64_ram_addr_o(15 downto 5) = X"DF" & "000" then
+        -- Only address range $DF00 to $DF1F is forwarded to SIMREU.
+        -- See issue #208.
+        core_io_ext  <= reu_oe;
+        core_io_data <= reu_dout;
+        reu_iof      <= core_iof;
+      end if;
     end if;
 
     core_dma <= core_dma_v;
