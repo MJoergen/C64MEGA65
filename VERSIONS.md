@@ -35,7 +35,7 @@ Version 6 - MONTH DAY, 2026
 * Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
   flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
 
-  The simulated REU now only claims the primary REU register window at
+* The simulated REU now only claims the primary REU register window at
   `$DF00-$DF1F` when used together with a hardware cartridge. The remaining
   IO2 range `$DF20-$DFFF` stays available on the Expansion Port, improving
   coexistence with cartridges such as Daniel Mantione's Final Cartridge III
