@@ -414,6 +414,39 @@ architecture synthesis of main is
   signal   cart_res_flckr_ign : natural range 0 to 2;                          -- avoid a short cart_reset_o after cart_reset_counter reached zero
   signal   cart_is_an_ef3     : std_logic;
 
+  -- Temporary ILA instrumentation for FC3 101% / R3 cartridge startup research.
+  -- These taps are registered on clk_main_i and are one main-clock cycle delayed.
+  signal dbg_fc3_c64_addr       : std_logic_vector(15 downto 0);
+  signal dbg_fc3_c64_data_out   : std_logic_vector( 7 downto 0); -- CPU write data / C64 RAM output
+  signal dbg_fc3_c64_data_in    : std_logic_vector( 7 downto 0); -- raw C64 RAM input
+  signal dbg_fc3_c64_data_mux   : std_logic_vector( 7 downto 0); -- data selected for the C64 CPU
+  signal dbg_fc3_cart_addr_pre  : std_logic_vector(15 downto 0);
+  signal dbg_fc3_cart_addr_q    : std_logic_vector(15 downto 0);
+  signal dbg_fc3_cart_data_in   : std_logic_vector( 7 downto 0);
+  signal dbg_fc3_cart_data_out  : std_logic_vector( 7 downto 0);
+  signal dbg_fc3_data_from_cart : std_logic_vector( 7 downto 0);
+  signal dbg_fc3_addr_decode    : std_logic_vector( 7 downto 0);
+  signal dbg_fc3_reset_counter  : std_logic_vector( 3 downto 0);
+  signal dbg_fc3_reset_tail     : std_logic_vector( 1 downto 0);
+  signal dbg_fc3_core_flags     : std_logic_vector(31 downto 0);
+  signal dbg_fc3_cart_flags     : std_logic_vector(31 downto 0);
+
+  attribute mark_debug : string;
+  attribute mark_debug of dbg_fc3_c64_addr       : signal is "true";
+  attribute mark_debug of dbg_fc3_c64_data_out   : signal is "true";
+  attribute mark_debug of dbg_fc3_c64_data_in    : signal is "true";
+  attribute mark_debug of dbg_fc3_c64_data_mux   : signal is "true";
+  attribute mark_debug of dbg_fc3_cart_addr_pre  : signal is "true";
+  attribute mark_debug of dbg_fc3_cart_addr_q    : signal is "true";
+  attribute mark_debug of dbg_fc3_cart_data_in   : signal is "true";
+  attribute mark_debug of dbg_fc3_cart_data_out  : signal is "true";
+  attribute mark_debug of dbg_fc3_data_from_cart : signal is "true";
+  attribute mark_debug of dbg_fc3_addr_decode    : signal is "true";
+  attribute mark_debug of dbg_fc3_reset_counter  : signal is "true";
+  attribute mark_debug of dbg_fc3_reset_tail     : signal is "true";
+  attribute mark_debug of dbg_fc3_core_flags     : signal is "true";
+  attribute mark_debug of dbg_fc3_cart_flags     : signal is "true";
+
   -- RAM Expansion Unit (REU)
   signal   reu_cfg       : std_logic_vector(1 downto 0);
   signal   reu_dma_req   : std_logic;
@@ -511,6 +544,145 @@ architecture synthesis of main is
   end component rtcf83;
 
 begin
+
+  -- Registered ILA taps for FC3 101% / R3 startup research.
+  --
+  -- dbg_fc3_addr_decode:
+  --   0 = $8000-$BFFF, 1 = $8000, 2 = $8003, 3 = $9E00,
+  --   4 = $DE00,       5 = $DFFF, 6 = $DE00-$DFFF, 7 = $DF00-$DFFF
+  --
+  -- dbg_fc3_core_flags:
+  --   0 reset_soft_i,        1 reset_hard_i,       2 reset_core_int_n, 3 reset_core_n,
+  --   4 hard_reset_n,        5 cold_start_done,    6 prevent_reset,    7 physical cart mode,
+  --   8 simulated REU mode,  9 c64_ram_we,        10 c64_ram_ce,      11 core_phi2,
+  --  12 core_dotclk,        13 core_ba,           14 core_roml,       15 core_romh,
+  --  16 core_ioe,           17 core_iof,          18 core_game_n,     19 core_exrom_n,
+  --  20 core_nmi_n,         21 core_irq_n,        22 core_dma,        23 core_umax_romh,
+  --  24 core_umax_unmapped, 25 cart_is_an_ef3,    26 pause_i,         27 c64_pause,
+  --  28 cartridge_loading_i, 29 crt_bank_wait_i,   30 core_io_rom,     31 core_io_ext
+  --
+  -- dbg_fc3_cart_flags:
+  --   0 cart_reset_i,        1 cart_reset_o,       2 cart_reset_oe_o,  3 cart_game_i,
+  --   4 cart_exrom_i,        5 cart_nmi_i,         6 cart_irq_i,       7 cart_dma_i,
+  --   8 cart_game_n,         9 cart_exrom_n,      10 cart_nmi_n,      11 cart_irq_n,
+  --  12 cart_dma_n,         13 cart_roml_n,       14 cart_romh_n,     15 cart_io1_n,
+  --  16 cart_io2_n,         17 cart_roml_q,       18 cart_romh_q,     19 cart_io1_q,
+  --  20 cart_io2_q,         21 cart_rw_q,         22 cart_data_oe_o,  23 cart_addr_oe_o,
+  --  24 cart_ctrl_oe_o,     25 cart_en_o,         26 cart_phi2_o,     27 cart_ba_o,
+  --  28 cart_dotclock_o,    29 cart_res_flckr_ign active, 30 cart_roml_i, 31 cart_romh_i
+  debug_fc3_ila_taps_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      dbg_fc3_c64_addr       <= std_logic_vector(c64_ram_addr_o);
+      dbg_fc3_c64_data_out   <= std_logic_vector(c64_ram_data_o);
+      dbg_fc3_c64_data_in    <= std_logic_vector(c64_ram_data_i);
+      dbg_fc3_c64_data_mux   <= std_logic_vector(c64_ram_data);
+      dbg_fc3_cart_addr_pre  <= std_logic_vector(cart_a_pre);
+      dbg_fc3_cart_addr_q    <= std_logic_vector(cart_a_q);
+      dbg_fc3_cart_data_in   <= std_logic_vector(cart_d_i);
+      dbg_fc3_cart_data_out  <= std_logic_vector(cart_d_o);
+      dbg_fc3_data_from_cart <= std_logic_vector(data_from_cart);
+      dbg_fc3_reset_counter  <= std_logic_vector(to_unsigned(cart_reset_counter, dbg_fc3_reset_counter'length));
+      dbg_fc3_reset_tail     <= std_logic_vector(to_unsigned(cart_res_flckr_ign, dbg_fc3_reset_tail'length));
+
+      dbg_fc3_addr_decode <= (others => '0');
+      if c64_ram_addr_o(15 downto 12) = x"8" or c64_ram_addr_o(15 downto 12) = x"9" or
+         c64_ram_addr_o(15 downto 12) = x"A" or c64_ram_addr_o(15 downto 12) = x"B" then
+        dbg_fc3_addr_decode(0) <= '1';
+      end if;
+      if c64_ram_addr_o = x"8000" then
+        dbg_fc3_addr_decode(1) <= '1';
+      end if;
+      if c64_ram_addr_o = x"8003" then
+        dbg_fc3_addr_decode(2) <= '1';
+      end if;
+      if c64_ram_addr_o = x"9E00" then
+        dbg_fc3_addr_decode(3) <= '1';
+      end if;
+      if c64_ram_addr_o = x"DE00" then
+        dbg_fc3_addr_decode(4) <= '1';
+      end if;
+      if c64_ram_addr_o = x"DFFF" then
+        dbg_fc3_addr_decode(5) <= '1';
+      end if;
+      if c64_ram_addr_o(15 downto 8) = x"DE" or c64_ram_addr_o(15 downto 8) = x"DF" then
+        dbg_fc3_addr_decode(6) <= '1';
+      end if;
+      if c64_ram_addr_o(15 downto 8) = x"DF" then
+        dbg_fc3_addr_decode(7) <= '1';
+      end if;
+
+      dbg_fc3_core_flags <= (others => '0');
+      dbg_fc3_core_flags( 0) <= reset_soft_i;
+      dbg_fc3_core_flags( 1) <= reset_hard_i;
+      dbg_fc3_core_flags( 2) <= reset_core_int_n;
+      dbg_fc3_core_flags( 3) <= reset_core_n;
+      dbg_fc3_core_flags( 4) <= hard_reset_n;
+      dbg_fc3_core_flags( 5) <= cold_start_done;
+      dbg_fc3_core_flags( 6) <= prevent_reset;
+      dbg_fc3_core_flags( 7) <= not c64_exp_port_mode_i(C_SIM_CRT);
+      dbg_fc3_core_flags( 8) <= c64_exp_port_mode_i(C_SIM_REU);
+      dbg_fc3_core_flags( 9) <= c64_ram_we;
+      dbg_fc3_core_flags(10) <= c64_ram_ce;
+      dbg_fc3_core_flags(11) <= core_phi2;
+      dbg_fc3_core_flags(12) <= core_dotclk;
+      dbg_fc3_core_flags(13) <= core_ba;
+      dbg_fc3_core_flags(14) <= core_roml;
+      dbg_fc3_core_flags(15) <= core_romh;
+      dbg_fc3_core_flags(16) <= core_ioe;
+      dbg_fc3_core_flags(17) <= core_iof;
+      dbg_fc3_core_flags(18) <= core_game_n;
+      dbg_fc3_core_flags(19) <= core_exrom_n;
+      dbg_fc3_core_flags(20) <= core_nmi_n;
+      dbg_fc3_core_flags(21) <= core_irq_n;
+      dbg_fc3_core_flags(22) <= core_dma;
+      dbg_fc3_core_flags(23) <= core_umax_romh;
+      dbg_fc3_core_flags(24) <= core_umax_unmapped;
+      dbg_fc3_core_flags(25) <= cart_is_an_ef3;
+      dbg_fc3_core_flags(26) <= pause_i;
+      dbg_fc3_core_flags(27) <= c64_pause;
+      dbg_fc3_core_flags(28) <= cartridge_loading_i;
+      dbg_fc3_core_flags(29) <= crt_bank_wait_i;
+      dbg_fc3_core_flags(30) <= core_io_rom;
+      dbg_fc3_core_flags(31) <= core_io_ext;
+
+      dbg_fc3_cart_flags <= (others => '0');
+      dbg_fc3_cart_flags( 0) <= cart_reset_i;
+      dbg_fc3_cart_flags( 1) <= cart_reset_o;
+      dbg_fc3_cart_flags( 2) <= cart_reset_oe_o;
+      dbg_fc3_cart_flags( 3) <= cart_game_i;
+      dbg_fc3_cart_flags( 4) <= cart_exrom_i;
+      dbg_fc3_cart_flags( 5) <= cart_nmi_i;
+      dbg_fc3_cart_flags( 6) <= cart_irq_i;
+      dbg_fc3_cart_flags( 7) <= cart_dma_i;
+      dbg_fc3_cart_flags( 8) <= cart_game_n;
+      dbg_fc3_cart_flags( 9) <= cart_exrom_n;
+      dbg_fc3_cart_flags(10) <= cart_nmi_n;
+      dbg_fc3_cart_flags(11) <= cart_irq_n;
+      dbg_fc3_cart_flags(12) <= cart_dma_n;
+      dbg_fc3_cart_flags(13) <= cart_roml_n;
+      dbg_fc3_cart_flags(14) <= cart_romh_n;
+      dbg_fc3_cart_flags(15) <= cart_io1_n;
+      dbg_fc3_cart_flags(16) <= cart_io2_n;
+      dbg_fc3_cart_flags(17) <= cart_roml_q;
+      dbg_fc3_cart_flags(18) <= cart_romh_q;
+      dbg_fc3_cart_flags(19) <= cart_io1_q;
+      dbg_fc3_cart_flags(20) <= cart_io2_q;
+      dbg_fc3_cart_flags(21) <= cart_rw_q;
+      dbg_fc3_cart_flags(22) <= cart_data_oe_o;
+      dbg_fc3_cart_flags(23) <= cart_addr_oe_o;
+      dbg_fc3_cart_flags(24) <= cart_ctrl_oe_o;
+      dbg_fc3_cart_flags(25) <= cart_en_o;
+      dbg_fc3_cart_flags(26) <= cart_phi2_o;
+      dbg_fc3_cart_flags(27) <= cart_ba_o;
+      dbg_fc3_cart_flags(28) <= cart_dotclock_o;
+      if cart_res_flckr_ign /= 0 then
+        dbg_fc3_cart_flags(29) <= '1';
+      end if;
+      dbg_fc3_cart_flags(30) <= cart_roml_i;
+      dbg_fc3_cart_flags(31) <= cart_romh_i;
+    end if;
+  end process debug_fc3_ila_taps_proc;
 
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
   -- since we can have more than one cache that might be dirty, we convert the std_logic_vector of length G_VDNUM
@@ -1569,4 +1741,3 @@ begin
   cass_rtc <= not (rtcf83_sda and cass_motor);
 
 end architecture synthesis;
-
