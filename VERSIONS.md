@@ -35,6 +35,13 @@ Version 6 - MONTH DAY, 2026
 * Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
   flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
 
+  The simulated REU now only claims the primary REU register window at
+  `$DF00-$DF1F` when used together with a hardware cartridge. The remaining
+  IO2 range `$DF20-$DFFF` stays available on the Expansion Port, improving
+  coexistence with cartridges such as Daniel Mantione's Final Cartridge III
+  101% and EasyFlash titles that use cartridge RAM for saves or high scores.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/208)
+
 * Implemented proper RAM cold-start pattern, which raises compatibility with
   some original software quite a bit. This also fixes Q-Bert.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
