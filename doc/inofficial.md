@@ -23,6 +23,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A11    | 05/05/26 | 557e414 | SIM REU: Fix regression bugs (issue #198)
 | WIP-V6-A12    | 05/05/26 | 1d8ec1c | Improved Expansion Port Timing and Idun support (issue #204)
 | WIP-V6-A13    | 05/09/26 | 2c2e593 | SIM REU: Move backing store down 8 kB to guard top-of-HyperRAM bursts (issue #214)
+| WIP-V6-A13X1  | 05/10/26 | aa7b7b2 | SIM REU: Only use $DF00-$DF1F internally, keeping $DF20-$DFFF on the cartridge port (issue #208)
 
 ## Version 5.2
 
