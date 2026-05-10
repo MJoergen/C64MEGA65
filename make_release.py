@@ -2,13 +2,13 @@
 """
 make_release.py — Package a C64MEGA65 release.
 
-Given a release name (e.g. V6, V6.1, or WIP-V6-A6) and an output folder, this
+Given a release name (e.g. V6, V6.1, WIP-V6-A6, or WIP-V6-A13X1) and an output folder, this
 script validates the version string against config.vhd, sanity-checks alpha
 releases against doc/inofficial.md and the git history, copies the per-board
 bitstreams from CORE/CORE-R{3..6}.runs/impl_1/, produces .cor files via the
 external `bit2core` tool, generates the `c64mega65` config file via
-M2M/tools/make_config.sh, and copies VERSIONS.md (timestamp preserved) into
-the release folder.
+M2M/tools/make_config.sh, and copies VERSIONS.md plus doc/inofficial.md
+(timestamps preserved) into the release folder.
 """
 
 import argparse
@@ -34,7 +34,7 @@ EXPECTED_OCCURRENCES_IN_CONFIG = 5
 # Regex for the three accepted version conventions.
 RE_MAJOR = re.compile(r"^V(\d+)$")
 RE_MINOR = re.compile(r"^V(\d+)\.(\d+)$")
-RE_ALPHA = re.compile(r"^WIP-V(\d+)-A(\d+)$")
+RE_ALPHA = re.compile(r"^WIP-V(\d+)-A(\d+)(?:X([1-9]\d*))?$")
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ def classify_version(name: str) -> str:
         f"'{name}' is not a valid version. Expected one of:\n"
         f"  Major  : V<n>          (e.g. V6)\n"
         f"  Minor  : V<n>.<m>      (e.g. V6.1)\n"
-        f"  Alpha  : WIP-V<n>-A<m> (e.g. WIP-V6-A6)"
+        f"  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)"
     )
 
 
@@ -387,6 +387,15 @@ def copy_versions_md(repo: Path, out: Path) -> Path:
     return dst
 
 
+def copy_inofficial_md(repo: Path, out: Path) -> Path:
+    src = repo / "doc" / "inofficial.md"
+    if not src.is_file():
+        die(f"{src.relative_to(repo)} not found.")
+    dst = out / src.name
+    copy_preserving_timestamps(src, dst)
+    return dst
+
+
 def run_bit2core(bit2core: str, machine: str, src_bit: Path,
                  core_name: str, version: str, dst_cor: Path) -> None:
     cmd = [
@@ -440,13 +449,14 @@ def main() -> None:
         prog="make_release.py",
         description="Package a C64MEGA65 release: copy R3..R6 bitstreams, "
                     "produce .cor files via bit2core, generate the c64mega65 "
-                    "config file and copy VERSIONS.md into the output folder.",
+                    "config file and copy VERSIONS.md plus inofficial.md into "
+                    "the output folder.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Version conventions:\n"
             "  Major  : V<n>          (e.g. V6)\n"
             "  Minor  : V<n>.<m>      (e.g. V6.1)\n"
-            "  Alpha  : WIP-V<n>-A<m> (e.g. WIP-V6-A6)\n\n"
+            "  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)\n\n"
             "Target selection:\n"
             "  Omit the third argument to build all four boards (R3..R6).\n"
             "  Otherwise pass a comma-separated list, e.g. 'R3,R6' or 'R4,R5'.\n"
@@ -455,23 +465,27 @@ def main() -> None:
             "  The second argument is a *parent* folder. The script creates\n"
             "  a subfolder named C64MEGA65-<version> in it and places the\n"
             "  per-board .bit and .cor files, the c64mega65 config file\n"
-            "  and a copy of VERSIONS.md there. Example: passing '~/Desktop'\n"
+            "  and copies of VERSIONS.md and inofficial.md there. Example:\n"
+            "  passing '~/Desktop'\n"
             "  with version V6.1 produces:\n"
             "    ~/Desktop/C64MEGA65-V6.1/\n"
             "      C64MEGA65-V6.1-R{3,4,5,6}.{bit,cor}\n"
             "      c64mega65\n"
             "      VERSIONS.md\n"
+            "      inofficial.md\n"
             "  If the release subfolder already exists and is non-empty, the\n"
             "  script aborts unless -f / --force is passed.\n\n"
             "Examples:\n"
             "  make_release.py V6 ~/Desktop\n"
             "  make_release.py WIP-V6-A6 /tmp/builds\n"
+            "  make_release.py WIP-V6-A13X1 /tmp/builds R6\n"
             "  make_release.py V6.1 ./out R3,R6\n"
             "  make_release.py V6.1 ./out R3,R6 --force\n"
         ),
     )
     parser.add_argument("version",
-                        help="Release name, e.g. V6, V6.1 or WIP-V6-A6")
+                        help="Release name, e.g. V6, V6.1, WIP-V6-A6 or "
+                             "WIP-V6-A13X1")
     parser.add_argument("output_folder",
                         help="Parent folder. The script creates a subfolder "
                              "named C64MEGA65-<version> inside it and places "
@@ -578,18 +592,23 @@ def main() -> None:
     generate_shell_config(repo, cfg_dst)
     ok(f"{cfg_dst.name} ({cfg_dst.stat().st_size:,} bytes)")
 
-    # 11) Ship VERSIONS.md alongside the release (mtime preserved).
+    # 11) Ship release notes alongside the release (mtime preserved).
     info("Copying VERSIONS.md into the release folder")
     vmd = copy_versions_md(repo, out)
     ok(f"{vmd.name} ({vmd.stat().st_size:,} bytes)")
 
+    info("Copying doc/inofficial.md into the release folder")
+    imd = copy_inofficial_md(repo, out)
+    ok(f"{imd.name} ({imd.stat().st_size:,} bytes)")
+
     # 12) Final summary so the user can see at-a-glance what was produced
     #     without having to scroll back through the verbose live output.
-    print_summary(args.version, kind, targets, cfg_dst, vmd, out)
+    print_summary(args.version, kind, targets, cfg_dst, vmd, imd, out)
 
 
 def print_summary(version: str, kind: str, targets: tuple,
-                  cfg_dst: Path, versions_md: Path, out: Path) -> None:
+                  cfg_dst: Path, versions_md: Path, inofficial_md: Path,
+                  out: Path) -> None:
     bar = "=" * 64
     check = _c("32", "[OK]")
     warn_mark = _c("33", "[!!]")
@@ -604,6 +623,8 @@ def print_summary(version: str, kind: str, targets: tuple,
     print(f" {check} Config file:   {cfg_dst.name} "
           f"({cfg_dst.stat().st_size:,} bytes)")
     print(f" {check} VERSIONS.md:   {versions_md.stat().st_size:,} bytes "
+          f"(timestamp preserved)")
+    print(f" {check} inofficial.md: {inofficial_md.stat().st_size:,} bytes "
           f"(timestamp preserved)")
     print(f" {check} Release at:    {out}")
     if _WARNINGS:
