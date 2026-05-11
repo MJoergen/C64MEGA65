@@ -72,35 +72,88 @@ add wave -noupdate -group reu_mapper -expand -group Internal /tb_reu/reu_mapper_
 add wave -noupdate -group reu_mapper -expand -group Internal /tb_reu/reu_mapper_inst/reu_rd_fifo_valid
 add wave -noupdate -group reu_mapper -expand -group Internal /tb_reu/reu_mapper_inst/active_s
 add wave -noupdate -group reu_mapper -expand -group Internal /tb_reu/reu_mapper_inst/active
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/clk_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/rst_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_waitrequest_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_write_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_read_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_address_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_writedata_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_byteenable_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_burstcount_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_readdata_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/s_avm_readdatavalid_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_waitrequest_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_write_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_read_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_address_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_writedata_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_byteenable_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_burstcount_o
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_readdata_i
-add wave -noupdate -expand -group avm_cache /tb_reu/avm_cache_inst/m_avm_readdatavalid_i
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_data
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_addr
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_count
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/rd_burstcount
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/state
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_offset_s
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_rd_hit_s
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_wr_hit_s
-add wave -noupdate -expand -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_filled_s
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/clk_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/rst_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_waitrequest_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_write_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_read_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_address_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_writedata_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_byteenable_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_burstcount_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_readdata_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/s_avm_readdatavalid_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_waitrequest_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_write_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_read_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_address_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_writedata_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_byteenable_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_burstcount_o
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_readdata_i
+add wave -noupdate -group avm_cache /tb_reu/avm_cache_inst/m_avm_readdatavalid_i
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_data
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_addr
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_count
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/rd_burstcount
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/state
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_offset_s
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_rd_hit_s
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_wr_hit_s
+add wave -noupdate -group avm_cache -group Internal /tb_reu/avm_cache_inst/cache_filled_s
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/clk_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/clk_del_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/delay_refclk_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/rst_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_write_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_read_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_address_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_writedata_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_byteenable_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_burstcount_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_readdata_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_readdatavalid_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/avm_waitrequest_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/count_long_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/count_short_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_resetn_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_csn_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_ck_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_rwds_in_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_rwds_out_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_rwds_oe_n_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_dq_in_i
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_dq_out_o
+add wave -noupdate -expand -group hyperram /tb_reu/hyperram_inst/hr_dq_oe_n_o
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_write
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_read
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_address
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_writedata
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_byteenable
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_burstcount
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_readdata
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_readdatavalid
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/errata_waitrequest
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_write
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_read
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_address
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_writedata
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_byteenable
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_burstcount
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_readdata
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_readdatavalid
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/cfg_waitrequest
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_rstn
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_csn
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_ck_ddr
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_dq_ddr_in
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_dq_ddr_out
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_dq_oe
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_dq_ie
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_rwds_ddr_out
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_rwds_oe
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_rwds_in
+add wave -noupdate -expand -group hyperram -group Internal /tb_reu/hyperram_inst/ctrl_read
 TreeUpdate [SetDefaultTree]
 WaveRestoreCursors {{Cursor 1} {39203239 ps} 0}
 quietly wave cursor active 1

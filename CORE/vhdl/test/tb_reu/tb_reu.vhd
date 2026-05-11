@@ -17,8 +17,8 @@ end entity tb_reu;
 architecture simulation of tb_reu is
 
   signal cnt           : std_logic_vector(4 downto 0) := (others => '0');
-  signal clk           : std_logic;
-  signal rst           : std_logic;
+  signal clk           : std_logic := '1';
+  signal rst           : std_logic := '1';
   signal cfg           : std_logic_vector(1 downto 0);
   signal dma_req       : std_logic;
   signal dma_cycle     : std_logic;
@@ -60,15 +60,32 @@ architecture simulation of tb_reu is
   signal cache_readdatavalid : std_logic;
   signal cache_waitrequest   : std_logic;
 
-  signal mem_avm_write         : std_logic;
-  signal mem_avm_read          : std_logic;
-  signal mem_avm_address       : std_logic_vector(31 downto 0);
-  signal mem_avm_writedata     : std_logic_vector(15 downto 0);
-  signal mem_avm_byteenable    : std_logic_vector(1 downto 0);
-  signal mem_avm_burstcount    : std_logic_vector(7 downto 0);
-  signal mem_avm_readdata      : std_logic_vector(15 downto 0);
-  signal mem_avm_readdatavalid : std_logic;
-  signal mem_avm_waitrequest   : std_logic;
+  signal hr_clk           : std_logic := '1';
+  signal hr_clk_del       : std_logic := '1';
+  signal hr_delay_refclk  : std_logic := '1';
+  signal hr_rst           : std_logic := '1';
+
+  signal hr_write         : std_logic;
+  signal hr_read          : std_logic;
+  signal hr_address       : std_logic_vector(31 downto 0);
+  signal hr_writedata     : std_logic_vector(15 downto 0);
+  signal hr_byteenable    : std_logic_vector(1 downto 0);
+  signal hr_burstcount    : std_logic_vector(7 downto 0);
+  signal hr_readdata      : std_logic_vector(15 downto 0);
+  signal hr_readdatavalid : std_logic;
+  signal hr_waitrequest   : std_logic;
+
+  signal hr_resetn    : std_logic;
+  signal hr_csn       : std_logic;
+  signal hr_ck        : std_logic;
+  signal hr_rwds_in   : std_logic;
+  signal hr_rwds_out  : std_logic;
+  signal hr_rwds_oe_n : std_logic;                    -- Output enable for RWDS
+  signal hr_rwds      : std_logic;
+  signal hr_dq_in     : std_logic_vector(7 downto 0);
+  signal hr_dq_out    : std_logic_vector(7 downto 0);
+  signal hr_dq_oe_n   : std_logic_vector(7 downto 0); -- Output enable for DQ
+  signal hr_dq        : std_logic_vector(7 downto 0);
 
   component reu is
     port (
@@ -95,6 +112,25 @@ architecture simulation of tb_reu is
       irq       : out   std_logic
     );
   end component reu;
+
+  component s27kl0642 is
+     port (
+        dq7      : inout std_logic;
+        dq6      : inout std_logic;
+        dq5      : inout std_logic;
+        dq4      : inout std_logic;
+        dq3      : inout std_logic;
+        dq2      : inout std_logic;
+        dq1      : inout std_logic;
+        dq0      : inout std_logic;
+        rwds     : inout std_logic;
+        csneg    : in    std_logic;
+        ck       : in    std_logic;
+        ckn      : in    std_logic;
+        resetneg : in    std_logic
+     );
+  end component s27kl0642;
+
 
   -- This defines a type containing an array of bytes
   type   ram_type is array (0 to 255) of std_logic_vector(7 downto 0);
@@ -123,22 +159,13 @@ begin
   -- Clock and reset
   -------------------
 
-  clk_proc : process
-  begin
-    clk <= '1';
-    wait for 15 ns;
-    clk <= '0';
-    wait for 15 ns;
-  end process clk_proc;
+  clk <= not clk after 15 ns;
+  rst <= '1', '0' after 1000 ns;
 
-  rst_proc : process
-  begin
-    rst <= '1';
-    wait for 200 ns;
-    wait until clk = '1';
-    rst <= '0';
-    wait;
-  end process rst_proc;
+  hr_clk <= not hr_clk after 5 ns;
+  hr_rst <= '1', '0' after 500 ns;
+  hr_clk_del <= transport hr_clk after 2.5 ns;
+  hr_delay_refclk <= not hr_delay_refclk after 2.5 ns;
 
 
   -----------------------
@@ -220,7 +247,7 @@ begin
 
   begin
     cpu_cs <= '0';
-    wait for 500 ns;
+    wait for 200 us;
     wait until clk = '1';
 
     assert ram( 0) = X"11";
@@ -363,50 +390,114 @@ begin
       m_avm_readdatavalid_i => cache_readdatavalid
     ); -- avm_cache_inst
 
-  hyperram_errata_inst : entity work.hyperram_errata
-    port map (
-      clk_i                 => clk,
-      rst_i                 => rst,
-      s_avm_waitrequest_o   => cache_waitrequest,
-      s_avm_write_i         => cache_write,
-      s_avm_read_i          => cache_read,
-      s_avm_address_i       => cache_address,
-      s_avm_writedata_i     => cache_writedata,
-      s_avm_byteenable_i    => cache_byteenable,
-      s_avm_burstcount_i    => cache_burstcount,
-      s_avm_readdata_o      => cache_readdata,
-      s_avm_readdatavalid_o => cache_readdatavalid,
-      m_avm_waitrequest_i   => mem_avm_waitrequest,
-      m_avm_write_o         => mem_avm_write,
-      m_avm_read_o          => mem_avm_read,
-      m_avm_address_o       => mem_avm_address,
-      m_avm_writedata_o     => mem_avm_writedata,
-      m_avm_byteenable_o    => mem_avm_byteenable,
-      m_avm_burstcount_o    => mem_avm_burstcount,
-      m_avm_readdata_i      => mem_avm_readdata,
-      m_avm_readdatavalid_i => mem_avm_readdatavalid
-    ); -- hyperram_errata_inst
 
-  avm_memory_pause_inst : entity work.avm_memory_pause
+   main2hr_avm_fifo : entity work.avm_fifo
+      generic map (
+         G_WR_DEPTH     => 16,
+         G_RD_DEPTH     => 16,
+         G_FILL_SIZE    => 1,
+         G_ADDRESS_SIZE => 32,
+         G_DATA_SIZE    => 16
+      )
+      port map (
+         s_clk_i               => clk,
+         s_rst_i               => rst,
+         s_avm_waitrequest_o   => cache_waitrequest,
+         s_avm_write_i         => cache_write,
+         s_avm_read_i          => cache_read,
+         s_avm_address_i       => cache_address,
+         s_avm_writedata_i     => cache_writedata,
+         s_avm_byteenable_i    => cache_byteenable,
+         s_avm_burstcount_i    => cache_burstcount,
+         s_avm_readdata_o      => cache_readdata,
+         s_avm_readdatavalid_o => cache_readdatavalid,
+         m_clk_i               => hr_clk,
+         m_rst_i               => hr_rst,
+         m_avm_waitrequest_i   => hr_waitrequest,
+         m_avm_write_o         => hr_write,
+         m_avm_read_o          => hr_read,
+         m_avm_address_o       => hr_address,
+         m_avm_writedata_o     => hr_writedata,
+         m_avm_byteenable_o    => hr_byteenable,
+         m_avm_burstcount_o    => hr_burstcount,
+         m_avm_readdata_i      => hr_readdata,
+         m_avm_readdatavalid_i => hr_readdatavalid
+      ); -- main2hr_avm_fifo
+
+
+  ---------------------------------------------------------
+  -- Instantiate HyperRAM controller
+  ---------------------------------------------------------
+
+  hyperram_inst : entity work.hyperram
     generic map (
-      G_REQ_PAUSE    => 30,
-      G_RESP_PAUSE   => 6,
-      G_ADDRESS_SIZE => 8,
-      G_DATA_SIZE    => 16
+      G_ERRATA_ISSI_D_FIX => true
     )
     port map (
-      clk_i               => clk,
-      rst_i               => rst,
-      avm_write_i         => mem_avm_write,
-      avm_read_i          => mem_avm_read,
-      avm_address_i       => mem_avm_address(7 downto 0),
-      avm_writedata_i     => mem_avm_writedata,
-      avm_byteenable_i    => mem_avm_byteenable,
-      avm_burstcount_i    => mem_avm_burstcount,
-      avm_readdata_o      => mem_avm_readdata,
-      avm_readdatavalid_o => mem_avm_readdatavalid,
-      avm_waitrequest_o   => mem_avm_waitrequest
-    ); -- avm_memory_inst
+      clk_i               => hr_clk,
+      clk_del_i           => hr_clk_del,
+      delay_refclk_i      => hr_delay_refclk,
+      rst_i               => hr_rst,
+      avm_write_i         => hr_write,
+      avm_read_i          => hr_read,
+      avm_address_i       => hr_address,
+      avm_writedata_i     => hr_writedata,
+      avm_byteenable_i    => hr_byteenable,
+      avm_burstcount_i    => hr_burstcount,
+      avm_readdata_o      => hr_readdata,
+      avm_readdatavalid_o => hr_readdatavalid,
+      avm_waitrequest_o   => hr_waitrequest,
+      count_long_o        => open,
+      count_short_o       => open,
+      hr_resetn_o         => hr_resetn,
+      hr_csn_o            => hr_csn,
+      hr_ck_o             => hr_ck,
+      hr_rwds_in_i        => hr_rwds_in,
+      hr_rwds_out_o       => hr_rwds_out,
+      hr_rwds_oe_n_o      => hr_rwds_oe_n,
+      hr_dq_in_i          => hr_dq_in,
+      hr_dq_out_o         => hr_dq_out,
+      hr_dq_oe_n_o        => hr_dq_oe_n
+    ); -- hyperram_inst : entity work.hyperram
+
+
+  ----------------------------------
+  -- Tri-state buffers for HyperRAM
+  ----------------------------------
+
+  hr_rwds <= hr_rwds_out when hr_rwds_oe_n = '0' else
+              'Z';
+
+  hr_dq_gen : for i in 0 to 7 generate
+     hr_dq(i) <= hr_dq_out(i) when hr_dq_oe_n(i) = '0' else
+                  'Z';
+  end generate hr_dq_gen;
+
+  hr_rwds_in <= hr_rwds;
+  hr_dq_in   <= hr_dq;
+
+
+
+  ---------------------------------------------------------
+  -- Instantiate HyperRAM simulation model
+  ---------------------------------------------------------
+
+  s27kl0642_inst : component s27kl0642
+     port map (
+        dq7      => hr_dq(7),
+        dq6      => hr_dq(6),
+        dq5      => hr_dq(5),
+        dq4      => hr_dq(4),
+        dq3      => hr_dq(3),
+        dq2      => hr_dq(2),
+        dq1      => hr_dq(1),
+        dq0      => hr_dq(0),
+        rwds     => hr_rwds,
+        csneg    => hr_csn,
+        ck       => hr_ck,
+        ckn      => not hr_ck,
+        resetneg => hr_resetn
+     ); -- s27kl0642_inst
 
 end architecture simulation;
 

@@ -29,8 +29,8 @@ entity avm_cache is
       m_avm_write_o         : out std_logic;
       m_avm_read_o          : out std_logic;
       m_avm_address_o       : out std_logic_vector(G_ADDRESS_SIZE-1 downto 0);
-      m_avm_writedata_o     : out std_logic_vector(G_DATA_SIZE-1 downto 0);
-      m_avm_byteenable_o    : out std_logic_vector(G_DATA_SIZE/8-1 downto 0);
+      m_avm_writedata_o     : out std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
+      m_avm_byteenable_o    : out std_logic_vector(G_DATA_SIZE/8-1 downto 0) := (others => '0');
       m_avm_burstcount_o    : out std_logic_vector(7 downto 0);
       m_avm_readdata_i      : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
       m_avm_readdatavalid_i : in  std_logic
