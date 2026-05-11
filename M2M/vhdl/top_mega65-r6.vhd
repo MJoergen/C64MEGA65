@@ -554,17 +554,6 @@ begin
    pmod2_en_o            <= '0';
    qspidb_io             <= (others => 'Z');
    qspicsn_o             <= '1';
-   sdram_clk_o           <= '0';
-   sdram_cke_o           <= '0';
-   sdram_ras_n_o         <= '1';
-   sdram_cas_n_o         <= '1';
-   sdram_we_n_o          <= '1';
-   sdram_cs_n_o          <= '1';
-   sdram_ba_o            <= (others => '0');
-   sdram_a_o             <= (others => '0');
-   sdram_dqml_o          <= '0';
-   sdram_dqmh_o          <= '0';
-   sdram_dq_io           <= (others => 'Z');
 
 
    -----------------------------------------------------------------------------------------
@@ -633,6 +622,17 @@ begin
       hr_reset_o              => hr_reset_o,
       hr_clk_p_o              => hr_clk_p_o,
       hr_cs0_o                => hr_cs0_o,
+      sdram_clk_o             => sdram_clk_o,
+      sdram_cke_o             => sdram_cke_o,
+      sdram_ras_n_o           => sdram_ras_n_o,
+      sdram_cas_n_o           => sdram_cas_n_o,
+      sdram_we_n_o            => sdram_we_n_o,
+      sdram_cs_n_o            => sdram_cs_n_o,
+      sdram_ba_o              => sdram_ba_o,
+      sdram_a_o               => sdram_a_o,
+      sdram_dqml_o            => sdram_dqml_o,
+      sdram_dqmh_o            => sdram_dqmh_o,
+      sdram_dq_io             => sdram_dq_io,
 
       -- Connect to CORE
       qnice_clk_o             => qnice_clk,

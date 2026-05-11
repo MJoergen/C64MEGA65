@@ -16,6 +16,7 @@ create_generated_clock -name qnice_clk       [get_pins i_framework/i_clk_m2m/i_c
 create_generated_clock -name hr_clk          [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT1]
 create_generated_clock -name hr_delay_refclk [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT2]
 create_generated_clock -name hr_clk_del      [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT3]
+create_generated_clock -name sr_clk          [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT4]
 create_generated_clock -name audio_clk       [get_pins i_framework/i_clk_m2m/i_clk_audio/CLKOUT0]
 create_generated_clock -name tmds_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT0]
 create_generated_clock -name hdmi_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT1]

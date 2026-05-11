@@ -96,7 +96,8 @@ begin
    avm_valid_s      <= '1' when avm_preemptive_r else reu_cs_i and not reu_cs_d;
    avm_write_s      <= '0' when avm_preemptive_r else avm_valid_s and reu_we_i;
    avm_read_s       <= '1' when avm_preemptive_r else avm_valid_s and not reu_we_i;
-   avm_address_s    <= (("00000000" & reu_addr_i(24 downto 1)) + G_BASE_ADDRESS) and X"003FFFFF";
+   -- Limit REU to 512 kB, i.e. 0x80000 bytes.
+   avm_address_s    <= (X"000" & "00" & reu_addr_i(18 downto 1)) + G_BASE_ADDRESS;
    avm_writedata_s  <= reu_dout_i & reu_dout_i;
    avm_byteenable_s <= "01" when reu_addr_i(0) = '0' else "10";
    avm_burstcount_s <= X"01";

@@ -15,6 +15,14 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A4     | 04/13/26 | 3915f86 | Support Magic Desk 2 format (issue #203)
 | WIP-V6-A5     | 04/13/26 | 54211ed | Support SnappyROM cartridge (issue #94)
 | WIP-V6-A6     | 04/21/26 | 4975181 | Improve initial RAM contents (issue #125)
+| WIP-V6-A7     | 04/22/26 | 4409a19 | SIMCRT: Support for Action Replay (issue #69)
+| WIP-V6-A8     | 04/23/26 | adce33c | SIMCRT: Another fix for Action Replay (issue #69)
+| WIP-V6-A9     | 04/25/26 | 05f2c25 | SIM REU: Allow parallel use with cartridges (issues #136 and #198)
+| WIP-V6-A9X4   | 05/05/26 | 70e4de7 | SIMCRT: Fix FC3 freezer firing on software NMI (issue #207)
+| WIP-V6-A10    | 05/01/26 | 6a33db8 | SIM REU: Use SDRAM on R6 and HyperRAM on R3 (issue #206)
+| WIP-V6-A11    | 05/05/26 | 557e414 | SIM REU: Fix regression bugs (issue #198)
+| WIP-V6-A12    | 05/05/26 | 1d8ec1c | Improved Expansion Port Timing and Idun support (issue #204)
+| WIP-V6-A13    | 05/09/26 | 2c2e593 | SIM REU: Move backing store down 8 kB to guard top-of-HyperRAM bursts (issue #214)
 
 ## Version 5.2
 

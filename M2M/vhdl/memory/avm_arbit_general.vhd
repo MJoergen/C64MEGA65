@@ -143,7 +143,7 @@ begin
             m_avm_readdatavalid_i  => avm_23_readdatavalid,
             m_avm_waitrequest_i    => avm_23_waitrequest
          ); -- i_avm_arbit_23
-   else generate
+    elsif G_NUM_SLAVES = 3 generate
       avm_23_write          <= s_avm_write_i     (                          2);
       avm_23_read           <= s_avm_read_i      (                          2);
       avm_23_address        <= s_avm_address_i   (3*G_ADDRESS_SIZE-1 downto 2*G_ADDRESS_SIZE);
@@ -155,44 +155,56 @@ begin
       s_avm_waitrequest_o  (                       2)             <= avm_23_waitrequest;
    end generate gen_4;
 
-   i_avm_arbit : entity work.avm_arbit
-      generic map (
-         G_PREFER_SWAP  => true,
-         G_FREQ_HZ      => G_FREQ_HZ,
-         G_ADDRESS_SIZE => G_ADDRESS_SIZE,
-         G_DATA_SIZE    => G_DATA_SIZE
-      )
-      port map (
-         clk_i                  => clk_i,
-         rst_i                  => rst_i,
-         s0_avm_write_i         => avm_01_write,
-         s0_avm_read_i          => avm_01_read,
-         s0_avm_address_i       => avm_01_address,
-         s0_avm_writedata_i     => avm_01_writedata,
-         s0_avm_byteenable_i    => avm_01_byteenable,
-         s0_avm_burstcount_i    => avm_01_burstcount,
-         s0_avm_readdata_o      => avm_01_readdata,
-         s0_avm_readdatavalid_o => avm_01_readdatavalid,
-         s0_avm_waitrequest_o   => avm_01_waitrequest,
-         s1_avm_write_i         => avm_23_write,
-         s1_avm_read_i          => avm_23_read,
-         s1_avm_address_i       => avm_23_address,
-         s1_avm_writedata_i     => avm_23_writedata,
-         s1_avm_byteenable_i    => avm_23_byteenable,
-         s1_avm_burstcount_i    => avm_23_burstcount,
-         s1_avm_readdata_o      => avm_23_readdata,
-         s1_avm_readdatavalid_o => avm_23_readdatavalid,
-         s1_avm_waitrequest_o   => avm_23_waitrequest,
-         m_avm_write_o          => m_avm_write_o,
-         m_avm_read_o           => m_avm_read_o,
-         m_avm_address_o        => m_avm_address_o,
-         m_avm_writedata_o      => m_avm_writedata_o,
-         m_avm_byteenable_o     => m_avm_byteenable_o,
-         m_avm_burstcount_o     => m_avm_burstcount_o,
-         m_avm_readdata_i       => m_avm_readdata_i,
-         m_avm_readdatavalid_i  => m_avm_readdatavalid_i,
-         m_avm_waitrequest_i    => m_avm_waitrequest_i
-      ); -- i_avm_arbit
+   gen_34 : if G_NUM_SLAVES >= 3 generate
+      i_avm_arbit : entity work.avm_arbit
+         generic map (
+            G_PREFER_SWAP  => true,
+            G_FREQ_HZ      => G_FREQ_HZ,
+            G_ADDRESS_SIZE => G_ADDRESS_SIZE,
+            G_DATA_SIZE    => G_DATA_SIZE
+         )
+         port map (
+            clk_i                  => clk_i,
+            rst_i                  => rst_i,
+            s0_avm_write_i         => avm_01_write,
+            s0_avm_read_i          => avm_01_read,
+            s0_avm_address_i       => avm_01_address,
+            s0_avm_writedata_i     => avm_01_writedata,
+            s0_avm_byteenable_i    => avm_01_byteenable,
+            s0_avm_burstcount_i    => avm_01_burstcount,
+            s0_avm_readdata_o      => avm_01_readdata,
+            s0_avm_readdatavalid_o => avm_01_readdatavalid,
+            s0_avm_waitrequest_o   => avm_01_waitrequest,
+            s1_avm_write_i         => avm_23_write,
+            s1_avm_read_i          => avm_23_read,
+            s1_avm_address_i       => avm_23_address,
+            s1_avm_writedata_i     => avm_23_writedata,
+            s1_avm_byteenable_i    => avm_23_byteenable,
+            s1_avm_burstcount_i    => avm_23_burstcount,
+            s1_avm_readdata_o      => avm_23_readdata,
+            s1_avm_readdatavalid_o => avm_23_readdatavalid,
+            s1_avm_waitrequest_o   => avm_23_waitrequest,
+            m_avm_write_o          => m_avm_write_o,
+            m_avm_read_o           => m_avm_read_o,
+            m_avm_address_o        => m_avm_address_o,
+            m_avm_writedata_o      => m_avm_writedata_o,
+            m_avm_byteenable_o     => m_avm_byteenable_o,
+            m_avm_burstcount_o     => m_avm_burstcount_o,
+            m_avm_readdata_i       => m_avm_readdata_i,
+            m_avm_readdatavalid_i  => m_avm_readdatavalid_i,
+            m_avm_waitrequest_i    => m_avm_waitrequest_i
+         ); -- i_avm_arbit
+   else generate
+      m_avm_write_o        <= avm_01_write;
+      m_avm_read_o         <= avm_01_read;
+      m_avm_address_o      <= avm_01_address;
+      m_avm_writedata_o    <= avm_01_writedata;
+      m_avm_byteenable_o   <= avm_01_byteenable;
+      m_avm_burstcount_o   <= avm_01_burstcount;
+      avm_01_readdata      <= m_avm_readdata_i;
+      avm_01_readdatavalid <= m_avm_readdatavalid_i;
+      avm_01_waitrequest   <= m_avm_waitrequest_i;
+   end generate gen_34;
 
 end architecture synthesis;
 

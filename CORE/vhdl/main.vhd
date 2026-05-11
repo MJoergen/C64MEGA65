@@ -387,6 +387,15 @@ architecture synthesis of main is
   signal   core_phi2_prev       : std_logic;
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
 
+  -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
+  signal   cart_a_pre           : unsigned(15 downto 0); -- combinational, includes Ultimax override
+  signal   cart_a_q             : unsigned(15 downto 0);
+  signal   cart_roml_q          : std_logic;
+  signal   cart_romh_q          : std_logic;
+  signal   cart_io1_q           : std_logic;
+  signal   cart_io2_q           : std_logic;
+  signal   cart_rw_q            : std_logic;
+
   -- Hardware Expansion Port (aka Cartridge Port)
   signal   cart_roml_n    : std_logic;
   signal   cart_romh_n    : std_logic;
@@ -727,18 +736,14 @@ begin
       nmi_n         => core_nmi_n,         -- input
       nmi_ack       => core_nmi_ack,       -- output
       ba            => core_ba,            -- output
-      roml          => core_roml,          -- output. CPU access to 0x8000-0x9FFF
-      romh          => core_romh,          -- output. CPU access to 0xA000-0xBFFF or 0xE000-0xFFFF (ultimax)
+      roml          => core_roml,          -- output: CPU access to 0x8000-0x9FFF
+      romh          => core_romh,          -- output: CPU access to 0xA000-0xBFFF or 0xE000-0xFFFF (ultimax)
       umaxromh      => core_umax_romh,     -- output
       umaxnomap     => core_umax_unmapped, -- output
-      ioe           => core_ioe,           -- output. aka IO1. CPU access to 0xDExx
-      iof           => core_iof,           -- output. aka IO2. CPU access to 0xDFxx
+      ioe           => core_ioe,           -- output: aka IO1. CPU access to 0xDExx
+      iof           => core_iof,           -- output: aka IO2. CPU access to 0xDFxx
       dotclk        => core_dotclk,        -- output
-      phi0          => open,               -- output
       phi2          => core_phi2,          -- output
-      --         freeze_key  => open,
-      --         mod_key     => open,
-      --         tape_play   => open,
 
       -- dma access
       dma_req       => core_dma,                -- input
@@ -811,7 +816,7 @@ begin
       c64rom_data_i => c64rom_data_i,
       c64rom_data_o => c64rom_data_o
     ); -- fpga64_sid_iec_inst
-
+    
   --------------------------------------------------------------------------------------------------
   -- Expansion Port (aka Cartridge Port) handling:
   --    * MEGA65's hardware expansion port
@@ -819,6 +824,38 @@ begin
   --    * Simulateed cartridge using data from .crt file
   --------------------------------------------------------------------------------------------------
 
+  -- Combinational pre-register address (includes Ultimax A14/A15 override).
+  -- According to "The PLA Dissected", A12-A15 are pulled up by RP4 whenever the
+  -- VIC-II has the bus, so they appear as %1111 to the cart in Ultimax mode.
+  cart_a_pre <= "11" & c64_ram_addr_o(13 downto 0) when core_umax_romh = '1'
+                else c64_ram_addr_o;
+
+  -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
+  -- vicAddr) that change on the same clock edge, producing combinational glitches during
+  -- CPU<->VIC bus handoffs. These glitches reach the Expansion Port connector on address,
+  -- ROML, ROMH, IO1, IO2, and R/W and would corrupt edge-triggered cart sampling.
+  --
+  -- We register all six signals here through a single flip-flop stage, which filters out
+  -- the transient values and presents only stable, post-settling values at the cart pin.
+  --
+  -- BA and dotclock are NOT registered because they come from clean register outputs in
+  -- the core (VIC-II output and clock divider respectively) with no combinational mux
+  -- upstream that could glitch.
+  --
+  -- PHI2 is NOT registered as it is already generated cart-port-faithful in fpga64_sid_iec.vhd
+  cart_output_pipeline_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      cart_a_q       <= cart_a_pre;       -- includes Ultimax override
+      cart_roml_q    <= cart_roml_n;
+      cart_romh_q    <= cart_romh_n;
+      cart_io1_q     <= cart_io1_n;
+      cart_io2_q     <= cart_io2_n;
+      cart_rw_q      <= not c64_ram_we;
+    end if;
+  end process cart_output_pipeline_proc;
+
+  -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
   begin
     -- C64 Expansion Port (aka Cartridge Port) control lines
@@ -906,20 +943,23 @@ begin
       cart_reset_o    <= reset_core_int_n when cart_reset_counter = 0 and cart_res_flckr_ign = 0 else '1';
       cart_reset_oe_o <= not cart_reset_o;
 
-      -- Connect physical output lines to the core's various output signals
-      cart_roml_o     <= cart_roml_n;
-      cart_romh_o     <= cart_romh_n;
-      cart_io1_o      <= cart_io1_n;
-      cart_io2_o      <= cart_io2_n;
-      cart_rw_o       <= not c64_ram_we;
+      -- Directly use the core's phi2, dotclock and BA signal for the physical output...
       cart_phi2_o     <= core_phi2;
       cart_dotclock_o <= core_dotclk;
+      cart_ba_o       <= core_ba;
 
-      -- @TODO: When implementing this, we need to perform more research. It seems that just using
-      -- the C64 cores's "cpuHasBus" signal leads to less compatibility than more. For example it
-      -- seemed, that the Kung Fu Flash is not working at all any more.
-      cart_ba_o       <= core_ba; -- MFJ
+      -- ...but use registered versions of address, ROML, ROMH, IO1, IO2 and RW to avoid glitches.
+      --
+      -- See comment block before cart_output_pipeline_proc to understand the separation
+      -- of unregistered and registered signals here.
+      cart_a_o        <= cart_a_q;      -- Ultimax override is baked in via cart_a_pre
+      cart_roml_o     <= cart_roml_q;
+      cart_romh_o     <= cart_romh_q;
+      cart_io1_o      <= cart_io1_q;
+      cart_io2_o      <= cart_io2_q;
+      cart_rw_o       <= cart_rw_q;
 
+      -- Connect physical input lines (inputs are NOT pipelined - read combinationally)
       cart_nmi_n      <= cart_nmi_i;
       cart_irq_n      <= cart_irq_i;
       cart_dma_n      <= cart_dma_i;
@@ -929,22 +969,14 @@ begin
       -- @TODO: As soon as we want to support DMA-enabled cartridges,
       -- we need to treat the address bus as a bi-directional port
       cart_addr_oe_o  <= '1';
-      if core_umax_romh = '0' then
-        cart_a_o <= c64_ram_addr_o;
-      -- Ultimax mode and VIC accesses the bus
-      else
-        -- According to "The PLA Dissected", the address lines A12 to A15 of the C64 address bus are pulled up by
-        -- RP4 whenever the VIC-II has the bus, so they are %1111 usually.
-        cart_a_o <= "11" & c64_ram_addr_o(13 downto 0);
-      end if;
 
       -- Switch the data lines bi-directionally so that the CPU can also
       -- write to the cartridge, e.g. for bank switching
       if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or core_umax_unmapped = '1') then
-        cart_data_oe_o <= '0';                                                                                                                  -- input
+        cart_data_oe_o <= '0';  -- input
         data_from_cart <= cart_d_i;
       else
-        cart_data_oe_o <= '1';                                                                                                                  -- output
+        cart_data_oe_o <= '1';  -- output
         if c64_ram_we = '0' then
           cart_d_o <= c64_ram_data_i;
         else
@@ -955,17 +987,20 @@ begin
   end process handle_hardware_expansion_proc;
 
   handle_cores_expansion_port_signals_proc : process (all)
+    variable core_dma_v : std_logic;
   begin
     core_io_rom    <= '0';
     core_irq_n     <= '1';
     reu_iof        <= '0';
     crt_addr_bus_o <= c64_ram_addr_o;
 
+    core_dma_v := '0';
+
     if c64_exp_port_mode_i(C_SIM_CRT) = '1' then
       -- Simulated cartridge using data from .crt file
       core_game_n  <= crt_game;
       core_exrom_n <= crt_exrom;
-      core_dma     <= cartridge_loading_i or crt_bank_wait_i;
+      core_dma_v   := cartridge_loading_i or crt_bank_wait_i;
       core_io_rom  <= crt_io_rom;
       core_io_ext  <= crt_io_ext;
       core_io_data <= unsigned(crt_io_data);
@@ -982,16 +1017,18 @@ begin
       core_nmi_n   <= cart_nmi_n and restore_key_n;
       core_io_ext  <= core_ioe or core_iof;
       core_io_data <= data_from_cart;
-      core_dma     <= not cart_dma_n; -- MFJ
+      core_dma_v   := not cart_dma_n; -- MFJ
     end if;
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
       -- Simulate 1750 REU 512KB
       core_io_ext  <= reu_oe;
       core_io_data <= reu_dout;
-      core_dma     <= reu_dma_req;
+      core_dma_v   := core_dma_v or reu_dma_req;
       reu_iof      <= core_iof;
     end if;
+
+    core_dma <= core_dma_v;
   end process handle_cores_expansion_port_signals_proc;
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
@@ -1136,8 +1173,12 @@ begin
       nmi_ack_i      => core_nmi_ack
     ); -- cartridge_inst
 
-  crt_addr_9exx <= '1' when c64_ram_addr_o(12 downto 8) = "11110" else '0';
-  crt_addr_9fxx <= '1' when c64_ram_addr_o(12 downto 8) = "11111" else '0';
+  -- Values written to $9Fxx are also written to $Dxxx when crt_iox_wr_ena is set.
+  -- This is relevant for Action Replay cartridge, see this schematic:
+  -- https://www.zimmers.net/anonftp/pub/cbm/schematics/cartridges/c64/freezer/MK.gif
+  -- Input to PLA is "10101001" and the output is "0101" indicating access to cartridge RAM.
+  crt_addr_9exx   <= '1' when c64_ram_addr_o(12 downto 8) = "11110" else '0';
+  crt_addr_9fxx   <= '1' when c64_ram_addr_o(12 downto 8) = "11111" else '0';
 
   crt_ioe_we_o    <= (core_ioe or (core_roml and crt_ioe_wr_ena and crt_addr_9exx)) and c64_ram_we;
   crt_iof_we_o    <= (core_iof or (core_roml and crt_iof_wr_ena and crt_addr_9fxx)) and c64_ram_we;
@@ -1503,7 +1544,7 @@ begin
   -- The result of stage (3) is then passed to i_main which uses these signals directly with MiSTer's i_reu
   reu_mapper_inst : entity work.reu_mapper
     generic map (
-      G_BASE_ADDRESS => X"0020_0000"  -- 2MW
+      G_BASE_ADDRESS => X"0" & C_HMAP_REU & X"000"
     )
     port map (
       clk_i               => clk_main_i,

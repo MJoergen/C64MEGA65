@@ -4,35 +4,69 @@ Version 6 - MONTH DAY, 2026
 @TODO: ENSURE README.MD AND FAQ.MD are up-to-date regarding V6
 @TODO: ENSURE README.MDs Video and Audio section is up-to-date re NTSC
 @TODO: ENSURE README.MDs demo pics (OSM!) are up-to-date
+@TODO: Document increased compatibility due to the resolved RTC regression
+@TODO: Document correct BA signal which should also increase compatibility
 
 ## @TODO: Don't forget to put these closed issues into VERSIONS.md
 
 ## New Features
 
-* @TODO: Add new features here
+* The simulated REU can now be used in parallel to hardware cartridges and in
+  parallel to simulated cartridges (`*.crt`). Example uses for this feature
+  include Snappy ROM's built-in Turbo Macro Pro assembler, a better user
+  experience for C64 OS while using an IDE64 hardware cartridge and for games
+  like A Pig's Quest and Mech Warrior Ultra.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/136 and
+   https://github.com/MJoergen/C64MEGA65/issues/198)
+
+  On 2024+ MEGA65s this feature works even better, smoother and more
+  compatible as it uses the built-in SDRAM instead of HyperRAM.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 ## Improved Compatibility of the Core
 
-* Added hardware support for the IDE64.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
+* Generally improved hardware cartridge compatibility, thanks to two
+  fixes that benefit cartridges beyond the ones we explicitly tested:
+  more faithful timing on the Expansion Port (signals at the cart
+  connector now reproduce real-C64 setup and hold relationships), and
+  proper Ultimax-mode memory mapping (previously the C64 core saw floating
+  data in some memory ranges instead of cartridge-provided RAM/ROM).
 
-* Simulated cartridges' (`*.crt`) improved compatibility:
-
-  - Magic Desk 2 format that is for example being used by SNK-Vs-Capcom Strong
-    Edition (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
-
-  - Snappy ROM freezer cartridge
-    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
+* Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
+  flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
 
 * Implemented proper RAM cold-start pattern, which raises compatibility with
   some original software quite a bit. This also fixes Q-Bert.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
 
+* Hardware support for these cartridges:
+
+  - IDE64
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
+
+  - Idun
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/204)
+
+* Simulated cartridges (`*.crt`) are now supporting:
+
+  - Super Snapshot and Snappy ROM freezer cartridges
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/94)
+
+  - ActionReplay freezer cartridge
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/69)
+
+  - Final Cartridge III and Daniel Mantione's Final Cartridge III 101%
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/207)
+
+  - Magic Desk 2 format that is for example being used by SNK-Vs-Capcom Strong
+    Edition (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/203)
+
+  - Improved Ocean Type 1 compatibility, so that for example Wonderboy works
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/138)
+
 ## Bugfixes
 
-* Increased REU compatibiltiy, fREUd demo by Hoaxers now works flawlessly, by
-  fixing a REU register map bug.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
+* @TODO: Add bugfixes here
 
 Version 5.2 - April 28, 2025
 ============================
@@ -42,7 +76,7 @@ fixing the "Jail Bars"/"Bar Code" issue, which mostly occurred on R6 boards
 and occasionally on R3 boards. Additionally, it includes several bug fixes
 and adds support for a few more simulated cartridge types.
 
-## New Features
+## New Features: All MEGA65
 
 * Simulated cartridges (`*.crt`) are now also supporting COMAL 80,
   Simons BASIC, Waterloo Structured BASIC, Mikro Assembler and

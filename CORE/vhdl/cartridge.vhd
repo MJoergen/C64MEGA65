@@ -58,6 +58,7 @@ architecture synthesis of cartridge is
   signal saved_d6     : std_logic;
   signal ioe_ena      : std_logic;
   signal iof_ena      : std_logic;
+  signal freeze_armed : std_logic; -- FC3: distinguishes freeze-button NMI from $DFFF bit-6 software NMI
 
   signal old_freeze : std_logic := '0';
   signal old_nmiack : std_logic := '0';
@@ -69,7 +70,7 @@ begin
 
   freeze_req <= not old_freeze and freeze_key_i;
   freeze_ack <= nmi_o and not old_nmiack and nmi_ack_i;
-  freeze_crt <= freeze_ack and not mod_key_i;
+  freeze_crt <= freeze_ack and freeze_armed and not mod_key_i;
 
   cartridge_proc : process (clk_i)
   begin
@@ -81,11 +82,13 @@ begin
 
       old_freeze <= freeze_key_i;
       if freeze_req = '1' and (allow_freeze = '1' or mod_key_i = '1') then
-        nmi_o <= '1';
+        nmi_o        <= '1';
+        freeze_armed <= '1';
       end if;
       old_nmiack <= nmi_ack_i;
       if freeze_ack = '1' then
-        nmi_o <= '0';
+        nmi_o        <= '0';
+        freeze_armed <= '0';
       end if;
 
       if cart_loading_i = '1' then
@@ -100,6 +103,7 @@ begin
         saved_d6     <= '0';
         ioe_wr_ena_o <= '0';
         iof_wr_ena_o <= '0';
+        freeze_armed <= '0';
       end if;
 
       case to_integer(unsigned(cart_id_i)) is
@@ -176,12 +180,18 @@ begin
               end if;
               cart_disable <= wr_data_i(7);
             end if;
+          else
+            -- cart hidden by $DFFF bit 7: $DExx/$DFxx must stop responding (cf. VICE fc3_reg_enabled)
+            ioe_ena <= '0';
+            iof_ena <= '0';
           end if;
           if freeze_crt = '1' then
             cart_disable <= '0';
             exrom_o      <= '1';
             game_o       <= '0';
             allow_freeze <= '0';
+            ioe_ena      <= '1'; -- freeze re-enables the cart even if hidden via bit 7
+            iof_ena      <= '1';
           end if;
           if cart_loading_i = '1' then
             game_o       <= '0';
@@ -466,12 +476,18 @@ begin
       end case;
 
       if rst_i = '1' then
-        ioe_ena   <= '0';
-        iof_ena   <= '0';
-        game_o    <= '1';
-        exrom_o   <= '1';
-        bank_lo_o <= (others => '0');
-        bank_hi_o <= (others => '0');
+        ioe_ena      <= '0';
+        iof_ena      <= '0';
+        game_o       <= '1';
+        exrom_o      <= '1';
+        bank_lo_o    <= (others => '0');
+        bank_hi_o    <= (others => '0');
+        nmi_o        <= '0';
+        allow_freeze <= '1'; -- Allow RESTORE key to generate NMI
+        saved_d6     <= '0';
+        ioe_wr_ena_o <= '0';
+        iof_wr_ena_o <= '0';
+        freeze_armed <= '0';
       end if;
     end if;
   end process cartridge_proc;

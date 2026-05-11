@@ -102,6 +102,19 @@ port (
    hr_clk_p_o              : out   std_logic;
    hr_cs0_o                : out   std_logic;
 
+   -- SDRAM
+   sdram_clk_o             : out   std_logic;
+   sdram_cke_o             : out   std_logic;
+   sdram_ras_n_o           : out   std_logic;
+   sdram_cas_n_o           : out   std_logic;
+   sdram_we_n_o            : out   std_logic;
+   sdram_cs_n_o            : out   std_logic;
+   sdram_ba_o              : out   std_logic_vector(1 downto 0);
+   sdram_a_o               : out   std_logic_vector(12 downto 0);
+   sdram_dqml_o            : out   std_logic;
+   sdram_dqmh_o            : out   std_logic;
+   sdram_dq_io             : inout std_logic_vector(15 downto 0);
+
    -- Connect to CORE
    qnice_clk_o             : out   std_logic;
    qnice_rst_o             : out   std_logic;
@@ -428,6 +441,10 @@ signal hr_dq_in               : std_logic_vector(7 downto 0);
 signal hr_dq_out              : std_logic_vector(7 downto 0);
 signal hr_dq_oe_n             : std_logic_vector(7 downto 0);   -- Output enable for DQ
 
+signal sdram_dq_in            : std_logic_vector(15 downto 0);
+signal sdram_dq_out           : std_logic_vector(15 downto 0);
+signal sdram_dq_oe_n          : std_logic_vector(15 downto 0); -- Output enable for DQ
+
 signal scl_out                : std_logic_vector(7 downto 0);
 signal sda_out                : std_logic_vector(7 downto 0);
 
@@ -448,6 +465,8 @@ begin
          hr_clk_del_o      => hr_clk_del,
          hr_delay_refclk_o => hr_delay_refclk,
          hr_rst_o          => hr_rst,
+         sr_clk_o          => open,               -- Ignore the 166 MHz clock
+         sr_rst_o          => open,
          audio_clk_o       => audio_clk,
          audio_rst_o       => audio_rst,
          sys_pps_o         => sys_pps
@@ -676,47 +695,6 @@ begin
       cnt_o     => qnice_hdmi_clk_freq,
       mon_clk_i => hdmi_clk
    );
-
-   --------------------------------------------------------
-   -- HyperRAM clock domain: hr_clk
-   --------------------------------------------------------
-
-   i_avm_arbit_general : entity work.avm_arbit_general
-      generic map (
-         G_NUM_SLAVES   => 3,
-         G_FREQ_HZ      => BOARD_CLK_SPEED,
-         G_ADDRESS_SIZE => 32,
-         G_DATA_SIZE    => 16
-      )
-      port map (
-         clk_i                 => hr_clk,
-         rst_i                 => hr_rst,
-         s_avm_write_i         => hr_dig_write         & hr_core_write_i         & hr_qnice_write,
-         s_avm_read_i          => hr_dig_read          & hr_core_read_i          & hr_qnice_read,
-         s_avm_address_i       => hr_dig_address       & hr_core_address_i       & hr_qnice_address,
-         s_avm_writedata_i     => hr_dig_writedata     & hr_core_writedata_i     & hr_qnice_writedata,
-         s_avm_byteenable_i    => hr_dig_byteenable    & hr_core_byteenable_i    & hr_qnice_byteenable,
-         s_avm_burstcount_i    => hr_dig_burstcount    & hr_core_burstcount_i    & hr_qnice_burstcount,
-         s_avm_readdata_o(3*16-1 downto 2*16) => hr_dig_readdata,
-         s_avm_readdata_o(2*16-1 downto 1*16) => hr_core_readdata_o,
-         s_avm_readdata_o(1*16-1 downto 0*16) => hr_qnice_readdata,
-         s_avm_readdatavalid_o(2) => hr_dig_readdatavalid,
-         s_avm_readdatavalid_o(1) => hr_core_readdatavalid_o,
-         s_avm_readdatavalid_o(0) => hr_qnice_readdatavalid,
-         s_avm_waitrequest_o(2)   => hr_dig_waitrequest,
-         s_avm_waitrequest_o(1)   => hr_core_waitrequest_o,
-         s_avm_waitrequest_o(0)   => hr_qnice_waitrequest,
-         m_avm_write_o         => hr_write,
-         m_avm_read_o          => hr_read,
-         m_avm_address_o       => hr_address,
-         m_avm_writedata_o     => hr_writedata,
-         m_avm_byteenable_o    => hr_byteenable,
-         m_avm_burstcount_o    => hr_burstcount,
-         m_avm_readdata_i      => hr_readdata,
-         m_avm_readdatavalid_i => hr_readdatavalid,
-         m_avm_waitrequest_i   => hr_waitrequest
-      ); -- i_avm_arbit_general
-
 
    ---------------------------------------------------------------------------------------------------------------
    -- Clock Domain Crossing
@@ -962,6 +940,132 @@ begin
          tmds_clk_p_o            => tmds_clk_p_o,
          tmds_clk_n_o            => tmds_clk_n_o
       ); -- i_av_pipeline
+
+
+   ---------------------------------------------------------------------------------------------------------------
+   -- RAM arbiter
+   ---------------------------------------------------------------------------------------------------------------
+
+   sdram_gen : if G_BOARD = "MEGA65_R3" generate
+
+      -- On R3 boards, we use HyperRAM for everything
+
+      i_avm_arbit_general : entity work.avm_arbit_general
+         generic map (
+            G_NUM_SLAVES   => 3,
+            G_FREQ_HZ      => BOARD_CLK_SPEED,
+            G_ADDRESS_SIZE => 32,
+            G_DATA_SIZE    => 16
+         )
+         port map (
+            clk_i                 => hr_clk,
+            rst_i                 => hr_rst,
+            s_avm_write_i         => hr_dig_write         & hr_core_write_i         & hr_qnice_write,
+            s_avm_read_i          => hr_dig_read          & hr_core_read_i          & hr_qnice_read,
+            s_avm_address_i       => hr_dig_address       & hr_core_address_i       & hr_qnice_address,
+            s_avm_writedata_i     => hr_dig_writedata     & hr_core_writedata_i     & hr_qnice_writedata,
+            s_avm_byteenable_i    => hr_dig_byteenable    & hr_core_byteenable_i    & hr_qnice_byteenable,
+            s_avm_burstcount_i    => hr_dig_burstcount    & hr_core_burstcount_i    & hr_qnice_burstcount,
+            s_avm_readdata_o(3*16-1 downto 2*16) => hr_dig_readdata,
+            s_avm_readdata_o(2*16-1 downto 1*16) => hr_core_readdata_o,
+            s_avm_readdata_o(1*16-1 downto 0*16) => hr_qnice_readdata,
+            s_avm_readdatavalid_o(2) => hr_dig_readdatavalid,
+            s_avm_readdatavalid_o(1) => hr_core_readdatavalid_o,
+            s_avm_readdatavalid_o(0) => hr_qnice_readdatavalid,
+            s_avm_waitrequest_o(2)   => hr_dig_waitrequest,
+            s_avm_waitrequest_o(1)   => hr_core_waitrequest_o,
+            s_avm_waitrequest_o(0)   => hr_qnice_waitrequest,
+            m_avm_write_o         => hr_write,
+            m_avm_read_o          => hr_read,
+            m_avm_address_o       => hr_address,
+            m_avm_writedata_o     => hr_writedata,
+            m_avm_byteenable_o    => hr_byteenable,
+            m_avm_burstcount_o    => hr_burstcount,
+            m_avm_readdata_i      => hr_readdata,
+            m_avm_readdatavalid_i => hr_readdatavalid,
+            m_avm_waitrequest_i   => hr_waitrequest
+         ); -- i_avm_arbit_general
+
+   else generate
+
+      -- On R4/R5/R6 boards, we use SDRAM for the ascaler and the HyperRAM for everything else
+
+      avm_arbit_general_inst : entity work.avm_arbit_general
+         generic map (
+            G_NUM_SLAVES   => 2,
+            G_FREQ_HZ      => BOARD_CLK_SPEED,
+            G_ADDRESS_SIZE => 32,
+            G_DATA_SIZE    => 16
+         )
+         port map (
+            clk_i                 => hr_clk,
+            rst_i                 => hr_rst,
+            s_avm_write_i         => hr_core_write_i         & hr_qnice_write,
+            s_avm_read_i          => hr_core_read_i          & hr_qnice_read,
+            s_avm_address_i       => hr_core_address_i       & hr_qnice_address,
+            s_avm_writedata_i     => hr_core_writedata_i     & hr_qnice_writedata,
+            s_avm_byteenable_i    => hr_core_byteenable_i    & hr_qnice_byteenable,
+            s_avm_burstcount_i    => hr_core_burstcount_i    & hr_qnice_burstcount,
+            s_avm_readdata_o(2*16-1 downto 1*16) => hr_core_readdata_o,
+            s_avm_readdata_o(1*16-1 downto 0*16) => hr_qnice_readdata,
+            s_avm_readdatavalid_o(1) => hr_core_readdatavalid_o,
+            s_avm_readdatavalid_o(0) => hr_qnice_readdatavalid,
+            s_avm_waitrequest_o(1)   => hr_core_waitrequest_o,
+            s_avm_waitrequest_o(0)   => hr_qnice_waitrequest,
+            m_avm_write_o         => hr_write,
+            m_avm_read_o          => hr_read,
+            m_avm_address_o       => hr_address,
+            m_avm_writedata_o     => hr_writedata,
+            m_avm_byteenable_o    => hr_byteenable,
+            m_avm_burstcount_o    => hr_burstcount,
+            m_avm_readdata_i      => hr_readdata,
+            m_avm_readdatavalid_i => hr_readdatavalid,
+            m_avm_waitrequest_i   => hr_waitrequest
+         ); -- avm_arbit_general_inst
+
+      ---------------------------------------------------------------------------------------------------------------
+      -- SDRAM controller
+      ---------------------------------------------------------------------------------------------------------------
+
+      sdram_inst : entity work.sdram
+         generic map (
+            G_CLOCK_SPEED_MHZ => 100          -- Same clock speed as HyperRAM
+         )
+         port map (
+            clk_i               => hr_clk,    -- 100 MHz
+            rst_i               => hr_rst,
+            avm_waitrequest_o   => hr_dig_waitrequest,
+            avm_write_i         => hr_dig_write,
+            avm_read_i          => hr_dig_read,
+            avm_address_i       => hr_dig_address,
+            avm_writedata_i     => hr_dig_writedata,
+            avm_byteenable_i    => hr_dig_byteenable,
+            avm_burstcount_i    => hr_dig_burstcount,
+            avm_readdata_o      => hr_dig_readdata,
+            avm_readdatavalid_o => hr_dig_readdatavalid,
+            sdram_a_o           => sdram_a_o,
+            sdram_ba_o          => sdram_ba_o,
+            sdram_cas_n_o       => sdram_cas_n_o,
+            sdram_cke_o         => sdram_cke_o,
+            sdram_clk_o         => sdram_clk_o,
+            sdram_cs_n_o        => sdram_cs_n_o,
+            sdram_dq_in_i       => sdram_dq_in,
+            sdram_dqmh_o        => sdram_dqmh_o,
+            sdram_dqml_o        => sdram_dqml_o,
+            sdram_dq_oe_n_o     => sdram_dq_oe_n,
+            sdram_dq_out_o      => sdram_dq_out,
+            sdram_ras_n_o       => sdram_ras_n_o,
+            sdram_we_n_o        => sdram_we_n_o
+         ); -- sdram_inst : entity work.sdram
+
+       sdram_dq_gen : for i in sdram_dq_io'range generate
+          sdram_dq_io(i) <= sdram_dq_out(i) when sdram_dq_oe_n(i) = '0' else
+                            'Z';
+       end generate sdram_dq_gen;
+
+       sdram_dq_in <= sdram_dq_io;
+
+   end generate sdram_gen;
 
 
    ---------------------------------------------------------------------------------------------------------------
