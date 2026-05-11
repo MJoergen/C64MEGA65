@@ -25,5 +25,5 @@ vlog \
 vsim -voptargs=+acc -t ps tb_reu glbl
 
 do wave.do
-run 60us
+run 70us
 

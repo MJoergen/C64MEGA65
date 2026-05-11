@@ -109,6 +109,11 @@ architecture simulation of tb_reu is
                            8 => X"99",
                            9 => X"AA",
                           10 => X"BB",
+                          11 => X"CC",
+                          12 => X"DD",
+                          13 => X"EE",
+                          14 => X"FF",
+                          15 => X"0A",
                           others => X"UU");
 
 begin
@@ -217,25 +222,35 @@ begin
       assert ram( 8) = X"99";
       assert ram( 9) = X"AA";
       assert ram(10) = X"BB";
+      assert ram(11) = X"CC";
+      assert ram(12) = X"DD";
+      assert ram(13) = X"EE";
+      assert ram(14) = X"FF";
+      assert ram(15) = X"0A";
 
-      write_to_hr(X"0000", X"000100", X"000B");
+      write_to_hr(X"0000", X"07FFF0", X"0010");
       wait until dma_req = '0';
       wait until clk = '1';
 
-      read_from_hr(X"0000", X"000101", X"000A");
+      read_from_hr(X"0000", X"07FFF1", X"000F");
       wait until dma_req = '0';
       wait until clk = '1';
 
-      assert ram(0) = X"22";
-      assert ram(1) = X"33";
-      assert ram(2) = X"44";
-      assert ram(3) = X"55";
-      assert ram(4) = X"66";
-      assert ram(5) = X"77";
-      assert ram(6) = X"88";
-      assert ram(7) = X"99";
-      assert ram(8) = X"AA";
-      assert ram(9) = X"BB";
+      assert ram( 0) = X"22";
+      assert ram( 1) = X"33";
+      assert ram( 2) = X"44";
+      assert ram( 3) = X"55";
+      assert ram( 4) = X"66";
+      assert ram( 5) = X"77";
+      assert ram( 6) = X"88";
+      assert ram( 7) = X"99";
+      assert ram( 8) = X"AA";
+      assert ram( 9) = X"BB";
+      assert ram(10) = X"CC";
+      assert ram(11) = X"DD";
+      assert ram(12) = X"EE";
+      assert ram(13) = X"FF";
+      assert ram(14) = X"0A";
 
       report "Test finished";
       wait;
@@ -284,7 +299,7 @@ begin
 
    i_reu_mapper : entity work.reu_mapper
       generic map (
-         G_BASE_ADDRESS => X"0020_0000"  -- 2MW
+         G_BASE_ADDRESS => X"003C_0000"
       )
       port map (
          clk_i               => clk,
@@ -309,7 +324,7 @@ begin
 
    i_avm_cache : entity work.avm_cache
       generic map (
-         G_CACHE_SIZE   => 4,
+         G_CACHE_SIZE   => 8,
          G_ADDRESS_SIZE => 32,
          G_DATA_SIZE    => 16
       )
