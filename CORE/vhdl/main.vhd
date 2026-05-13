@@ -1505,7 +1505,7 @@ begin
       rst_i               => not reset_core_n,
       reu_ext_cycle_i     => sim_ext_cycle,
       reu_ext_cycle_o     => sim_reu_cycle,
-      reu_addr_i          => sim_reu_addr,
+      reu_addr_i          => sim_reu_addr(18 downto 0), -- limit to 512 kB
       reu_dout_i          => sim_reu_dout,
       reu_din_o           => sim_reu_din,
       reu_we_i            => sim_reu_we,

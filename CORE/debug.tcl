@@ -49,6 +49,7 @@ proc batch_insert_ila { depth } {
     }
     # Now that the netlist has been filtered,  determine bus names and clock domains
     foreach d $net_list {
+        puts "$d"
         # name is root name of a bus, index is the bit index in the
         # bus
         set name [regsub {\[-?[[:digit:]]+\]$} $d {}]

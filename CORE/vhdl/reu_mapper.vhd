@@ -21,7 +21,7 @@ entity reu_mapper is
       rst_i               : in  std_logic;
       reu_ext_cycle_i     : in  std_logic; -- From C64
       reu_ext_cycle_o     : out std_logic; -- To REU
-      reu_addr_i          : in  std_logic_vector(24 downto 0);  -- 32 MB
+      reu_addr_i          : in  std_logic_vector(18 downto 0);  -- 512 kB
       reu_dout_i          : in  std_logic_vector(7 downto 0);
       reu_din_o           : out std_logic_vector(7 downto 0);
       reu_we_i            : in  std_logic;
@@ -41,7 +41,7 @@ end entity reu_mapper;
 
 architecture synthesis of reu_mapper is
 
-   signal reu_addr_d           : std_logic_vector(24 downto 0);
+   signal reu_addr_d           : std_logic_vector(18 downto 0);
    signal avm_preemptive_s     : std_logic;
    signal avm_preemptive_r     : std_logic;
    signal avm_preemptive_block : std_logic;
