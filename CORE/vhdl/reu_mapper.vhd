@@ -70,6 +70,32 @@ architecture synthesis of reu_mapper is
    signal active_s             : std_logic;
    signal active               : std_logic;
 
+   attribute mark_debug : string;
+   attribute mark_debug of reu_ext_cycle_i     : signal is "true";
+   attribute mark_debug of reu_ext_cycle_o     : signal is "true";
+   attribute mark_debug of reu_addr_i          : signal is "true";
+   attribute mark_debug of reu_dout_i          : signal is "true";
+   attribute mark_debug of reu_din_o           : signal is "true";
+   attribute mark_debug of reu_we_i            : signal is "true";
+   attribute mark_debug of reu_cs_i            : signal is "true";
+   attribute mark_debug of avm_write_o         : signal is "true";
+   attribute mark_debug of avm_read_o          : signal is "true";
+   attribute mark_debug of avm_address_o       : signal is "true";
+   attribute mark_debug of avm_writedata_o     : signal is "true";
+   attribute mark_debug of avm_byteenable_o    : signal is "true";
+   attribute mark_debug of avm_burstcount_o    : signal is "true";
+   attribute mark_debug of avm_readdata_i      : signal is "true";
+   attribute mark_debug of avm_readdatavalid_i : signal is "true";
+   attribute mark_debug of avm_waitrequest_i   : signal is "true";
+
+   attribute mark_debug of avm_preemptive_s     : signal is "true";
+   attribute mark_debug of avm_preemptive_r     : signal is "true";
+   attribute mark_debug of avm_preemptive_block : signal is "true";
+   attribute mark_debug of active_s             : signal is "true";
+   attribute mark_debug of active               : signal is "true";
+   attribute mark_debug of reu_rd_fifo_ready    : signal is "true";
+   attribute mark_debug of reu_rd_fifo_valid    : signal is "true";
+
 begin
 
    -- This is a massive hack!

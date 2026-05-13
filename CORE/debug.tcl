@@ -51,8 +51,8 @@ proc batch_insert_ila { depth } {
     foreach d $net_list {
         # name is root name of a bus, index is the bit index in the
         # bus
-        set name [regsub {\[[[:digit:]]+\]$} $d {}]
-        set index [regsub {^.*\[([[:digit:]]+)\]$} $d {\1}]
+        set name [regsub {\[-?[[:digit:]]+\]$} $d {}]
+        set index [regsub {^.*\[(-?[[:digit:]]+)\]$} $d {\1}]
         if {[string is integer -strict $index]} {
             if {![info exists max($name)]} {
                 set max($name) $index
@@ -218,7 +218,7 @@ proc batch_insert_ila { depth } {
         connect_debug_port ila_1/trig_in_ack [get_nets $trig_out_ack]
     } 
     set project_found [get_projects -quiet] 
-    if { $project_found != "New Project" } {
+    if { $project_found != "Project" } {
         puts "Saving constraints now in project [current_project -quiet]"
         save_constraints_as debug_constraints.xdc
     }    
