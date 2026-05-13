@@ -96,6 +96,32 @@ architecture synthesis of reu_mapper is
    attribute mark_debug of reu_rd_fifo_ready    : signal is "true";
    attribute mark_debug of reu_rd_fifo_valid    : signal is "true";
 
+   attribute mark_debug_clock : string;
+   attribute mark_debug_clock of reu_ext_cycle_i     : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_ext_cycle_o     : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_addr_i          : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_dout_i          : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_din_o           : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_we_i            : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_cs_i            : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_write_o         : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_read_o          : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_address_o       : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_writedata_o     : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_byteenable_o    : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_burstcount_o    : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_readdata_i      : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_readdatavalid_i : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_waitrequest_i   : signal is "CORE/clk_gen/main_clk_o";
+
+   attribute mark_debug_clock of avm_preemptive_s     : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_preemptive_r     : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of avm_preemptive_block : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of active_s             : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of active               : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_rd_fifo_ready    : signal is "CORE/clk_gen/main_clk_o";
+   attribute mark_debug_clock of reu_rd_fifo_valid    : signal is "CORE/clk_gen/main_clk_o";
+
 begin
 
    -- This is a massive hack!

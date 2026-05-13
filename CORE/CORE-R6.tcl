@@ -156,6 +156,7 @@ cd m2m-rom
 exec ./make_rom.sh <@stdin >@stdout 2>@stderr
 cd ..
 synth_design -top mega65_r6 -flatten_hierarchy none
+write_checkpoint -force mega65_r6_synth.dcp
 source debug.tcl
 opt_design
 place_design
