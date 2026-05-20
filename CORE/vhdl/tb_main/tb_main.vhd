@@ -47,6 +47,8 @@ architecture simulation of tb_main is
   constant M65_F7           : integer   := 3;
   constant M65_M            : integer   := 36;
   constant M65_RESTORE      : integer   := 75;
+  constant M65_F9           : integer   := 68; -- FREEZE
+  constant M65_7            : integer   := 24;
 
   signal   main_reset_core       : std_logic;
   signal   main_crt_loading      : std_logic;
@@ -277,53 +279,49 @@ begin
   -- This holds the C64 RAM (64kB)
   ---------------------------------------
 
-  c64_ram_proc : process
+  c64_ram_proc : process (clk_main)
     --
 
     type     ram_type is array (natural range 0 to 65535) of unsigned(7 downto 0);
     variable ram_v   : ram_type := (others => x"EE");
-    variable inject1_v : boolean  := true;
-    variable inject2_v : boolean  := true;
-    variable inject3_v : boolean  := true;
-    variable inject4_v : boolean  := true;
   begin
-    main_loop : loop
-      wait until rising_edge(clk_main);
-
-      if inject1_v and now >= 400 ms then
-        report "Press RESTORE";
-        kb_key_num       <= m65_RESTORE;
-        kb_key_pressed_n <= '0'; -- active low
-        inject1_v        := false;
-      end if;
-
-      if inject2_v and now >= 450 ms then
-        report "Release RESTORE";
-        kb_key_num       <= m65_RESTORE;
-        kb_key_pressed_n <= '1'; -- active low
-        inject2_v        := false;
-      end if;
-
-      if inject3_v and now >= 2000 ms then
-        report "Press M";
-        kb_key_num       <= m65_M;
-        kb_key_pressed_n <= '0'; -- active low
-        inject3_v        := false;
-      end if;
-
-      if inject4_v and now >= 2050 ms then
-        report "Release M";
-        kb_key_num       <= m65_M;
-        kb_key_pressed_n <= '1'; -- active low
-        inject4_v        := false;
-      end if;
-
+    if rising_edge(clk_main) then
       if c64_ram_we = '1' then
         ram_v(to_integer(c64_ram_addr)) := c64_ram_data_out;
       end if;
       c64_ram_data_in <= ram_v(to_integer(c64_ram_addr));
-    end loop main_loop;
+    end if;
   end process c64_ram_proc;
+
+
+  ---------------------------------------
+  -- This injects key-presses
+  ---------------------------------------
+
+  keyboard_proc : process
+  begin
+    kb_key_pressed_n <= '1';
+
+    wait for 700 ms;
+    kb_key_num       <= M65_F7;
+    kb_key_pressed_n <= '0';
+    wait for 50 ms;
+    kb_key_pressed_n <= '1';
+
+    wait for 7500 ms;
+    kb_key_num       <= M65_F9;
+    kb_key_pressed_n <= '0';
+    wait for 50 ms;
+    kb_key_pressed_n <= '1';
+
+    wait for 3000 ms;
+    kb_key_num       <= M65_7;
+    kb_key_pressed_n <= '0';
+    wait for 50 ms;
+    kb_key_pressed_n <= '1';
+
+    wait;
+  end process keyboard_proc;
 
 
   ---------------------------------------

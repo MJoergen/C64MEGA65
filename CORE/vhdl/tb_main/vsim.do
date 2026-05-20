@@ -93,7 +93,7 @@ vlog \
 
 # Run simulation
 vsim -voptargs=+acc -t ps \
-    -gG_CRT_FILE_NAME=Action_Replay_V6.0_6.0_1989_PAL.crt \
+    -gG_CRT_FILE_NAME=snappyrom-5.34-pal.crt \
     tb_main glbl
 
 do wave.do

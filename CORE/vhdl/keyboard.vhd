@@ -69,7 +69,8 @@ entity keyboard is
       cia1_pbo_i           : in std_logic_vector(7 downto 0);
       
       -- Restore key = NMI
-      restore_n            : out std_logic
+      restore_n            : out std_logic;
+      freeze_n             : out std_logic
    );
 end keyboard;
 
@@ -184,6 +185,7 @@ begin
    joy_2_fire_n_o  <= '1';
 
    restore_n   <= key_pressed_n(m65_restore);
+   freeze_n    <= key_pressed_n(m65_f9);
    
    keyboard_state : process(clk_main_i)
    begin

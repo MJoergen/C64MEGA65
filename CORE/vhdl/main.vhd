@@ -272,6 +272,7 @@ architecture synthesis of main is
 
   -- the Restore key is special : it creates a non maskable interrupt (NMI)
   signal   restore_key_n : std_logic;
+  signal   freeze_key_n  : std_logic; -- Used for SIMCRT
 
   -- C64's IEC signals
   signal   c64_iec_clk_out  : std_logic;
@@ -1008,7 +1009,7 @@ begin
         -- Ultimax mode and VIC accesses the bus: we need to translate the address, see comment about "The PLA Dissected" above
         crt_addr_bus_o <= "11" & c64_ram_addr_o(13 downto 0);
       end if;
-      core_nmi_n <= (not crt_nmi) and restore_key_n;
+      core_nmi_n <= not crt_nmi;
     else
       -- Use hardware slot
       core_game_n  <= cart_game_n;
@@ -1171,8 +1172,8 @@ begin
       exrom_o        => crt_exrom,
       game_o         => crt_game,
       roml_we_o      => crt_roml_we,
-      freeze_key_i   => not restore_key_n,
-      mod_key_i      => '0',
+      freeze_key_i   => (not restore_key_n) or (not freeze_key_n),
+      mod_key_i      => not restore_key_n,
       nmi_o          => crt_nmi,
       nmi_ack_i      => core_nmi_ack
     ); -- cartridge_inst
@@ -1285,7 +1286,8 @@ begin
       cia1_pbo_i      => cia1_pb_out,
 
       -- Restore key = NMI
-      restore_n       => restore_key_n
+      restore_n       => restore_key_n,
+      freeze_n        => freeze_key_n
     ); -- keyboard_inst
 
   --------------------------------------------------------------------------------------------------
