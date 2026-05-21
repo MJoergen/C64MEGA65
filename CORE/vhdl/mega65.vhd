@@ -352,8 +352,6 @@ constant C_MENU_VGA_15KHZCS   : natural := 77;
 subtype C_MENU_OSM_SCALING is natural range 91 downto 83;
 
 -- RAMs for the C64
-signal qnice_c64_ram_we             : std_logic;
-signal qnice_c64_ram_data           : std_logic_vector(7 downto 0);  -- The actual RAM of the C64
 signal qnice_c64_mount_buf_ram_we   : std_logic;
 signal qnice_c64_mount_buf_ram_data : std_logic_vector(7 downto 0);  -- Disk mount buffer
 
@@ -797,7 +795,6 @@ begin
       -- avoid latches
       qnice_dev_data_o           <= x"EEEE";
       qnice_dev_wait_o           <= '0';
-      qnice_c64_ram_we           <= '0';
       qnice_c64_qnice_ce         <= '0';
       qnice_c64_qnice_we         <= '0';
       qnice_c64_mount_buf_ram_we <= '0';
