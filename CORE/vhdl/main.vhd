@@ -375,7 +375,6 @@ architecture synthesis of main is
   signal   core_nmi_ack         : std_logic;
   signal   core_ba              : std_logic;
   signal   core_irq_n           : std_logic;
-  signal   core_dma             : std_logic;
   signal   core_exrom_n         : std_logic;
   signal   core_game_n          : std_logic;
   signal   core_umax_romh       : std_logic;
@@ -387,6 +386,13 @@ architecture synthesis of main is
   signal   core_phi2            : std_logic;
   signal   core_phi2_prev       : std_logic;
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
+
+  signal   core_dma_req         : std_logic;
+  signal   core_dma_cycle       : std_logic;
+  signal   core_dma_addr        : unsigned(15 downto 0);
+  signal   core_dma_dout        : unsigned(7 downto 0);
+  signal   core_dma_din         : unsigned(7 downto 0);
+  signal   core_dma_we          : std_logic;
 
   -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
   signal   cart_a_pre           : unsigned(15 downto 0); -- combinational, includes Ultimax override
@@ -701,13 +707,13 @@ begin
       phi2          => core_phi2,          -- output
 
       -- dma access
-      dma_req       => core_dma,                -- input
-      dma_cycle     => reu_dma_cycle,           -- output
-      dma_addr      => unsigned(reu_dma_addr),  -- input
-      dma_dout      => unsigned(reu_dma_dout),  -- input
-      dma_din       => reu_dma_din,             -- output
-      dma_we        => reu_dma_we,              -- input
-      irq_ext_n     => not reu_irq,             -- input
+      dma_req       => core_dma_req,       -- input
+      dma_cycle     => core_dma_cycle,     -- output
+      dma_addr      => core_dma_addr,      -- input
+      dma_dout      => core_dma_dout,      -- input
+      dma_din       => core_dma_din,       -- output
+      dma_we        => core_dma_we,        -- input
+      irq_ext_n     => not reu_irq,        -- input
 
       -- paddle interface
       pot1          => pot1_x_i,
@@ -771,7 +777,8 @@ begin
       c64rom_data_i => c64rom_data_i,
       c64rom_data_o => c64rom_data_o
     ); -- fpga64_sid_iec_inst
-    
+
+
   --------------------------------------------------------------------------------------------------
   -- Expansion Port (aka Cartridge Port) handling:
   --    * MEGA65's hardware expansion port
@@ -987,7 +994,13 @@ begin
       end if;
     end if;
 
-    core_dma <= core_dma_v;
+    core_dma_req  <= core_dma_v;
+    core_dma_addr <= unsigned(reu_dma_addr);
+    core_dma_dout <= unsigned(reu_dma_dout);
+    core_dma_we   <= reu_dma_we;
+    reu_dma_cycle <= core_dma_cycle;
+    reu_dma_din   <= core_dma_din;
+
   end process handle_cores_expansion_port_signals_proc;
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
