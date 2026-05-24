@@ -9,6 +9,10 @@ Version 6 - MONTH DAY, 2026
 
 ## @TODO: Don't forget to put these closed issues into VERSIONS.md
 
+* https://github.com/MJoergen/C64MEGA65/issues/217
+  Notee to self: Examine the fix: Is RESTORE still generating an NMI as it should? Which key is the freeze key now? Is this documented somewhere? Any issues that need to be opened for Boris?
+  And - reminder - a change in T65.vhd was performed; double-check, too.
+
 ## New Features
 
 * The simulated REU can now be used in parallel to hardware cartridges and in

@@ -284,6 +284,11 @@ architecture synthesis of main is
   -- Hardware IEC port
   signal   hw_iec_clk_n_in  : std_logic;
   signal   hw_iec_data_n_in : std_logic;
+  signal   hw_iec_srq_n_in  : std_logic;
+
+  -- 2-FF synchronizer for the asynchronous IEC SRQ input (see https://github.com/MJoergen/C64MEGA65/issues/219)
+  signal   iec_srq_n_d      : std_logic := '1';
+  signal   iec_srq_n_sync   : std_logic := '1';
 
   -- Simulated IEC drives
   signal   iec_drive_ce : std_logic;                                           -- chip enable for iec_drive (clock divider, see generate_drive_ce below)
@@ -762,7 +767,12 @@ begin
       -- cass_sense  => cass_rtc,         -- input
       cass_sense    => '1',
 
-      cass_read     => '1',                -- default is '1' according to MiSTer's c1530.vhd
+      -- On a real C64 the cassette read line and the IEC SRQ line share the same PCB trace and
+      -- both feed CIA1's /FLAG pin (edge-triggered IRQ source). We route the IEC SRQ here so that
+      -- IEC devices using SRQ (e.g. the Meatloaf modem emulation) work. Both lines are low active,
+      -- so we AND them; the cassette read line is still hardcoded '1' (inactive) until #187 wires it.
+      -- See https://github.com/MJoergen/C64MEGA65/issues/219
+      cass_read     => hw_iec_srq_n_in and '1',
 
       -- Access custom Kernal: C64's Basic and DOS
       c64rom_clk_i  => c64_clk_sd_i,
@@ -1302,14 +1312,15 @@ begin
     hw_iec_clk_n_in  <= '1';
     hw_iec_data_n_in <= '1';
 
-    -- According to https://www.c64-wiki.com/wiki/Serial_Port, the C64 does not use the SRQ line and therefore
-    -- we are at this time also not using it. The wiki article states, hat even though it is not used, it is
-    -- still connected with the read line of the cassette port (although this can only detect signal edges,
-    -- but not signal levels).
-    -- @TODO: Investigate, if there are some edge-case use-cases that are using this "feature" and
-    -- in this case enhance our simulation
+    -- SRQ: on a real C64 this line is connected to the cassette read line and feeds CIA1's /FLAG pin,
+    -- generating an IRQ on falling edges. The C64 itself never drives SRQ (it only senses it), so we
+    -- keep the output driver disabled and only read iec_srq_n_i. Some IEC devices use SRQ to interrupt
+    -- the C64 (e.g. the Meatloaf modem emulation), so we route the (synchronized) input to CIA1 /FLAG
+    -- via hw_iec_srq_n_in below. Default '1' (inactive) when the hardware IEC port is not enabled.
+    -- See https://github.com/MJoergen/C64MEGA65/issues/219
     iec_srq_en_o     <= '0';
     iec_srq_n_o      <= '1';
+    hw_iec_srq_n_in  <= '1';
 
     if iec_hardware_port_en_i = '1' then
       -- The IEC bus is low active. By default, we let the hardware bus lines float by setting the NC7SZ126P5X
@@ -1329,12 +1340,27 @@ begin
       hw_iec_clk_n_in  <= iec_clk_n_i;
       hw_iec_data_n_in <= iec_data_n_i;
 
+      -- Route the synchronized SRQ input to CIA1 /FLAG (only while the hardware IEC port is active)
+      hw_iec_srq_n_in  <= iec_srq_n_sync;
+
       -- Write to the IEC port by pulling the signals low and otherwise let them float (using the NC7SZ126P5X chip)
       -- We need to invert the logic, because if the C64 wants to pull something to LOW we need to ENABLE the NC7SZ126P5X's OE
       iec_clk_en_o     <= not c64_iec_clk_out;
       iec_data_en_o    <= not c64_iec_data_out;
     end if;
   end process handle_hardware_iec_proc;
+
+  -- 2-FF synchronizer for the asynchronous IEC SRQ pin into the main clock domain.
+  -- We deliberately do NOT debounce: SRQ feeds CIA1's edge-triggered /FLAG pin and debouncing
+  -- could swallow short but legitimate pulses. The ~2 cycle latency (~63 ns) is irrelevant
+  -- compared to the C64's ~1 us CPU cycle. See https://github.com/MJoergen/C64MEGA65/issues/219
+  iec_srq_sync_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      iec_srq_n_d    <= iec_srq_n_i;
+      iec_srq_n_sync <= iec_srq_n_d;
+    end if;
+  end process iec_srq_sync_proc;
 
   --------------------------------------------------------------------------------------------------
   -- MiSTer IEC drives
