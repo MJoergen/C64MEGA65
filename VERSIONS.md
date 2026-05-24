@@ -46,6 +46,10 @@ Version 6 - MONTH DAY, 2026
   101% and EasyFlash titles that use cartridge RAM for saves or high scores.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/208)
 
+* The SRQ line of the IEC bus is now connected to CIA 1's /FLAG pin, just as
+  on a real C64. This makes IEC devices that use SRQ to interrupt the C64
+  work, such as the modem emulation of the Meatloaf device.
+
 * Implemented proper RAM cold-start pattern, which raises compatibility with
   some original software quite a bit. This also fixes Q-Bert.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
@@ -57,6 +61,9 @@ Version 6 - MONTH DAY, 2026
 
   - Idun
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/204)
+
+  - Meatloaf
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/219)
 
 * Simulated cartridges (`*.crt`) are now supporting:
 
