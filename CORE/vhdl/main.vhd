@@ -517,6 +517,9 @@ architecture synthesis of main is
     );
   end component rtcf83;
 
+  signal core_phi2_d    : std_logic;
+  signal core_phi2_fall : std_logic;
+
 begin
 
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
@@ -817,6 +820,9 @@ begin
     end if;
   end process cart_output_pipeline_proc;
 
+  core_phi2_d    <= core_phi2 when rising_edge(clk_main_i);
+  core_phi2_fall <= core_phi2_d and not core_phi2;
+
   -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
   begin
@@ -866,34 +872,45 @@ begin
     cart_exrom_o    <= '1';
     cart_nmi_o      <= '1';
     cart_irq_o      <= '1';
-    cart_roml_o     <= '0';
-    cart_romh_o     <= '0';
-    cart_ba_o       <= '0';
-    cart_rw_o       <= '0';
-    cart_io1_o      <= '0';
-    cart_io2_o      <= '0';
-    cart_a_o        <= (others => '0');
-    cart_d_o        <= (others => '0');
+    cart_roml_o     <= '1';
+    cart_romh_o     <= '1';
+    cart_ba_o       <= '1'; -- Controlled by cart_ctrl_oe_o
+    cart_rw_o       <= '1'; -- Controlled by cart_ctrl_oe_o
+    cart_io1_o      <= '1'; -- Controlled by cart_ctrl_oe_o
+    cart_io2_o      <= '1'; -- Controlled by cart_ctrl_oe_o
+    cart_a_o        <= (others => '1');
+    cart_d_o        <= (others => '1');
 
     cart_nmi_n      <= '1';
     cart_irq_n      <= '1';
     cart_dma_n      <= '1';
     cart_exrom_n    <= '1';
     cart_game_n     <= '1';
-    data_from_cart  <= x"00";
+    data_from_cart  <= x"FF";
 
     -- memory access flags
     cart_roml_n     <= not core_roml;
-    cart_romh_n     <= (not core_romh) and (not core_umax_romh);                                                                                -- normal ROMH and Ultimax VIC access ROMH
+    cart_romh_n     <= (not core_romh) and (not core_umax_romh);    -- normal ROMH and Ultimax VIC access ROMH
     cart_io1_n      <= not core_ioe;
     cart_io2_n      <= not core_iof;
 
+    -- Default is to connect the CORE's DMA interface to the SIMREU
+    core_dma_addr <= unsigned(reu_dma_addr);
+    core_dma_dout <= unsigned(reu_dma_dout);
+    core_dma_we   <= reu_dma_we;
+    reu_dma_cycle <= core_dma_cycle;
+    reu_dma_din   <= core_dma_din;
+
     -- Mode = Use hardware slot
     if c64_exp_port_mode_i(C_SIM_CRT) = '0' then
+
       -- Hardcoded to WRITE-ONLY (OUTPUT) for the time being
-      cart_ctrl_oe_o  <= '1';
       cart_roml_oe_o  <= '1';
       cart_romh_oe_o  <= '1';
+
+      -- Default is that we are driving the address bus and the BA/RW/IO1/IO2 control signals.
+      cart_addr_oe_o  <= '1';
+      cart_ctrl_oe_o  <= '1';
 
       -- Bi-directional RESET handling:
       -- Default is: READ (aka sense reset from the cartridge). We are switching this to WRITE
@@ -928,13 +945,35 @@ begin
       cart_exrom_n    <= cart_exrom_i;
       cart_game_n     <= cart_game_i;
 
-      -- @TODO: As soon as we want to support DMA-enabled cartridges,
-      -- we need to treat the address bus as a bi-directional port
-      cart_addr_oe_o  <= '1';
+      if cart_dma_i = '0' then
+
+        -- When in DMA mode we need to sense the cart_rw_i pin. However, we also need to drive the cart_ba_o output.
+        -- Due to a hardware limitation, we can not do both at the same time. Fortunately, we don't need to,
+        -- since when BA is to be driven low, we don't care about the RW signal.
+        cart_ctrl_oe_o  <= not core_ba;
+
+        -- When in DMA mode, the cartridge is driving the address bus
+        cart_addr_oe_o  <= '0';
+
+        -- In DMA mode, connect cartridge port to CORE's DMA interface.
+        core_dma_addr  <= unsigned(cart_a_i);
+        core_dma_dout  <= unsigned(cart_d_i);
+        core_dma_we    <= (not cart_rw_i) and core_phi2_fall; -- Assert for one clock cycle
+        cart_d_o       <= core_dma_din;
+        cart_data_oe_o <= cart_rw_i;
+
+        if core_ba = '0' then
+          -- When VIC needs the bus, set cartridge signals to safe values
+          cart_ctrl_oe_o <= '1';
+          cart_ba_o      <= '0';
+          cart_io1_o     <= '1';
+          cart_io2_o     <= '1';
+          cart_rw_o      <= '1';
+        end if;
 
       -- Switch the data lines bi-directionally so that the CPU can also
       -- write to the cartridge, e.g. for bank switching
-      if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or core_umax_unmapped = '1') then
+      elsif c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or core_umax_unmapped = '1') then
         cart_data_oe_o <= '0';  -- input
         data_from_cart <= cart_d_i;
       else
@@ -995,11 +1034,6 @@ begin
     end if;
 
     core_dma_req  <= core_dma_v;
-    core_dma_addr <= unsigned(reu_dma_addr);
-    core_dma_dout <= unsigned(reu_dma_dout);
-    core_dma_we   <= reu_dma_we;
-    reu_dma_cycle <= core_dma_cycle;
-    reu_dma_din   <= core_dma_din;
 
   end process handle_cores_expansion_port_signals_proc;
 
