@@ -25,6 +25,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A13    | 05/09/26 | 2c2e593 | SIM REU: Move backing store down 8 kB to guard top-of-HyperRAM bursts (issue #214)
 | WIP-V6-A13X1  | 05/10/26 | aa7b7b2 | SIM REU: Only use DF00-DF1F internally, keeping DF20-DFFF on the cartridge port (issue #208)
 | WIP-V6-A14    | 05/21/26 | 1af0705 | SIM CRT: Add support for separate FREEZE button (issue #217)
+| WIP-V6-A14X1  | 05/28/26 | ab13bf1 | HW DMA: First attempt (issue #199)
 
 ## Version 5.2
 
