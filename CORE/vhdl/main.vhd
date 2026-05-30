@@ -517,9 +517,6 @@ architecture synthesis of main is
     );
   end component rtcf83;
 
-  signal core_phi2_d    : std_logic;
-  signal core_phi2_fall : std_logic;
-
 begin
 
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
@@ -820,9 +817,6 @@ begin
     end if;
   end process cart_output_pipeline_proc;
 
-  core_phi2_d    <= core_phi2 when rising_edge(clk_main_i);
-  core_phi2_fall <= core_phi2_d and not core_phi2;
-
   -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
   begin
@@ -958,12 +952,13 @@ begin
         -- In DMA mode, connect cartridge port to CORE's DMA interface.
         core_dma_addr  <= unsigned(cart_a_i);
         core_dma_dout  <= unsigned(cart_d_i);
-        core_dma_we    <= (not cart_rw_i) and core_phi2_fall; -- Assert for one clock cycle
+        core_dma_we    <= not cart_rw_i;
         cart_d_o       <= core_dma_din;
         cart_data_oe_o <= cart_rw_i;
 
         if core_ba = '0' then
           -- When VIC needs the bus, set cartridge signals to safe values
+          cart_data_oe_o <= '0'; -- Leave data bus floating
           cart_ctrl_oe_o <= '1';
           cart_ba_o      <= '0';
           cart_io1_o     <= '1';
