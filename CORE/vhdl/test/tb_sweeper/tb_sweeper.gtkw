@@ -1,0 +1,87 @@
+[*]
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Wed Jun  3 11:17:41 2026
+[*]
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sweeper/tb_sweeper.ghw"
+[dumpfile_mtime] "Wed Jun  3 11:17:26 2026"
+[dumpfile_size] 17967
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65.develop/CORE/vhdl/test/tb_sweeper/tb_sweeper.gtkw"
+[timestart] 142800000
+[size] 1654 1031
+[pos] -215 -92
+*-26.357327 300000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.tb_sweeper.
+[treeopen] top.tb_sweeper.sweeper_inst.
+[sst_width] 210
+[signals_width] 248
+[sst_expanded] 1
+[sst_vpaned_height] 286
+@28
+top.tb_sweeper.sweeper_inst.clk_i
+top.tb_sweeper.sweeper_inst.rst_i
+top.tb_sweeper.sweeper_inst.start_i
+top.tb_sweeper.sweeper_inst.busy_o
+@22
+#{top.tb_sweeper.sweeper_inst.crc_o[15:0]} top.tb_sweeper.sweeper_inst.crc_o[15] top.tb_sweeper.sweeper_inst.crc_o[14] top.tb_sweeper.sweeper_inst.crc_o[13] top.tb_sweeper.sweeper_inst.crc_o[12] top.tb_sweeper.sweeper_inst.crc_o[11] top.tb_sweeper.sweeper_inst.crc_o[10] top.tb_sweeper.sweeper_inst.crc_o[9] top.tb_sweeper.sweeper_inst.crc_o[8] top.tb_sweeper.sweeper_inst.crc_o[7] top.tb_sweeper.sweeper_inst.crc_o[6] top.tb_sweeper.sweeper_inst.crc_o[5] top.tb_sweeper.sweeper_inst.crc_o[4] top.tb_sweeper.sweeper_inst.crc_o[3] top.tb_sweeper.sweeper_inst.crc_o[2] top.tb_sweeper.sweeper_inst.crc_o[1] top.tb_sweeper.sweeper_inst.crc_o[0]
+@28
+top.tb_sweeper.sweeper_inst.wbus_cyc_o
+top.tb_sweeper.sweeper_inst.wbus_stall_i
+top.tb_sweeper.sweeper_inst.wbus_stb_o
+@22
+#{top.tb_sweeper.sweeper_inst.wbus_addr_o[3:0]} top.tb_sweeper.sweeper_inst.wbus_addr_o[3] top.tb_sweeper.sweeper_inst.wbus_addr_o[2] top.tb_sweeper.sweeper_inst.wbus_addr_o[1] top.tb_sweeper.sweeper_inst.wbus_addr_o[0]
+@28
+top.tb_sweeper.sweeper_inst.wbus_we_o
+@22
+#{top.tb_sweeper.sweeper_inst.wbus_wrdat_o[31:0]} top.tb_sweeper.sweeper_inst.wbus_wrdat_o[31] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[30] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[29] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[28] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[27] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[26] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[25] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[24] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[23] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[22] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[21] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[20] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[19] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[18] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[17] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[16] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[15] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[14] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[13] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[12] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[11] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[10] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[9] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[8] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[7] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[6] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[5] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[4] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[3] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[2] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[1] top.tb_sweeper.sweeper_inst.wbus_wrdat_o[0]
+@28
+top.tb_sweeper.sweeper_inst.wbus_ack_i
+@c00023
+#{top.tb_sweeper.sweeper_inst.wbus_rddat_i[31:0]} top.tb_sweeper.sweeper_inst.wbus_rddat_i[31] top.tb_sweeper.sweeper_inst.wbus_rddat_i[30] top.tb_sweeper.sweeper_inst.wbus_rddat_i[29] top.tb_sweeper.sweeper_inst.wbus_rddat_i[28] top.tb_sweeper.sweeper_inst.wbus_rddat_i[27] top.tb_sweeper.sweeper_inst.wbus_rddat_i[26] top.tb_sweeper.sweeper_inst.wbus_rddat_i[25] top.tb_sweeper.sweeper_inst.wbus_rddat_i[24] top.tb_sweeper.sweeper_inst.wbus_rddat_i[23] top.tb_sweeper.sweeper_inst.wbus_rddat_i[22] top.tb_sweeper.sweeper_inst.wbus_rddat_i[21] top.tb_sweeper.sweeper_inst.wbus_rddat_i[20] top.tb_sweeper.sweeper_inst.wbus_rddat_i[19] top.tb_sweeper.sweeper_inst.wbus_rddat_i[18] top.tb_sweeper.sweeper_inst.wbus_rddat_i[17] top.tb_sweeper.sweeper_inst.wbus_rddat_i[16] top.tb_sweeper.sweeper_inst.wbus_rddat_i[15] top.tb_sweeper.sweeper_inst.wbus_rddat_i[14] top.tb_sweeper.sweeper_inst.wbus_rddat_i[13] top.tb_sweeper.sweeper_inst.wbus_rddat_i[12] top.tb_sweeper.sweeper_inst.wbus_rddat_i[11] top.tb_sweeper.sweeper_inst.wbus_rddat_i[10] top.tb_sweeper.sweeper_inst.wbus_rddat_i[9] top.tb_sweeper.sweeper_inst.wbus_rddat_i[8] top.tb_sweeper.sweeper_inst.wbus_rddat_i[7] top.tb_sweeper.sweeper_inst.wbus_rddat_i[6] top.tb_sweeper.sweeper_inst.wbus_rddat_i[5] top.tb_sweeper.sweeper_inst.wbus_rddat_i[4] top.tb_sweeper.sweeper_inst.wbus_rddat_i[3] top.tb_sweeper.sweeper_inst.wbus_rddat_i[2] top.tb_sweeper.sweeper_inst.wbus_rddat_i[1] top.tb_sweeper.sweeper_inst.wbus_rddat_i[0]
+@29
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[31]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[30]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[29]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[28]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[27]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[26]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[25]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[24]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[23]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[22]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[21]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[20]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[19]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[18]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[17]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[16]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[15]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[14]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[13]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[12]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[11]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[10]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[9]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[8]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[7]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[6]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[5]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[4]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[3]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[2]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[1]
+top.tb_sweeper.sweeper_inst.wbus_rddat_i[0]
+@1401201
+-group_end
+@420
+top.tb_sweeper.sweeper_inst.state
+@22
+#{top.tb_sweeper.sweeper_inst.crc_cur[15:0]} top.tb_sweeper.sweeper_inst.crc_cur[15] top.tb_sweeper.sweeper_inst.crc_cur[14] top.tb_sweeper.sweeper_inst.crc_cur[13] top.tb_sweeper.sweeper_inst.crc_cur[12] top.tb_sweeper.sweeper_inst.crc_cur[11] top.tb_sweeper.sweeper_inst.crc_cur[10] top.tb_sweeper.sweeper_inst.crc_cur[9] top.tb_sweeper.sweeper_inst.crc_cur[8] top.tb_sweeper.sweeper_inst.crc_cur[7] top.tb_sweeper.sweeper_inst.crc_cur[6] top.tb_sweeper.sweeper_inst.crc_cur[5] top.tb_sweeper.sweeper_inst.crc_cur[4] top.tb_sweeper.sweeper_inst.crc_cur[3] top.tb_sweeper.sweeper_inst.crc_cur[2] top.tb_sweeper.sweeper_inst.crc_cur[1] top.tb_sweeper.sweeper_inst.crc_cur[0]
+#{top.tb_sweeper.sweeper_inst.crc_data[7:0]} top.tb_sweeper.sweeper_inst.crc_data[7] top.tb_sweeper.sweeper_inst.crc_data[6] top.tb_sweeper.sweeper_inst.crc_data[5] top.tb_sweeper.sweeper_inst.crc_data[4] top.tb_sweeper.sweeper_inst.crc_data[3] top.tb_sweeper.sweeper_inst.crc_data[2] top.tb_sweeper.sweeper_inst.crc_data[1] top.tb_sweeper.sweeper_inst.crc_data[0]
+#{top.tb_sweeper.sweeper_inst.crc_new[15:0]} top.tb_sweeper.sweeper_inst.crc_new[15] top.tb_sweeper.sweeper_inst.crc_new[14] top.tb_sweeper.sweeper_inst.crc_new[13] top.tb_sweeper.sweeper_inst.crc_new[12] top.tb_sweeper.sweeper_inst.crc_new[11] top.tb_sweeper.sweeper_inst.crc_new[10] top.tb_sweeper.sweeper_inst.crc_new[9] top.tb_sweeper.sweeper_inst.crc_new[8] top.tb_sweeper.sweeper_inst.crc_new[7] top.tb_sweeper.sweeper_inst.crc_new[6] top.tb_sweeper.sweeper_inst.crc_new[5] top.tb_sweeper.sweeper_inst.crc_new[4] top.tb_sweeper.sweeper_inst.crc_new[3] top.tb_sweeper.sweeper_inst.crc_new[2] top.tb_sweeper.sweeper_inst.crc_new[1] top.tb_sweeper.sweeper_inst.crc_new[0]
+@28
+top.tb_sweeper.sweeper_inst.data_start
+top.tb_sweeper.sweeper_inst.data_valid
+top.tb_sweeper.sweeper_inst.data_final
+[pattern_trace] 1
+[pattern_trace] 0
