@@ -59,6 +59,14 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 
 -- START YOUR CONFIGURATION BELOW THIS LINE
 
+-- The core's version string. Single source of truth: this constant is used
+-- by SCR_WELCOME, HELP_1, HELP_2 and HELP_3 (the welcome and help screens
+-- just below), by CORENAME (the serial-terminal banner further down) and
+-- by CFG_FILE (the on-SD-card config filename further down). Update this
+-- one line when releasing a new version; make_release.py parses it and
+-- uses it as the official version string for that release.
+constant CORE_VERSION : string := "WIP-V6-A15";
+
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
 --
@@ -77,7 +85,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 
 constant SCR_WELCOME : string :=
 
-   "\n Commodore 64 for MEGA65 Version WIP-V6-A15\n\n" &
+   "\n Commodore 64 for MEGA65 Version " & CORE_VERSION & "\n\n" &
 
    " MiSTer port 2026 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n\n" &
@@ -97,7 +105,7 @@ constant SCR_WELCOME : string :=
 
 constant HELP_1 : string :=
 
-   "\n Commodore 64 for MEGA65 Version WIP-V6-A15\n\n" &
+   "\n Commodore 64 for MEGA65 Version " & CORE_VERSION & "\n\n" &
 
    " MiSTer port 2026 by MJoergen & sy2002\n" &
    " Powered by MiSTer2MEGA65\n\n" &
@@ -110,7 +118,7 @@ constant HELP_1 : string :=
    "   with arbitrary sub-folders\n" &
    " * Both SD card slots are supported. Back\n" &
    "   slot takes precedence over bottom slot\n" &
-   " * Copy the c64mega65 config file to your\n" &
+   " * Copy the C64MEGA65 config file to your\n" &
    "   /c64 folder so that your menu settings\n" &
    "   are being saved\n" &
    " * If you use any analog display device\n" &
@@ -128,7 +136,7 @@ constant HELP_1 : string :=
 
 constant HELP_2 : string :=
 
-   "\n Commodore 64 for MEGA65 Version WIP-V6-A15\n\n" &
+   "\n Commodore 64 for MEGA65 Version " & CORE_VERSION & "\n\n" &
 
    " When browsing the menu:\n\n" &
 
@@ -159,7 +167,7 @@ constant HELP_2 : string :=
 
 constant HELP_3 : string :=
 
-   "\n Commodore 64 for MEGA65 Version WIP-V6-A15\n\n" &
+   "\n Commodore 64 for MEGA65 Version " & CORE_VERSION & "\n\n" &
 
    " SID:\n\n" &
 
@@ -225,7 +233,7 @@ constant SEL_CFG_FILE      : std_logic_vector(15 downto 0) := x"0101";
 -- START YOUR CONFIGURATION BELOW THIS LINE
 
 constant DIR_START         : string := "/c64";
-constant CFG_FILE          : string := "/c64/c64mega65";
+constant CFG_FILE          : string := "/c64/c64mega65-" & CORE_VERSION;
 
 --------------------------------------------------------------------------------------------------------------------
 -- General configuration settings: Reset, Pause, OSD behavior, Ascal, etc. (Selector 0x0110)
@@ -304,7 +312,7 @@ constant SEL_CORENAME      : std_logic_vector(15 downto 0) := x"0200";
 
 -- Currently this is only used in the debug console. Use the welcome screen and the
 -- help system to display the name and version of your core to the end user
-constant CORENAME          : string := "Commodore 64 for MEGA65 Version WIP-V6-A15";
+constant CORENAME          : string := "Commodore 64 for MEGA65 Version " & CORE_VERSION;
 
 --------------------------------------------------------------------------------------------------------------------
 -- "Help" menu / Options menu  (Selectors 0x0300 .. 0x0312): DO NOT TOUCH

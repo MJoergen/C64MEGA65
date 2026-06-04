@@ -7,9 +7,10 @@ Given a release name (e.g. V6, V6.1, WIP-V6-A6, WIP-V6-A13X1, or with
 validates the version string against config.vhd, sanity-checks alpha releases
 against doc/inofficial.md and the git history unless --ignore was passed,
 copies the per-board bitstreams from CORE/CORE-R{3..6}.runs/impl_1/, produces
-.cor files via the external `bit2core` tool, generates the `c64mega65` config
-file via M2M/tools/make_config.sh, and copies VERSIONS.md into the release
-folder. Alpha releases also copy doc/inofficial.md (timestamps preserved).
+.cor files via the external `bit2core` tool, generates the
+`c64mega65-<version>` config file via M2M/tools/make_config.sh, and copies
+VERSIONS.md into the release folder. Alpha releases also copy
+doc/inofficial.md (timestamps preserved).
 """
 
 import argparse
@@ -30,7 +31,6 @@ CORE_NAME       = "C64 for MEGA65"
 CORE_FILE_BASE  = "C64MEGA65"
 BIT2CORE_TAIL   = "=default,c64cart+c64cart"
 BOARD_REVS      = ("R3", "R4", "R5", "R6")
-EXPECTED_OCCURRENCES_IN_CONFIG = 5
 
 # Regex for the three accepted version conventions.
 RE_MAJOR = re.compile(r"^V(\d+)$")
@@ -135,28 +135,40 @@ def find_repo_root() -> Path:
 # config.vhd check
 # ---------------------------------------------------------------------------
 
+_CORE_VERSION_RE = re.compile(
+    r'constant\s+CORE_VERSION\s*:\s*string\s*:=\s*"([^"]+)"\s*;'
+)
+
+
 def check_config_vhd(repo: Path, version: str) -> None:
+    """Confirm the CORE_VERSION constant in config.vhd matches the CLI version.
+
+    Since GitHub issue #182, the version string lives in exactly one place in
+    config.vhd — the `CORE_VERSION` constant — and every welcome/help screen,
+    the CORENAME serial-terminal banner, and the CFG_FILE on-SD-card filename
+    derive from it via VHDL string concatenation. We parse the constant out
+    and assert it matches `args.version`.
+    """
     cfg = repo / "CORE" / "vhdl" / "config.vhd"
     text = cfg.read_text(encoding="utf-8", errors="replace")
 
-    # Match the version as a whole "word" — i.e. preceded by a space and
-    # followed by a non-version character (\, ", end of line). This avoids
-    # matching V6 inside V6.1 or WIP-V6-A12.
-    pattern = re.compile(
-        r"(?<![A-Za-z0-9.\-])" + re.escape(version) + r"(?![A-Za-z0-9.\-])"
-    )
-    matches = pattern.findall(text)
-    n = len(matches)
+    matches = _CORE_VERSION_RE.findall(text)
+    if not matches:
+        die(f"Could not find a `constant CORE_VERSION : string := \"...\";` "
+            f"line in {cfg.relative_to(repo)}. Add one (see the section near "
+            f"the top of the user-configurable area) or rewrite this regex.")
+    if len(matches) > 1:
+        die(f"Found {len(matches)} `CORE_VERSION` constant assignments in "
+            f"{cfg.relative_to(repo)}; expected exactly one. Values: "
+            f"{', '.join(repr(m) for m in matches)}.")
 
-    if n == 0:
-        die(f"Version '{version}' not found in {cfg.relative_to(repo)}. "
-            f"Update config.vhd first (welcome screen, three help screens "
-            f"and CORENAME — {EXPECTED_OCCURRENCES_IN_CONFIG} places).")
-    if n != EXPECTED_OCCURRENCES_IN_CONFIG:
-        warn(f"Version '{version}' appears {n}x in {cfg.relative_to(repo)} "
-             f"(expected {EXPECTED_OCCURRENCES_IN_CONFIG}). Continuing anyway.")
-    else:
-        ok(f"Version '{version}' found {n}x in config.vhd.")
+    found = matches[0]
+    if found != version:
+        die(f"Version mismatch: command line says '{version}' but "
+            f"{cfg.relative_to(repo)} has `CORE_VERSION := \"{found}\"`. "
+            f"Update CORE_VERSION in config.vhd to '{version}' (or call the "
+            f"script with '{found}').")
+    ok(f"CORE_VERSION in config.vhd matches command line: '{version}'.")
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +361,8 @@ def copy_preserving_timestamps(src: Path, dst: Path) -> None:
 
 def generate_shell_config(repo: Path, dst: Path) -> None:
     """Run M2M/tools/make_config.sh to produce the QNICE Shell's persistence
-    file (the `/c64/c64mega65` config that stores the user's menu choices).
+    file (the `/c64/c64mega65-<version>` config that stores the user's menu
+    choices; see GitHub issue #182 for why the filename is versioned).
 
     The script uses a hard-coded relative path (`../../CORE/vhdl/config.vhd`)
     when 'auto' is requested, so we invoke it with cwd set to M2M/tools/.
@@ -359,7 +372,7 @@ def generate_shell_config(repo: Path, dst: Path) -> None:
     bash = shutil.which("bash")
     if not bash:
         die("'bash' not found in PATH. Cannot run make_config.sh to generate "
-            "the c64mega65 config file. Install bash (Git Bash on "
+            "the c64mega65-<version> config file. Install bash (Git Bash on "
             "Windows) and retry.")
 
     tools_dir = repo / "M2M" / "tools"
@@ -451,9 +464,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="make_release.py",
         description="Package a C64MEGA65 release: copy R3..R6 bitstreams, "
-                    "produce .cor files via bit2core, generate the c64mega65 "
-                    "config file and copy VERSIONS.md into the output folder. "
-                    "Alpha releases also copy inofficial.md.",
+                    "produce .cor files via bit2core, generate the "
+                    "c64mega65-<version> config file and copy VERSIONS.md "
+                    "into the output folder. Alpha releases also copy "
+                    "inofficial.md.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Version conventions:\n"
@@ -470,14 +484,14 @@ def main() -> None:
             "Output layout:\n"
             "  The second argument is a *parent* folder. The script creates\n"
             "  a subfolder named C64MEGA65-<version> in it and places the\n"
-            "  per-board .bit and .cor files, the c64mega65 config file\n"
-            "  and VERSIONS.md there. Alpha releases also include\n"
-            "  inofficial.md. Example:\n"
+            "  per-board .bit and .cor files, the c64mega65-<version>\n"
+            "  config file and VERSIONS.md there. Alpha releases also\n"
+            "  include inofficial.md. Example:\n"
             "  passing '~/Desktop'\n"
             "  with version V6.1 produces:\n"
             "    ~/Desktop/C64MEGA65-V6.1/\n"
             "      C64MEGA65-V6.1-R{3,4,5,6}.{bit,cor}\n"
-            "      c64mega65\n"
+            "      c64mega65-V6.1\n"
             "      VERSIONS.md\n"
             "  If the release subfolder already exists and is non-empty, the\n"
             "  script aborts unless -f / --force is passed.\n\n"
@@ -588,6 +602,15 @@ def main() -> None:
             stale_inofficial.unlink()
         elif stale_inofficial.exists():
             die(f"Cannot remove stale non-file artifact: {stale_inofficial}")
+    # Always remove a stale, unversioned `c64mega65` config file from the
+    # release folder. Pre-#182 releases produced it, and re-running the
+    # script in the same out folder would otherwise leave it behind next to
+    # the new c64mega65-<version> file and confuse end users.
+    stale_cfg = out / "c64mega65"
+    if stale_cfg.is_file() or stale_cfg.is_symlink():
+        stale_cfg.unlink()
+    elif stale_cfg.exists():
+        die(f"Cannot remove stale non-file artifact: {stale_cfg}")
     info(f"Parent folder:  {parent}")
     info(f"Release folder: {out}")
 
@@ -609,10 +632,12 @@ def main() -> None:
             die(f"[{rev}] bit2core did not produce {dst_cor}.")
         ok(f"[{rev}] {dst_cor.name} ({dst_cor.stat().st_size:,} bytes)")
 
-    # 10) Generate the c64mega65 Shell config file alongside the cores so
+    # 10) Generate the c64mega65-<version> config file alongside the cores so
     #     end users can drop it into /c64/ on their SD card to enable menu
-    #     persistence.
-    cfg_dst = out / "c64mega65"
+    #     persistence. The version suffix MUST match what CFG_FILE in
+    #     config.vhd produces (which derives from CORE_VERSION, validated by
+    #     check_config_vhd() earlier in this run).
+    cfg_dst = out / f"c64mega65-{args.version}"
     info(f"Generating config file {cfg_dst.name}")
     generate_shell_config(repo, cfg_dst)
     ok(f"{cfg_dst.name} ({cfg_dst.stat().st_size:,} bytes)")

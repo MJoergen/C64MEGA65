@@ -24,6 +24,13 @@ Version 6 - MONTH DAY, 2026
   compatible as it uses the built-in SDRAM instead of HyperRAM.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
+* The C64MEGA65 config file now carries the core version in its name (for
+  example `c64mega65-V6` instead of just `c64mega65`). This lets you keep
+  the config files of different core versions side by side in the same
+  `/c64` folder on your SD card, which is handy when you run, say, the
+  latest release in one MEGA65 core slot and an alpha core in another slot.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/182)
+
 ## Improved Compatibility of the Core
 
 * Generally improved hardware cartridge compatibility, thanks to two

@@ -284,23 +284,32 @@ digits are. Don't forget to go to the folder `m` and remove `mover.sh`.
 ## 16) The core is not remembering my settings
 
 Make sure that you have a `/c64` folder on your SD card and make sure that
-you copy the `c64mega65` file that came with the
+you copy the C64MEGA65 config file that came with the
 [ZIP file that contains Version 6](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
 to this very folder.
 
-When going from an older version of the C64 core to a newer version
-(for example from Version 5.2 to Version 6) you always need to overwrite your
-old `c64mega65` file by the new one that came with the
-[ZIP file](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241).
+Starting with Version 6, the C64MEGA65 config file's name includes the core
+version (for the V6 release it is `c64mega65-V6`; alpha builds use names like
+`c64mega65-WIP-V6-A15`, matching the version shown at the top of the welcome
+screen). This lets you keep the config files of different core versions side
+by side on the same SD card, which is handy when you run the latest release
+in one MEGA65 core slot and an alpha version in another. As a side effect,
+your menu settings from an older core version (e.g. from Version 5.2's
+`c64mega65` file) are not migrated automatically: you copy the new config
+file from the
+[ZIP file](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
+into `/c64` and reconfigure the menu to your liking. The old, unversioned
+`c64mega65` file from previous core versions is no longer used by Version 6
+and can be deleted.
 
-Important: Even if you have a `c64/c64mega65` file on your SD card: The core will
-not save any settings in case you switched between SD cards during a certain session.
-Next time you power-on the core, it will resume saving the settings until you switch
-between SD cards for the next time.
+Important: Even if you have a C64MEGA65 config file on your SD card: The core
+will not save any settings in case you switched between SD cards during a
+certain session. Next time you power-on the core, it will resume saving the
+settings until you switch between SD cards for the next time.
 [Learn more details here](https://c64.mega65.org/installation.html#config-file).
 
-Currently, we cannot automate this manual chore and need to ask users to copy the
-`c64mega65` file.
+Currently, we cannot automate this manual chore and need to ask users to copy
+the C64MEGA65 config file.
 [Track our efforts](https://github.com/MJoergen/C64MEGA65/issues/16) to change
 this by following
 [this GitHub issue](https://github.com/MJoergen/C64MEGA65/issues/16).

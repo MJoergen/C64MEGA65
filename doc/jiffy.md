@@ -96,4 +96,6 @@ Install and use JiffyDOS
 * If you want the core to remember that you seleced JiffyDOS next time
   you start the MEGA65, make sure that you that you also have the
   [config file](https://github.com/MJoergen/C64MEGA65/blob/master/README.md#config-file)
-  `c64mega65` installed in your `/c64` folder.
+  installed in your `/c64` folder. Starting with Version 6, this file's
+  name includes the core version (for example `c64mega65-V6`); use whatever
+  file came with your release ZIP.

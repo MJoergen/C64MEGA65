@@ -26,6 +26,9 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A13X1  | 05/10/26 | aa7b7b2 | SIM REU: Only use DF00-DF1F internally, keeping DF20-DFFF on the cartridge port (issue #208)
 | WIP-V6-A14    | 05/21/26 | 1af0705 | SIM CRT: Add support for separate FREEZE button (issue #217)
 | WIP-V6-A15    | 05/24/26 | 5ed6a70 | Wire the IEC SRQ line to CIA1 /FLAG so SRQ-using IEC devices work, e.g. Meatloaf modem emulation (issue #219)
+@TODO: When making Alpha 16, don't forget to also mention the new naming convention for the config file here in inofficial.md.
+Then mention the actual Alpha 16 Raison d'Être
+| WIP-V6-A16    | @TODO    | @TODO   | New naming convention for the C64MEGA65 config file (issue #182). @TODO
 
 ## Version 5.2
 

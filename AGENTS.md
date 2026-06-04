@@ -813,8 +813,13 @@ generated dirs; Vivado regenerates them.
 
 **Config file (saves user menu choices to SD):**
 The framework cannot grow files on FAT32. Generate a correctly-sized
-`/c64/c64mega65` file with `M2M/tools/make_config.sh c64mega65 auto` (size
-must match `OPTM_SIZE` from `config.vhd`).
+`/c64/c64mega65-<version>` file with
+`M2M/tools/make_config.sh c64mega65-<version> auto`, where `<version>`
+matches the `CORE_VERSION` constant in `CORE/vhdl/config.vhd` (size must
+match `OPTM_SIZE` from `config.vhd`). The version suffix on the filename
+was introduced in V6 (issue #182) so multiple core versions can keep their
+settings side by side on the same SD card; `CFG_FILE` in `config.vhd`
+derives the full path from `CORE_VERSION`.
 
 **Debug console:** JTAG cable + serial 115200 8N1; press
 <kbd>Run/Stop</kbd>+<kbd>Cursor Up</kbd>+<kbd>Help</kbd> to get the QNICE

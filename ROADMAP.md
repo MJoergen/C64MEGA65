@@ -30,8 +30,8 @@ Feature Roadmap
 * You can use the Amiga mouse as a C64 mouse
 * Support autoswap via `*.lst` files
 * Support the creation of empty disk images
-* Support the creation of empty config files and the migration of the config
-  file from an older version to a newer version
+* Support the creation of empty config files on the SD card so users do not
+  need to copy a pre-made config file from the release ZIP.
 * Parallel C1541 port for faster (~20x) loading time using DolphinDOS
 * Utilize full 16:9 screen real estate for file- and directory browsing and
   core configuration on HDMI while saving screen real estate on 4:3 VGA
@@ -54,9 +54,6 @@ particular order:
   which exclusively uses GCR internally (c1541_direct_gcr.sv instead of
   c1541_gcr.sv). `*.D64` images are converted to/from GCR when reading/writing
   from SD card.
-* Put major/minor version in the first two bytes of the config file so that
-  in case of a mismatch a warning can be issued (e.g. by directly printing it
-  into the C64's screen RAM). Needs new version of make_config.sh.
 * Clarify: Line 65 in fdc1772.v: back to 2 or work with generic?
 * Implement a remote-control mechanism via Serial/JTAG (similar to what
   already works on the MEGA65 core) that allows us to remote-control the
