@@ -153,9 +153,9 @@ begin
          exrom_o        => main_exrom,
          game_o         => main_game,
          roml_we_o      => main_crt_roml_we,
-         freeze_key_i   => '0',
-         mod_key_i      => '0',
-         nmi_ack_i      => '0'
+         freeze_key_i      => '0',
+         suppress_freeze_i => '0',
+         nmi_ack_i         => '0'
       ); -- i_cartridge
 
    i_avm_rom : entity work.avm_rom

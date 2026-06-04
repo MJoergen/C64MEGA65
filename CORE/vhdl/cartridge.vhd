@@ -45,7 +45,13 @@ entity cartridge is
     roml_we_o      : out   std_logic;
 
     freeze_key_i   : in    std_logic;
-    mod_key_i      : in    std_logic;
+
+    -- suppress_freeze_i: '1' means the NMI must fire WITHOUT triggering cart-freeze entry.
+    -- Used to model the C64 RESTORE key, which fires NMI but doesn't enter freezer mode.
+    -- Replaces MiSTer's mod_key (a separate Win-key modifier with the same semantics).
+    -- On MEGA65 it's driven directly from RESTORE.
+    suppress_freeze_i : in std_logic;
+
     nmi_o          : out   std_logic;
     nmi_ack_i      : in    std_logic
   );
@@ -70,7 +76,7 @@ begin
 
   freeze_req <= not old_freeze and freeze_key_i;
   freeze_ack <= nmi_o and not old_nmiack and nmi_ack_i;
-  freeze_crt <= freeze_ack and freeze_armed and not mod_key_i;
+  freeze_crt <= freeze_ack and freeze_armed and not suppress_freeze_i;
 
   cartridge_proc : process (clk_i)
   begin
@@ -81,7 +87,7 @@ begin
       io_data_o  <= X"FF";
 
       old_freeze <= freeze_key_i;
-      if freeze_req = '1' and (allow_freeze = '1' or mod_key_i = '1') then
+      if freeze_req = '1' and (allow_freeze = '1' or suppress_freeze_i = '1') then
         nmi_o        <= '1';
         freeze_armed <= '1';
       end if;

@@ -68,9 +68,9 @@ entity keyboard is
       cia1_pbi_o           : out std_logic_vector(7 downto 0);
       cia1_pbo_i           : in std_logic_vector(7 downto 0);
       
-      -- Restore key = NMI
-      restore_n            : out std_logic;
-      freeze_n             : out std_logic
+      -- Special keys
+      restore_n            : out std_logic;  -- Restore key = NMI
+      freeze_n             : out std_logic   -- F9 key = freezer key for simulated cartridges
    );
 end keyboard;
 

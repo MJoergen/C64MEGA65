@@ -7,13 +7,10 @@ Version 6 - MONTH DAY, 2026
 @TODO: Document increased compatibility due to the resolved RTC regression
 @TODO: Document correct BA signal which should also increase compatibility
 
-## @TODO: Don't forget to put these closed issues into VERSIONS.md
-
-* https://github.com/MJoergen/C64MEGA65/issues/217
-  Notee to self: Examine the fix: Is RESTORE still generating an NMI as it should? Which key is the freeze key now? Is this documented somewhere? Any issues that need to be opened for Boris?
-  And - reminder - a change in T65.vhd was performed; double-check, too.
-
 ## New Features
+
+* For simulated freezer cartridges (`*.crt`), the `F9` key is now the new
+  freezer button (before V6, it was the `Restore`key).
 
 * The simulated REU can now be used in parallel to hardware cartridges and in
   parallel to simulated cartridges (`*.crt`). Example uses for this feature
@@ -49,6 +46,11 @@ Version 6 - MONTH DAY, 2026
 * The SRQ line of the IEC bus is now connected to CIA 1's /FLAG pin, just as
   on a real C64. This makes IEC devices that use SRQ to interrupt the C64
   work, such as the modem emulation of the Meatloaf device.
+
+* The freeze function has been moved away from the Restore key to the F9 
+  key. The Restore key now only issues an NMI like on a C64. This enhances
+  compatibility with all known simulated Freezers (`*.crt`).
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/217)
 
 * Implemented proper RAM cold-start pattern, which raises compatibility with
   some original software quite a bit. This also fixes Q-Bert.

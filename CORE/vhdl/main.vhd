@@ -270,9 +270,9 @@ architecture synthesis of main is
   signal   alo       : std_logic_vector(15 downto 0);
   signal   aro       : std_logic_vector(15 downto 0);
 
-  -- the Restore key is special : it creates a non maskable interrupt (NMI)
-  signal   restore_key_n : std_logic;
-  signal   freeze_key_n  : std_logic;
+    -- Special keys
+  signal   restore_key_n : std_logic;   -- the Restore key is special: it creates a non maskable interrupt (NMI)
+  signal   freeze_key_n  : std_logic;   -- F9 key = freezer key for simulated cartridges
 
   -- C64's IEC signals
   signal   c64_iec_clk_out  : std_logic;
@@ -693,7 +693,7 @@ begin
       io_ext        => core_io_ext,        -- input
       io_data       => core_io_data,       -- input
       irq_n         => core_irq_n,         -- input: low active
-      nmi_n         => core_nmi_n,         -- input
+      nmi_n         => core_nmi_n,         -- input: important: in parallel with SIMCRT's or HW CRT's NMI, we always need to deliver the Restore key here, too. Otherwise Restore will never generate an NMI as it should.
       nmi_ack       => core_nmi_ack,       -- output
       ba            => core_ba,            -- output
       roml          => core_roml,          -- output: CPU access to 0x8000-0x9FFF
@@ -973,7 +973,7 @@ begin
         -- Ultimax mode and VIC accesses the bus: we need to translate the address, see comment about "The PLA Dissected" above
         crt_addr_bus_o <= "11" & c64_ram_addr_o(13 downto 0);
       end if;
-      core_nmi_n <= not crt_nmi; -- SIMCRT controls the NMI to the CPU.
+      core_nmi_n <= not crt_nmi; -- SIMCRT controls the NMI to the CPU which includes the Restore key
     else
       -- Use hardware slot
       core_game_n  <= cart_game_n;
@@ -1136,8 +1136,8 @@ begin
       exrom_o        => crt_exrom,
       game_o         => crt_game,
       roml_we_o      => crt_roml_we,
-      freeze_key_i   => (not restore_key_n) or (not freeze_key_n),
-      mod_key_i      => not restore_key_n,
+      freeze_key_i      => (not restore_key_n) or (not freeze_key_n),
+      suppress_freeze_i => not restore_key_n,
       nmi_o          => crt_nmi,
       nmi_ack_i      => core_nmi_ack
     ); -- cartridge_inst
@@ -1249,9 +1249,9 @@ begin
       cia1_pbi_o      => cia1_pb_in,
       cia1_pbo_i      => cia1_pb_out,
 
-      -- Restore key = NMI
-      restore_n       => restore_key_n,
-      freeze_n        => freeze_key_n
+      -- Special keys
+      restore_n       => restore_key_n,   -- Restore key = NMI
+      freeze_n        => freeze_key_n     -- F9 key = freezer key for simulated cartridges
     ); -- keyboard_inst
 
   --------------------------------------------------------------------------------------------------
