@@ -2,13 +2,14 @@
 """
 make_release.py — Package a C64MEGA65 release.
 
-Given a release name (e.g. V6, V6.1, WIP-V6-A6, or WIP-V6-A13X1) and an output folder, this
-script validates the version string against config.vhd, sanity-checks alpha
-releases against doc/inofficial.md and the git history, copies the per-board
-bitstreams from CORE/CORE-R{3..6}.runs/impl_1/, produces .cor files via the
-external `bit2core` tool, generates the `c64mega65` config file via
-M2M/tools/make_config.sh, and copies VERSIONS.md plus doc/inofficial.md
-(timestamps preserved) into the release folder.
+Given a release name (e.g. V6, V6.1, WIP-V6-A6, WIP-V6-A13X1, or with
+--ignore an ad-hoc name such as A15test1) and an output folder, this script
+validates the version string against config.vhd, sanity-checks alpha releases
+against doc/inofficial.md and the git history unless --ignore was passed,
+copies the per-board bitstreams from CORE/CORE-R{3..6}.runs/impl_1/, produces
+.cor files via the external `bit2core` tool, generates the `c64mega65` config
+file via M2M/tools/make_config.sh, and copies VERSIONS.md into the release
+folder. Alpha releases also copy doc/inofficial.md (timestamps preserved).
 """
 
 import argparse
@@ -110,7 +111,9 @@ def classify_version(name: str) -> str:
         f"'{name}' is not a valid version. Expected one of:\n"
         f"  Major  : V<n>          (e.g. V6)\n"
         f"  Minor  : V<n>.<m>      (e.g. V6.1)\n"
-        f"  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)"
+        f"  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)\n"
+        f"  Or pass -i / --ignore for an ad-hoc name that is already present "
+        f"in config.vhd."
     )
 
 
@@ -449,14 +452,17 @@ def main() -> None:
         prog="make_release.py",
         description="Package a C64MEGA65 release: copy R3..R6 bitstreams, "
                     "produce .cor files via bit2core, generate the c64mega65 "
-                    "config file and copy VERSIONS.md plus inofficial.md into "
-                    "the output folder.",
+                    "config file and copy VERSIONS.md into the output folder. "
+                    "Alpha releases also copy inofficial.md.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Version conventions:\n"
             "  Major  : V<n>          (e.g. V6)\n"
             "  Minor  : V<n>.<m>      (e.g. V6.1)\n"
-            "  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)\n\n"
+            "  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)\n"
+            "  Ignore : pass -i / --ignore to package an ad-hoc version name\n"
+            "           such as A15test1. The name still must appear in\n"
+            "           config.vhd, but no doc/inofficial.md row is required.\n\n"
             "Target selection:\n"
             "  Omit the third argument to build all four boards (R3..R6).\n"
             "  Otherwise pass a comma-separated list, e.g. 'R3,R6' or 'R4,R5'.\n"
@@ -465,20 +471,21 @@ def main() -> None:
             "  The second argument is a *parent* folder. The script creates\n"
             "  a subfolder named C64MEGA65-<version> in it and places the\n"
             "  per-board .bit and .cor files, the c64mega65 config file\n"
-            "  and copies of VERSIONS.md and inofficial.md there. Example:\n"
+            "  and VERSIONS.md there. Alpha releases also include\n"
+            "  inofficial.md. Example:\n"
             "  passing '~/Desktop'\n"
             "  with version V6.1 produces:\n"
             "    ~/Desktop/C64MEGA65-V6.1/\n"
             "      C64MEGA65-V6.1-R{3,4,5,6}.{bit,cor}\n"
             "      c64mega65\n"
             "      VERSIONS.md\n"
-            "      inofficial.md\n"
             "  If the release subfolder already exists and is non-empty, the\n"
             "  script aborts unless -f / --force is passed.\n\n"
             "Examples:\n"
             "  make_release.py V6 ~/Desktop\n"
             "  make_release.py WIP-V6-A6 /tmp/builds\n"
             "  make_release.py WIP-V6-A13X1 /tmp/builds R6\n"
+            "  make_release.py A15test1 /tmp/builds R6 --ignore\n"
             "  make_release.py V6.1 ./out R3,R6\n"
             "  make_release.py V6.1 ./out R3,R6 --force\n"
         ),
@@ -500,17 +507,26 @@ def main() -> None:
                         help="Overwrite an existing, non-empty release "
                              "subfolder. Without this flag, the script "
                              "refuses to clobber an existing release.")
+    parser.add_argument("-i", "--ignore", action="store_true",
+                        help="Ignore the standard version-name grammar and "
+                             "skip the doc/inofficial.md alpha-release row "
+                             "check. The version string is still required to "
+                             "appear in CORE/vhdl/config.vhd.")
     args = parser.parse_args()
 
     # 1) Validate version format up front.
-    try:
-        kind = classify_version(args.version)
-    except ValueError as e:
-        die(str(e))
+    if args.ignore:
+        kind = "ignored"
+        info("Version grammar ignored; config.vhd will still be checked.")
+    else:
+        try:
+            kind = classify_version(args.version)
+        except ValueError as e:
+            die(str(e))
 
-    info({"major": "Major release detected.",
-          "minor": "Minor release detected.",
-          "alpha": "Alpha release detected."}[kind])
+        info({"major": "Major release detected.",
+              "minor": "Minor release detected.",
+              "alpha": "Alpha release detected."}[kind])
 
     # 2) Locate the repo.
     repo = find_repo_root()
@@ -526,6 +542,9 @@ def main() -> None:
     if kind == "alpha":
         commit = check_inofficial_md(repo, args.version)
         check_git_commit(repo, commit, args.version)
+    elif kind == "ignored":
+        info("--ignore was passed; skipping doc/inofficial.md and git "
+             "release-row checks.")
 
     # 6) Resolve target boards.
     if args.targets is None:
@@ -563,6 +582,12 @@ def main() -> None:
         warn(f"Release folder exists and is not empty; --force was given, "
              f"overwriting: {out}")
     out.mkdir(parents=True, exist_ok=True)
+    if kind != "alpha":
+        stale_inofficial = out / "inofficial.md"
+        if stale_inofficial.is_file() or stale_inofficial.is_symlink():
+            stale_inofficial.unlink()
+        elif stale_inofficial.exists():
+            die(f"Cannot remove stale non-file artifact: {stale_inofficial}")
     info(f"Parent folder:  {parent}")
     info(f"Release folder: {out}")
 
@@ -597,9 +622,11 @@ def main() -> None:
     vmd = copy_versions_md(repo, out)
     ok(f"{vmd.name} ({vmd.stat().st_size:,} bytes)")
 
-    info("Copying doc/inofficial.md into the release folder")
-    imd = copy_inofficial_md(repo, out)
-    ok(f"{imd.name} ({imd.stat().st_size:,} bytes)")
+    imd = None
+    if kind == "alpha":
+        info("Copying doc/inofficial.md into the release folder")
+        imd = copy_inofficial_md(repo, out)
+        ok(f"{imd.name} ({imd.stat().st_size:,} bytes)")
 
     # 12) Final summary so the user can see at-a-glance what was produced
     #     without having to scroll back through the verbose live output.
@@ -607,7 +634,7 @@ def main() -> None:
 
 
 def print_summary(version: str, kind: str, targets: tuple,
-                  cfg_dst: Path, versions_md: Path, inofficial_md: Path,
+                  cfg_dst: Path, versions_md: Path, inofficial_md,
                   out: Path) -> None:
     bar = "=" * 64
     check = _c("32", "[OK]")
@@ -624,8 +651,9 @@ def print_summary(version: str, kind: str, targets: tuple,
           f"({cfg_dst.stat().st_size:,} bytes)")
     print(f" {check} VERSIONS.md:   {versions_md.stat().st_size:,} bytes "
           f"(timestamp preserved)")
-    print(f" {check} inofficial.md: {inofficial_md.stat().st_size:,} bytes "
-          f"(timestamp preserved)")
+    if inofficial_md is not None:
+        print(f" {check} inofficial.md: {inofficial_md.stat().st_size:,} bytes "
+              f"(timestamp preserved)")
     print(f" {check} Release at:    {out}")
     if _WARNINGS:
         print()
