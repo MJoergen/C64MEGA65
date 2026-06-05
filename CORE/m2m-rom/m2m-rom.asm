@@ -238,6 +238,30 @@ PREP_START_R    XOR     R8, R8
                 DECRB
                 RET
 
+; RESET_CORE helper:
+;
+; Pulses M2M$CSR bit 0 ("Reset the MiSTer core") long enough to satisfy the
+; 32-cycle minimum at reset_soft_i (see RESET SEMANTICS in main.vhd).
+; A bare OR/AND pair would only be a few QNICE cycles wide and, after the
+; 2-stage CDC in framework.vhd, fall short of that floor. The delay loop
+; widens the pulse to >= 64 main_clk cycles, comfortably above the limit.
+;
+; Semantics: M2M$CSR_RESET is a strict subset of a short MEGA65 reset-button
+; press: soft-reset the C64 only, no AV-pipeline / HyperRAM touch, no cart
+; eject. To exit a cart, hold the MEGA65 reset button for at least 1.5 s.
+;
+; Input:  none
+; Output: none (callers do their own R8/R9 = 0/0 if needed)
+RESET_CORE      INCRB
+                MOVE    M2M$CSR, R0
+                OR      M2M$CSR_RESET, @R0      ; assert soft reset
+                MOVE    64, R1                  ; widen pulse to >=32 main_clk
+_RC_DELAY       SUB     1, R1                   ; cycles after the 2-FF CDC
+                RBRA    _RC_DELAY, !Z
+                AND     M2M$CSR_UN_RESET, @R0   ; release soft reset
+                DECRB
+                RET
+
 ; OSM_SEL_POST callback function:
 ;
 ; Called each time the user selects something in the on-screen-menu (OSM),
@@ -261,11 +285,16 @@ PREP_START_R    XOR     R8, R8
 ;   R9: 0=OK, else error code
 OSM_SEL_POST    INCRB
 
-                ; Auto-reset the core (and any connected HW cartridge) when
-                ; the user changes a setting that requires a clean restart:
+                ; Auto-soft-reset the core when the user changes a setting
+                ; that requires a clean restart:
                 ;   * Kernal mode
                 ;   * Expansion port mode (HW slot vs. simulated cartridge)
                 ;   * Simulated 1750 REU
+                ;
+                ; This is a soft reset (M2M$CSR_RESET is a strict subset of
+                ; a short MEGA65 reset-button press), so a loaded cartridge
+                ; persists and re-autostarts after the reset. To exit a
+                ; cart, hold the MEGA65 reset button for at least 1.5 s.
                 CMP     C64_OPTM_G_KERNAL_MODES, R8
                 RBRA    _OSM_SP_RESET, Z
                 CMP     C64_OPTM_G_EXP_PORT, R8
@@ -274,9 +303,7 @@ OSM_SEL_POST    INCRB
                 RBRA    _OSM_SP_RESET, Z
                 RBRA    _OSM_SEL_POST_R, 1
 
-_OSM_SP_RESET   MOVE    M2M$CSR, R0             ; control and status register
-                OR      M2M$CSR_RESET, @R0      ; reset the core
-                AND     M2M$CSR_UN_RESET, @R0   ; un-reset the core
+_OSM_SP_RESET   RSUB    RESET_CORE, 1
 
 _OSM_SEL_POST_R XOR     R8, R8
                 XOR     R9, R9
@@ -293,11 +320,11 @@ OSM_SEL_PRE     INCRB
 
                 ; Automatically switch to "Simulate cartridge" if the user
                 ; chooses to load a software cartridge. When the previous
-                ; mode was "Use hardware slot" we additionally reset the
-                ; core: otherwise the running C64 would see the HW expansion
-                ; port silently disappear under it and stay hung while the
-                ; file selector is open. The sw_cartridge_wrapper will issue
-                ; its own reset once the .crt has been loaded.
+                ; mode was "Use hardware slot" we additionally soft-reset
+                ; the core: otherwise the running C64 would see the HW
+                ; expansion port silently disappear under it and stay hung
+                ; while the file selector is open. The sw_cartridge_wrapper
+                ; will issue its own reset once the .crt has been loaded.
                 CMP     C64_OPTM_G_MOUNT_CRT, R8
                 RBRA    _OSM_SEL_PRE_R, !Z
                 MOVE    C64_OSM_SIM_CRT, R8
@@ -306,9 +333,8 @@ OSM_SEL_PRE     INCRB
                 RBRA    _OSM_SEL_PRE_R, Z       ; yes, then nothing to do
                 MOVE    1, R9                   ; no, then set sim crt mode
                 RSUB    M2M$FORCE_MENU, 1
-                MOVE    M2M$CSR, R0             ; reset the core to avoid a
-                OR      M2M$CSR_RESET, @R0      ; hang: the HW expansion
-                AND     M2M$CSR_UN_RESET, @R0   ; slot was just decoupled
+                RSUB    RESET_CORE, 1           ; HW slot just decoupled;
+                                                ; park the C64 in clean reset
 
 _OSM_SEL_PRE_R  XOR     R8, R8
                 XOR     R9, R9

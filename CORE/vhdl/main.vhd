@@ -336,10 +336,22 @@ architecture synthesis of main is
   -- and will therefore also exit games which prevent you from exitting them via reset and you can
   -- also exit from simulated cartridges using a hard reset.
   --
+  -- Three-tier reset hierarchy (each tier strictly contains the one below):
+  --    long  MEGA65 reset button (>= 1.5 s) => framework reset_m2m_n  (asserts reset_hard_i)
+  --    short MEGA65 reset button            => framework reset_core_n (asserts reset_soft_i + hr_rst)
+  --    QNICE Shell M2M$CSR_RESET pulse      => reset_soft_i only (no hr_rst, no AV-pipeline glitch)
+  -- The QNICE pulse (issued via the RESET_CORE helper in CORE/m2m-rom/m2m-rom.asm) is intentionally
+  -- a strict subset of a short button press: it soft-resets the C64 only and does not disturb the
+  -- ASCAL/HDMI pipeline, so OSM-driven resets (kernal swap, EXP_PORT/REU toggle, .crt mount) keep
+  -- the picture stable. See the routing in M2M/vhdl/top_mega65-r{3,4,5,6}.vhd and the rationale
+  -- comment in M2M/vhdl/QNICE/qnice.vhd:96-110.
+  --
   -- When pulsing reset_soft_i from the outside (mega65.vhd), then you need to ensure that this
-  -- pulse is at least 32 clock cycles long. Currently (see mega65.vhd) there are two sources that
-  -- trigger reset_soft_i: The M2M reset manager and sw_cartridge_wrapper. Both are ensuring that
-  -- the rest pulse is at least 32 clock cycles long.
+  -- pulse is at least 32 clock cycles long. Currently (see mega65.vhd) there are three sources that
+  -- trigger reset_soft_i: The M2M reset manager, sw_cartridge_wrapper, and the QNICE Shell's
+  -- M2M$CSR_RESET write pulse (via RESET_CORE in CORE/m2m-rom/m2m-rom.asm, which inserts a small
+  -- QNICE delay loop between the OR/AND CSR writes to widen the pulse to >= 64 main_clk cycles
+  -- after the 2-stage CDC in framework.vhd). All three sources honor the 32-cycle minimum.
   --
   -- A reset that is coming from a hardware cartridge via cart_reset_i (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are

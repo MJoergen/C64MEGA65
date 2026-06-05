@@ -812,7 +812,17 @@ begin
          -- M2M's reset manager provides 2 signals:
          --    m2m:   Reset the whole machine: Core and Framework
          --    core:  Only reset the core
-         main_reset_m2m_i        => main_reset_m2m  or main_qnice_reset or main_rst,
+         --
+         -- main_qnice_reset (QNICE Shell's M2M$CSR bit 0) is intentionally
+         -- routed only to the core rail: M2M$CSR_RESET is a strict subset
+         -- of a short MEGA65 reset-button press (soft-reset the C64 only,
+         -- do not disturb the AV pipeline). Putting it on the m2m rail
+         -- would assert reset_hard_i in main.vhd, mask CBM80 at $8003,
+         -- wipe cartridge_inst, and contradict the comment block at
+         -- main.vhd:1110-1114. See M2M/vhdl/QNICE/qnice.vhd:96-110,
+         -- M2M/rom/sysdef.asm:14, and the RESET SEMANTICS block in
+         -- CORE/vhdl/main.vhd for the full rationale.
+         main_reset_m2m_i        => main_reset_m2m  or main_rst,
          main_reset_core_i       => main_reset_core or main_qnice_reset,
          main_pause_core_i       => main_qnice_pause,
 
