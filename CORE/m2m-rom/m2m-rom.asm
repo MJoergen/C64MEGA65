@@ -261,10 +261,20 @@ PREP_START_R    XOR     R8, R8
 ;   R9: 0=OK, else error code
 OSM_SEL_POST    INCRB
 
-                ; auto-reset if the user changes the kernal mode
+                ; Auto-reset the core (and any connected HW cartridge) when
+                ; the user changes a setting that requires a clean restart:
+                ;   * Kernal mode
+                ;   * Expansion port mode (HW slot vs. simulated cartridge)
+                ;   * Simulated 1750 REU
                 CMP     C64_OPTM_G_KERNAL_MODES, R8
-                RBRA    _OSM_SEL_POST_R, !Z
-                MOVE    M2M$CSR, R0             ; control and status register
+                RBRA    _OSM_SP_RESET, Z
+                CMP     C64_OPTM_G_EXP_PORT, R8
+                RBRA    _OSM_SP_RESET, Z
+                CMP     C64_OPTM_G_REU, R8
+                RBRA    _OSM_SP_RESET, Z
+                RBRA    _OSM_SEL_POST_R, 1
+
+_OSM_SP_RESET   MOVE    M2M$CSR, R0             ; control and status register
                 OR      M2M$CSR_RESET, @R0      ; reset the core
                 AND     M2M$CSR_UN_RESET, @R0   ; un-reset the core
 
@@ -281,8 +291,13 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
 
-                ; automatically switch to "Simulate cartridge" if the user
-                ; chooses to load a software cartridge
+                ; Automatically switch to "Simulate cartridge" if the user
+                ; chooses to load a software cartridge. When the previous
+                ; mode was "Use hardware slot" we additionally reset the
+                ; core: otherwise the running C64 would see the HW expansion
+                ; port silently disappear under it and stay hung while the
+                ; file selector is open. The sw_cartridge_wrapper will issue
+                ; its own reset once the .crt has been loaded.
                 CMP     C64_OPTM_G_MOUNT_CRT, R8
                 RBRA    _OSM_SEL_PRE_R, !Z
                 MOVE    C64_OSM_SIM_CRT, R8
@@ -291,6 +306,9 @@ OSM_SEL_PRE     INCRB
                 RBRA    _OSM_SEL_PRE_R, Z       ; yes, then nothing to do
                 MOVE    1, R9                   ; no, then set sim crt mode
                 RSUB    M2M$FORCE_MENU, 1
+                MOVE    M2M$CSR, R0             ; reset the core to avoid a
+                OR      M2M$CSR_RESET, @R0      ; hang: the HW expansion
+                AND     M2M$CSR_UN_RESET, @R0   ; slot was just decoupled
 
 _OSM_SEL_PRE_R  XOR     R8, R8
                 XOR     R9, R9

@@ -31,6 +31,13 @@ Version 6 - MONTH DAY, 2026
   latest release in one MEGA65 core slot and an alpha core in another slot.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/182)
 
+* The core (and any connected hardware cartridge) is now auto-reset when
+  you change the Expansion Port mode in the on-screen menu (between
+  "Use hardware slot" and "Simulate cartridge") or toggle "Simulate 1750
+  REU 512KB". This avoids mistakes and therefore improves the usability.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/225 and
+   https://github.com/MJoergen/C64MEGA65/issues/226)
+
 ## Improved Compatibility of the Core
 
 * Generally improved hardware cartridge compatibility, thanks to two
