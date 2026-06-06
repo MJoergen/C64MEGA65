@@ -273,8 +273,8 @@ constant JOY_2_AT_OSD      : boolean := false;
 -- 2=keep ascal mode in sync with the QNICE input register ascal_mode_i:
 --   use this if you want to control the ascal mode for example via the Options menu
 --   where you would wire the output of certain options menu bits with ascal_mode_i
-constant ASCAL_USAGE       : natural := 2;
-constant ASCAL_MODE        : natural := 0;   -- see ascal.vhd for the meaning of this value
+constant ASCAL_USAGE       : natural := 1;   -- V6: AUSE_CUSTOM. ASCAL_INIT clears M2M$CSR bit 11; m2m-rom (HDMI Filter dispatcher) writes M2M$ASCAL_MODE directly.
+constant ASCAL_MODE        : natural := 0;   -- ignored when ASCAL_USAGE=1; m2m-rom sets the mode per HDMI Filter selection (No Filter/Sharp Bilinear/Bicubic -> native NEAREST/SBILINEAR/BICUBIC, the other 5 -> POLYPHASE)
 
 -- Save on-screen-display settings if the file specified by CFG_FILE exists and if it has
 -- the length of OPTM_SIZE bytes. If the first byte of the file has the value 0xFF then it
@@ -373,7 +373,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 98;  -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 110; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -463,7 +463,20 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Back to main menu\n"       &
 
-   " HDMI: CRT emulation\n"     &
+   " HDMI: %s\n"                &  -- HDMI Filter submenu (replaces V1's CRT emulation toggle)
+   " HDMI Filter\n"             &
+   "\n"                         &
+   " No Filter\n"               &  -- nearest-neighbour (intentionally exposes the #223 wonky-pixel look as a power-user opt-in)
+   " Sharp Bilinear\n"          &  -- ascal native SBILINEAR (cubic-warped lerp; see ascal.vhd:783-821)
+   " Bicubic\n"                 &  -- ascal native bicubic (mode 011), between Sharp Bilinear and Smooth perceptually
+   " Smooth\n"                  &
+   " Lanczos\n"                 &
+   " Scanlines\n"               &  -- default: bit-identical to V5's CRT emulation look
+   " CRT (S-Video)\n"           &
+   " CRT (Composite)\n"         &
+   "\n"                         &
+   " Back to main menu\n"       &
+
    " HDMI: Zoom-in\n"           &
 
    " VGA: %s\n"                 &  -- VGA submenu
@@ -513,7 +526,7 @@ constant OPTM_G_KERNAL_MODES  : integer := 12;
 constant OPTM_G_HDMI_MODES    : integer := 13;
 constant OPTM_G_HDMI_FF       : integer := 14;
 constant OPTM_G_HDMI_DVI      : integer := 15;
-constant OPTM_G_CRT_EMULATION : integer := 16;
+constant OPTM_G_HDMI_FILTER   : integer := 16;  -- HDMI: %s submenu (filter radio); replaces V1's CRT emulation toggle
 constant OPTM_G_HDMI_ZOOM     : integer := 17;
 constant OPTM_G_VGA_MODES     : integer := 18;
 constant OPTM_G_OSM_MODE      : integer := 19;
@@ -593,7 +606,20 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,
 
-                                             OPTM_G_CRT_EMULATION + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
+                                             OPTM_G_SUBMENU,                          -- " HDMI: %s"
+                                             OPTM_G_HEADLINE,                         -- " HDMI Filter"
+                                             OPTM_G_LINE,
+                                             OPTM_G_HDMI_FILTER,                      -- No Filter
+                                             OPTM_G_HDMI_FILTER,                      -- Sharp Bilinear
+                                             OPTM_G_HDMI_FILTER,                      -- Bicubic
+                                             OPTM_G_HDMI_FILTER,                      -- Smooth
+                                             OPTM_G_HDMI_FILTER,                      -- Lanczos
+                                             OPTM_G_HDMI_FILTER   + OPTM_G_STDSEL,    -- Scanlines (default; bit-identical to V5's CRT emulation look)
+                                             OPTM_G_HDMI_FILTER,                      -- CRT (S-Video)
+                                             OPTM_G_HDMI_FILTER,                      -- CRT (Composite)
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- " Back to main menu"
+
                                              OPTM_G_HDMI_ZOOM     + OPTM_G_SINGLESEL,
 
                                              OPTM_G_SUBMENU,

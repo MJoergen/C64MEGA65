@@ -345,12 +345,24 @@ constant C_MENU_HDMI_4_3_50   : natural := 60;
 constant C_MENU_HDMI_5_4_50   : natural := 61;
 constant C_MENU_HDMI_FF       : natural := 63;
 constant C_MENU_HDMI_DVI      : natural := 64;
-constant C_MENU_CRT_EMULATION : natural := 67;
-constant C_MENU_HDMI_ZOOM     : natural := 68;
-constant C_MENU_VGA_STD       : natural := 72;
-constant C_MENU_VGA_15KHZHSVS : natural := 76;
-constant C_MENU_VGA_15KHZCS   : natural := 77;
-subtype C_MENU_OSM_SCALING is natural range 91 downto 83;
+-- HDMI Filter submenu (replaces V1's CRT emulation single-toggle at bit 67).
+-- The selection is interpreted entirely by the core's m2m-rom.asm
+-- (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for native modes and loads
+-- the matching (H, V) coefficient pair via M2M$LOAD_POLYPHASE for polyphase
+-- modes. ASCAL_USAGE=1 in config.vhd routes mode control to QNICE directly.
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 70;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 71;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 72;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 73;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 74;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 75;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 76;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 77;
+constant C_MENU_HDMI_ZOOM     : natural := 80;
+constant C_MENU_VGA_STD       : natural := 84;
+constant C_MENU_VGA_15KHZHSVS : natural := 88;
+constant C_MENU_VGA_15KHZCS   : natural := 89;
+subtype C_MENU_OSM_SCALING is natural range 103 downto 95;
 
 -- RAMs for the C64
 signal qnice_c64_mount_buf_ram_we   : std_logic;
@@ -776,19 +788,11 @@ begin
    qnice_csync_o              <= qnice_osm_control_i(C_MENU_VGA_15KHZCS);     -- Composite sync (CSYNC)
    qnice_osm_cfg_scaling_o    <= qnice_osm_control_i(C_MENU_OSM_SCALING);
 
-   -- ascal filters that are applied while processing the input
-   -- 00 : Nearest Neighbour
-   -- 01 : Bilinear
-   -- 10 : Sharp Bilinear
-   -- 11 : Bicubic
+   -- In config.vhd, we chose ASCAL_USAGE = 1 (AUSE_CUSTOM), which hands the control over ASCAL
+   -- modes to our core-specific m2m-rom.asm. There, we are handling the multiple HDMI Filter
+   -- choices. This means: The following three lines are ignored by M2M during runtime
    qnice_ascal_mode_o         <= "00";
-
-   -- If polyphase is '1' then the ascal filter mode is ignored and polyphase filters are used instead
-   -- @TODO: Right now, the filters are hardcoded in the M2M framework, we need to make them changeable inside m2m-rom.asm
-   qnice_ascal_polyphase_o    <= qnice_osm_control_i(C_MENU_CRT_EMULATION);
-
-   -- ascal triple-buffering
-   -- @TODO: Right now, the M2M framework only supports OFF, so do not touch until the framework is upgraded
+   qnice_ascal_polyphase_o    <= '0';
    qnice_ascal_triplebuf_o    <= '0';
 
    -- Flip joystick ports (i.e. the joystick in port 2 is used as joystick 1 and vice versa)

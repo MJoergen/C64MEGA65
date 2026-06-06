@@ -17,27 +17,19 @@
 ASCAL_FILTER_LEN    .EQU 0x0100
 
 
+; LOAD_ASCAL_FLT  Framework default polyphase load.
+;                 Loads the V1 "CRT emulation" filter pair (Lanczos2_12
+;                 horizontal + Scan_Br_110_80 vertical) into the ascal
+;                 polyphase RAM. Called once from ASCAL_INIT at boot.
+;
+;                 A core that wants a different default, multiple selectable
+;                 pairs, or runtime swapping should call M2M$LOAD_POLYPHASE
+;                 directly from its own PREP_START / OSM_SEL_POST callbacks.
+;                 See M2M/video_filters/README.md for the full pattern.
+
 LOAD_ASCAL_FLT  SYSCALL(enter, 1)
-
-                ; setup the ascal Polyphase RAM device
-                MOVE    M2M$RAMROM_DEV, R0
-                MOVE    M2M$ASCAL_PPHASE, @R0
-                MOVE    M2M$RAMROM_4KWIN, R0
-                MOVE    0, @R0
-
-                MOVE    ASCAL_FILTER_LEN, R10
-
-                ; copy horizontal filter from ROM to ascal Polyphase RAM
-                MOVE    LANCZOS2_12, R8
-                MOVE    M2M$RAMROM_DATA, R9
-                ADD     M2M$ASCAL_PP_HORIZ, R9
-                SYSCALL(memcpy, 1)
-
-                ; copy vertical filter from ROM to ascal Polyphase RAM
-                MOVE    SCAN_BR_110_80, R8
-                MOVE    M2M$RAMROM_DATA, R9
-                ADD     M2M$ASCAL_PP_VERT, R9
-                SYSCALL(memcpy, 1)
-
+                MOVE    LANCZOS2_12,    R8
+                MOVE    SCAN_BR_110_80, R9
+                RSUB    M2M$LOAD_POLYPHASE, 1
                 SYSCALL(leave, 1)
                 RET

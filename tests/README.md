@@ -5,6 +5,37 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version 6.0 - TBD
+-----------------
+
+@TODO: Update the "Test HDMI modes" sub-checklist. The single "CRT emulation"
+toggle from earlier versions has been replaced by an "HDMI: %s" submenu with
+six filter pairs (Sharp / Smooth / Lanczos / Scanlines / CRT (S-Video) /
+CRT (Composite)); the default selection is "Scanlines", which loads the same
+coefficient pair (lanczos2_12 + Scan_Br_110_80) as the V5 CRT emulation, so
+existing users see no visual change on upgrade. The V6 HDMI test block
+should at minimum:
+
+* Cycle through all six filter options and confirm each renders without
+  artifacts on the C64 boot screen and on a known dithered scene (e.g.
+  the [demos](demos.md) shadebobs)
+* Confirm the default selection is "Scanlines" on first boot (empty or
+  missing SD config file)
+* Confirm the saved selection persists across power cycles
+* Confirm changing the filter at runtime does NOT reset the C64 (the
+  running program keeps going; only the picture changes from the next
+  frame)
+* Confirm that switching to "Sharp" eliminates the uneven-column-width
+  artefact reported in issue #223
+* Verify the "HDMI: %s" header line correctly reflects the current
+  selection (e.g. " HDMI: Sharp", " HDMI: CRT (Composite)") and that
+  the longest label fits inside the menu frame without ellipsis
+
+@TODO: Confirm `M2M$LOAD_POLYPHASE` (new V2.1 framework helper in
+`M2M/rom/tools.asm`) plays nicely with `LOAD_ASCAL_FLT` for cores that do
+NOT override the polyphase loader: those should still get the V1
+Lanczos2_12 + Scan_Br_110_80 default at boot, bit-identical to V2.0.
+
 Version 5.2 - April 21, 2025
 ----------------------------
 

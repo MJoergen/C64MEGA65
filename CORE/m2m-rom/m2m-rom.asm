@@ -203,6 +203,20 @@ _PREP_LI_RET    DECRB
 ;   R9: 0=OK, else error code
 PREP_START      INCRB
 
+                ; Apply the saved HDMI Filter selection. At this point the
+                ; framework has already loaded its own default into the
+                ; ascal polyphase RAM (LANCZOS2_12 + SCAN_BR_110_80 via
+                ; M2M/rom/filters.asm:LOAD_ASCAL_FLT), and HELP_MENU_INIT has
+                ; populated M2M$CFM_DATA from the saved SD config. We now
+                ; overwrite the framework default with whatever the user
+                ; chose -- before the core un-resets and the first frame
+                ; reaches HDMI, so no glitch is visible. The default
+                ; selection in config.vhd is "Scanlines", which loads the
+                ; same pair as the framework default, so first-time users
+                ; (or anyone with an empty config) see the V1 CRT-emulation
+                ; look bit-identically.
+                RSUB    LOAD_HDMI_FILTER, 1
+
                 ; Check if JiffyDOS is configured as the default Kernal but
                 ; the JiffyDOS ROMs cannot be found: In this case we switch
                 ; back to the default Kernal.
@@ -285,6 +299,14 @@ _RC_DELAY       SUB     1, R1                   ; cycles after the 2-FF CDC
 ;   R9: 0=OK, else error code
 OSM_SEL_POST    INCRB
 
+                ; HDMI Filter selection changed: re-push the matching (H, V)
+                ; coefficient pair into the ascal polyphase RAM. NO core
+                ; reset -- only the coefficient RAM content changes; the C64
+                ; keeps running. The user sees the new filter from the next
+                ; frame.
+                CMP     C64_OPTM_G_HDMI_FILTER, R8
+                RBRA    _OSM_SP_FILTER, Z
+
                 ; Auto-soft-reset the core when the user changes a setting
                 ; that requires a clean restart:
                 ;   * Kernal mode
@@ -301,6 +323,9 @@ OSM_SEL_POST    INCRB
                 RBRA    _OSM_SP_RESET, Z
                 CMP     C64_OPTM_G_REU, R8
                 RBRA    _OSM_SP_RESET, Z
+                RBRA    _OSM_SEL_POST_R, 1
+
+_OSM_SP_FILTER  RSUB    LOAD_HDMI_FILTER, 1
                 RBRA    _OSM_SEL_POST_R, 1
 
 _OSM_SP_RESET   RSUB    RESET_CORE, 1
@@ -421,6 +446,110 @@ D64_VARIANT_CNT .EQU    2
 D64_STDSIZE_L   .DW     0xAB00, 0x0000
 D64_STDSIZE_H   .DW     0x0002, 0x0003
 
+; ----------------------------------------------------------------------------
+; HDMI Filter dispatch
+; ----------------------------------------------------------------------------
+
+; LOAD_HDMI_FILTER: Read the saved HDMI Filter selection from M2M$CFM_DATA
+; and configure ascal accordingly. Called from PREP_START (boot) and
+; OSM_SEL_POST (runtime). Eight options, single-select: exactly one of the
+; C64_OSM_HDMI_FLT_* bits is set at any time -- OPTM_G_STDSEL in config.vhd
+; guarantees a default ("Scanlines") if the saved SD config file is missing
+; or empty.
+;
+; Two execution shapes, both encoded in HDMI_FLT_TABLE rows
+; (OSM_bit, ASCAL_MODE_word, H_label, V_label):
+;
+;   * Native modes (No Filter / Sharp Bilinear / Bicubic) -> write the
+;                  matching mode word (NEAREST / SBILINEAR / BICUBIC) to
+;                  M2M$ASCAL_MODE. The H/V labels are 0 sentinels: we skip
+;                  the polyphase RAM write entirely and let ascal run its
+;                  built-in scaler datapath.
+;   * Polyphase modes (Smooth / Lanczos / Scanlines / CRT (S-Video) /
+;                  CRT (Composite)) -> write POLYPHASE then push the
+;                  (H_label, V_label) pair into the ascal polyphase RAM
+;                  via M2M$LOAD_POLYPHASE.
+;
+; This routine assumes ASCAL_USAGE=1 (AUSE_CUSTOM) in config.vhd, which
+; tells ASCAL_INIT to clear M2M$CSR bit 11 and leave M2M$ASCAL_MODE
+; writable. If a future core sets ASCAL_USAGE back to 2 (AUSE_AUTO), the
+; mode writes below silently no-op.
+;
+; Input:  None
+; Output: R8 = 0, R9 = 0 on success
+LOAD_HDMI_FILTER INCRB
+                MOVE    HDMI_FLT_TABLE, R0
+                MOVE    8, R1                   ; option count
+
+_LHF_LOOP       MOVE    @R0++, R8               ; R8 = OSM bit for this option
+                RSUB    M2M$GET_SETTING, 1
+                CMP     1, R9                   ; selected?
+                RBRA    _LHF_FOUND, Z           ; yes -> apply this row
+                ADD     3, R0                   ; no -> skip MODE, H, V
+                SUB     1, R1
+                RBRA    _LHF_LOOP, !Z
+
+                ; Defensive fallback: no bit set. Force Scanlines preset
+                ; (polyphase mode + Lanczos2_12 / Scan_Br_110_80).
+                MOVE    M2M$ASCAL_MODE, R2
+                MOVE    M2M$ASCAL_POLYPHASE, @R2
+                MOVE    LANCZOS2_12,    R8
+                MOVE    SCAN_BR_110_80, R9
+                RSUB    M2M$LOAD_POLYPHASE, 1
+                RBRA    _LHF_RET, 1
+
+_LHF_FOUND      MOVE    @R0++, R3               ; R3 = ASCAL_MODE word
+                MOVE    M2M$ASCAL_MODE, R2
+                MOVE    R3, @R2                 ; write mode register
+                MOVE    @R0++, R8               ; R8 = H label (0 = sentinel)
+                MOVE    @R0,   R9               ; R9 = V label (0 = sentinel)
+                CMP     0, R8                   ; native-mode sentinel?
+                RBRA    _LHF_RET, Z             ; yes -> done, no RAM write
+                RSUB    M2M$LOAD_POLYPHASE, 1
+
+_LHF_RET        XOR     R8, R8
+                XOR     R9, R9
+                DECRB
+                RET
+
+; Filter table: (OSM_bit, ASCAL_MODE_word, H_label, V_label) per option, in
+; OPTM_ITEMS display order. The first three rows use ascal native modes
+; (NEAREST / SBILINEAR / BICUBIC); their H and V are 0 sentinels so the
+; dispatcher skips the polyphase RAM write for them. The remaining five
+; rows all select polyphase (mode 100) and provide real coefficient table
+; labels.
+;
+; See M2M/video_filters/README.md for per-blob perceptual notes and
+; CORE/vhdl/config.vhd for the OPTM_ITEMS / OPTM_GROUPS structure.
+HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,                   0
+                .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0
+                .DW C64_OSM_HDMI_FLT_BICUBIC,       M2M$ASCAL_BICUBIC,   0,                   0
+                .DW C64_OSM_HDMI_FLT_SMOOTH,        M2M$ASCAL_POLYPHASE, GS_SHARPNESS_050,    GS_SHARPNESS_050
+                .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12
+                .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80
+
+                ; As long as we are not supporting MiSTer's full
+                ; filter and post-processing chain:
+                ;
+                ; Both CRT rows reuse SCAN_BR_110_80 as the V file (same as
+                ; Scanlines mode). CRT_Sim_*_V is a deep ~40% mid-phase plateau
+                ; designed to be combined with the MiSTer gamma LUT + shadow mask;
+                ; M2M V2.1 supports neither, so standalone the plateau crushes
+                ; bright C64 content into a dark band. The Composite vs S-Video
+                ; character lives entirely in the H file (Composite has heavy
+                ; horizontal blur, S-Video has mild softening), so swapping only
+                ; the V file preserves the perceptual distinction while restoring
+                ; near-unity mean brightness.
+                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, CRT_SIM_SVIDEO_H,    SCAN_BR_110_80
+                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, CRT_SIM_COMPOSITE_H, SCAN_BR_110_80
+
+; Filter coefficient blobs for the 5 polyphase-based options. LANCZOS2_12 and
+; SCAN_BR_110_80 are already linked via the M2M framework file
+; M2M/rom/filters.asm (included from M2M/rom/shell.asm).
+#include "../../M2M/video_filters/GS_Sharpness_050.asm"
+#include "../../M2M/video_filters/CRT_Sim_Composite_H.asm"
+#include "../../M2M/video_filters/CRT_Sim_SVideo_H.asm"
+
 ; This needs to be the last thing before the "Variables" sections starts
 END_OF_ROM      .DW 0
 
@@ -442,9 +571,9 @@ END_OF_ROM      .DW 0
 ; The On-Screen-Menu uses the heap for several data structures. This heap
 ; is located before the main system heap in memory.
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
-; Example: If your HEAP_SIZE would be 30208, then you write 30208-1664=28544
+; Example: If your HEAP_SIZE would be 30208, then you write 30208-1920=28288
 ; instead, but when doing the sanity check calculations, you use 30208
-MENU_HEAP_SIZE  .EQU 1664
+MENU_HEAP_SIZE  .EQU 1920
 
 #ifndef RELEASE
 
@@ -452,14 +581,14 @@ MENU_HEAP_SIZE  .EQU 1664
 ; this needs to be the last variable before the monitor variables as it is
 ; only defined as "BLOCK 1" to avoid a large amount of null-values in
 ; the ROM file
-HEAP_SIZE       .EQU 5504                       ; 7168 - 1664 = 5504
+HEAP_SIZE       .EQU 5248                       ; 7168 - 1920 = 5248
 HEAP            .BLOCK 1
 
 ; in RELEASE mode: 28k of heap which leads to a better user experience when
 ; it comes to folders with a lot of files
 #else
 
-HEAP_SIZE       .EQU 28544                      ; 30208 - 1664 = 28544
+HEAP_SIZE       .EQU 28288                      ; 30208 - 1920 = 28288
 HEAP            .BLOCK 1
  
 ; The monitor variables use 22 words, round to 32 for being safe and subtract

@@ -120,7 +120,7 @@ M2M$ASCAL_NEAREST   .EQU 0x0000 ; Nearest neighbor
 M2M$ASCAL_BILINEAR  .EQU 0x0001 ; Bilinear
 M2M$ASCAL_SBILINEAR .EQU 0x0002 ; Sharp Bilinear
 M2M$ASCAL_BICUBIC   .EQU 0x0003 ; Bicubic
-M2M$ASCAL_POLYPHASE .EQU 0x0004 ; Polyphase filter (used for CRT emulation)
+M2M$ASCAL_POLYPHASE .EQU 0x0004 ; Polyphase filter mode (coefficients loaded via M2M$LOAD_POLYPHASE; see M2M/video_filters/README.md)
 
 ; ascal Polyphase addresses
 M2M$ASCAL_PP_HORIZ  .EQU 0x0000
