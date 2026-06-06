@@ -16,53 +16,54 @@ generic (
    G_BASE_ADDRESS : std_logic_vector(21 downto 0)
 );
 port (
-   qnice_clk_i          : in  std_logic;
-   qnice_rst_i          : in  std_logic;
-   qnice_addr_i         : in  std_logic_vector(27 downto 0);
-   qnice_data_i         : in  std_logic_vector(15 downto 0);
-   qnice_ce_i           : in  std_logic;
-   qnice_we_i           : in  std_logic;
-   qnice_data_o         : out std_logic_vector(15 downto 0);
-   qnice_wait_o         : out std_logic;
+   qnice_clk_i            : in  std_logic;
+   qnice_rst_i            : in  std_logic;
+   qnice_addr_i           : in  std_logic_vector(27 downto 0);
+   qnice_data_i           : in  std_logic_vector(15 downto 0);
+   qnice_ce_i             : in  std_logic;
+   qnice_we_i             : in  std_logic;
+   qnice_data_o           : out std_logic_vector(15 downto 0);
+   qnice_wait_o           : out std_logic;
 
-   main_clk_i           : in  std_logic;
-   main_rst_i           : in  std_logic;
-   main_reset_core_o    : out std_logic;
-   main_loading_o       : out std_logic;
-   main_id_o            : out std_logic_vector(15 downto 0);
-   main_exrom_o         : out std_logic_vector( 7 downto 0);
-   main_game_o          : out std_logic_vector( 7 downto 0);
-   main_size_o          : out std_logic_vector(22 downto 0);
-   main_bank_laddr_o    : out std_logic_vector(15 downto 0);
-   main_bank_size_o     : out std_logic_vector(15 downto 0);
-   main_bank_num_o      : out std_logic_vector(15 downto 0);
-   main_bank_raddr_o    : out std_logic_vector(24 downto 0);
-   main_bank_wr_o       : out std_logic;
-   main_bank_lo_i       : in  std_logic_vector( 6 downto 0);
-   main_bank_hi_i       : in  std_logic_vector( 6 downto 0);
-   main_bank_wait_o     : out std_logic;
-   main_ram_addr_i      : in  std_logic_vector(15 downto 0);
-   main_ram_data_i      : in  std_logic_vector( 7 downto 0);
-   main_ioe_we_i        : in  std_logic;
-   main_iof_we_i        : in  std_logic;
-   main_lo_ram_data_o   : out std_logic_vector(15 downto 0);
-   main_hi_ram_data_o   : out std_logic_vector(15 downto 0);
-   main_ioe_ram_data_o  : out std_logic_vector( 7 downto 0);
-   main_iof_ram_data_o  : out std_logic_vector( 7 downto 0);
-   main_crt_we_i        : in  std_logic;
-   main_crt_ram_data_o  : out std_logic_vector( 7 downto 0);
+   main_clk_i             : in  std_logic;
+   main_rst_i             : in  std_logic;
+   main_reset_core_o      : out std_logic;
+   main_loading_o         : out std_logic;
+   main_id_o              : out std_logic_vector(15 downto 0);
+   main_exrom_o           : out std_logic_vector( 7 downto 0);
+   main_game_o            : out std_logic_vector( 7 downto 0);
+   main_size_o            : out std_logic_vector(22 downto 0);
+   main_bank_laddr_o      : out std_logic_vector(15 downto 0);
+   main_bank_size_o       : out std_logic_vector(15 downto 0);
+   main_bank_num_o        : out std_logic_vector(15 downto 0);
+   main_bank_raddr_o      : out std_logic_vector(24 downto 0);
+   main_bank_wr_o         : out std_logic;
+   main_bank_lo_i         : in  std_logic_vector( 6 downto 0);
+   main_bank_hi_i         : in  std_logic_vector( 6 downto 0);
+   main_bank_wait_o       : out std_logic;
+   main_ram_addr_i        : in  std_logic_vector(15 downto 0);
+   main_ram_data_i        : in  std_logic_vector( 7 downto 0);
+   main_ioe_we_i          : in  std_logic;
+   main_iof_we_i          : in  std_logic;
+   main_lo_ram_data_o     : out std_logic_vector(15 downto 0);
+   main_hi_ram_data_o     : out std_logic_vector(15 downto 0);
+   main_ioe_ram_data_o    : out std_logic_vector( 7 downto 0);
+   main_iof_ram_data_o    : out std_logic_vector( 7 downto 0);
+   main_crt_we_i          : in  std_logic;
+   main_crt_ram_data_o    : out std_logic_vector( 7 downto 0);
+   main_cart_soft_reset_i : in  std_logic; -- OSM soft-reset to force a cacher reinit.
 
-   hr_clk_i             : in  std_logic;
-   hr_rst_i             : in  std_logic;
-   hr_write_o           : out std_logic;
-   hr_read_o            : out std_logic;
-   hr_address_o         : out std_logic_vector(31 downto 0) := (others => '0');
-   hr_writedata_o       : out std_logic_vector(15 downto 0);
-   hr_byteenable_o      : out std_logic_vector( 1 downto 0);
-   hr_burstcount_o      : out std_logic_vector( 7 downto 0);
-   hr_readdata_i        : in  std_logic_vector(15 downto 0);
-   hr_readdatavalid_i   : in  std_logic;
-   hr_waitrequest_i     : in  std_logic
+   hr_clk_i               : in  std_logic;
+   hr_rst_i               : in  std_logic;
+   hr_write_o             : out std_logic;
+   hr_read_o              : out std_logic;
+   hr_address_o           : out std_logic_vector(31 downto 0) := (others => '0');
+   hr_writedata_o         : out std_logic_vector(15 downto 0);
+   hr_byteenable_o        : out std_logic_vector( 1 downto 0);
+   hr_burstcount_o        : out std_logic_vector( 7 downto 0);
+   hr_readdata_i          : in  std_logic_vector(15 downto 0);
+   hr_readdatavalid_i     : in  std_logic;
+   hr_waitrequest_i       : in  std_logic
 );
 end entity sw_cartridge_wrapper;
 
@@ -127,6 +128,7 @@ architecture synthesis of sw_cartridge_wrapper is
    signal hr_bank_wait            : std_logic;
    signal hr_cache_addr_lo        : std_logic_vector(C_CACHE_SIZE-1 downto 0);
    signal hr_cache_addr_hi        : std_logic_vector(C_CACHE_SIZE-1 downto 0);
+   signal hr_cart_soft_reset      : std_logic;
    signal hr_loading              : std_logic;
    signal hr_id                   : std_logic_vector(15 downto 0);
    signal hr_exrom                : std_logic_vector( 7 downto 0);
@@ -238,17 +240,18 @@ begin
 
    i_cdc_main2hr : entity work.cdc_stable
       generic map (
-         G_DATA_SIZE => 14
+         G_DATA_SIZE => 15
       )
       port map (
          src_clk_i                => main_clk_i,
          src_data_i( 6 downto  0) => main_bank_lo_i,
          src_data_i(13 downto  7) => main_bank_hi_i,
+         src_data_i(14)           => main_cart_soft_reset_i,
          dst_clk_i                => hr_clk_i,
          dst_data_o( 6 downto  0) => hr_bank_lo,
-         dst_data_o(13 downto  7) => hr_bank_hi
+         dst_data_o(13 downto  7) => hr_bank_hi,
+         dst_data_o(14)           => hr_cart_soft_reset
       ); -- i_cdc_main2hr
-
 
    -------------------------------------------------------------
    -- Instantiate CRT loader and parser
@@ -297,7 +300,8 @@ begin
          bram_lo_wren_o      => hr_bram_lo_wren,
          bram_lo_q_i         => (others => '0'),
          bram_hi_wren_o      => hr_bram_hi_wren,
-         bram_hi_q_i         => (others => '0')
+         bram_hi_q_i         => (others => '0'),
+         cart_soft_reset_i   => hr_cart_soft_reset
       ); -- i_crt_loader
 
 

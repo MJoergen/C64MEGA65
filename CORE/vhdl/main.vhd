@@ -29,13 +29,13 @@ entity main is
     reset_soft_i           : in    std_logic;
     reset_hard_i           : in    std_logic;
 
-    -- "Soft-but-not-from-sw_cartridge_wrapper" reset: short MEGA65 button
-    -- press AND QNICE M2M$CSR_RESET pulse, but NOT the wrapper's post-parse
-    -- pulse. Used to synthetically pulse cartridge_inst.cart_loading_i so
-    -- that bank-switched SIMCRTs re-enter their autostart configuration after
-    -- an OSM-driven mode toggle. See also cartridge_inst's port map and the 
-    -- comment block above it
+    -- Soft-reset that comes from the MEGA65's reset button or from the
+    -- QNICE M2M$CSR_RESET reset pulse but not from sw_cartridge_wrapper. Used
+    -- in the auto-reset scenarios where toggling SIMREU or switching between
+    -- the hardware expansion slot and SIMCRT triggers an auto-reset. We need
+    -- this to reliably start the SIMCRT cartridges after such an auto-reset.
     cart_soft_reset_i      : in    std_logic;
+    cart_soft_reset_o      : out   std_logic;  -- gated by prevent_reset
 
     -- Pull high to pause the core
     pause_i                : in    std_logic;
@@ -542,9 +542,9 @@ begin
   -- prevent data corruption by not allowing a soft reset to happen while the cache is still dirty
   -- since we can have more than one cache that might be dirty, we convert the std_logic_vector of length G_VDNUM
   -- into an unsigned and check for zero
-  prevent_reset   <= '0' when unsigned(cache_dirty) = 0 else
-                     '1';
-  cart_soft_reset <= cart_soft_reset_i and not prevent_reset;
+  prevent_reset     <= '0' when unsigned(cache_dirty) = 0 else '1';
+  cart_soft_reset   <= cart_soft_reset_i and not prevent_reset;
+  cart_soft_reset_o <= cart_soft_reset;
 
   -- the color of the drive led is green normally, but it turns yellow
   -- when the cache is dirty and/or currently being flushed
@@ -1129,7 +1129,9 @@ begin
   -- Simulated Cartridge
   --------------------------------------------------------------------------------------------------
 
-  -- This component handles the CPU writes to $DExx and $DFxx for the bank switching.
+  -- This component handles the CPU writes to $DExx and $DFxx for the bank switching and contains
+  -- the simulated banking, EXROM/GAME, etc. behavior of all known cartridge types.
+  --
   -- IMPORTANT: The component sets the correct exrom_o and game_o while cart_loading_i='1'.
   -- During a reset signal via "rst_i" exrom_o, game_o and other stateful signals are reset
   -- to the neutral state. Due to the fact, that sw_cartridge_wrapper uses a soft reset to
@@ -1140,6 +1142,10 @@ begin
   -- sub-clause, leaving cartridge_inst in the cart's autostart configuration. Using rst_i
   -- would leave exrom_o=1/game_o=1 (no cart visible) because the rst_i block sits AFTER
   -- the case statement and last-assignment-wins. Required for bank-switched carts.
+  --
+  -- Additionally we are outputting cart_soft_reset via cart_soft_reset_o, so that in mega65.vhd
+  -- we can trigger a bank 0 cache reload in i_sw_cartridge_wrapper so that the CBM80 signature
+  -- can be seen after the OSM-driven reset.
   cartridge_inst : entity work.cartridge
     port map (
       clk_i          => clk_main_i,

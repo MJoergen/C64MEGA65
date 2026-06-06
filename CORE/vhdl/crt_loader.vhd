@@ -78,7 +78,13 @@ entity crt_loader is
       bram_lo_wren_o      : out std_logic;
       bram_lo_q_i         : in  std_logic_vector(15 downto 0);
       bram_hi_wren_o      : out std_logic;
-      bram_hi_q_i         : in  std_logic_vector(15 downto 0)
+      bram_hi_q_i         : in  std_logic_vector(15 downto 0);
+
+      -- OSM soft-reset (CDC'd into hr_clk by the wrapper). While high,
+      -- cart_valid is forced low so the cacher sees a 1->0->1 edge and
+      -- re-runs its init block at crt_cacher.vhd:291-302 (wipes tags,
+      -- reloads slot 0 with bank 0).
+      cart_soft_reset_i   : in  std_logic
    );
 end entity crt_loader;
 
@@ -140,8 +146,7 @@ begin
          cart_size_o         => cart_size_o
       ); -- i_crt_parser
 
-   cart_valid <= '1' when resp_status_o = C_STAT_READY
-            else '0';
+   cart_valid <= '1' when resp_status_o = C_STAT_READY and cart_soft_reset_i = '0' else '0';
 
    i_crt_cacher : entity work.crt_cacher
       generic map (

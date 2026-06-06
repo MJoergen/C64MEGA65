@@ -283,6 +283,7 @@ signal main_crt_bank_wait         : std_logic;
 signal main_reset_core            : std_logic;
 signal main_reset_from_prgloader  : std_logic;
 signal main_prg_trigger_run       : std_logic;
+signal main_cart_soft_reset       : std_logic;
 
 ---------------------------------------------------------------------------------------------
 -- hr_clk
@@ -534,11 +535,12 @@ begin
          reset_soft_i           => main_reset_core_i or main_reset_core,
          reset_hard_i           => main_reset_m2m_i or main_reset_from_prgloader,
 
-         -- Soft reset routed to cartridge_inst (in main.vhd) -- deliberately
+         -- Soft reset routed to cartridge_inst (in main.vhd): deliberately
          -- excludes sw_cartridge_wrapper's local main_reset_core, so the
          -- wrapper's post-parse pulse does NOT wipe the just-installed cart
          -- state. See cartridge_inst port map comment block in main.vhd.
          cart_soft_reset_i      => main_reset_core_i,
+         cart_soft_reset_o      => main_cart_soft_reset,
 
          pause_i                => main_pause_core_i,
          trigger_run_i          => main_prg_trigger_run,
@@ -995,51 +997,52 @@ begin
       G_BASE_ADDRESS => C_HMAP_CRT(9 downto 0) & X"000"
    )
    port map (
-      qnice_clk_i          => qnice_clk_i,
-      qnice_rst_i          => qnice_rst_i,
-      qnice_addr_i         => qnice_dev_addr_i,
-      qnice_data_i         => qnice_dev_data_i,
-      qnice_ce_i           => qnice_crt_qnice_ce,
-      qnice_we_i           => qnice_crt_qnice_we,
-      qnice_data_o         => qnice_crt_qnice_data,
-      qnice_wait_o         => qnice_crt_qnice_wait,
-      main_clk_i           => main_clk_o,
-      main_rst_i           => main_reset_m2m_i,
-      main_reset_core_o    => main_reset_core,        -- see RESET SEMANTICS in main.vhd, min. pulse length is 32 clock cycles
-      main_loading_o       => main_crt_loading,
-      main_id_o            => main_crt_id,
-      main_exrom_o         => main_crt_exrom,
-      main_game_o          => main_crt_game,
-      main_size_o          => main_crt_size,
-      main_bank_laddr_o    => main_crt_bank_laddr,
-      main_bank_size_o     => main_crt_bank_size,
-      main_bank_num_o      => main_crt_bank_num,
-      main_bank_raddr_o    => main_crt_bank_raddr,
-      main_bank_wr_o       => main_crt_bank_wr,
-      main_bank_lo_i       => main_crt_bank_lo,
-      main_bank_hi_i       => main_crt_bank_hi,
-      main_bank_wait_o     => main_crt_bank_wait,
-      main_ram_addr_i      => std_logic_vector(main_crt_addr_bus),
-      main_ram_data_i      => std_logic_vector(main_ram_data_from_c64),
-      main_ioe_we_i        => main_crt_ioe_we,
-      main_iof_we_i        => main_crt_iof_we,
-      main_lo_ram_data_o   => main_crt_lo_ram_data,
-      main_hi_ram_data_o   => main_crt_hi_ram_data,
-      main_ioe_ram_data_o  => main_crt_ioe_ram_data,
-      main_iof_ram_data_o  => main_crt_iof_ram_data,
-      main_crt_we_i        => main_crt_we,
-      main_crt_ram_data_o  => main_crt_ram_data,
-      hr_clk_i             => hr_clk_i,
-      hr_rst_i             => hr_rst_i,
-      hr_write_o           => hr_crt_write,
-      hr_read_o            => hr_crt_read,
-      hr_address_o         => hr_crt_address,
-      hr_writedata_o       => hr_crt_writedata,
-      hr_byteenable_o      => hr_crt_byteenable,
-      hr_burstcount_o      => hr_crt_burstcount,
-      hr_readdata_i        => hr_crt_readdata,
-      hr_readdatavalid_i   => hr_crt_readdatavalid,
-      hr_waitrequest_i     => hr_crt_waitrequest
+      qnice_clk_i            => qnice_clk_i,
+      qnice_rst_i            => qnice_rst_i,
+      qnice_addr_i           => qnice_dev_addr_i,
+      qnice_data_i           => qnice_dev_data_i,
+      qnice_ce_i             => qnice_crt_qnice_ce,
+      qnice_we_i             => qnice_crt_qnice_we,
+      qnice_data_o           => qnice_crt_qnice_data,
+      qnice_wait_o           => qnice_crt_qnice_wait,
+      main_clk_i             => main_clk_o,
+      main_rst_i             => main_reset_m2m_i,
+      main_reset_core_o      => main_reset_core,        -- see RESET SEMANTICS in main.vhd, min. pulse length is 32 clock cycles
+      main_loading_o         => main_crt_loading,
+      main_id_o              => main_crt_id,
+      main_exrom_o           => main_crt_exrom,
+      main_game_o            => main_crt_game,
+      main_size_o            => main_crt_size,
+      main_bank_laddr_o      => main_crt_bank_laddr,
+      main_bank_size_o       => main_crt_bank_size,
+      main_bank_num_o        => main_crt_bank_num,
+      main_bank_raddr_o      => main_crt_bank_raddr,
+      main_bank_wr_o         => main_crt_bank_wr,
+      main_bank_lo_i         => main_crt_bank_lo,
+      main_bank_hi_i         => main_crt_bank_hi,
+      main_bank_wait_o       => main_crt_bank_wait,
+      main_ram_addr_i        => std_logic_vector(main_crt_addr_bus),
+      main_ram_data_i        => std_logic_vector(main_ram_data_from_c64),
+      main_ioe_we_i          => main_crt_ioe_we,
+      main_iof_we_i          => main_crt_iof_we,
+      main_lo_ram_data_o     => main_crt_lo_ram_data,
+      main_hi_ram_data_o     => main_crt_hi_ram_data,
+      main_ioe_ram_data_o    => main_crt_ioe_ram_data,
+      main_iof_ram_data_o    => main_crt_iof_ram_data,
+      main_crt_we_i          => main_crt_we,
+      main_crt_ram_data_o    => main_crt_ram_data,
+      main_cart_soft_reset_i => main_cart_soft_reset,   -- see main.vhd comment at cartridge_inst
+      hr_clk_i               => hr_clk_i,
+      hr_rst_i               => hr_rst_i,
+      hr_write_o             => hr_crt_write,
+      hr_read_o              => hr_crt_read,
+      hr_address_o           => hr_crt_address,
+      hr_writedata_o         => hr_crt_writedata,
+      hr_byteenable_o        => hr_crt_byteenable,
+      hr_burstcount_o        => hr_crt_burstcount,
+      hr_readdata_i          => hr_crt_readdata,
+      hr_readdatavalid_i     => hr_crt_readdatavalid,
+      hr_waitrequest_i       => hr_crt_waitrequest
    ); -- i_sw_cartridge_wrapper
 
    main2hr_avm_fifo : entity work.avm_fifo
