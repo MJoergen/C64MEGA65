@@ -865,6 +865,35 @@ internalize them before debugging anything visual or timing-related:
   feature work goes on `dev-*` / `develop-*` branches and *may* be broken.
 - **License:** GPL v3. New contributions must also be GPL v3.
 
+### `tests/README.md` is an append-only per-version log
+
+`tests/README.md` is not a current testing checklist — it is a **historical
+regression-test record**, one section per shipped version, newest at the top
+(Setext-style headers: `Version X - <date>` underlined with `-----`). Each
+`Version X` block records what was tested for that specific release: the
+bullets, tables, and procedures inside it describe the state of the OSM /
+menu / features **as they existed when that version shipped**, not as they
+exist today.
+
+Consequences for agents:
+
+- **Do not edit past `Version X` sections** to reflect renamed or removed
+  menu items, new feature names, etc. — even when the rename is correct
+  in the current codebase. A bullet like `* CRT emulation` inside the
+  `Version 5.2` block is a true statement about V5.2 testing and must
+  stay verbatim. Rewriting it falsifies the historical record.
+- **For unreleased work (the version currently in development), prepend
+  a new section at the top** of the file: `Version X.Y - TBD` underlined
+  with `-----`, immediately after the intro paragraph and before the most
+  recent shipped version. Put `@TODO` bullets there describing what needs
+  to be tested or what the V5.x procedure should become in V(X.Y).
+- Once the new version actually ships, the `TBD` becomes a real date and
+  the `@TODO`s become concrete tested-or-not entries; from that point on
+  it joins the historical record and is no longer edited.
+
+The same append-only-newest-on-top convention is used by
+`M2M/video_filters/README.md` (V2.1.0 above V1.0.0).
+
 ---
 
 ## 8. Useful pointers

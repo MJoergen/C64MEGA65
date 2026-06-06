@@ -57,3 +57,25 @@ convert_file(MODE_OUT, 'Scan_Br_115_80.txt',  'Scan_Br_115_80.out' , 0x7100, 10,
 convert_file(MODE_ASM, 'Scan_Br_115_80.txt',  'Scan_Br_115_80.asm' , 0x7100, 10, 7, 1, 0, 1)
 convert_file(MODE_OUT, 'Scan_Br_120_80.txt',  'Scan_Br_120_80.out' , 0x7100, 10, 7, 1, 0, 1)
 convert_file(MODE_ASM, 'Scan_Br_120_80.txt',  'Scan_Br_120_80.asm' , 0x7100, 10, 7, 1, 0, 1)
+
+# Added for C64MEGA65 V6 "HDMI: %s" filter submenu
+# (M2M V2.1: additive only; existing entries above are unchanged.)
+# Dual-use blobs (loaded into both H and V slots by the core):
+# SharpBilinear_080 uses shift_left=1 — its peak source coefficient is 128, which
+# at shift_left=2 would scale to 512 and silently wrap to signed -512 in
+# ASCAL's signed(9 downto 0) RAM (10-bit max is +511). At shift_left=1 it scales
+# to 256 = +256 signed, same dynamic range as the Scan_Br_*_80 family.
+convert_file(MODE_OUT, 'SharpBilinear_080.txt',  'SharpBilinear_080.out' , 0x7000, 10,  7, 1, 0, 1)
+convert_file(MODE_ASM, 'SharpBilinear_080.txt',  'SharpBilinear_080.asm' , 0x7000, 10,  7, 1, 0, 1)
+convert_file(MODE_OUT, 'GS_Sharpness_050.txt',   'GS_Sharpness_050.out'  , 0x7000, 10, 11, 1, 0, 2)
+convert_file(MODE_ASM, 'GS_Sharpness_050.txt',   'GS_Sharpness_050.asm'  , 0x7000, 10, 11, 1, 0, 2)
+# CRT Composite simulation — H to slot 0x7000, V to slot 0x7100:
+convert_file(MODE_OUT, 'CRT_Sim_Composite_H.txt','CRT_Sim_Composite_H.out', 0x7000, 10,  7, 1, 0, 2)
+convert_file(MODE_ASM, 'CRT_Sim_Composite_H.txt','CRT_Sim_Composite_H.asm', 0x7000, 10,  7, 1, 0, 2)
+convert_file(MODE_OUT, 'CRT_Sim_Composite_V.txt','CRT_Sim_Composite_V.out', 0x7100, 10,  7, 1, 0, 2)
+convert_file(MODE_ASM, 'CRT_Sim_Composite_V.txt','CRT_Sim_Composite_V.asm', 0x7100, 10,  7, 1, 0, 2)
+# CRT S-Video simulation — H to 0x7000, V to 0x7100:
+convert_file(MODE_OUT, 'CRT_Sim_SVideo_H.txt',   'CRT_Sim_SVideo_H.out'   , 0x7000, 10,  7, 1, 0, 2)
+convert_file(MODE_ASM, 'CRT_Sim_SVideo_H.txt',   'CRT_Sim_SVideo_H.asm'   , 0x7000, 10,  7, 1, 0, 2)
+convert_file(MODE_OUT, 'CRT_Sim_SVideo_V.txt',   'CRT_Sim_SVideo_V.out'   , 0x7100, 10,  7, 1, 0, 2)
+convert_file(MODE_ASM, 'CRT_Sim_SVideo_V.txt',   'CRT_Sim_SVideo_V.asm'   , 0x7100, 10,  7, 1, 0, 2)

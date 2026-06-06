@@ -445,3 +445,47 @@ _PRINTSLF_3     ADD     1, R1
 _PRINTSLF_RET   MOVE    R7, R8
                 DECRB
                 RET
+
+; ----------------------------------------------------------------------------
+; M2M$LOAD_POLYPHASE  Load a (horizontal, vertical) filter pair into the
+;                    ascal polyphase coefficient RAM. ASCAL_FILTER_LEN
+;                    (= 0x100) words are copied into the H slot at
+;                    M2M$ASCAL_PP_HORIZ and another 0x100 words into the V
+;                    slot at M2M$ASCAL_PP_VERT, through QNICE device
+;                    M2M$ASCAL_PPHASE.
+;
+;                    Safe to call at boot or at runtime from a core OSM
+;                    callback. Does NOT touch ascal mode bits, does NOT reset
+;                    the core. The 256-word filter blob format is documented
+;                    in M2M/video_filters/README.md.
+;
+; Input:  R8 = pointer to a 256-word horizontal coefficient table
+;         R9 = pointer to a 256-word vertical   coefficient table
+; Output: -
+; ----------------------------------------------------------------------------
+
+M2M$LOAD_POLYPHASE  SYSCALL(enter, 1)
+
+                ; select the ascal Polyphase RAM device
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    M2M$ASCAL_PPHASE, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+                MOVE    0, @R0
+
+                MOVE    ASCAL_FILTER_LEN, R10
+
+                ; copy horizontal filter (R8 already = H label) to PP_HORIZ
+                MOVE    R9, R0                  ; stash V pointer
+                MOVE    M2M$RAMROM_DATA, R9
+                ADD     M2M$ASCAL_PP_HORIZ, R9
+                SYSCALL(memcpy, 1)
+
+                ; copy vertical filter (R0 = stashed V label) to PP_VERT
+                MOVE    R0, R8
+                MOVE    M2M$RAMROM_DATA, R9
+                ADD     M2M$ASCAL_PP_VERT, R9
+                MOVE    ASCAL_FILTER_LEN, R10
+                SYSCALL(memcpy, 1)
+
+                SYSCALL(leave, 1)
+                RET

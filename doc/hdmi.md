@@ -3,7 +3,7 @@
 ## Config menu
 The config menu contains the following six entries containing the word HDMI:
 
-* HDMI: CRT emulation
+* HDMI: \<filter\> (HDMI Filter submenu: Sharp / Smooth / Lanczos / Scanlines / CRT (S-Video) / CRT (Composite); default is "Scanlines", which is bit-identical to V5's "CRT emulation" look)
 * HDMI: Zoom-in
 * HDMI: Force 60Hz
 * HDMI: 4:3 mode
@@ -11,7 +11,10 @@ The config menu contains the following six entries containing the word HDMI:
 * HDMI: Flicker-free
 
 Of these six options, only "Zoom-in", "Force 60Hz", and "4:3 mode" affect the
-actual HDMI screen resolution.
+actual HDMI screen resolution. The HDMI Filter submenu picks one of six
+polyphase coefficient pairs that are loaded into ASCAL's polyphase scaler;
+see [`M2M/video_filters/README.md`](../M2M/video_filters/README.md) for the
+per-filter character and the underlying mechanism.
 
 
 ## Possible resolutions

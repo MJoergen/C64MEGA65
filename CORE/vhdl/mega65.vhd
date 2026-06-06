@@ -344,12 +344,21 @@ constant C_MENU_HDMI_4_3_50   : natural := 60;
 constant C_MENU_HDMI_5_4_50   : natural := 61;
 constant C_MENU_HDMI_FF       : natural := 63;
 constant C_MENU_HDMI_DVI      : natural := 64;
-constant C_MENU_CRT_EMULATION : natural := 67;
-constant C_MENU_HDMI_ZOOM     : natural := 68;
-constant C_MENU_VGA_STD       : natural := 72;
-constant C_MENU_VGA_15KHZHSVS : natural := 76;
-constant C_MENU_VGA_15KHZCS   : natural := 77;
-subtype C_MENU_OSM_SCALING is natural range 91 downto 83;
+-- HDMI Filter submenu (replaces V1's CRT emulation single-toggle at bit 67).
+-- All options drive ascal polyphase mode (qnice_ascal_polyphase_o is hardwired
+-- to '1' below); selection is interpreted entirely by the core's m2m-rom.asm,
+-- which loads the matching (H, V) coefficient pair via M2M$LOAD_POLYPHASE.
+constant C_MENU_HDMI_FLT_SHARP         : natural := 70;
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 71;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 72;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 73;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 74;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 75;
+constant C_MENU_HDMI_ZOOM     : natural := 78;
+constant C_MENU_VGA_STD       : natural := 82;
+constant C_MENU_VGA_15KHZHSVS : natural := 86;
+constant C_MENU_VGA_15KHZCS   : natural := 87;
+subtype C_MENU_OSM_SCALING is natural range 101 downto 93;
 
 -- RAMs for the C64
 signal qnice_c64_mount_buf_ram_we   : std_logic;
@@ -781,9 +790,15 @@ begin
    -- 11 : Bicubic
    qnice_ascal_mode_o         <= "00";
 
-   -- If polyphase is '1' then the ascal filter mode is ignored and polyphase filters are used instead
-   -- @TODO: Right now, the filters are hardcoded in the M2M framework, we need to make them changeable inside m2m-rom.asm
-   qnice_ascal_polyphase_o    <= qnice_osm_control_i(C_MENU_CRT_EMULATION);
+   -- ascal stays in polyphase mode permanently. Which (H, V) coefficient pair
+   -- is loaded into the polyphase RAM is decided entirely by the QNICE Shell
+   -- in m2m-rom.asm: it reads the HDMI Filter submenu selection (group
+   -- OPTM_G_HDMI_FILTER / bits C_MENU_HDMI_FLT_*) and pushes the matching pair
+   -- via M2M$LOAD_POLYPHASE on boot (PREP_START) and on every change
+   -- (OSM_SEL_POST). qnice_ascal_mode_o above is forced to "00" so the
+   -- non-polyphase modes (NN / Bilinear / Sharp Bilinear / Bicubic) are never
+   -- selected -- the V5 "CRT emulation off = NN = wonky pixels" path is gone.
+   qnice_ascal_polyphase_o    <= '1';
 
    -- ascal triple-buffering
    -- @TODO: Right now, the M2M framework only supports OFF, so do not touch until the framework is upgraded
