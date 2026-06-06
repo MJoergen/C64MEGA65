@@ -46,9 +46,9 @@ down.
 | `Scan_Br_115_80.asm`          | `Scanlines - Brighter/115pct/Scan_Br_115_80`  | V            | 118..147    | tiny +     | +15% brightness-compensated. |
 | `Scan_Br_120_80.asm`          | `Scanlines - Brighter/120pct/Scan_Br_120_80`  | V            | 122..154    | tiny +     | +20% brightness-compensated; KiDra's original V choice (see V1 section). |
 | `CRT_Sim_Composite_H.asm`     | `CRT - Simulation/CRT Simulation (Composite)_H` | H          | 126..129    | small +    | Composite-bandwidth horizontal blur; helps dither blend into colors. |
-| `CRT_Sim_Composite_V.asm`     | `CRT - Simulation/CRT Simulation (Composite)_V` | V          | **51..128** | ~0         | Strong scanline darkening — pairs with the composite H file. |
+| `CRT_Sim_Composite_V.asm`     | `CRT - Simulation/CRT Simulation (Composite)_V` | V          | **51..128** | ~0         | Strong scanline darkening — pairs with the composite H file *in the original MiSTer pipeline (with gamma + shadow mask)*; **not paired with anything in C64MEGA65 V6** — see the V6 reference table below. |
 | `CRT_Sim_SVideo_H.asm`        | `CRT - Simulation/CRT Simulation (S-Video)_H`   | H          | 127..130    | small +    | Mild S-Video-style horizontal softening. |
-| `CRT_Sim_SVideo_V.asm`        | `CRT - Simulation/CRT Simulation (S-Video)_V`   | V          | **51..128** | ~0         | Scanline darkening — pairs with the S-Video H file. |
+| `CRT_Sim_SVideo_V.asm`        | `CRT - Simulation/CRT Simulation (S-Video)_V`   | V          | **51..128** | ~0         | Scanline darkening — pairs with the S-Video H file *in the original MiSTer pipeline*; **not paired with anything in C64MEGA65 V6** — see the V6 reference table below. |
 
 The **Per-row sum** column above is the raw MiSTer-side row sum, *before*
 any `shift_left` is applied. MiSTer's 64-phase 8-bit files treat raw row
@@ -264,9 +264,13 @@ does:
 The core sets `ASCAL_USAGE = 1` (`AUSE_CUSTOM`) in `config.vhd` so
 `ASCAL_INIT` clears `M2M$CSR` bit 11, leaving `M2M$ASCAL_MODE` (`0xFFE3`)
 writable from QNICE. `LOAD_HDMI_FILTER` then writes the mode register
-**per menu selection**: `M2M$ASCAL_SBILINEAR` for the "Sharp" option,
-`M2M$ASCAL_POLYPHASE` for the five polyphase-based options. There is no
-NN fallback because the dispatcher never writes `M2M$ASCAL_NEAREST`.
+**per menu selection**: `M2M$ASCAL_NEAREST` for "No Filter",
+`M2M$ASCAL_SBILINEAR` for "Sharp Bilinear", `M2M$ASCAL_BICUBIC` for
+"Bicubic", and `M2M$ASCAL_POLYPHASE` for the five polyphase-based options
+(Smooth, Lanczos, Scanlines, CRT (S-Video), CRT (Composite)). The
+"No Filter" option intentionally exposes the V5 #223 wonky-pixel-columns
+artefact as a power-user opt-in — it is NOT the default, and no other
+menu option silently falls through to nearest-neighbour.
 
 ### Filter combinations used by C64MEGA65 V6
 
@@ -274,12 +278,14 @@ The reference combinations chosen for the C64MEGA65 V6 "HDMI: %s" submenu:
 
 | Menu label               | ASCAL mode        | Horizontal              | Vertical               | What you see |
 |--------------------------|-------------------|-------------------------|------------------------|--------------|
-| Sharp                    | native SBILINEAR  | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | ASCAL's built-in cubic-warped Sharp Bilinear (`ascal.vhd:783-821`). Smoother than the polyphase `SHARPBILINEAR_080` emulation: C¹-continuous curve `g(t) = 4·t³` (t<½) / `1 − 4·(1−t)³` (t≥½), no slope discontinuities, no kinks. The cleanest "modern flatscreen" look. |
+| No Filter                | native NEAREST    | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | Pure nearest-neighbour. **Intentionally reproduces the V5 "CRT emulation off" wonky-pixel-column artefact (issue #223)** as a power-user opt-in for those who want raw, untouched pixels at the cost of uneven character widths at non-integer scale ratios. Not the default. |
+| Sharp Bilinear           | native SBILINEAR  | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | ASCAL's built-in cubic-warped Sharp Bilinear (`ascal.vhd:783-821`). Smoother than the polyphase `SHARPBILINEAR_080` emulation: C¹-continuous curve `g(t) = 4·t³` (t<½) / `1 − 4·(1−t)³` (t≥½), no slope discontinuities, no kinks. The cleanest "modern flatscreen" look. |
+| Bicubic                  | native BICUBIC    | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | ASCAL's built-in bicubic kernel. Mild edge bite from small negative outer-tap lobes; perceptually sits between Sharp Bilinear (no ringing at all) and Lanczos (visible halo). Good middle ground for users who want a hint of edge enhancement without the Lanczos look. |
 | Smooth                   | POLYPHASE         | `GS_SHARPNESS_050`      | `GS_SHARPNESS_050`     | Gently anti-aliased pixels, no scanlines. |
 | Lanczos                  | POLYPHASE         | `LANCZOS2_12`           | `LANCZOS2_12`          | Sharp scaler with classic Lanczos ringing. |
 | Scanlines                | POLYPHASE         | `LANCZOS2_12`           | `SCAN_BR_110_80`       | V5's "CRT emulation", preserved bit-identically. |
-| CRT (S-Video)            | POLYPHASE         | `CRT_SIM_SVIDEO_H`      | `CRT_SIM_SVIDEO_V`     | RGB-monitor / 1084 feel with mild scanlines. |
-| CRT (Composite)          | POLYPHASE         | `CRT_SIM_COMPOSITE_H`   | `CRT_SIM_COMPOSITE_V`  | 1980s living-room TV: bandwidth-limited horizontals, strong scanlines. |
+| CRT (S-Video)            | POLYPHASE         | `CRT_SIM_SVIDEO_H`      | `SCAN_BR_110_80`       | RGB-monitor / 1084 feel: mild horizontal softening + gentle scanlines, near-unity mean brightness. |
+| CRT (Composite)          | POLYPHASE         | `CRT_SIM_COMPOSITE_H`   | `SCAN_BR_110_80`       | 1980s living-room TV: heavy composite-style horizontal blur + gentle scanlines, near-unity mean brightness. |
 
 The single-blob entries (Smooth / Lanczos) load the same table into both
 slots; ASCAL applies it once horizontally and once vertically.
@@ -288,6 +294,27 @@ Note: the `SharpBilinear_080.txt` / `.asm` files remain in this folder as
 a polyphase emulation of the same idea — useful for cores that don't want
 to use ASCAL's native Sharp Bilinear, or for A/B comparison. C64MEGA65 V6
 does not `#include` it, so it costs zero ROM here.
+
+**On the CRT V file swap.** The upstream MiSTer `CRT_Sim_*_V` files are
+designed to be **one of three stages**: polyphase filter + brightness-lifting
+gamma LUT (`Gamma/CRT Simulation.txt`) + shadow mask overlay. M2M V2.1
+supports only the polyphase stage. Used standalone, the `CRT_Sim_*_V` file
+(coefficient data is identical between Composite and S-Video — only the
+label name differs; the per-format character lives entirely in the H file)
+has a deep ~40 %-of-unity mid-phase basin spanning 16 of 64 phases
+(post-shift row sums 102…116 across phases 24–39, with the 39.8 % floor at
+the two basin minima), which on a uniformly bright C64 BASIC screen reads
+as a heavy dark horizontal band rather than subtle scanlines. C64MEGA65
+V6 therefore pairs the `CRT_Sim_*_H` files with `SCAN_BR_110_80` as the V
+file (same V as the "Scanlines" entry), keeping the Composite-vs-S-Video
+distinction in the horizontal pass while restoring near-unity mean
+brightness. The `CRT_Sim_*_V` files stay in this folder for cores that do
+have gamma + shadow mask support, but are not `#include`d in the C64
+build. The longer-term direction is to wire ASCAL's adaptive-polyphase
+modes (101/110) and pair them with the `Scanlines - Adaptive/SLA_*` files,
+which apply scanline darkening per-pixel as a function of source
+luminance — bright C64 content gets mild scanlines, dark content gets
+full strength.
 
 ## MiSTer2MEGA65 Version 1.0.0
 

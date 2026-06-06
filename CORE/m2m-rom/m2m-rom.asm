@@ -452,20 +452,22 @@ D64_STDSIZE_H   .DW     0x0002, 0x0003
 
 ; LOAD_HDMI_FILTER: Read the saved HDMI Filter selection from M2M$CFM_DATA
 ; and configure ascal accordingly. Called from PREP_START (boot) and
-; OSM_SEL_POST (runtime). Six options, single-select: exactly one of the
+; OSM_SEL_POST (runtime). Eight options, single-select: exactly one of the
 ; C64_OSM_HDMI_FLT_* bits is set at any time -- OPTM_G_STDSEL in config.vhd
 ; guarantees a default ("Scanlines") if the saved SD config file is missing
 ; or empty.
 ;
-; Two execution paths, both encoded in HDMI_FLT_TABLE rows
+; Two execution shapes, both encoded in HDMI_FLT_TABLE rows
 ; (OSM_bit, ASCAL_MODE_word, H_label, V_label):
 ;
-;   * Sharp     -> write M2M$ASCAL_MODE = M2M$ASCAL_SBILINEAR. The H/V
-;                  labels are 0 sentinels: we skip the polyphase RAM write
-;                  entirely and let ascal run its native Sharp Bilinear
-;                  datapath (smooth cubic-warped lerp; see ascal.vhd:783).
-;   * others    -> write M2M$ASCAL_MODE = M2M$ASCAL_POLYPHASE, then push
-;                  the (H_label, V_label) pair into the ascal polyphase RAM
+;   * Native modes (No Filter / Sharp Bilinear / Bicubic) -> write the
+;                  matching mode word (NEAREST / SBILINEAR / BICUBIC) to
+;                  M2M$ASCAL_MODE. The H/V labels are 0 sentinels: we skip
+;                  the polyphase RAM write entirely and let ascal run its
+;                  built-in scaler datapath.
+;   * Polyphase modes (Smooth / Lanczos / Scanlines / CRT (S-Video) /
+;                  CRT (Composite)) -> write POLYPHASE then push the
+;                  (H_label, V_label) pair into the ascal polyphase RAM
 ;                  via M2M$LOAD_POLYPHASE.
 ;
 ; This routine assumes ASCAL_USAGE=1 (AUSE_CUSTOM) in config.vhd, which
@@ -473,11 +475,11 @@ D64_STDSIZE_H   .DW     0x0002, 0x0003
 ; writable. If a future core sets ASCAL_USAGE back to 2 (AUSE_AUTO), the
 ; mode writes below silently no-op.
 ;
-; Input:  -
+; Input:  None
 ; Output: R8 = 0, R9 = 0 on success
 LOAD_HDMI_FILTER INCRB
                 MOVE    HDMI_FLT_TABLE, R0
-                MOVE    6, R1                   ; option count
+                MOVE    8, R1                   ; option count
 
 _LHF_LOOP       MOVE    @R0++, R8               ; R8 = OSM bit for this option
                 RSUB    M2M$GET_SETTING, 1
@@ -511,30 +513,42 @@ _LHF_RET        XOR     R8, R8
                 RET
 
 ; Filter table: (OSM_bit, ASCAL_MODE_word, H_label, V_label) per option, in
-; OPTM_ITEMS display order. The Sharp row uses the ascal native Sharp Bilinear
-; (mode 010 = M2M$ASCAL_SBILINEAR); H and V are 0 sentinels so the dispatcher
-; skips the polyphase RAM write for that option. The remaining five rows all
-; select polyphase (mode 100) and provide real coefficient table labels.
+; OPTM_ITEMS display order. The first three rows use ascal native modes
+; (NEAREST / SBILINEAR / BICUBIC); their H and V are 0 sentinels so the
+; dispatcher skips the polyphase RAM write for them. The remaining five
+; rows all select polyphase (mode 100) and provide real coefficient table
+; labels.
 ;
 ; See M2M/video_filters/README.md for per-blob perceptual notes and
 ; CORE/vhdl/config.vhd for the OPTM_ITEMS / OPTM_GROUPS structure.
-HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0
+HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,                   0
+                .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0
+                .DW C64_OSM_HDMI_FLT_BICUBIC,       M2M$ASCAL_BICUBIC,   0,                   0
                 .DW C64_OSM_HDMI_FLT_SMOOTH,        M2M$ASCAL_POLYPHASE, GS_SHARPNESS_050,    GS_SHARPNESS_050
                 .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12
                 .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80
-                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, CRT_SIM_SVIDEO_H,    CRT_SIM_SVIDEO_V
-                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, CRT_SIM_COMPOSITE_H, CRT_SIM_COMPOSITE_V
+
+                ; As long as we are not supporting MiSTer's full
+                ; filter and post-processing chain:
+                ;
+                ; Both CRT rows reuse SCAN_BR_110_80 as the V file (same as
+                ; Scanlines mode). CRT_Sim_*_V is a deep ~40% mid-phase plateau
+                ; designed to be combined with the MiSTer gamma LUT + shadow mask;
+                ; M2M V2.1 supports neither, so standalone the plateau crushes
+                ; bright C64 content into a dark band. The Composite vs S-Video
+                ; character lives entirely in the H file (Composite has heavy
+                ; horizontal blur, S-Video has mild softening), so swapping only
+                ; the V file preserves the perceptual distinction while restoring
+                ; near-unity mean brightness.
+                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, CRT_SIM_SVIDEO_H,    SCAN_BR_110_80
+                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, CRT_SIM_COMPOSITE_H, SCAN_BR_110_80
 
 ; Filter coefficient blobs for the 5 polyphase-based options. LANCZOS2_12 and
 ; SCAN_BR_110_80 are already linked via the M2M framework file
-; M2M/rom/filters.asm (included from M2M/rom/shell.asm). SharpBilinear_080 is
-; NOT included here because the Sharp option now uses the ascal native Sharp
-; Bilinear (mode 010) — the polyphase coefficient table is unused for it.
+; M2M/rom/filters.asm (included from M2M/rom/shell.asm).
 #include "../../M2M/video_filters/GS_Sharpness_050.asm"
 #include "../../M2M/video_filters/CRT_Sim_Composite_H.asm"
-#include "../../M2M/video_filters/CRT_Sim_Composite_V.asm"
 #include "../../M2M/video_filters/CRT_Sim_SVideo_H.asm"
-#include "../../M2M/video_filters/CRT_Sim_SVideo_V.asm"
 
 ; This needs to be the last thing before the "Variables" sections starts
 END_OF_ROM      .DW 0

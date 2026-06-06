@@ -345,20 +345,23 @@ constant C_MENU_HDMI_5_4_50   : natural := 61;
 constant C_MENU_HDMI_FF       : natural := 63;
 constant C_MENU_HDMI_DVI      : natural := 64;
 -- HDMI Filter submenu (replaces V1's CRT emulation single-toggle at bit 67).
--- All options drive ascal polyphase mode (qnice_ascal_polyphase_o is hardwired
--- to '1' below); selection is interpreted entirely by the core's m2m-rom.asm,
--- which loads the matching (H, V) coefficient pair via M2M$LOAD_POLYPHASE.
-constant C_MENU_HDMI_FLT_SHARP         : natural := 70;
-constant C_MENU_HDMI_FLT_SMOOTH        : natural := 71;
-constant C_MENU_HDMI_FLT_LANCZOS       : natural := 72;
-constant C_MENU_HDMI_FLT_SCANLINES     : natural := 73;  -- default; bit-identical to V1's CRT emulation
-constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 74;
-constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 75;
-constant C_MENU_HDMI_ZOOM     : natural := 78;
-constant C_MENU_VGA_STD       : natural := 82;
-constant C_MENU_VGA_15KHZHSVS : natural := 86;
-constant C_MENU_VGA_15KHZCS   : natural := 87;
-subtype C_MENU_OSM_SCALING is natural range 101 downto 93;
+-- The selection is interpreted entirely by the core's m2m-rom.asm
+-- (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for native modes and loads
+-- the matching (H, V) coefficient pair via M2M$LOAD_POLYPHASE for polyphase
+-- modes. ASCAL_USAGE=1 in config.vhd routes mode control to QNICE directly.
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 70;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 71;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 72;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 73;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 74;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 75;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 76;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 77;
+constant C_MENU_HDMI_ZOOM     : natural := 80;
+constant C_MENU_VGA_STD       : natural := 84;
+constant C_MENU_VGA_15KHZHSVS : natural := 88;
+constant C_MENU_VGA_15KHZCS   : natural := 89;
+subtype C_MENU_OSM_SCALING is natural range 103 downto 95;
 
 -- RAMs for the C64
 signal qnice_c64_mount_buf_ram_we   : std_logic;
