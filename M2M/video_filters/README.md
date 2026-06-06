@@ -5,8 +5,7 @@ polyphase coefficient tables** that any M2M-based core can pull into ASCAL's
 4-tap / 64-phase polyphase scaler. The framework's default boot behavior is
 unchanged from V2.0.1: at system start it loads the classic
 `LANCZOS2_12` (horizontal) + `SCAN_BR_110_80` (vertical) pair (see
-`M2M/rom/filters.asm`). Cores that want more control can override this — see
-below.
+`M2M/rom/filters.asm`). Cores that want more control can override this.
 
 ### Background
 
@@ -104,39 +103,6 @@ exactly the bug that produced the over-bright Smooth / CRT pictures in
 the V6 beta build and was fixed by lowering the five affected files back
 to `shift_left=1`.
 
-### Post-conversion sanity check
-
-After running `convert.py`, every regenerated `.asm` should have row sums
-landing within ~5 % of 256 for non-scanline filters, and with controlled
-sub-unity dips for V files that intentionally do scanlines. The check
-below catches both the silent-truncation and the wrong-shift failure
-modes (it's what was used to verify the V6 brightness fix):
-
-```python
-python3 - <<'EOF'
-import re, glob
-for asm in sorted(glob.glob('*.asm')):
-    sums = []
-    for line in open(asm):
-        if not line.lstrip().startswith('.DW'):
-            continue
-        vals = []
-        for h in re.findall(r'0x([0-9A-Fa-f]+)', line):
-            v = int(h, 16)
-            if v >= 0x200: v -= 0x400         # two's-complement decode
-            vals.append(v)
-        sums.append(sum(vals))
-    if not sums: continue
-    print(f"{asm:30s}  rows={len(sums):3d}  "
-          f"sum range = [{min(sums)},{max(sums)}]  "
-          f"unity ratio = {min(sums)/256:.2f}..{max(sums)/256:.2f}")
-EOF
-```
-
-Expected: 64 rows per file (256-phase Lanczos decimated to 64); unity
-ratio max ≈ 1.00 ± 0.05; min either ≈ 1.00 (non-scanline) or as
-documented in the inventory table for V scanline / CRT-V files.
-
 ### `convert.py` — how to add or regenerate a filter
 
 `convert.py` reads one MiSTer-format `.txt` and emits two artifacts:
@@ -178,50 +144,6 @@ Parameter meanings:
 | `GS_Sharpness_*`              | 11          | 1          | 1          | Same unity convention as SharpBilinear. Extra 4-line Gaussian kernel block in the header. `shift_left=2` would double brightness (effective sum 512 vs unity 256) — visible as washed-out picture. |
 | `CRT Simulation (*)`          | 7           | 1          | 1          | Same unity convention. The `_V` files dip to row sum ~51 (post-shift ~102, = 40 % of unity) at mid-phases — that intentional sub-unity dip is the CRT vertical scanline gap. |
 
-**Three silent-failure modes** are worth knowing — `convert.py` does no
-validation today, all three have bitten this project:
-
-1. **Silent under-production.** Any `.txt` line that doesn't split into
-   four comma-separated integers is dropped silently. So if
-   `skip_header_lines` is too low, leftover comment lines slip past as
-   "non-conforming data" and the output is short by a few phases — no
-   error. *Sanity check:* freshly generated `.asm` must have exactly
-   **64 `.DW` lines**.
-2. **Silent sign-flip overflow.** `convert.py` packs every coefficient
-   into the low 10 bits of a 16-bit word as raw two's complement, with
-   no range check. If `shift_left` pushes a positive coefficient to ≥ 512
-   (signed-10-bit `+511` ceiling), it wraps to a large negative number —
-   peak-brightness phases silently invert. Caught during V6 step 1 for
-   `SharpBilinear_080`: source peak 128, `shift_left=2` would push to
-   `512 = 0x200`, which the hardware reads as `-512`. *Sanity check:*
-   `peak_source × 2^shift_left ≤ 511`.
-3. **Silent 2× brightness from wrong shift_left.** Even when no overflow
-   occurs, the wrong `shift_left` produces wrong row sums and therefore
-   wrong brightness. Using `shift_left=2` on a unity-128 MiSTer file
-   doubles every phase to unity 512, washing out the picture. This is
-   the V6 beta bug that produced the over-bright Smooth / CRT
-   screenshots. *Sanity check:* run the "Post-conversion sanity check"
-   above and verify row sums land near ASCAL unity 256.
-
-All three failure modes are now caught **inside `convert.py`** by an
-assertion block that runs after the scale step and before any file write,
-so a bad invocation aborts with a message that names the wrong parameter
-and the actual computed value:
-
-```
-$ python3 ./convert.py
-AssertionError: GS_Sharpness_050.asm: peak row sum 512 outside the unity
-window [240, 320] around ASCAL polyphase unity (= 256). shift_left=2 is
-wrong for this file — a value of 512 means the picture will be 2.00x the
-intended brightness. ...
-```
-
-The standalone sanity-check snippet above is still useful for auditing
-already-committed `.asm` files (e.g. when someone else's contribution
-lands without being regenerated), but the in-`convert.py` assertions
-mean future regressions caught the bug *before* a broken `.asm` gets
-written.
-
 ### How a core uses these files
 
 The bridge between the assembled-in coefficient tables and ASCAL's
@@ -237,7 +159,7 @@ polyphase RAM is the framework helper `M2M$LOAD_POLYPHASE` in
 ```
 
 A core that's happy with the default behavior doesn't need to do
-anything — `M2M/rom/filters.asm:LOAD_ASCAL_FLT` is a thin wrapper around
+anything: `M2M/rom/filters.asm:LOAD_ASCAL_FLT` is a thin wrapper around
 `M2M$LOAD_POLYPHASE` that selects `LANCZOS2_12` + `SCAN_BR_110_80` at
 system start, identical to V2.0. The OSM bit driving
 `qnice_ascal_polyphase_o` then toggles ASCAL between this polyphase set
@@ -267,10 +189,7 @@ writable from QNICE. `LOAD_HDMI_FILTER` then writes the mode register
 **per menu selection**: `M2M$ASCAL_NEAREST` for "No Filter",
 `M2M$ASCAL_SBILINEAR` for "Sharp Bilinear", `M2M$ASCAL_BICUBIC` for
 "Bicubic", and `M2M$ASCAL_POLYPHASE` for the five polyphase-based options
-(Smooth, Lanczos, Scanlines, CRT (S-Video), CRT (Composite)). The
-"No Filter" option intentionally exposes the V5 #223 wonky-pixel-columns
-artefact as a power-user opt-in — it is NOT the default, and no other
-menu option silently falls through to nearest-neighbour.
+(Smooth, Lanczos, Scanlines, CRT (S-Video), CRT (Composite)).
 
 ### Filter combinations used by C64MEGA65 V6
 
@@ -278,7 +197,7 @@ The reference combinations chosen for the C64MEGA65 V6 "HDMI: %s" submenu:
 
 | Menu label               | ASCAL mode        | Horizontal              | Vertical               | What you see |
 |--------------------------|-------------------|-------------------------|------------------------|--------------|
-| No Filter                | native NEAREST    | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | Pure nearest-neighbour. **Intentionally reproduces the V5 "CRT emulation off" wonky-pixel-column artefact (issue #223)** as a power-user opt-in for those who want raw, untouched pixels at the cost of uneven character widths at non-integer scale ratios. Not the default. |
+| No Filter                | native NEAREST    | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | Pure nearest-neighbour. Power-user opt-in for those who want raw, untouched pixels at the cost of uneven character widths at non-integer scale ratios. Not the default. |
 | Sharp Bilinear           | native SBILINEAR  | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | ASCAL's built-in cubic-warped Sharp Bilinear (`ascal.vhd:783-821`). Smoother than the polyphase `SHARPBILINEAR_080` emulation: C¹-continuous curve `g(t) = 4·t³` (t<½) / `1 − 4·(1−t)³` (t≥½), no slope discontinuities, no kinks. The cleanest "modern flatscreen" look. |
 | Bicubic                  | native BICUBIC    | *— (no coeffs loaded)*  | *— (no coeffs loaded)* | ASCAL's built-in bicubic kernel. Mild edge bite from small negative outer-tap lobes; perceptually sits between Sharp Bilinear (no ringing at all) and Lanczos (visible halo). Good middle ground for users who want a hint of edge enhancement without the Lanczos look. |
 | Smooth                   | POLYPHASE         | `GS_SHARPNESS_050`      | `GS_SHARPNESS_050`     | Gently anti-aliased pixels, no scanlines. |

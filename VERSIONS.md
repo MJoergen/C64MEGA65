@@ -44,12 +44,13 @@ Version 6 - MONTH DAY, 2026
 
 ## Improved Compatibility of the Core
 
-* Generally improved hardware cartridge compatibility, thanks to two
+* Generally improved hardware cartridge compatibility, thanks to three
   fixes that benefit cartridges beyond the ones we explicitly tested:
   more faithful timing on the Expansion Port (signals at the cart
-  connector now reproduce real-C64 setup and hold relationships), and
-  proper Ultimax-mode memory mapping (previously the C64 core saw floating
-  data in some memory ranges instead of cartridge-provided RAM/ROM).
+  connector now reproduce real-C64 setup and hold relationships), the BA
+  signal is now routed to the Expansion port and proper Ultimax-mode memory
+  mapping (previously the C64 core saw floating data in some memory ranges
+  instead of cartridge-provided RAM/ROM).
 
 * Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
   flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
