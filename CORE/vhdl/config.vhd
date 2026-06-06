@@ -273,8 +273,8 @@ constant JOY_2_AT_OSD      : boolean := false;
 -- 2=keep ascal mode in sync with the QNICE input register ascal_mode_i:
 --   use this if you want to control the ascal mode for example via the Options menu
 --   where you would wire the output of certain options menu bits with ascal_mode_i
-constant ASCAL_USAGE       : natural := 2;
-constant ASCAL_MODE        : natural := 0;   -- see ascal.vhd for the meaning of this value
+constant ASCAL_USAGE       : natural := 1;   -- V6: AUSE_CUSTOM. ASCAL_INIT clears M2M$CSR bit 11; m2m-rom (HDMI Filter dispatcher) writes M2M$ASCAL_MODE directly.
+constant ASCAL_MODE        : natural := 0;   -- ignored when ASCAL_USAGE=1; m2m-rom sets the mode per HDMI Filter selection (Sharp -> native SBILINEAR, others -> POLYPHASE)
 
 -- Save on-screen-display settings if the file specified by CFG_FILE exists and if it has
 -- the length of OPTM_SIZE bytes. If the first byte of the file has the value 0xFF then it

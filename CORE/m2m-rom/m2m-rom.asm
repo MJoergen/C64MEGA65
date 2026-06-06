@@ -447,20 +447,31 @@ D64_STDSIZE_L   .DW     0xAB00, 0x0000
 D64_STDSIZE_H   .DW     0x0002, 0x0003
 
 ; ----------------------------------------------------------------------------
-; HDMI Filter dispatch (V6)
+; HDMI Filter dispatch
 ; ----------------------------------------------------------------------------
 
 ; LOAD_HDMI_FILTER: Read the saved HDMI Filter selection from M2M$CFM_DATA
-; and push the matching (H, V) polyphase coefficient pair into the ascal
-; polyphase RAM via M2M$LOAD_POLYPHASE. Called from PREP_START (boot) and
-; OSM_SEL_POST (runtime). Six options, single-select: exactly one of the bits
-; in C64_OSM_HDMI_FLT_* is set at any time -- OPTM_G_STDSEL in config.vhd
+; and configure ascal accordingly. Called from PREP_START (boot) and
+; OSM_SEL_POST (runtime). Six options, single-select: exactly one of the
+; C64_OSM_HDMI_FLT_* bits is set at any time -- OPTM_G_STDSEL in config.vhd
 ; guarantees a default ("Scanlines") if the saved SD config file is missing
 ; or empty.
 ;
-; Defensive: if no bit is set (would mean a corrupted config and missing
-; OPTM_G_STDSEL default), we still write the Scanlines pair so the polyphase
-; RAM content is deterministic regardless of what ASCAL_INIT loaded earlier.
+; Two execution paths, both encoded in HDMI_FLT_TABLE rows
+; (OSM_bit, ASCAL_MODE_word, H_label, V_label):
+;
+;   * Sharp     -> write M2M$ASCAL_MODE = M2M$ASCAL_SBILINEAR. The H/V
+;                  labels are 0 sentinels: we skip the polyphase RAM write
+;                  entirely and let ascal run its native Sharp Bilinear
+;                  datapath (smooth cubic-warped lerp; see ascal.vhd:783).
+;   * others    -> write M2M$ASCAL_MODE = M2M$ASCAL_POLYPHASE, then push
+;                  the (H_label, V_label) pair into the ascal polyphase RAM
+;                  via M2M$LOAD_POLYPHASE.
+;
+; This routine assumes ASCAL_USAGE=1 (AUSE_CUSTOM) in config.vhd, which
+; tells ASCAL_INIT to clear M2M$CSR bit 11 and leave M2M$ASCAL_MODE
+; writable. If a future core sets ASCAL_USAGE back to 2 (AUSE_AUTO), the
+; mode writes below silently no-op.
 ;
 ; Input:  -
 ; Output: R8 = 0, R9 = 0 on success
@@ -471,22 +482,27 @@ LOAD_HDMI_FILTER INCRB
 _LHF_LOOP       MOVE    @R0++, R8               ; R8 = OSM bit for this option
                 RSUB    M2M$GET_SETTING, 1
                 CMP     1, R9                   ; selected?
-                RBRA    _LHF_FOUND, Z           ; yes -> load this pair
-                ADD     2, R0                   ; no -> skip H, V pointers
+                RBRA    _LHF_FOUND, Z           ; yes -> apply this row
+                ADD     3, R0                   ; no -> skip MODE, H, V
                 SUB     1, R1
                 RBRA    _LHF_LOOP, !Z
 
-                ; Defensive: no bit set (would mean a corrupted config file
-                ; AND a missing OPTM_G_STDSEL default, which should never
-                ; happen). Fall back to the Scanlines pair so the dispatcher
-                ; result is independent of whatever ASCAL_INIT loaded earlier.
+                ; Defensive fallback: no bit set. Force Scanlines preset
+                ; (polyphase mode + Lanczos2_12 / Scan_Br_110_80).
+                MOVE    M2M$ASCAL_MODE, R2
+                MOVE    M2M$ASCAL_POLYPHASE, @R2
                 MOVE    LANCZOS2_12,    R8
                 MOVE    SCAN_BR_110_80, R9
                 RSUB    M2M$LOAD_POLYPHASE, 1
                 RBRA    _LHF_RET, 1
 
-_LHF_FOUND      MOVE    @R0++, R8               ; R8 = H label
-                MOVE    @R0, R9                 ; R9 = V label
+_LHF_FOUND      MOVE    @R0++, R3               ; R3 = ASCAL_MODE word
+                MOVE    M2M$ASCAL_MODE, R2
+                MOVE    R3, @R2                 ; write mode register
+                MOVE    @R0++, R8               ; R8 = H label (0 = sentinel)
+                MOVE    @R0,   R9               ; R9 = V label (0 = sentinel)
+                CMP     0, R8                   ; native-mode sentinel?
+                RBRA    _LHF_RET, Z             ; yes -> done, no RAM write
                 RSUB    M2M$LOAD_POLYPHASE, 1
 
 _LHF_RET        XOR     R8, R8
@@ -494,21 +510,26 @@ _LHF_RET        XOR     R8, R8
                 DECRB
                 RET
 
-; Filter pair table: (OSM_bit, H_label, V_label) per option, in display order.
-; Indices match the OPTM_ITEMS order: Sharp / Smooth / Lanczos / Scanlines /
-; CRT (S-Video) / CRT (Composite). See M2M/video_filters/README.md for
-; per-blob notes and CORE/vhdl/config.vhd for the menu structure.
-HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_SHARP,         SHARPBILINEAR_080,   SHARPBILINEAR_080
-                .DW C64_OSM_HDMI_FLT_SMOOTH,        GS_SHARPNESS_050,    GS_SHARPNESS_050
-                .DW C64_OSM_HDMI_FLT_LANCZOS,       LANCZOS2_12,         LANCZOS2_12
-                .DW C64_OSM_HDMI_FLT_SCANLINES,     LANCZOS2_12,         SCAN_BR_110_80
-                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    CRT_SIM_SVIDEO_H,    CRT_SIM_SVIDEO_V
-                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, CRT_SIM_COMPOSITE_H, CRT_SIM_COMPOSITE_V
+; Filter table: (OSM_bit, ASCAL_MODE_word, H_label, V_label) per option, in
+; OPTM_ITEMS display order. The Sharp row uses the ascal native Sharp Bilinear
+; (mode 010 = M2M$ASCAL_SBILINEAR); H and V are 0 sentinels so the dispatcher
+; skips the polyphase RAM write for that option. The remaining five rows all
+; select polyphase (mode 100) and provide real coefficient table labels.
+;
+; See M2M/video_filters/README.md for per-blob perceptual notes and
+; CORE/vhdl/config.vhd for the OPTM_ITEMS / OPTM_GROUPS structure.
+HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0
+                .DW C64_OSM_HDMI_FLT_SMOOTH,        M2M$ASCAL_POLYPHASE, GS_SHARPNESS_050,    GS_SHARPNESS_050
+                .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12
+                .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80
+                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, CRT_SIM_SVIDEO_H,    CRT_SIM_SVIDEO_V
+                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, CRT_SIM_COMPOSITE_H, CRT_SIM_COMPOSITE_V
 
-; Filter coefficient blobs (the 4 new CRT files + SharpBilinear + GS_Sharpness).
-; LANCZOS2_12 and SCAN_BR_110_80 are already linked into the ROM via the
-; M2M framework file M2M/rom/filters.asm (included from M2M/rom/shell.asm).
-#include "../../M2M/video_filters/SharpBilinear_080.asm"
+; Filter coefficient blobs for the 5 polyphase-based options. LANCZOS2_12 and
+; SCAN_BR_110_80 are already linked via the M2M framework file
+; M2M/rom/filters.asm (included from M2M/rom/shell.asm). SharpBilinear_080 is
+; NOT included here because the Sharp option now uses the ascal native Sharp
+; Bilinear (mode 010) — the polyphase coefficient table is unused for it.
 #include "../../M2M/video_filters/GS_Sharpness_050.asm"
 #include "../../M2M/video_filters/CRT_Sim_Composite_H.asm"
 #include "../../M2M/video_filters/CRT_Sim_Composite_V.asm"
@@ -538,10 +559,6 @@ END_OF_ROM      .DW 0
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
 ; Example: If your HEAP_SIZE would be 30208, then you write 30208-1920=28288
 ; instead, but when doing the sanity check calculations, you use 30208
-;
-; V6: Bumped 1664 -> 1920 to absorb the OPTM-heap pressure from the new HDMI
-; Filter submenu (longer OPTM_ITEMS, larger OPTM_GROUPS arrays, +1 submenu).
-; See M2M/rom/coreinfo.asm LOG_HEAP2 for the budget breakdown.
 MENU_HEAP_SIZE  .EQU 1920
 
 #ifndef RELEASE

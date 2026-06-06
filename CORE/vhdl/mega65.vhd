@@ -783,25 +783,11 @@ begin
    qnice_csync_o              <= qnice_osm_control_i(C_MENU_VGA_15KHZCS);     -- Composite sync (CSYNC)
    qnice_osm_cfg_scaling_o    <= qnice_osm_control_i(C_MENU_OSM_SCALING);
 
-   -- ascal filters that are applied while processing the input
-   -- 00 : Nearest Neighbour
-   -- 01 : Bilinear
-   -- 10 : Sharp Bilinear
-   -- 11 : Bicubic
+   -- In config.vhd, we chose ASCAL_USAGE = 1 (AUSE_CUSTOM), which hands the control over ASCAL
+   -- modes to our core-specific m2m-rom.asm. There, we are handling the multiple HDMI Filter
+   -- choices. This means: The following three lines are ignored by M2M during runtime
    qnice_ascal_mode_o         <= "00";
-
-   -- ascal stays in polyphase mode permanently. Which (H, V) coefficient pair
-   -- is loaded into the polyphase RAM is decided entirely by the QNICE Shell
-   -- in m2m-rom.asm: it reads the HDMI Filter submenu selection (group
-   -- OPTM_G_HDMI_FILTER / bits C_MENU_HDMI_FLT_*) and pushes the matching pair
-   -- via M2M$LOAD_POLYPHASE on boot (PREP_START) and on every change
-   -- (OSM_SEL_POST). qnice_ascal_mode_o above is forced to "00" so the
-   -- non-polyphase modes (NN / Bilinear / Sharp Bilinear / Bicubic) are never
-   -- selected -- the V5 "CRT emulation off = NN = wonky pixels" path is gone.
-   qnice_ascal_polyphase_o    <= '1';
-
-   -- ascal triple-buffering
-   -- @TODO: Right now, the M2M framework only supports OFF, so do not touch until the framework is upgraded
+   qnice_ascal_polyphase_o    <= '0';
    qnice_ascal_triplebuf_o    <= '0';
 
    -- Flip joystick ports (i.e. the joystick in port 2 is used as joystick 1 and vice versa)

@@ -480,11 +480,10 @@ M2M$LOAD_POLYPHASE  SYSCALL(enter, 1)
                 ADD     M2M$ASCAL_PP_HORIZ, R9
                 SYSCALL(memcpy, 1)
 
-                ; copy vertical filter (R0 = stashed V label) to PP_VERT
+                ; copy vertical filter (R0 = stashed V label) to PP_VERT.
                 MOVE    R0, R8
                 MOVE    M2M$RAMROM_DATA, R9
                 ADD     M2M$ASCAL_PP_VERT, R9
-                MOVE    ASCAL_FILTER_LEN, R10
                 SYSCALL(memcpy, 1)
 
                 SYSCALL(leave, 1)

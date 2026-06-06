@@ -894,6 +894,19 @@ Consequences for agents:
 The same append-only-newest-on-top convention is used by
 `M2M/video_filters/README.md` (V2.1.0 above V1.0.0).
 
+### QNICE assembler is multi-pass — include order does not matter
+
+`qasm` (the QNICE assembler used by `M2M/QNICE/assembler/asm` and invoked
+from `CORE/m2m-rom/make_rom.sh`) resolves labels across multiple passes.
+You can `#include` filter blobs, data tables, helpers, or callbacks **in
+any order** — a forward reference from a `.DW` row to a `HDMI_FLT_TABLE`
+that is `#include`d later in the same file (or in a different `#include`d
+file altogether) resolves cleanly. Do not waste effort re-ordering
+`#include` lines for "label visibility" — the only reason to reorder is
+readability. Cross-file forward references between
+`M2M/rom/{tools,filters,gencfg,shell}.asm` and
+`CORE/m2m-rom/m2m-rom.asm` work the same way.
+
 ---
 
 ## 8. Useful pointers
