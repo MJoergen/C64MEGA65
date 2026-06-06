@@ -533,7 +533,13 @@ begin
          -- reset_soft_i minimum pulse length is 32 clock cycles
          reset_soft_i           => main_reset_core_i or main_reset_core,
          reset_hard_i           => main_reset_m2m_i or main_reset_from_prgloader,
-         
+
+         -- Soft reset routed to cartridge_inst (in main.vhd) -- deliberately
+         -- excludes sw_cartridge_wrapper's local main_reset_core, so the
+         -- wrapper's post-parse pulse does NOT wipe the just-installed cart
+         -- state. See cartridge_inst port map comment block in main.vhd.
+         cart_soft_reset_i      => main_reset_core_i,
+
          pause_i                => main_pause_core_i,
          trigger_run_i          => main_prg_trigger_run,
 
