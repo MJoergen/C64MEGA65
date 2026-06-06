@@ -9,6 +9,10 @@ Version 6 - MONTH DAY, 2026
 
 ## New Features
 
+* Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
+  Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)and CRT (Composite).
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/223)
+
 * For simulated freezer cartridges (`*.crt`), the `F9` key is now the new
   freezer button (before V6, it was the `Restore`key).
 
