@@ -1050,7 +1050,7 @@ begin
         -- In contrast to what is written above in the comment RESET SEMANTICS, we cannot use
         -- reset_core_n here because as soon as cart_reset_counter is > 0 reset_core_n goes low
         -- and then cart_reset_counter would be reset back to 0 prematurely
-        if reset_soft_i or reset_hard_i then
+        if reset_soft_i = '1' or reset_hard_i = '1' then
           cart_reset_counter <= 0;
           cart_res_flckr_ign <= 0;
 
