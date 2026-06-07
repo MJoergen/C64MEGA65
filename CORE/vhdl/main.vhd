@@ -695,8 +695,11 @@ begin
       refresh       => open,
 
       cia_mode      => c64_cia_ver_i,      -- 0 - 6526 "old", 1 - 8521 "new"
+      
+      -- Turbo Mode
       turbo_mode    => "00",
       turbo_speed   => "00",
+      sim_crt_i     => c64_exp_port_mode_i(C_SIM_CRT), -- turbo mode for SIMCRTs and protection for hardware cartridges
 
       -- VGA/SCART interface
       -- The hsync frequency is 15.64 kHz (period 63.94 us).
