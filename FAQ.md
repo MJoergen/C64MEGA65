@@ -70,7 +70,7 @@ Indeed, the core is not yet able to format disks. We do have this topic on our
 
 JiffyDOS is commercial software. The C64 core does not come with
 a pre-installed copy of JiffyDOS.
-[Learn here](https://c64.mega65.org/C64MEGA65DOCS/jiffydos-and-alternative-kernals.html)
+[Learn here](https://c64.mega65.org/jiffydos-and-alternative-kernals.html)
 where to buy and how to install it.
 
 ## 8) My game or demo crashes
