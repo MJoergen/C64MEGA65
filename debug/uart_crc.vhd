@@ -142,7 +142,7 @@ begin
       if rst_i = '1' or rx_valid = '1' then
         crc_d    <= (others => '0');
         tx_valid <= '1';
-        message  <= x"4D46490D0A0000000000";
+        message  <= x"4D464A0D0A0000000000";
       end if;
     end if;
   end process uart_proc;

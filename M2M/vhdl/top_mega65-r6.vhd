@@ -568,7 +568,7 @@ begin
       -- Connect to I/O ports
       clk_i                   => clk_i,
       reset_n_i               => not reset_button_i,
-      uart_rxd_i              => '1',
+      uart_rxd_i              => uart_rxd_i,
       uart_txd_o              => open,
       vga_red_o               => vga_red_o,
       vga_green_o             => vga_green_o,

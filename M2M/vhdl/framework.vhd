@@ -576,6 +576,7 @@ begin
       port map (
          clk_main_i           => main_clk_i,
          clk_main_speed_i     => CORE_CLK_SPEED,
+         uart_rx_i            => uart_rxd_i,
 
          -- interface to the MEGA65 keyboard controller
          kio8_o               => kb_io0_o,

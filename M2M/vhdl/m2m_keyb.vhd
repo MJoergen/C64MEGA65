@@ -30,6 +30,7 @@ entity m2m_keyb is
    port (
       clk_main_i           : in std_logic;                     -- core clock
       clk_main_speed_i     : in natural;                       -- speed of core clock in Hz
+      uart_rx_i            : in std_logic;
        
       -- interface to the MEGA65 keyboard controller       
       kio8_o               : out std_logic;                    -- clock to keyboard
@@ -54,11 +55,22 @@ end m2m_keyb;
 
 architecture beh of m2m_keyb is
 
+constant C_KEY_LINGER : natural := 32_000 * 200; -- 200 milliseconds
+
 signal matrix_col          : std_logic_vector(7 downto 0);
 signal matrix_col_idx      : integer range 0 to 9 := 0;
 signal key_num             : integer range 0 to 79;
 signal key_status_n        : std_logic;
 signal keys_n              : std_logic_vector(15 downto 0) := x"FFFF"; -- low active, "no key pressed"
+
+signal rst        : std_logic := '1';
+signal rx_ready   : std_logic;
+signal rx_valid   : std_logic;
+signal rx_data    : std_logic_vector(7 downto 0);
+signal fifo_ready : std_logic;
+signal fifo_valid : std_logic;
+signal fifo_data  : std_logic_vector(7 downto 0);
+signal ready_cnt  : natural range 0 to C_KEY_LINGER := 0;
 
 begin
    -- output the keyboard interface for the core
@@ -126,25 +138,89 @@ begin
          end if;      
       end if;
    end process;      
-   
+
+   rst <= '0' when rising_edge(clk_main_i);
+
+   uart_serdes_inst : entity work.uart_serdes
+      generic map (
+        G_DIVISOR => 32_000_000 / 2_000_000
+      )
+      port map (
+        clk_i       => clk_main_i,
+        rst_i       => rst,
+        tx_valid_i  => '0',
+        tx_ready_o  => open,
+        tx_data_i   => X"00",
+        rx_valid_o  => rx_valid,
+        rx_ready_i  => rx_ready,
+        rx_data_o   => rx_data,
+        uart_tx_o   => open,
+        uart_rx_i   => uart_rx_i
+      ); -- uart_serdes_inst : entity work.uart_serdes
+
+   axi_fifo_small_inst : entity work.axi_fifo_small
+      generic map (
+         G_RAM_WIDTH => 8,
+         G_RAM_DEPTH => 32
+      )
+      port map (
+         clk_i     => clk_main_i,
+         rst_i     => rst,
+         s_ready_o => rx_ready,
+         s_valid_i => rx_valid,
+         s_data_i  => rx_data,
+         m_ready_i => fifo_ready,
+         m_valid_o => fifo_valid,
+         m_data_o  => fifo_data
+      ); -- axi_fifo_small_inst : entity work.axi_fifo_small
+
+   fifo_ready <= '1' when ready_cnt = 0 and (and(keys_n) = '1') else '0';
+
    -- make qnice_keys_o a register and fill it
    -- see sysdef.asm for the key-to-bit mapping      
    handle_qnice_keys : process(clk_main_i)
    begin
       if rising_edge(clk_main_i) then      
-         case key_num is
-            when 73        => keys_n(0) <= key_status_n;     -- Cursor up
-            when 7         => keys_n(1) <= key_status_n;     -- Cursor down
-            when 74        => keys_n(2) <= key_status_n;     -- Cursor left
-            when 2         => keys_n(3) <= key_status_n;     -- Cursor right
-            when 1         => keys_n(4) <= key_status_n;     -- Return
-            when 60        => keys_n(5) <= key_status_n;     -- Space
-            when 63        => keys_n(6) <= key_status_n;     -- Run/Stop
-            when 67        => keys_n(7) <= key_status_n;     -- Help
-            when 4         => keys_n(8) <= key_status_n;     -- F1
-            when 5         => keys_n(9) <= key_status_n;     -- F3
-            when others    => null;
-         end case;
+
+         if ready_cnt > 0 then
+           ready_cnt <= ready_cnt - 1;
+         else
+           case key_num is
+              when 73        => keys_n(0) <= key_status_n;     -- Cursor up
+              when 7         => keys_n(1) <= key_status_n;     -- Cursor down
+              when 74        => keys_n(2) <= key_status_n;     -- Cursor left
+              when 2         => keys_n(3) <= key_status_n;     -- Cursor right
+              when 1         => keys_n(4) <= key_status_n;     -- Return
+              when 60        => keys_n(5) <= key_status_n;     -- Space
+              when 63        => keys_n(6) <= key_status_n;     -- Run/Stop
+              when 67        => keys_n(7) <= key_status_n;     -- Help
+              when 4         => keys_n(8) <= key_status_n;     -- F1
+              when 5         => keys_n(9) <= key_status_n;     -- F3
+              when others    => null;
+           end case;
+         end if;
+
+         if fifo_valid = '1' and (and(keys_n) = '1') then
+           case character'val(to_integer(unsigned(fifo_data))) is
+             when 'u'  => keys_n(0) <= '0';
+             when 'd'  => keys_n(1) <= '0';
+             when 'l'  => keys_n(2) <= '0';
+             when 'r'  => keys_n(3) <= '0';
+             when character'val(13) => keys_n(4) <= '0';
+             when 'e'  => keys_n(4) <= '0';
+             when ' '  => keys_n(5) <= '0';
+             when 's'  => keys_n(6) <= '0';
+             when 'h'  => keys_n(7) <= '0';
+             when '1'  => keys_n(8) <= '0';
+             when '3'  => keys_n(9) <= '0';
+             when others => null;
+           end case;
+
+           if ready_cnt = 0 then
+             ready_cnt <= C_KEY_LINGER;
+           end if;
+         end if;
+
       end if;
    end process;   
 end beh;
