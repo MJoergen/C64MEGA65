@@ -4,7 +4,8 @@ library ieee;
 
 entity sweeper is
   generic (
-    G_ADDR_SIZE : natural
+    G_ADDR_SIZE : natural;
+    G_DATA_SIZE : natural
   );
   port (
     clk_i        : in    std_logic;
@@ -12,7 +13,7 @@ entity sweeper is
 
     start_i      : in    std_logic;
     busy_o       : out   std_logic;
-    crc_o        : out   std_logic_vector(15 downto 0);
+    crc_o        : out   std_logic_vector(31 downto 0);
 
     -- Wishbone bus Master interface
     wbus_cyc_o   : out   std_logic;                                  -- Valid bus cycle
@@ -20,9 +21,9 @@ entity sweeper is
     wbus_stb_o   : out   std_logic;                                  -- Strobe signals / core select signal
     wbus_addr_o  : out   std_logic_vector(G_ADDR_SIZE - 1 downto 0); -- lower address bits
     wbus_we_o    : out   std_logic;                                  -- Write enable
-    wbus_wrdat_o : out   std_logic_vector(31 downto 0);              -- Write Databus
+    wbus_wrdat_o : out   std_logic_vector(G_DATA_SIZE - 1 downto 0); -- Write Databus
     wbus_ack_i   : in    std_logic;                                  -- Bus cycle acknowledge
-    wbus_rddat_i : in    std_logic_vector(31 downto 0)               -- Read Databus
+    wbus_rddat_i : in    std_logic_vector(G_DATA_SIZE - 1 downto 0)  -- Read Databus
   );
 end entity sweeper;
 
@@ -31,9 +32,9 @@ architecture synthesis of sweeper is
   type   state_type is (IDLE_ST, BUSY_ST);
   signal state : state_type := IDLE_ST;
 
-  signal crc_cur  : std_logic_vector(15 downto 0);
+  signal crc_cur  : std_logic_vector(31 downto 0);
   signal crc_data : std_logic_vector(7 downto 0);
-  signal crc_new  : std_logic_vector(15 downto 0);
+  signal crc_new  : std_logic_vector(31 downto 0);
 
   signal data_start   : std_logic;
   signal data_valid   : std_logic;
@@ -105,7 +106,7 @@ begin
       data_final_d <= data_final;
       data_valid   <= '0';
       if wbus_ack_i = '1' then
-        crc_data   <= wbus_rddat_i(7 downto 0);
+        crc_data   <= wbus_rddat_i;
         data_valid <= '1';
       end if;
     end if;

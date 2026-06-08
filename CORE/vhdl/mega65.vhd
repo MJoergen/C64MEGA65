@@ -105,6 +105,8 @@ port (
    --------------------------------------------------------------------------------------------------------
 
    clk_i                   : in  std_logic;              -- 100 MHz clock
+      uart_rxd_i              : in std_logic;
+      uart_txd_o              : out std_logic;
 
    -- Share clock and reset with the framework
    main_clk_o              : out std_logic;                 -- CORE's clock
@@ -528,6 +530,8 @@ begin
       )
       port map (
          clk_main_i             => main_clk_o,
+      uart_rxd_i              => uart_rxd_i,
+      uart_txd_o              => uart_txd_o,
          
          -- see RESET SEMANTICS in main.vhd
          -- reset_soft_i minimum pulse length is 32 clock cycles

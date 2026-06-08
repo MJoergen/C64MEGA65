@@ -23,6 +23,8 @@ entity main is
   );
   port (
     clk_main_i             : in    std_logic;
+      uart_rxd_i              : in std_logic;
+      uart_txd_o              : out std_logic;
 
     -- Read the RESET SEMANTICS comment below
     -- A pulse of reset_soft_i needs to be 32 clock cycles long at a minimum
@@ -649,6 +651,8 @@ begin
       clk32         => clk_main_i,
       clk32_speed   => clk_main_speed_i,
       reset_n       => reset_core_n,
+      uart_rxd_i              => uart_rxd_i,
+      uart_txd_o              => uart_txd_o,
 
       -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
       bios          => c64_rom_i,

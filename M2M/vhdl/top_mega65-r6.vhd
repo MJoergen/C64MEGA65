@@ -568,8 +568,8 @@ begin
       -- Connect to I/O ports
       clk_i                   => clk_i,
       reset_n_i               => not reset_button_i,
-      uart_rxd_i              => uart_rxd_i,
-      uart_txd_o              => uart_txd_o,
+      uart_rxd_i              => '1',
+      uart_txd_o              => open,
       vga_red_o               => vga_red_o,
       vga_green_o             => vga_green_o,
       vga_blue_o              => vga_blue_o,
@@ -760,6 +760,8 @@ begin
       )
       port map (
          clk_i                   => clk_i,
+      uart_rxd_i              => uart_rxd_i,
+      uart_txd_o              => uart_txd_o,
 
          -- Share clock and reset with the framework
          main_clk_o              => main_clk,            -- CORE's 54 MHz clock

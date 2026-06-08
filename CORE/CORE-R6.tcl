@@ -8,6 +8,10 @@ create_project -in_memory
 set_property PART xc7a200tfbg484-2 [current_project]
 set_property XPM_LIBRARIES {XPM_CDC XPM_FIFO} [current_project]
 read_vhdl -vhdl2008 { \
+      ../debug/crc.vhd \
+      ../debug/sweeper.vhd \
+      ../debug/uart_crc.vhd \
+      ../debug/uart_serdes.vhd \
       C64_MiSTerMEGA65/rtl/cpu_6510.vhd \
       C64_MiSTerMEGA65/rtl/dprom.vhd \
       C64_MiSTerMEGA65/rtl/fpga64_buslogic.vhd \

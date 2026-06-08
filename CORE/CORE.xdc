@@ -8,6 +8,8 @@ set_case_analysis 0 [get_pins CORE/hr_core_speed_reg[0]/Q]
 
 create_generated_clock -name main_clk [get_pins CORE/clk_gen/i_clk_c64_orig/CLKOUT0]
 
+create_generated_clock -name fast_clk [get_pins CORE/i_main/fpga64_sid_iec_inst/buslogic/i_clk_fast/CLKOUT0]
+
 ## CDC in IEC drives, handled manually in the source code
 set_false_path -from [get_pins -hier id1_reg[*]/C]
 set_false_path -from [get_pins -hier id2_reg[*]/C]
