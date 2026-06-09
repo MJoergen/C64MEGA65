@@ -302,6 +302,7 @@ signal main_csr_joy2_on       : std_logic;
 
 -- keyboard handling
 signal main_qnice_keys_n      : std_logic_vector(15 downto 0);
+signal main_keys_read         : std_logic;
 
 --- control signals from QNICE in main's clock domain
 signal main_flip_joyports     : std_logic;
@@ -353,6 +354,7 @@ signal qnice_h_freq           : std_logic_vector(15 downto 0); -- horizontal syn
 
 -- m2m_keyb output for the firmware and the Shell; see also sysdef.asm
 signal qnice_qnice_keys_n     : std_logic_vector(15 downto 0);
+signal qnice_keys_read        : std_logic;
 
 -- Paddles in 50 MHz clock domain which happens to be QNICE's
 signal qnice_pot1_x_n         : unsigned(7 downto 0);
@@ -595,7 +597,8 @@ begin
          drive_led_col_i      => main_drive_led_col_i,
 
          -- interface to QNICE: used by the firmware and the Shell
-         qnice_keys_n_o       => main_qnice_keys_n
+         qnice_keys_n_o       => main_qnice_keys_n,
+         keys_read_i          => main_keys_read
       ); -- i_m2m_keyb
 
    ---------------------------------------------------------------------------------------------------------------
@@ -654,6 +657,7 @@ begin
       qnice_vram_we_o           => qnice_vram_we,
       qnice_vram_attr_we_o      => qnice_vram_attr_we,
       qnice_qnice_keys_n_i      => qnice_qnice_keys_n,
+      qnice_keys_read_o         => qnice_keys_read,
       qnice_pot1_x_n_o          => qnice_pot1_x_n,
       qnice_pot1_y_n_o          => qnice_pot1_y_n,
       qnice_pot2_x_n_o          => qnice_pot2_x_n,
@@ -757,7 +761,7 @@ begin
    i_qnice2main: xpm_cdc_array_single
       generic map (
          DEST_SYNC_FF => 2,
-         WIDTH        => 615
+         WIDTH        => 616
       )
       port map (
          src_clk                    => qnice_clk,
@@ -774,6 +778,7 @@ begin
          src_in(541 downto 534)     => std_logic_vector(qnice_pot2_x_n),
          src_in(549 downto 542)     => std_logic_vector(qnice_pot2_y_n),
          src_in(614 downto 550)     => qnice_rtc,
+         src_in(615)                => qnice_keys_read,
          dest_clk                   => main_clk_i,
          dest_out(0)                => main_qnice_reset_o,
          dest_out(1)                => main_qnice_pause_o,
@@ -787,7 +792,8 @@ begin
          dest_out(533 downto 526)   => main_pot1_y_o,
          dest_out(541 downto 534)   => main_pot2_x_o,
          dest_out(549 downto 542)   => main_pot2_y_o,
-         dest_out(614 downto 550)   => main_rtc_o
+         dest_out(614 downto 550)   => main_rtc_o,
+         dest_out(615)              => main_keys_read
       ); -- i_qnice2main
 
    -- Clock domain crossing: QNICE to HR

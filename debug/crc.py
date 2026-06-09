@@ -23,16 +23,16 @@
 # CRC shift direction:         right (little endian)
 # Input word width:            8 bits
 
-def crc(crcIn, data):
+def crc(crc_in : int, data_in : int) -> int:
     class bitwrapper:
-        def __init__(self, x):
+        def __init__(self, x : int):
             self.x = x
-        def __getitem__(self, i):
+        def __getitem__(self, i : int) -> int:
             return (self.x >> i) & 1
-        def __setitem__(self, i, x):
+        def __setitem__(self, i : int, x : int):
             self.x = (self.x | (1 << i)) if x else (self.x & ~(1 << i))
-    crcIn = bitwrapper(crcIn)
-    data = bitwrapper(data)
+    crcIn = bitwrapper(crc_in)
+    data = bitwrapper(data_in)
     ret = bitwrapper(0)
     ret[0] = crcIn[2] ^ crcIn[8] ^ data[2]
     ret[1] = crcIn[0] ^ crcIn[3] ^ crcIn[9] ^ data[0] ^ data[3]
@@ -68,15 +68,15 @@ def crc(crcIn, data):
     ret[31] = crcIn[1] ^ crcIn[7] ^ data[1] ^ data[7]
     return ret.x
 
-l = {}
+l : dict[str, str] = {}
 for j in range(8):
     c = crc(0, (1 << j))
     for i in range(16384):
-        a = '%04x'%c
+        a = '%08x'%c
         if a in l:
-            l[a] += '%5d'%i + '.' + str(j) + '  '
+            l[a] += '%04x'%i + '.' + str(j) + '  '
         else:
-            l[a] = '%5d'%i + '.' + str(j) + '  '
+            l[a] = '%04x'%i + '.' + str(j) + '  '
         c = crc(c, 0)
 for index,item in sorted(l.items()):
     print(index,item)

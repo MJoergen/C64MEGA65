@@ -49,7 +49,8 @@ entity m2m_keyb is
       drive_led_col_i      : in std_logic_vector(23 downto 0); -- RGB color of drive led
             
       -- interface to QNICE: used by the firmware and the Shell (see sysdef.asm for details)
-      qnice_keys_n_o       : out std_logic_vector(15 downto 0)
+      qnice_keys_n_o       : out std_logic_vector(15 downto 0);
+      keys_read_i          : in std_logic
    );
 end m2m_keyb;
 
@@ -181,6 +182,10 @@ begin
    handle_qnice_keys : process(clk_main_i)
    begin
       if rising_edge(clk_main_i) then      
+
+        if keys_read_i = '1' then
+          ready_cnt <= 0;
+        end if;
 
          if ready_cnt > 0 then
            ready_cnt <= ready_cnt - 1;

@@ -64,6 +64,7 @@ port (
 
    -- Keyboard input for the firmware and Shell (see sysdef.asm)
    keys_n_i             : in std_logic_vector(15 downto 0);
+   keys_read_o          : out std_logic;
 
    -- 256-bit general purpose control (output) flags
    -- "d" = directly controled by the firmware
@@ -552,6 +553,7 @@ begin
 
    keys_en                    <= '1' when cpu_addr = x"FFE8" else '0';
    keys_data_out              <= keys_n_i when keys_en = '1' and cpu_data_dir = '0' else (others => '0');
+   keys_read_o <= keys_en and not cpu_data_dir;
 
    cfd_addr_en                <= '1' when cpu_addr = x"FFF0" else '0';
    cfd_addr_we                <= cfd_addr_en and cpu_data_dir and cpu_data_valid;
