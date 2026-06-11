@@ -422,7 +422,6 @@ architecture synthesis of main is
   signal   cart_io1_n_q          : std_logic;
   signal   cart_io2_n_q          : std_logic;
   signal   cart_rw_q             : std_logic;
-  signal   core_umax_unmapped_q  : std_logic;             -- held copy of Ultimax-unmapped flag (IDE64, issue #176)
   signal   cart_d_q              : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
   signal   cart_sel_live         : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
   signal   cart_sel_q            : std_logic;             -- registered:    any cart-window access still showing at the pin
@@ -832,9 +831,6 @@ begin
   cart_sel_live <= '1' when cart_roml_n   = '0' or cart_romh_n   = '0' or
                             cart_io1_n    = '0' or cart_io2_n    = '0' or
                             core_umax_unmapped   = '1' else '0';
-  cart_sel_q    <= '1' when cart_roml_n_q = '0' or cart_romh_n_q = '0' or
-                            cart_io1_n_q  = '0' or cart_io2_n_q  = '0' or
-                            core_umax_unmapped_q = '1' else '0';
 
   -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
   -- vicAddr) that change on the same clock edge, producing combinational glitches during
@@ -845,10 +841,8 @@ begin
   -- filters out the transient values and presents only stable, post-settling values at the
   -- cart pin (cart_a_q, cart_roml_n_q, cart_romh_n_q, cart_io1_n_q, cart_io2_n_q, cart_rw_q).
   --
-  -- We also register two semantic helpers used by the data-direction envelope below:
-  -- core_umax_unmapped_q (the Ultimax-unmapped flag, which has no /ROML or /ROMH pin to
-  -- piggyback on) and cart_d_q (a one-cycle-delayed copy of the C64's outgoing write byte,
-  -- used to hold valid write data during the registered tail of a cart write).
+  -- We also register cart_d_q, a one-cycle-delayed copy of the C64's outgoing write byte,
+  -- to hold valid write data during the registered tail of a cart write.
   --
   -- BA and dotclock are NOT registered because they come from clean register outputs in
   -- the core (VIC-II output and clock divider respectively) with no combinational mux
@@ -864,8 +858,8 @@ begin
       cart_io1_n_q          <= cart_io1_n;
       cart_io2_n_q          <= cart_io2_n;
       cart_rw_q             <= not c64_ram_we;
-      core_umax_unmapped_q  <= core_umax_unmapped;
       cart_d_q              <= c64_ram_data_o;
+      cart_sel_q            <= cart_sel_live;
     end if;
   end process cart_output_pipeline_proc;
 
