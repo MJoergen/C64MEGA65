@@ -10,3 +10,6 @@ _DIRBR_FILTERFN .BLOCK  1                       ; pointer to filter function
 
 _DIRBR_FH       .BLOCK  FAT32$FDH_STRUCT_SIZE   ; file handle
 _DIRBR_ENTRY    .BLOCK  FAT32$DE_STRUCT_SIZE    ; directory entry
+
+_SLL_TAIL       .BLOCK  1                       ; current tail of the list
+                                                ; under construction

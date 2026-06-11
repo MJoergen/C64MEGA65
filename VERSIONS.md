@@ -42,6 +42,9 @@ Version 6 - MONTH DAY, 2026
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/225 and
    https://github.com/MJoergen/C64MEGA65/issues/226)
 
+* The file browser loads large directories up to 15x faster.
+  (https://github.com/MJoergen/C64MEGA65/issues/228)
+
 ## Improved Compatibility of the Core
 
 * Generally improved hardware cartridge compatibility, thanks to three

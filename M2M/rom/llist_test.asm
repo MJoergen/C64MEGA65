@@ -40,15 +40,22 @@ INSERT_LOOP     MOVE    R0, R8                  ; R8: string
 
                 MOVE    R8, R9                  ; R9: newly created heap elm
                 MOVE    R2, R8                  ; R8: head of linked list
-                MOVE    CMP_FUNC, R10           ; R10: compare function
-                XOR     R11, R11                ; R11 = 0: no filter
-                ;MOVE    FILTER_FUNC, R11        ; R11: filter function
-                RSUB    SLL$S_INSERT, 1         ; linked list sorted insert
+                XOR     R10, R10                ; R10 = 0: no filter
+                ;MOVE    FILTER_FUNC, R10        ; R10: filter function
+                RSUB    SLL$APPEND, 1           ; O(1) tail append; the
+                                                ; sort runs once after the
+                                                ; loop, see SLL$SORT below
                 MOVE    R8, R2                  ; new head of linked list
 
                 ADD     TEST_STR_LEN, R0        ; next test string
                 SUB     1, R1                   ; one less string to go
                 RBRA    INSERT_LOOP, !Z         ; done? no: loop
+
+                ; sort the assembled list before printing it
+                MOVE    R2, R8
+                MOVE    CMP_FUNC, R9
+                RSUB    SLL$SORT, 1
+                MOVE    R8, R2                  ; R2: new sorted head
 
                 MOVE    ASCENDING_STR, R8       ; output SORTED (ASCENDING)
                 RSUB    PRINT_SEPARATOR, 1
@@ -131,13 +138,16 @@ NEW_ELM         INCRB
                 DECRB
                 RET
 
-; SLL$S_INSERT compare function that returns negative if (S0 < S1),
+; SLL$SORT compare function that returns negative if (S0 < S1),
 ; zero if (S0 == S1), positive if (S0 > S1). These semantic are
 ; basically compatible with STR$CMP, but instead of expecting pointers
 ; to two strings, this compare function is expecting two pointers to
 ; SLL records, while the pointer to the first one is given in R8 and
 ; treated as "S0" and the second one in R9 and treated as "S1".
 ; Also, this compare function compares case-insensitive.
+;
+; MUST preserve R11 across the call (SLL$SORT keeps the comparator
+; pointer in unbanked R11 across every merge iteration).
 
 CMP_FUNC        INCRB
                 MOVE    R8, R0 
@@ -189,7 +199,7 @@ CMP_FUNC        INCRB
                 DECRB
                 RET
 
-; SLL$S_INSERT filter function that filters out some values, i.e. does not
+; SLL$APPEND filter function that filters out some values, i.e. does not
 ; insert them into the linked list. Returns 1 for all values that shall be
 ; filtered and 0 for all values that are OK.
 ; R8 contains the element-pointer and R8 is also used as return value, i.e.
@@ -757,3 +767,10 @@ TEST_DATA_START .ASCII_W "co4G5GEQDp06cyTWfsmb"
 
 HEAP_HEAD        .BLOCK 1
 HEAP_START       .BLOCK 1
+
+; Tail tracker for llist.asm's SLL$APPEND / SLL$SORT pair.  Mirrors the
+; reservation that the production Shell build provides via
+; M2M/rom/dirbrowse_vars.asm.  See the comment block at the end of
+; llist.asm for the full rationale on why the .BLOCK is not inside
+; llist.asm itself.
+_SLL_TAIL        .BLOCK 1

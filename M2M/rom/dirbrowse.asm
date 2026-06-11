@@ -108,21 +108,35 @@ _DIRBR_LOOP     MOVE    R7, R8                  ; R8: directory handle
 
                 MOVE    R5, R8                  ; R8: head of linked list
                                                 ; R9: still has new element
-                MOVE    _DIRBR_COMPARE, R10     ; R10: compare function
-                MOVE    R6, R11                 ; R11: filter func. or 0
+                MOVE    R6, R10                 ; R10: filter func. or 0
+                                                ; (R11 unused by SLL$APPEND)
 
-                RSUB    SLL$S_INSERT, 1
+                RSUB    SLL$APPEND, 1           ; O(1) tail append; the
+                                                ; sort is done once after
+                                                ; the build loop (see #228)
                 MOVE    R8, R5                  ; R5: (new) head of linked lst
                 RBRA    _DIRBR_LOOP, 1          ; next iteration
 
-_DIRBR_LOOPEND  MOVE    R4, R9                  ; return amount of entries
+_DIRBR_LOOPEND  ; sort the assembled list before returning it
+                MOVE    R5, R8
+                MOVE    _DIRBR_COMPARE, R9
+                RSUB    SLL$SORT, 1
+                MOVE    R8, R5                  ; R5: new sorted head
+
+                MOVE    R4, R9                  ; return amount of entries
                 MOVE    R5, R10                 ; R10: head of linked list
                 XOR     R11, R11                ; 0 = no error
                 RBRA    _DIRBR_RD_RET, 1
 
 _DIRBR_RD_ECD   MOVE    1, R11                  ; directory not found
                 RBRA    _DIRBR_RD_RET, 1
-_DIRBR_RD_WOOM  MOVE    2, R11                  ; out-of-memory
+_DIRBR_RD_WOOM  ; sort the partial list so the caller still sees it sorted
+                MOVE    R5, R8
+                MOVE    _DIRBR_COMPARE, R9
+                RSUB    SLL$SORT, 1
+                MOVE    R8, R5                  ; R5: new sorted head
+
+                MOVE    2, R11                  ; out-of-memory
                 MOVE    R4, R9                  ; amount of entries
                 MOVE    R5, R10                 ; head of linked list
                 RBRA    _DIRBR_RD_RET, 1
@@ -228,13 +242,20 @@ _DIRBR_NEOOM    MOVE    R11, R8                 ; heap head did not change
 _DIRBR_NERET    DECRB
                 RET
 
-; SLL$S_INSERT compare function that returns negative if (S0 < S1),
+; SLL$SORT compare function that returns negative if (S0 < S1),
 ; zero if (S0 == S1), positive if (S0 > S1). These semantic are
 ; basically compatible with STR$CMP, but instead of expecting pointers
 ; to two strings, this compare function is expecting two pointers to
 ; SLL records, while the pointer to the first one is given in R8 and
 ; treated as "S0" and the second one in R9 and treated as "S1".
 ; Also, this compare function compares case-insensitive.
+;
+; MUST preserve R11 across the call.  SLL$SORT keeps the comparator
+; pointer in the unbanked R11 across every merge iteration, so writing to
+; R11 (or invoking a helper that does not preserve it) silently breaks
+; the sort after the first iteration.  Today this function never touches
+; R11, and all SYSCALL string helpers used here preserve it via their
+; register-bank discipline.
 
 _DIRBR_COMPARE  INCRB
                 MOVE    R8, R0 
@@ -362,7 +383,7 @@ _DIRBR_IAN_C0   AND     0xFFFB, SR              ; not a num: clear Carry
 _DIRBR_IAN_RET  DECRB
                 RET
 
-; SLL$S_INSERT filter function which is a wrapper for the user-defined
+; SLL$APPEND filter function which is a wrapper for the user-defined
 ; function specified for DIRBROWSE_READ. This is a simplification so that
 ; DIRBROWSE_READ just expects a filter function that compares strings and
 ; that does not need to be aware of the SLL semantics
