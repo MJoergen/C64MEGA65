@@ -765,12 +765,17 @@ TEST_DATA_START .ASCII_W "co4G5GEQDp06cyTWfsmb"
                 .ASCII_W "yYv6HFeGV5l1cfEI6zXy"
 
 
-HEAP_HEAD        .BLOCK 1
-HEAP_START       .BLOCK 1
-
 ; Tail tracker for llist.asm's SLL$APPEND / SLL$SORT pair.  Mirrors the
 ; reservation that the production Shell build provides via
 ; M2M/rom/dirbrowse_vars.asm.  See the comment block at the end of
 ; llist.asm for the full rationale on why the .BLOCK is not inside
 ; llist.asm itself.
+;
+; IMPORTANT: This reservation must stay BEFORE HEAP_HEAD/HEAP_START: the
+; heap grows upward from HEAP_START through the unreserved RAM behind it,
+; so anything declared after HEAP_START would be overwritten by the very
+; first heap allocation.
 _SLL_TAIL        .BLOCK 1
+
+HEAP_HEAD        .BLOCK 1
+HEAP_START       .BLOCK 1
