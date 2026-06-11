@@ -920,6 +920,60 @@ Write comments apostrophe-free: rephrase possessives ("preserve R9 of the
 caller" instead of "preserve caller's R9"). The same applies to unpaired
 `"` quotes in comments; paired quotes (as in `.ASCII_W "text"`) are fine.
 
+### Verify QNICE code in the emulator — write testbeds, run them headlessly
+
+Do not stop at "it assembles." QNICE assembly in this repo can be executed
+and verified on the spot — no hardware, no Vivado — via the emulator's
+headless batch mode. Any non-trivial change to Shell logic (sorting,
+parsing, string handling, data structures) should come with an emulator run
+that proves the behavior.
+
+One-time setup per machine — the QNICE submodule tracks prebuilt **Linux**
+binaries, so on macOS rebuild them (a submodule checkout reverts this):
+
+```bash
+cc M2M/QNICE/assembler/qasm.c -o M2M/QNICE/assembler/qasm
+cc M2M/QNICE/assembler/qasm2rom.c -o M2M/QNICE/assembler/qasm2rom -std=c99
+( cd M2M/QNICE/emulator && bash make.bash )
+```
+
+Assemble and run a test program:
+
+```bash
+( cd M2M/rom && ../QNICE/assembler/asm llist_test.asm )
+M2M/QNICE/emulator/qnice -b 0x8000 \
+    M2M/QNICE/monitor/monitor.out M2M/rom/llist_test.out < /dev/null
+```
+
+`-b` loads the listed `.out` files, sets SP the way the monitor cold start
+does, sets PC to the (hex) entry address and runs until `HALT`, an error,
+CTRL-C, or stdin EOF — exit codes 0 / 1 / 130. Programs that use
+`SYSCALL`s need `monitor.out` loaded alongside, as shown. Gotchas:
+
+- If `qnice -h` does not mention `-b`, the emulator binary is stale —
+  rebuild it from the current sources (see above).
+- A runaway program that never reads stdin spins forever: wrap emulator
+  calls in a timeout (macOS has no `timeout(1)`; use a python
+  `subprocess(..., timeout=...)` wrapper).
+- In the interactive `Q>` shell, `RUN` does **not** set SP (do
+  `SET R13 0xFEEB` first or the first `RSUB` pushes into the IO area) and
+  bare numbers parse as *decimal* (`RUN 0x8000`, never `RUN 8000`).
+  Batch mode gets both right automatically.
+
+Write standalone testbeds in the style of `M2M/rom/llist_test.asm` and
+`M2M/rom/dirbrowse_test.asm`: `.ORG 0x8000`, `#include` the module under
+test, feed it fixed test data, print results via `SYSCALL(puts/puthex)`,
+end with `SYSCALL(exit, 1)`. Then validate the captured stdout with a
+script instead of eyeballing it — the llist testbed prints 500 strings
+unsorted/ascending/descending and a python checker asserts sortedness,
+multiset equality, and that descending is the exact reverse of ascending
+(which proves the doubly-linked PREV chain). Precedent: the V6 mergesort
+rewrite of `llist.asm` shipped with exactly this loop, and the testbed
+caught a real memory-layout bug (heap trampling a variable) before any
+hardware saw the code.
+
+## 8. Useful pointers
+
 - User docs (authoritative for behavior): https://c64.mega65.org
 - M2M wiki (parts WIP): https://github.com/sy2002/MiSTer2MEGA65/wiki
 - QNICE-FPGA: https://github.com/sy2002/QNICE-FPGA and http://qnice-fpga.com/
