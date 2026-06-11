@@ -907,9 +907,18 @@ readability. Cross-file forward references between
 `M2M/rom/{tools,filters,gencfg,shell}.asm` and
 `CORE/m2m-rom/m2m-rom.asm` work the same way.
 
----
+### No apostrophes in QNICE assembly comments
 
-## 8. Useful pointers
+The `asm` wrapper script pipes every `.asm` source through the **C
+preprocessor** before handing it to `qasm`. An unpaired `'` inside a
+comment — `caller's`, `Tatham's`, `MiSTer's` — is treated as an
+unterminated character constant and produces a
+`missing terminating ' character [-Winvalid-pp-token]` warning per
+occurrence. The build output is unaffected, but the logs drown in noise.
+
+Write comments apostrophe-free: rephrase possessives ("preserve R9 of the
+caller" instead of "preserve caller's R9"). The same applies to unpaired
+`"` quotes in comments; paired quotes (as in `.ASCII_W "text"`) are fine.
 
 - User docs (authoritative for behavior): https://c64.mega65.org
 - M2M wiki (parts WIP): https://github.com/sy2002/MiSTer2MEGA65/wiki

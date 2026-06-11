@@ -528,8 +528,8 @@ HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,     
                 .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12
                 .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80
 
-                ; As long as we are not supporting MiSTer's full
-                ; filter and post-processing chain:
+                ; As long as we are not supporting the full filter and
+                ; post-processing chain of MiSTer:
                 ;
                 ; Both CRT rows reuse SCAN_BR_110_80 as the V file (same as
                 ; Scanlines mode). CRT_Sim_*_V is a deep ~40% mid-phase plateau

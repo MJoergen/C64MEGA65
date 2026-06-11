@@ -14,8 +14,8 @@
 ;
 ; The sort is a bottom-up iterative mergesort that walks SLL$NEXT only; a
 ; single forward pass at the end of the sort rebuilds the SLL$PREV chain.
-; Algorithm: Knuth TAOCP Vol 3 section 5.2.4 / Simon Tatham's classic
-; write-up at
+; Algorithm: Knuth TAOCP Vol 3 section 5.2.4 / the classic write-up by
+; Simon Tatham at
 ; https://www.chiark.greenend.org.uk/~sgtatham/algorithms/listsort.html .
 ;
 ; done by sy2002 in 2022 and 2026 and licensed under GPL v3
@@ -142,7 +142,7 @@ _SLLLNC_RET     DECRB
 ;   R8: (New) head of linked list
 ;
 ; Notes:
-;  - The new element's NEXT pointer is set to zero by SLL$APPEND.  PREV is
+;  - SLL$APPEND sets the NEXT pointer of the new element to zero.  PREV is
 ;    NOT maintained during append -- SLL$SORT will rebuild the complete PREV
 ;    chain in its final fix-up pass.  Iterating the list with SLL$ITERATE
 ;    in backward direction (R9 = -1) is therefore only valid after SLL$SORT
@@ -150,9 +150,9 @@ _SLLLNC_RET     DECRB
 ; ----------------------------------------------------------------------------
 
 SLL$APPEND      INCRB
-                MOVE    R9, R0                  ; preserve caller's R9
-                MOVE    R10, R1                 ; preserve caller's R10
-                MOVE    R11, R2                 ; preserve caller's R11
+                MOVE    R9, R0                  ; preserve R9 of the caller
+                MOVE    R10, R1                 ; preserve R10 of the caller
+                MOVE    R11, R2                 ; preserve R11 of the caller
                 INCRB
 
                 MOVE    R8, R0                  ; R0: current head
@@ -225,7 +225,7 @@ _SLLAP_RET      DECRB
 ;   R8: New head of sorted list
 ;
 ; Notes:
-;  - Caller's R9, R10, R11 are preserved across the call.
+;  - R9, R10 and R11 of the caller are preserved across the call.
 ;  - Worst-case transient cost is on the order of 10 words across the two
 ;    internal register banks.  No per-node memory growth.
 ;  - On an empty input list (R8 == 0) the routine is a no-op that returns
@@ -239,11 +239,11 @@ _SLLAP_RET      DECRB
 
 SLL$SORT        INCRB
                 ; bank+1: caller-save and outer-pass scalars
-                ;   R0 = saved caller's R10
-                ;   R1 = saved caller's R11
+                ;   R0 = saved R10 of the caller
+                ;   R1 = saved R11 of the caller
                 ;   R2 = insize
                 ;   R3 = nmerges
-                ;   R4 = saved caller's R9
+                ;   R4 = saved R9 of the caller
                 MOVE    R10, R0
                 MOVE    R11, R1
                 MOVE    R9,  R4

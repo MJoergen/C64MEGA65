@@ -765,7 +765,7 @@ TEST_DATA_START .ASCII_W "co4G5GEQDp06cyTWfsmb"
                 .ASCII_W "yYv6HFeGV5l1cfEI6zXy"
 
 
-; Tail tracker for llist.asm's SLL$APPEND / SLL$SORT pair.  Mirrors the
+; Tail tracker for the SLL$APPEND / SLL$SORT pair of llist.asm.  Mirrors the
 ; reservation that the production Shell build provides via
 ; M2M/rom/dirbrowse_vars.asm.  See the comment block at the end of
 ; llist.asm for the full rationale on why the .BLOCK is not inside
