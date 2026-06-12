@@ -157,7 +157,7 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Mono SID",                None, []),
     ("",                         None, ["LINE"]),
-    (" 6581",                    "SID_SETUP", []),
+    (" 6581",                    "SID_SETUP", ["STDSEL"]),
     (" 8580",                    "SID_SETUP", []),
     ("",                         None, ["LINE"]),
     (" Stereo SID",              None, []),
@@ -165,7 +165,7 @@ V6_MENU = [
     (" L: 6581 R: 6581",         "SID_SETUP", []),
     (" L: 6581 R: 8580",         "SID_SETUP", []),
     (" L: 8580 R: 6581",         "SID_SETUP", []),
-    (" L: 8580 R: 8580",         "SID_SETUP", ["STDSEL"]),
+    (" L: 8580 R: 8580",         "SID_SETUP", []),
     ("",                         None, ["LINE"]),
     (" Right SID Port",          None, []),
     ("",                         None, ["LINE"]),
@@ -537,10 +537,11 @@ KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5,
 
 
 class NavSim:
-    def __init__(self, groups, stdsel, start):
+    def __init__(self, groups, stdsel, start, labels=None):
         self.g = list(groups)
         self.sel = list(stdsel)
         self.n = len(groups)
+        self.labels = labels or [""] * self.n
         self.level = 0
         self.cursor = start
         self.trace = []
@@ -556,6 +557,22 @@ class NavSim:
         b = self._struct()
         self.trace.append("K L=%04X C=%04X P=%04X O=%04X"
                           % (self.level, self.cursor, b["parent"], b["opener"]))
+
+    def _emit_w(self):
+        """OPTM_SHOW runs the %s machinery: for every line that contains a
+        %s and that is visible at the current level, the OPTM_CLBK_SHOW
+        callback fires with the flat line index - the testbed stub prints
+        one W line per call. This is the regression gate for the
+        percent-terminated-label desync bug in the OPTM_SHOW scanner."""
+        arr = self._struct()["arr"]
+        for i, t in enumerate(self.labels):
+            if "%s" in t and (arr[i] & 0x8000):
+                self.trace.append("W I=%04X" % i)
+
+    def run_start(self):
+        """The testbed calls OPTM_SHOW before each OPTM_RUN, like
+        HELP_MENU does in production."""
+        self._emit_w()
 
     def _move(self, step):
         c = self.cursor
@@ -591,8 +608,10 @@ class NavSim:
                     if self.g[i] & 0x40FF:
                         break
                 self.cursor = i
+                self._emit_w()                      # SM_4 calls OPTM_SHOW
             else:                                   # leave
                 self._leave()
+                self._emit_w()                      # SM_4 calls OPTM_SHOW
             return None
         if self.sel[self.cursor]:
             if w & 0x8000:                          # single-select: flip off
@@ -619,6 +638,8 @@ class NavSim:
         """Process one key as OPTM_RUN would. Returns 'close' if menu ends."""
         self._emit_k()                              # GETKEY trace happens
         self.keys.append(key)                       # before the key acts
+        if key & 0x8000:                            # background redraw:
+            self._emit_w()                          # OPTM_SHOW runs first
         k = key & 0x7FFF
         if k == KEY_UP:
             self._move(-1)
@@ -632,6 +653,7 @@ class NavSim:
                 self.trace.append("R C=%04X" % self.cursor)
                 return "close"
             self._leave()
+            self._emit_w()                          # SM_4 calls OPTM_SHOW
         elif k in (KEY_SELECT, KEY_SELALT):
             if self._select(k) == "close":
                 self.trace.append("R C=%04X" % self.cursor)
@@ -794,8 +816,10 @@ def nav_script():
     """Build the nav-test key script with the simulator and return
     (keys, expected trace lines)."""
     g = menu_masked(V6_MENU)
-    s = NavSim(g, menu_stdsel(V6_MENU), 2)
+    s = NavSim(g, menu_stdsel(V6_MENU), 2,
+               labels=[t for t, _, _ in V6_MENU])
 
+    s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_UP)                  # wrap to "Close Menu" (158)
     assert s.cursor == 158
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
@@ -819,6 +843,11 @@ def nav_script():
     assert (s.level, s.cursor) == (2, 46)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 33)
+    s.until(KEY_DOWN, 110)          # to "Volume: %s" - entering this region
+    s.feed(KEY_SELECT)              # is the regression case for the percent-
+    assert (s.level, s.cursor) == (7, 113)   # terminated-label scanner bug
+    s.feed(KEY_MENUUP)              # back to main, cursor on the opener
+    assert (s.level, s.cursor) == (0, 110)
     s.until(KEY_DOWN, 126)          # to "Advanced Settings"
     s.feed(KEY_SELECT)              # enter region 8
     assert (s.level, s.cursor) == (8, 129)
@@ -833,6 +862,7 @@ def nav_script():
     assert r == "close"
     # reopen: same level and cursor (persistence)
     assert (s.level, s.cursor) == (10, 152)
+    s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 8
     assert (s.level, s.cursor) == (8, 145)
     s.feed(KEY_MENUUP)              # pop to main
@@ -842,13 +872,19 @@ def nav_script():
     return s.keys, s.trace
 
 
+NAV2_LABELS = [" 50%", " A:%s", " B:%s", " x", " back", " back",
+               " C", " back", " quit"]
+
+
 def nav2_script():
     """Second nav scenario on a synthetic menu, covering the enter-scan stop
     positions of spec section 10 item 4 that the V6 menu cannot provide:
     a region whose FIRST content is a nested child opener (this is the only
     input that distinguishes the new 0x40FF stop mask in _OPTM_RUN_SM_2 from
     the old 0x00FF one - found by mutation testing), and an empty region
-    (the scan must stop on the closer)."""
+    (the scan must stop on the closer). The labels additionally place a
+    percent-terminated label (idx 0) BEFORE two %s lines, which guards the
+    OPTM_SHOW scanner against the percent-eats-newline desync bug."""
     groups = [
         0x0001,   # 0: radio id 1 (START line, visible at main)
         0xC000,   # 1: open region A
@@ -861,7 +897,8 @@ def nav2_script():
         0x00FF,   # 8: bare "Close Menu"
     ]
     stdsel = [1, 0, 0, 1, 0, 0, 0, 0, 0]
-    s = NavSim(groups, stdsel, 0)
+    s = NavSim(groups, stdsel, 0, labels=NAV2_LABELS)
+    s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_DOWN)                # to the opener of A
     assert s.cursor == 1
     s.feed(KEY_SELECT)              # enter A: scan must STOP on the child
@@ -953,6 +990,23 @@ def emit_equiv_asm(path):
         f.write("\n".join(L) + "\n")
 
 
+def ascii_item_lines(label, labels):
+    """Emit a complete OPTM_ITEMS-style string: every menu line followed by
+    a literal two-character backslash-n, zero-terminated at the very end -
+    identical to what the firmware reads from config.vhd. CAUTION: the
+    newline must NOT be written as "\\n" inside an .ASCII_* literal: qasm
+    translates that escape into CR LF (0x0D 0x0A), while the menu system
+    expects the two characters backslash (0x5C) and lower-case n (0x6E),
+    exactly as a VHDL string stores them. Hence the explicit .DW pair."""
+    out = [label]
+    for t in labels:
+        if t:
+            out.append('                .ASCII_P "%s"' % t)
+        out.append("                .DW     0x005C, 0x006E")
+    out.append("                .DW     0x0000")
+    return out
+
+
 def emit_nav_asm(path):
     keys, _ = nav_script()
     g = menu_masked(V6_MENU)
@@ -965,6 +1019,7 @@ def emit_nav_asm(path):
     L += dw_lines(g)
     L.append("NAV_STDSEL_DEF")
     L += dw_lines(sd)
+    L += ascii_item_lines("NAV_ITEMS", [t for t, _, _ in V6_MENU])
     L.append("NAV_SCRIPT_CNT  .EQU %d" % len(keys))
     L.append("NAV_SCRIPT")
     L += dw_lines(keys)
@@ -976,6 +1031,7 @@ def emit_nav_asm(path):
     L += dw_lines(g2)
     L.append("NAV2_STDSEL_DEF")
     L += dw_lines(sd2)
+    L += ascii_item_lines("NAV2_ITEMS", NAV2_LABELS)
     L.append("NAV2_SCRIPT_CNT .EQU %d" % len(keys2))
     L.append("NAV2_SCRIPT")
     L += dw_lines(keys2)

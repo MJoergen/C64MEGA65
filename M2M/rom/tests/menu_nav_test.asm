@@ -66,8 +66,12 @@ _NT_CPY         MOVE    @R0++, @R1++
                 MOVE    NAV_START, @R8
 
                 ; run the menu; re-run it after each close while script
-                ; entries are left (tests menu level persistence)
-_NT_RUN         MOVE    NT_CURSOR, R8
+                ; entries are left (tests menu level persistence). Like
+                ; HELP_MENU in production, draw the menu via OPTM_SHOW
+                ; before running it: this exercises the %s machinery at
+                ; the current (possibly persisted) menu level
+_NT_RUN         RSUB    OPTM_SHOW, 1
+                MOVE    NT_CURSOR, R8
                 MOVE    @R8, R8
                 RSUB    OPTM_RUN, 1
                 MOVE    NT_CURSOR, R9           ; remember returned cursor
@@ -113,6 +117,9 @@ _NT_CPY2        MOVE    @R0++, @R1++
                 ADD     OPTM_IR_SIZE, R8
                 MOVE    NAV2_N, @R8
                 MOVE    NT_REC, R8
+                ADD     OPTM_IR_ITEMS, R8
+                MOVE    NAV2_ITEMS, @R8
+                MOVE    NT_REC, R8
                 ADD     OPTM_IR_GROUPS, R8
                 MOVE    NAV2_GROUPS, @R8
 
@@ -145,11 +152,9 @@ _NT_DONE        MOVE    NT_S_DONE, R8
 
 NT_REC          .DW     NT_STUB, NT_STUB, NT_STUB, NT_STUB
                 .DW     NT_STUB, NT_STUB, NT_GETKEY
-                .DW     NT_CB_SEL, 0x0000, NT_FATAL
+                .DW     NT_CB_SEL, NT_CB_SHOW, NT_FATAL
                 .DW     0x0078, 0, 0x0078, 0    ; sel. chars (inline strings)
-                .DW     NAV_N, NT_ITEMS, NAV_GROUPS, NT_STDSEL, NT_LINES
-
-NT_ITEMS        .ASCII_W "unused"
+                .DW     NAV_N, NAV_ITEMS, NAV_GROUPS, NT_STDSEL, NT_LINES
 
                 ; all visual functions: do nothing, preserve all registers
 NT_STUB         RET
@@ -211,6 +216,28 @@ _NT_GK_2        MOVE    R2, R8                  ; return the key
 _NT_GK_RET      DECRB
                 RET
 
+                ; %s callback: OPTM_SHOW calls this for every line that
+                ; contains a %s and that is visible at the current menu
+                ; level; print the flat line index and return the string
+                ; unchanged (no replacement). The W trace lines verify that
+                ; the %s scanner of OPTM_SHOW keeps its line counter in
+                ; sync, also across labels whose last character is a
+                ; percent sign (" 100%" and friends)
+NT_CB_SHOW      INCRB
+                MOVE    R8, R0                  ; preserve the string ptr
+                MOVE    R9, R1                  ; preserve the line index
+
+                MOVE    NT_S_W, R8              ; "W I="
+                SYSCALL(puts, 1)
+                MOVE    R1, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+
+                MOVE    R0, R8                  ; return string unchanged
+                MOVE    R1, R9
+                DECRB
+                RET
+
                 ; selection callback: print the group word, the item index
                 ; within the group and the key that selected it
 NT_CB_SEL       INCRB
@@ -262,6 +289,7 @@ NT_S_KY         .ASCII_W " K="
 NT_S_R          .ASCII_W "R C="
 NT_S_F          .ASCII_W "F C="
 NT_S_X          .ASCII_W "X"
+NT_S_W          .ASCII_W "W I="
 NT_S_N2         .ASCII_W "N2"
 NT_S_DONE       .ASCII_W "DONE"
 

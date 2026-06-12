@@ -696,7 +696,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_LINE,
                                              OPTM_G_TEXT,                             -- Mono SID
                                              OPTM_G_LINE,
-                                             OPTM_G_SID_SETUP,                        -- 6581
+                                             OPTM_G_SID_SETUP     + OPTM_G_STDSEL,    -- 6581 (default, as in all releases so far)
                                              OPTM_G_SID_SETUP,                        -- 8580
                                              OPTM_G_LINE,
                                              OPTM_G_TEXT,                             -- Stereo SID
@@ -704,7 +704,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SID_SETUP,                        -- L: 6581 R: 6581
                                              OPTM_G_SID_SETUP,                        -- L: 6581 R: 8580
                                              OPTM_G_SID_SETUP,                        -- L: 8580 R: 6581
-                                             OPTM_G_SID_SETUP     + OPTM_G_STDSEL,    -- L: 8580 R: 8580 (default per the #189 sketch)
+                                             OPTM_G_SID_SETUP,                        -- L: 8580 R: 8580
                                              OPTM_G_LINE,
                                              OPTM_G_TEXT,                             -- Right SID Port
                                              OPTM_G_LINE,

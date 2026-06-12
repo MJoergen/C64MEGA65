@@ -384,7 +384,17 @@ _OPTM_HM_1A     CMP     '%', @R0                ; search for "%s"
                 RBRA    _OPTM_HM_2, !Z          ; no
                 ADD     1, R0                   ; skip character
                 CMP     's', @R0                ; "%s" found?
-                RBRA    _OPTM_HM_2, !Z          ; no
+                RBRA    _OPTM_HM_0, !Z          ; no: re-examine the current
+                                                ; character instead of
+                                                ; skipping it: if a percent
+                                                ; sign is the last character
+                                                ; of a menu item, then the
+                                                ; backslash of the \n that
+                                                ; follows it must still be
+                                                ; seen by the newline check
+                                                ; above, otherwise the menu
+                                                ; item counter runs out of
+                                                ; sync for all further items
                 ADD     1, R0                   ; skip character
 
                 ; respect (sub)menu structure: skip invisible items by

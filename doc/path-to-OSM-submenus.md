@@ -4,7 +4,7 @@ Path to OSM submenus
 Design document for **multi-level (nested) submenus** in the MiSTer2MEGA65 on-screen menu (OSM). Research result of June 2026; no code has been written yet. Together with [path-to-OSM-dependencies.md](path-to-OSM-dependencies.md) this is the second of the two OSM enhancements that ship with **M2M V2.1.0** and the **C64MEGA65 V6** core.
 
 * Testbed: C64MEGA65 **V6** (this repository, including its vendored `M2M/` folder). The reference menu structure is [#189](https://github.com/MJoergen/C64MEGA65/issues/189) (new V6 on-screen menu), which contains three sub-submenus and therefore needs exactly three menu levels: main menu → submenu → sub-submenu.
-* **Implementation status (2026-06-12): implemented.** The algorithms live in the new module `M2M/rom/menu_struct.asm` (pure, emulator-testable routines `OPTM_STRUCT_BUILD`, `OPTM_STRUCT_VAL`, `OPTM_SUMM_SCAN`), wired up from `menu.asm` and `options.asm`; the §6 menu is in `config.vhd`/`mega65.vhd`. The test plan of §10 is automated: `python3 M2M/rom/tests/menu_test.py run` (builder fixtures, the §10.2 equivalence harness, a scripted navigation of the whole V6 menu) and `…verify` (machine-checks `config.vhd`/`mega65.vhd` against the golden model). Two deliberate deltas to this document: the optional view-height check of §5.5 ships as a serial-console **warning**, not a fatal (zero regression risk); the `%s`-walk end-of-menu fatal now reports the heading index in R9 instead of 0.
+* **Implementation status (2026-06-12): implemented.** The algorithms live in the new module `M2M/rom/menu_struct.asm` (pure, emulator-testable routines `OPTM_STRUCT_BUILD`, `OPTM_STRUCT_VAL`, `OPTM_SUMM_SCAN`), wired up from `menu.asm` and `options.asm`; the §6 menu is in `config.vhd`/`mega65.vhd`. The test plan of §10 is automated: `python3 M2M/rom/tests/menu_test.py run` (builder fixtures, the §10.2 equivalence harness, a scripted navigation of the whole V6 menu) and `…verify` (machine-checks `config.vhd`/`mega65.vhd` against the golden model). Two deliberate deltas to this document: the optional view-height check of §5.5 ships as a serial-console **warning**, not a fatal (zero regression risk); the `%s`-walk end-of-menu fatal now reports the heading index in R9 instead of 0. Hardware bring-up (2026-06-12) additionally uncovered and fixed a **pre-existing `OPTM_SHOW` bug** outside the scope of this design: the `%s` scanner consumed two characters on a lone `%`, so a label whose last character is `%` (e.g. ` 100%`) swallowed the backslash of its `\n` and desynchronized the line counter for the whole rest of the menu — invisible in every pre-V6 config (no `%s` line ever followed a `%`-terminated label at a reachable level), but fatal in the §6 menu, where the Volume and OSM-scaling percentages sit before the nested `OSM:`/`VIC-II:` openers (entering Volume mis-gated the VIC-II `%s` onto flat index 125, whose summary walk ran off the end of the menu). One-branch fix in `menu.asm` (`_OPTM_HM_1A`); regression-gated by the `W` trace lines of `menu_nav_test.asm`, which mutation testing proves to catch the original code.
 * Framework: ships as a **minor** release **M2M V2.1.0** — existing M2M cores must keep working unchanged (see section 7).
 * Companion: [path-to-OSM-dependencies.md](path-to-OSM-dependencies.md) ([#229](https://github.com/MJoergen/C64MEGA65/issues/229), "smart dependencies"). Both features modify the same firmware routines; section 8 specifies how they compose and in which order to implement them.
 
@@ -400,7 +400,7 @@ This is the complete target menu, transcribed from #189 with four adjustments, e
    76  "\n"                               OPTM_G_LINE
    77  " Mono SID\n"                      OPTM_G_TEXT
    78  "\n"                               OPTM_G_LINE
-   79  " 6581\n"                          OPTM_G_SID_SETUP
+   79  " 6581\n"                          OPTM_G_SID_SETUP + OPTM_G_STDSEL   -- default: mono 6581 as in all pre-V6 releases (decision sy2002 2026-06-12; supersedes the #189 sketch which suggested stereo dual-8580)
    80  " 8580\n"                          OPTM_G_SID_SETUP
    81  "\n"                               OPTM_G_LINE
    82  " Stereo SID\n"                    OPTM_G_TEXT
@@ -408,7 +408,7 @@ This is the complete target menu, transcribed from #189 with four adjustments, e
    84  " L: 6581 R: 6581\n"               OPTM_G_SID_SETUP
    85  " L: 6581 R: 8580\n"               OPTM_G_SID_SETUP
    86  " L: 8580 R: 6581\n"               OPTM_G_SID_SETUP
-   87  " L: 8580 R: 8580\n"               OPTM_G_SID_SETUP + OPTM_G_STDSEL   -- default per the #189 sketch (today ships mono 6581 as default, config.vhd:557; final defaults are a #189 decision)
+   87  " L: 8580 R: 8580\n"               OPTM_G_SID_SETUP
    88  "\n"                               OPTM_G_LINE
    89  " Right SID Port\n"                OPTM_G_TEXT
    90  "\n"                               OPTM_G_LINE
