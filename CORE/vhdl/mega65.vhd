@@ -317,52 +317,82 @@ signal hr_hdmi_ff                 : std_logic;
 -- qnice_clk
 ---------------------------------------------------------------------------------------------
 
--- OSM selections within qnice_osm_control_i
+-- OSM selections within qnice_osm_control_i: one bit per OPTM_ITEMS line
+-- (flat index, see config.vhd). The values below are machine-checked
+-- against the menu structure: run "python3 M2M/rom/menu_test.py verify"
+-- after every menu change.
 constant C_MENU_EXP_PORT_HW   : natural := 7;
 constant C_MENU_SIM_CRT       : natural := 8;
 constant C_MENU_SIM_REU       : natural := 10;
-constant C_MENU_FLIP_JOYS     : natural := 14;
-constant C_MENU_MONO_6581     : natural := 20;
-constant C_MENU_MONO_8580     : natural := 21;
-constant C_MENU_STEREO_L6R6   : natural := 25;
-constant C_MENU_STEREO_L6R8   : natural := 26;
-constant C_MENU_STEREO_L8R6   : natural := 27;
-constant C_MENU_STEREO_L8R8   : natural := 28;
-constant C_MENU_STEREO_R_D420 : natural := 32;
-constant C_MENU_STEREO_R_D500 : natural := 33;
-constant C_MENU_STEREO_R_DE00 : natural := 34;
-constant C_MENU_STEREO_R_DF00 : natural := 35;
-constant C_MENU_IMPROVE_AUDIO : natural := 38;
-constant C_MENU_8521          : natural := 41;
-constant C_MENU_IEC           : natural := 42;
-constant C_MENU_KERNAL_STD    : natural := 46;
-constant C_MENU_KERNAL_GS     : natural := 47;
-constant C_MENU_KERNAL_JAPAN  : natural := 48;
-constant C_MENU_KERNAL_JIFFY  : natural := 49;
-constant C_MENU_HDMI_16_9_50  : natural := 58;
-constant C_MENU_HDMI_16_9_60  : natural := 59;
-constant C_MENU_HDMI_4_3_50   : natural := 60;
-constant C_MENU_HDMI_5_4_50   : natural := 61;
-constant C_MENU_HDMI_FF       : natural := 63;
-constant C_MENU_HDMI_DVI      : natural := 64;
--- HDMI Filter submenu (replaces V1's CRT emulation single-toggle at bit 67).
--- The selection is interpreted entirely by the core's m2m-rom.asm
--- (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for native modes and loads
--- the matching (H, V) coefficient pair via M2M$LOAD_POLYPHASE for polyphase
--- modes. ASCAL_USAGE=1 in config.vhd routes mode control to QNICE directly.
-constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 70;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
-constant C_MENU_HDMI_FLT_SHARP         : natural := 71;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
-constant C_MENU_HDMI_FLT_BICUBIC       : natural := 72;  -- ascal native BICUBIC
-constant C_MENU_HDMI_FLT_SMOOTH        : natural := 73;
-constant C_MENU_HDMI_FLT_LANCZOS       : natural := 74;
-constant C_MENU_HDMI_FLT_SCANLINES     : natural := 75;  -- default; bit-identical to V1's CRT emulation
-constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 76;
-constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 77;
-constant C_MENU_HDMI_ZOOM     : natural := 80;
-constant C_MENU_VGA_STD       : natural := 84;
-constant C_MENU_VGA_15KHZHSVS : natural := 88;
-constant C_MENU_VGA_15KHZCS   : natural := 89;
-subtype C_MENU_OSM_SCALING is natural range 103 downto 95;
+-- Model submenu: machine mode and turbo are not yet wired, see #181
+constant C_MENU_MACHINE_PAL   : natural := 17;
+constant C_MENU_MACHINE_NTSC  : natural := 18;
+constant C_MENU_TURBO_OFF     : natural := 22;
+constant C_MENU_TURBO_C128    : natural := 23;
+constant C_MENU_TURBO_SMART   : natural := 24;
+constant C_MENU_TURBO_2X      : natural := 27;
+constant C_MENU_TURBO_3X      : natural := 28;
+constant C_MENU_TURBO_4X      : natural := 29;
+constant C_MENU_FLIP_JOYS     : natural := 32;
+-- HDMI submenu; the NTSC display modes and the NTSC flicker-free twin are
+-- not yet wired, see #181/#105, neither is raw 50.1 Hz
+constant C_MENU_HDMI_16_9_50  : natural := 36;
+constant C_MENU_HDMI_16_9_60_N : natural := 37;
+constant C_MENU_HDMI_4_3_50   : natural := 38;
+constant C_MENU_HDMI_4_3_60_N : natural := 39;
+constant C_MENU_HDMI_5_4_50   : natural := 40;
+constant C_MENU_HDMI_5_4_60_N : natural := 41;
+constant C_MENU_HDMI_FF       : natural := 43;
+constant C_MENU_HDMI_FF_NTSC  : natural := 44;
+constant C_MENU_HDMI_DVI      : natural := 45;
+-- HDMI Filter submenu (nested inside the HDMI submenu; replaces V1's CRT
+-- emulation single-toggle). The selection is interpreted entirely by the
+-- core's m2m-rom.asm (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for
+-- native modes and loads the matching (H, V) coefficient pair via
+-- M2M$LOAD_POLYPHASE for polyphase modes. ASCAL_USAGE=1 in config.vhd
+-- routes mode control to QNICE directly.
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 49;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 50;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 51;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 52;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 53;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 54;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 55;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 56;
+constant C_MENU_HDMI_ZOOM     : natural := 59;
+constant C_MENU_HDMI_RAW50    : natural := 60;           -- not yet wired
+-- VGA submenu
+constant C_MENU_VGA_STD       : natural := 66;
+constant C_MENU_VGA_15KHZHSVS : natural := 70;
+constant C_MENU_VGA_15KHZCS   : natural := 71;
+-- SID submenu
+constant C_MENU_MONO_6581     : natural := 79;
+constant C_MENU_MONO_8580     : natural := 80;
+constant C_MENU_STEREO_L6R6   : natural := 84;
+constant C_MENU_STEREO_L6R8   : natural := 85;
+constant C_MENU_STEREO_L8R6   : natural := 86;
+constant C_MENU_STEREO_L8R8   : natural := 87;
+constant C_MENU_STEREO_R_D420 : natural := 91;
+constant C_MENU_STEREO_R_D500 : natural := 92;
+constant C_MENU_STEREO_R_DE00 : natural := 93;
+constant C_MENU_STEREO_R_DF00 : natural := 94;
+constant C_MENU_IMPROVE_AUDIO : natural := 97;
+constant C_MENU_IEC           : natural := 100;
+-- Kernal submenu
+constant C_MENU_KERNAL_STD    : natural := 104;
+constant C_MENU_KERNAL_GS     : natural := 105;
+constant C_MENU_KERNAL_JAPAN  : natural := 106;
+constant C_MENU_KERNAL_JIFFY  : natural := 107;
+-- Volume submenu: not yet wired, see #85
+subtype C_MENU_VOLUME is natural range 123 downto 113;
+-- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not
+-- yet wired)
+constant C_MENU_RTC_GEOS      : natural := 129;
+subtype C_MENU_OSM_SCALING is natural range 141 downto 133;
+constant C_MENU_8521          : natural := 144;
+constant C_MENU_VICII_NMOS    : natural := 148;
+constant C_MENU_VICII_HMOS    : natural := 149;
+constant C_MENU_VICII_OLDHMOS : natural := 150;
 
 -- RAMs for the C64
 signal qnice_c64_mount_buf_ram_we   : std_logic;
@@ -768,9 +798,11 @@ begin
    -- while in the 4:3 mode we are outputting a 5:4 image. This is kind of odd, but it seemed that our 4/3 aspect ratio
    -- adjusted image looks best on a 5:4 monitor and the other way round.
    -- Not sure if this will stay forever or if we will come up with a better naming convention.
+   -- The V6 menu (#189) removed the PAL-clocked "16:9 720p 60 Hz" mode (see #105): the 60 Hz
+   -- modes are reserved for the upcoming NTSC support (#181). The NTSC menu entries
+   -- (C_MENU_HDMI_*_60_N) exist already, but they are deliberately not wired up yet.
    qnice_video_mode_o <= C_VIDEO_HDMI_5_4_50   when qnice_osm_control_i(C_MENU_HDMI_5_4_50)  = '1' else
                          C_VIDEO_HDMI_4_3_50   when qnice_osm_control_i(C_MENU_HDMI_4_3_50)  = '1' else
-                         C_VIDEO_HDMI_16_9_60  when qnice_osm_control_i(C_MENU_HDMI_16_9_60) = '1' else
                          C_VIDEO_HDMI_16_9_50;                       -- C_MENU_HDMI_16_9_50
 
    -- Use On-Screen-Menu selections to configure several audio and video settings

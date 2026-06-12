@@ -21,5 +21,12 @@ CORE/make_qasm.sh
 M2M/rom/*.lis
 M2M/rom/*.out
 M2M/rom/*.rom
+M2M/rom/*.def
+M2M/rom/*.exp
+M2M/rom/*.got
+M2M/rom/menu_test_fixtures.asm
+M2M/rom/menu_equiv_fixtures.asm
+M2M/rom/menu_nav_fixtures.asm
+M2M/rom/__pycache__/
 M2M/video_filters/*.out
 .claude

@@ -571,9 +571,14 @@ END_OF_ROM      .DW 0
 ; The On-Screen-Menu uses the heap for several data structures. This heap
 ; is located before the main system heap in memory.
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
-; Example: If your HEAP_SIZE would be 30208, then you write 30208-1920=28288
+; Example: If your HEAP_SIZE would be 30208, then you write 30208-3072=27136
 ; instead, but when doing the sanity check calculations, you use 30208
-MENU_HEAP_SIZE  .EQU 1920
+;
+; 3072 words fit the V6 (#189) menu: 159 items, 10 submenus, 1596 character
+; OPTM_ITEMS string -> budget 1 = 2094 words, budget 2 = 14 x 27 = 378 words
+; (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live numbers), plus
+; headroom for the planned per-item dependency array (#229) and label growth
+MENU_HEAP_SIZE  .EQU 3072
 
 #ifndef RELEASE
 
@@ -581,14 +586,14 @@ MENU_HEAP_SIZE  .EQU 1920
 ; this needs to be the last variable before the monitor variables as it is
 ; only defined as "BLOCK 1" to avoid a large amount of null-values in
 ; the ROM file
-HEAP_SIZE       .EQU 5248                       ; 7168 - 1920 = 5248
+HEAP_SIZE       .EQU 4096                       ; 7168 - 3072 = 4096
 HEAP            .BLOCK 1
 
-; in RELEASE mode: 28k of heap which leads to a better user experience when
-; it comes to folders with a lot of files
+; in RELEASE mode: 26.5k of heap which leads to a better user experience
+; when it comes to folders with a lot of files
 #else
 
-HEAP_SIZE       .EQU 28288                      ; 30208 - 1920 = 28288
+HEAP_SIZE       .EQU 27136                      ; 30208 - 3072 = 27136
 HEAP            .BLOCK 1
  
 ; The monitor variables use 22 words, round to 32 for being safe and subtract
@@ -597,8 +602,8 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x81E6 and subtract the result from 0xFEE0. This yields
-; currently a stack size of 1786, which is more than 1.5k words, and therefore
+; is currently 0x81E8 and subtract the result from 0xFEE0. This yields
+; currently a stack size of 1784, which is more than 1.5k words, and therefore
 ; sufficient for this program.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation

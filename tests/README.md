@@ -8,6 +8,37 @@ effort, it might be that we are not always doing it.
 Version 6.0 - TBD
 -----------------
 
+@TODO: Test the new multi-level on-screen-menu (#189, M2M V2.1.0 nested
+submenus, see doc/path-to-OSM-submenus.md section 10 for the full plan).
+Before any hardware test, run the headless regression suite, which must
+pass: `python3 M2M/rom/menu_test.py run` (builder equivalence vs. the old
+parser, structure/validation fixtures, scripted navigation of the whole V6
+menu in the QNICE emulator) and `python3 M2M/rom/menu_test.py verify`
+(config.vhd/mega65.vhd indices vs. the golden model). On hardware:
+
+* Navigate main menu -> Advanced Settings -> OSM Scaling and back twice:
+  leaving lands the cursor on " OSM: %s" and then on " Advanced Settings"
+* Run/Stop pops exactly one level from a sub-submenu (OSM Scaling /
+  VIC-II / HDMI Filter), pops to the main menu from a depth-1 submenu and
+  closes the OSM at the main menu
+* Close the OSM with Help while inside the VIC-II sub-submenu, reopen:
+  still inside that sub-submenu, cursor preserved
+* Mount a disk image, write to it, then enter a sub-submenu while
+  `<Saving>` shows: the background redraw keeps level and cursor
+* All %s summaries show the selected item of their own submenu at every
+  level, including both " HDMI: %s" headings (display mode vs. filter)
+* All pre-V6 features still react: every entry of Expansion Port, HDMI
+  display modes/flicker-free/DVI/filter/zoom, VGA modes, SID settings,
+  IEC, Kernal selection, OSM scaling, CIA model, flip joystick, REU,
+  improve audio, PRG/CRT/D64 loading (the new Model/Turbo/Volume/RTC/
+  VIC-II/NTSC entries are intentionally silent placeholders)
+* Settings save/restore across a power cycle with the new 159-byte
+  config file `/c64/c64mega65-<CORE_VERSION>` (re-generate it with
+  M2M/tools/make_config.sh)
+* Provoke each authoring fatal once in a scratch config.vhd: unbalanced
+  brackets (boot fatal with item index), OPTM_G_START inside a submenu
+  (boot fatal), oversized submenu view (serial-console warning only)
+
 @TODO: Update the "Test HDMI modes" sub-checklist. The single "CRT emulation"
 toggle from earlier versions has been replaced by an "HDMI: %s" submenu with
 six filter pairs (Sharp / Smooth / Lanczos / Scanlines / CRT (S-Video) /

@@ -513,38 +513,54 @@ _HLP_S2         SUB     1, R3                   ; one less menu item to go
                 RBRA    _HLP_S3, Z              ; no: do not destroy @R1
                 MOVE    R5, @R1                 ; yes: update @R1
 
-                ; determine the amount of submenus (if any)
-                ; fatal if the amount is an odd number, because this indicates
-                ; that at least one "opened" OPTM_G_SUBMENU in config.vhd is
-                ; not "closed" by another instance of OPTM_G_SUBMENU
+                ; determine the amount of submenus (if any) and validate the
+                ; menu structure: the submenu start/end flags in OPTM_GROUPS
+                ; must form balanced brackets (submenus may nest since M2M
+                ; V2.1.0) and the OPTM_G_START item must be visible in the
+                ; main menu; see OPTM_STRUCT_VAL in menu_struct.asm
 _HLP_S3         MOVE    M2M$RAMROM_DEV, R0
                 MOVE    M2M$CONFIG, @R0
                 MOVE    M2M$RAMROM_4KWIN, R0
                 MOVE    M2M$CFG_OPTM_GROUPS, @R0
-                MOVE    M2M$RAMROM_DATA, R0     ; R0: ptr cur men itm grp id
 
-                MOVE    OPTM_ICOUNT, R1
-                MOVE    @R1, R1                 ; R1: amount of menu items
-                XOR     R8, R8                  ; R8: amount of submenus
+                MOVE    M2M$RAMROM_DATA, R8     ; R8: menu item groups
+                MOVE    OPTM_ICOUNT, R9
+                MOVE    @R9, R9                 ; R9: amount of menu items
+                MOVE    OPTM_START, R10
+                MOVE    @R10, R10               ; R10: OPTM_G_START item
+                RSUB    OPTM_STRUCT_VAL, 1
+                RBRA    _HLP_S4, !C             ; structure is OK
 
-_HLP_S4         MOVE    @R0++, R2
-                AND     OPTM_SUBMENU, R2        ; is a submenu?
-                RBRA    _HLP_S5, Z              ; no
-                ADD     1, R8                   ; yes
-_HLP_S5         SUB     1, R1                   ; one more item done
-                RBRA    _HLP_S4, !Z             ; iterate until done
-
-                AND     0xFFFB, SR              ; clear Carry
-                SHR     1, R8                   ; divide R8 by two
-                RBRA    _HLP_S_RET, !X          ; R8 was an even number..
-                MOVE    ERR_F_MENUSUB, R8       ; ..else fatal
-                XOR     R9, R9
+                CMP     2, R9                   ; which fatal?
+                RBRA    _HLP_S5, Z
+                MOVE    R10, R9                 ; unbalanced submenu flags
+                MOVE    ERR_F_MENUSUB, R8       ; R9: offending item index
                 RBRA    FATAL, 1
+_HLP_S5         MOVE    R10, R9                 ; OPTM_G_START on an item
+                MOVE    ERR_F_MENUSTRT2, R8     ; invisible in the main menu
+                RBRA    FATAL, 1                ; R9: offending item index
 
-_HLP_S_RET      MOVE    OPTM_SCOUNT, R0         ; store in variable
-                MOVE    R8, @R0
+_HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
+                MOVE    R9, @R0
 
-                SYSCALL(leave, 1)
+                ; sanity check the menu geometry: menu.asm draws without
+                ; clipping, so a menu view that is taller than the window
+                ; height (OPTM_DY) overflows the frame; this is an authoring
+                ; error in config.vhd, but a benign one, so only log it on
+                ; the serial console instead of going fatal
+                MOVE    SCR$OSM_O_DY, R8
+                MOVE    @R8, R8
+                SUB     2, R8                   ; net height: minus the frame
+                CMP     R10, R8                 ; largest view > net height?
+                RBRA    _HLP_S_RET, !N          ; no: all good
+                MOVE    R10, R0                 ; yes: log a warning
+                MOVE    LOG_STR_MENUHGT, R8
+                SYSCALL(puts, 1)
+                MOVE    R0, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+
+_HLP_S_RET      SYSCALL(leave, 1)
                 RET
 
 ; ----------------------------------------------------------------------------
@@ -1352,35 +1368,30 @@ OPTM_CB_SHOW    SYSCALL(enter, 1)
                 MOVE    R9, R3                  ; R3: ptr to current men. item
 
                 ; Search for the first menu group within the submenu and
-                ; within this menu group, find the currently selected item
-_OPTM_CBS_A     ADD     1, R3                   ; next item
-                CMP     R6, R3                  ; end of (overall)menu?
-                RBRA    _OPTM_CBS_B, !Z         ; no: continue
-                MOVE    ERR_F_MENUSUB, R8       ; yes: fatal
-                XOR     R9, R9
-                RBRA    FATAL, 1
-_OPTM_CBS_B     MOVE    @R3, R1
-                AND     OPTM_SUBMENU, R1        ; end-of-submenu marker?
-                RBRA    _OPTM_CBS_C, Z          ; no: continue
-                MOVE    ERR_F_MENUNGRP, R8      ; yes: fatal
-                MOVE    R5, R9
-                RBRA    FATAL, 1
-_OPTM_CBS_C     MOVE    @R3, R8
-                MOVE    1, R9
-                MOVE    255, R10
-                SYSCALL(in_range_u, 1)          ; is the item a menu group?
-                RBRA    _OPTM_CBS_A, !C         ; no: next item
-                MOVE    HEAP, R8                ; get selected menu group item
-                ADD     OPTM_IR_STDSEL, R8
-                MOVE    @R8, R8
-                ADD     R3, R8
-                SUB     M2M$RAMROM_DATA, R8     ; R3 is relative to RAMROM_DTA
-                MOVE    @R8, R8                 ; is the item selected?
-                RBRA    _OPTM_CBS_A, Z          ; no
+                ; within this menu group, find the currently selected item;
+                ; the contents of nested submenus are skipped, see
+                ; OPTM_SUMM_SCAN in menu_struct.asm
+                MOVE    R3, R8                  ; R8: ptr to the submenu item
+                MOVE    R6, R9                  ; R9: end-of-menu sentinel
+                MOVE    HEAP, R10               ; R10: selected-state array
+                ADD     OPTM_IR_STDSEL, R10
+                MOVE    @R10, R10
+                MOVE    M2M$RAMROM_DATA, R11    ; R11: groups array base
+                RSUB    OPTM_SUMM_SCAN, 1
+                MOVE    R8, R3                  ; R3: ptr to the found item
+                RBRA    _OPTM_CBS_C, C          ; found: extract the label
+                CMP     0, R8                   ; not found: which fatal?
+                RBRA    _OPTM_CBS_B, !Z
+                MOVE    ERR_F_MENUSUB, R8       ; reached the end of the
+                MOVE    R5, R9                  ; whole menu: broken
+                RBRA    FATAL, 1                ; menu structure
+_OPTM_CBS_B     MOVE    ERR_F_MENUNGRP, R8      ; reached the end of the
+                MOVE    R5, R9                  ; submenu: no selected menu
+                RBRA    FATAL, 1                ; group item inside
 
                 ; extract the label of the selected item from the \n separated
                 ; OPTM_ITEMS string
-                SUB     M2M$RAMROM_DATA, R3     ; R3: index of selected item
+_OPTM_CBS_C     SUB     M2M$RAMROM_DATA, R3     ; R3: index of selected item
                 MOVE    HEAP, R1
                 ADD     OPTM_IR_ITEMS, R1
                 MOVE    @R1, R1                 ; R1: current segment in strng
@@ -1473,10 +1484,10 @@ _OPTM_CBS_I2    MOVE    @R0++, R1               ; is current item a submenu?
                 MOVE    R1, R2
                 AND     OPTM_SUBMENU, R1
                 RBRA    _OPTM_CBS_I3, Z         ; no
-                AND     0x00FF, R2              ; yes, but is it a close flag?
-                CMP     OPTM_CLOSE, R2
-                RBRA    _OPTM_CBS_I3, Z         ; yes: so do not count it
-                ADD     1, R9                   ; no: increase submenu index
+                AND     0x00FF, R2              ; yes, but only count the
+                CMP     0, R2                   ; opener (low byte 0x00) and
+                RBRA    _OPTM_CBS_I3, !Z        ; not the submenu-end item
+                ADD     1, R9                   ; opener: incr. submenu index
 
 _OPTM_CBS_I3    CMP     0, R8                   ; done?
                 RBRA    _OPTM_CBS_I4, Z         ; yes
@@ -1512,7 +1523,6 @@ _OPTM_CBS_I5    MOVE    VDRIVES_NUM, R8
                 SUB     2, R11
                 RSUB    M2M$RPL_S, 1            ; replace %s
 
-                ADD     1, @R2                  ; next iteration of callback
                 MOVE    R9, R0                  ; return target string
                 MOVE    R7, SP                  ; restore SP
 
