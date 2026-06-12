@@ -1072,14 +1072,15 @@ _OPTM_GK_MNT_X1 MOVE    1, R9
 _OPTM_GK_MNT_3  RSUB    OPTM_SET, 1             ; set/unset menu item
                                                 ; (R8=menu item, R9=value)
 
-                ; update M2M$CFM_DATA accordingly:
-                ; window within M2M$CFM_DATA = R0 / 16
-                ; bit within window = R0 % 16
+                ; update M2M$CFM_DATA accordingly; R8 contains the flat menu
+                ; item index that VD_MENGRP returned:
+                ; window within M2M$CFM_DATA = R8 / 16
+                ; bit within window = R8 % 16
                 MOVE    R8, R3
                 MOVE    R8, R4
                 AND     0xFFFB, SR              ; clear Carry
-                SHR     4, R3                   ; R3 = R0 / 16
-                AND     0x000F, R4              ; R4 = R0 % 16
+                SHR     4, R3                   ; R3 = R8 / 16
+                AND     0x000F, R4              ; R4 = R8 % 16
                 MOVE    M2M$CFM_ADDR, R5
                 MOVE    R3, @R5
 

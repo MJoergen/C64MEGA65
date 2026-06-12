@@ -297,12 +297,12 @@ For balanced configs `opens` equals the old flagged/2, so `OPTM_SCOUNT`'s three 
 
 ### 5.7 Heap sizing (core-local; the V6 numbers)
 
-`MENU_HEAP_SIZE` (CORE/m2m-rom/m2m-rom.asm:576) must grow — **independently of this feature**: the companion DEPS design alone (4th per-line array + 1 record word) puts today's 110-line menu at 20+1220+1+4·110+1 = 1682 + 270 = **1952 > 1920**. With the V6/#189 menu (section 6: N=159, strlen=1596, 10 regions, with DEPS):
+`MENU_HEAP_SIZE` (CORE/m2m-rom/m2m-rom.asm:576) must grow — **independently of this feature**: the companion DEPS design alone (4th per-line array + 1 record word) puts today's 110-line menu at 20+1220+1+4·110+1 = 1682 + 270 = **1952 > 1920**. With the V6/#189 menu (section 6: N=159, strlen=1570, 10 regions, with DEPS):
 
 ```
-budget 1: 20 + 1596 + 1 + 4*159 + 1                  = 2254 words
+budget 1: 20 + 1570 + 1 + 4*159 + 1                  = 2228 words
 budget 2: (1 vdrive + 10 submenus + 2 crtroms + 1)*27 =  378 words
-total                                                 = 2632 words
+total                                                 = 2606 words
 ```
 
 **Recommendation: `MENU_HEAP_SIZE .EQU 3072`** (slack ≈ 440 for label growth), compensated per the file's own convention: RELEASE `HEAP_SIZE` 28288 → 27136, DEBUG 5248 → 4096 (m2m-rom.asm:578-592). The file-browser heap loses ≈ 50 directory entries per directory in RELEASE; overflow there is graceful (DIRBROWSE_READ code 2 = truncated listing, dirbrowse.asm:40-44). Do not touch `STACK_SIZE`. Other cores keep their own values until they need bigger menus; the budget-1/-2 fatals (`ERR_FATAL_HEAP1/2`) report the exact overrun at boot, as today.
@@ -317,7 +317,7 @@ total                                                 = 2632 words
 6. Core-side: the V6 menu from #189 as the worked example
 ---------------------------------------------------------
 
-This is the complete target menu, transcribed from #189 with four adjustments, each flagged inline: (a) the "HDMI: Scanlines" sub-submenu gets the existing eight HDMI-filter options as its content (#189 leaves it empty; today's "HDMI Filter" submenu is exactly this list, config.vhd:609-621); (b) the flicker-free line exists twice (PAL/NTSC twin groups — companion doc, decision 4); (c) "Back to main menu" inside submenus becomes " Back" (decision 1: it pops one level); (d) where #189's `*`/`=` marker glyphs are internally inconsistent (e.g. "=CRT:&lt;Load&gt;" marks a load line, not a toggle; "=Audio improvements" carries no `*` although it defaults on today), the listing follows today's config.vhd semantics for `OPTM_G_STDSEL`/`OPTM_G_SINGLESEL`. Lines carrying `OPTM_DEP(…)` tags require the companion DEPS feature; until it lands, drop the tags — the only effect is that both PAL and NTSC variant lines show at once (dev-branch optics, nothing breaks). The three NTSC display-mode rows (37/39/41) are **structural placeholders**: "576p 60 Hz" as sketched in #189 has no plumbed video mode today (the plumbed NTSC-rate modes are 720p60, 480p59.94, 640×480p60, 800×600p60 — companion doc, section 5.1); keep the row count and swap the labels/modes when #181/#105 decide the final set — flat indices and `OPTM_DEP` tags do not change.
+This is the complete target menu, transcribed from #189 with four adjustments, each flagged inline: (a) the "HDMI: Scanlines" sub-submenu gets the existing eight HDMI-filter options as its content (#189 leaves it empty; today's "HDMI Filter" submenu is exactly this list, config.vhd:609-621); (b) the flicker-free line exists twice (PAL/NTSC twin groups — companion doc, decision 4); (c) "Back to main menu" inside submenus becomes " Back" (decision 1: it pops one level); (d) where #189's `*`/`=` marker glyphs are internally inconsistent (e.g. "=CRT:&lt;Load&gt;" marks a load line, not a toggle; "=Audio improvements" carries no `*` although it defaults on today), the listing follows today's config.vhd semantics for `OPTM_G_STDSEL`/`OPTM_G_SINGLESEL`. Lines carrying `OPTM_DEP(…)` tags require the companion DEPS feature; until it lands, drop the tags — the only effect is that both PAL and NTSC variant lines show at once (dev-branch optics, nothing breaks). The NTSC display-mode rows (37/39/41) were originally structural placeholders ("576p 60 Hz" as sketched in #189 has no plumbed video mode); decided 2026-06-13 (sy2002): the NTSC set is **16:9 720p 59.94 Hz, 4:3 480p 59.94 Hz, 5:4 480p 59.94 Hz** (the plumbed NTSC-rate modes, companion doc section 5.1), and since the DEPS feature (#229) will show the PAL and NTSC variants mutually exclusively, the labels carry no (PAL)/(NTSC) suffixes. Until DEPS lands, both variants show at once (dev-branch optics, nothing breaks).
 
 ```
   idx  OPTM_ITEMS line                    OPTM_GROUPS entry
@@ -357,12 +357,12 @@ This is the complete target menu, transcribed from #189 with four adjustments, e
    33  " HDMI: %s\n"                      OPTM_G_SUBMENU                  -- OPEN region 2 "HDMI" (parent: main)
    34  " HDMI Display Mode\n"             OPTM_G_HEADLINE
    35  "\n"                               OPTM_G_LINE
-   36  " 16:9 720p 50 Hz (PAL)\n"         OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
-   37  " 16:9 720p 60 Hz (NTSC)\n"        OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
-   38  " 4:3 576p 50 Hz (PAL)\n"          OPTM_G_HDMI_MODES_PAL  + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
-   39  " 4:3 576p 60 Hz (NTSC)\n"         OPTM_G_HDMI_MODES_NTSC + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
-   40  " 5:4 576p 50 Hz (PAL)\n"          OPTM_G_HDMI_MODES_PAL  + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
-   41  " 5:4 576p 60 Hz (NTSC)\n"         OPTM_G_HDMI_MODES_NTSC + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
+   36  " 16:9 720p 50 Hz\n"               OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
+   37  " 16:9 720p 59.94 Hz\n"            OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
+   38  " 4:3  576p 50 Hz\n"               OPTM_G_HDMI_MODES_PAL  + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
+   39  " 4:3  480p 59.94 Hz\n"            OPTM_G_HDMI_MODES_NTSC + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
+   40  " 5:4  576p 50 Hz\n"               OPTM_G_HDMI_MODES_PAL  + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
+   41  " 5:4  480p 59.94 Hz\n"            OPTM_G_HDMI_MODES_NTSC + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
    42  "\n"                               OPTM_G_LINE
    43  " HDMI: Flicker-free\n"            OPTM_G_HDMI_FF      + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,0)
    44  " HDMI: Flicker-free\n"            OPTM_G_HDMI_FF_NTSC + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE,1)
@@ -487,7 +487,7 @@ This is the complete target menu, transcribed from #189 with four adjustments, e
 * `OPTM_SIZE` = **159** (≤ 254 ✓); 159 of 256 `osm_control` bits used (97 spare); config file grows to 159 bytes — regenerate with `M2M/tools/make_config.sh c64mega65-<version> auto` and bump `CORE_VERSION` (the #182 versioned-filename mechanism keeps old settings files harmless).
 * 10 regions; region ids / parents / opener indices: 1 Model @14 (parent 0), 2 HDMI @33 (0), 3 HDMI-Filter @46 (**2**), 4 VGA @63 (0), 5 SID @74 (0), 6 Kernal @101 (0), 7 Volume @110 (0), 8 Advanced @126 (0), 9 OSM @130 (**8**), 10 VIC-II @145 (**8**). Maximum depth 2 → three menu levels.
 * View heights (visible lines per level): main **27**; Model 17, HDMI 17, HDMI-Filter 12, VGA 10, SID 25, Kernal 8, Volume 15, Advanced 8, OSM 13, VIC-II 7. → `OPTM_DX` stays 25, **`OPTM_DY` = 27** (largest view = main); 27+2 = 29 ≤ CHARS_DY 33 — the menu fits the VGA OSM with four rows to spare, matching MJoergen's count in #189.
-* strlen(OPTM_ITEMS) = 1278 label characters + 2×159 = **1596** (`\n` = two chars in VHDL). Heap budgets: see section 5.7 (total 2632 with DEPS → `MENU_HEAP_SIZE` 3072).
+* strlen(OPTM_ITEMS) = 1252 label characters + 2×159 = **1570** (`\n` = two chars in VHDL). Heap budgets: see section 5.7 (total 2606 with DEPS → `MENU_HEAP_SIZE` 3072).
 * `%s` slot order (= opener order): vdrive 0, then regions 1..10, then CRT/ROM 0..1, then scratch — 14 slots × 27 words = 378.
 
 ### 6.2 Group IDs and VHDL wiring

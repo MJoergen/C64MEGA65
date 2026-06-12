@@ -574,8 +574,8 @@ END_OF_ROM      .DW 0
 ; Example: If your HEAP_SIZE would be 30208, then you write 30208-3072=27136
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 3072 words fit the V6 (#189) menu: 159 items, 10 submenus, 1596 character
-; OPTM_ITEMS string -> budget 1 = 2094 words, budget 2 = 14 x 27 = 378 words
+; 3072 words fit the V6 (#189) menu: 159 items, 10 submenus, 1570 character
+; OPTM_ITEMS string -> budget 1 = 2068 words, budget 2 = 14 x 27 = 378 words
 ; (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live numbers), plus
 ; headroom for the planned per-item dependency array (#229) and label growth
 MENU_HEAP_SIZE  .EQU 3072

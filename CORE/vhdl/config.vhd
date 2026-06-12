@@ -442,12 +442,12 @@ constant OPTM_ITEMS        : string :=
    " HDMI: %s\n"                &  -- HDMI submenu
    " HDMI Display Mode\n"       &
    "\n"                         &
-   " 16:9 720p 50 Hz (PAL)\n"   &
-   " 16:9 720p 60 Hz (NTSC)\n"  &  -- the NTSC display modes are not yet wired in mega65.vhd, see #181/#105
-   " 4:3 576p 50 Hz (PAL)\n"    &
-   " 4:3 576p 60 Hz (NTSC)\n"   &
-   " 5:4 576p 50 Hz (PAL)\n"    &
-   " 5:4 576p 60 Hz (NTSC)\n"   &
+   " 16:9 720p 50 Hz\n"         &  -- PAL modes; with the dependencies feature (#229) only the matching
+   " 16:9 720p 59.94 Hz\n"      &  -- machine-mode variants will be shown, hence no (PAL)/(NTSC) suffixes
+   " 4:3  576p 50 Hz\n"         &  -- the NTSC display modes (59.94 Hz) are not yet wired in mega65.vhd,
+   " 4:3  480p 59.94 Hz\n"      &  -- see #181/#105
+   " 5:4  576p 50 Hz\n"         &
+   " 5:4  480p 59.94 Hz\n"      &
    "\n"                         &
    " HDMI: Flicker-free\n"      &
    " HDMI: Flicker-free\n"      &  -- NTSC twin of the line above; not yet wired, see #181 and path-to-OSM-dependencies.md
@@ -649,12 +649,12 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SUBMENU,                          -- open "HDMI: %s" (settings)
                                              OPTM_G_HEADLINE,                         -- HDMI Display Mode
                                              OPTM_G_LINE,
-                                             OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL,  -- 16:9 720p 50 Hz (PAL)
-                                             OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL,  -- 16:9 720p 60 Hz (NTSC)
-                                             OPTM_G_HDMI_MODES_PAL,                   -- 4:3 576p 50 Hz (PAL)
-                                             OPTM_G_HDMI_MODES_NTSC,                  -- 4:3 576p 60 Hz (NTSC)
-                                             OPTM_G_HDMI_MODES_PAL,                   -- 5:4 576p 50 Hz (PAL)
-                                             OPTM_G_HDMI_MODES_NTSC,                  -- 5:4 576p 60 Hz (NTSC)
+                                             OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL,  -- 16:9 720p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL,  -- 16:9 720p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL,                   -- 4:3  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC,                  -- 4:3  480p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL,                   -- 5:4  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC,                  -- 5:4  480p 59.94 Hz
                                              OPTM_G_LINE,
                                              OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
                                              OPTM_G_HDMI_FF_NTSC  + OPTM_G_SINGLESEL + OPTM_G_STDSEL,

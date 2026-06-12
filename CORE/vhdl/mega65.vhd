@@ -334,14 +334,15 @@ constant C_MENU_TURBO_2X      : natural := 27;
 constant C_MENU_TURBO_3X      : natural := 28;
 constant C_MENU_TURBO_4X      : natural := 29;
 constant C_MENU_FLIP_JOYS     : natural := 32;
--- HDMI submenu; the NTSC display modes and the NTSC flicker-free twin are
--- not yet wired, see #181/#105, neither is raw 50.1 Hz
+-- HDMI submenu; the NTSC display modes (59.94 Hz) and the NTSC
+-- flicker-free twin are not yet wired, see #181/#105, neither is raw
+-- 50.1 Hz
 constant C_MENU_HDMI_16_9_50  : natural := 36;
-constant C_MENU_HDMI_16_9_60_N : natural := 37;
+constant C_MENU_HDMI_16_9_5994 : natural := 37;
 constant C_MENU_HDMI_4_3_50   : natural := 38;
-constant C_MENU_HDMI_4_3_60_N : natural := 39;
+constant C_MENU_HDMI_4_3_5994 : natural := 39;
 constant C_MENU_HDMI_5_4_50   : natural := 40;
-constant C_MENU_HDMI_5_4_60_N : natural := 41;
+constant C_MENU_HDMI_5_4_5994 : natural := 41;
 constant C_MENU_HDMI_FF       : natural := 43;
 constant C_MENU_HDMI_FF_NTSC  : natural := 44;
 constant C_MENU_HDMI_DVI      : natural := 45;
@@ -798,9 +799,9 @@ begin
    -- while in the 4:3 mode we are outputting a 5:4 image. This is kind of odd, but it seemed that our 4/3 aspect ratio
    -- adjusted image looks best on a 5:4 monitor and the other way round.
    -- Not sure if this will stay forever or if we will come up with a better naming convention.
-   -- The V6 menu (#189) removed the PAL-clocked "16:9 720p 60 Hz" mode (see #105): the 60 Hz
-   -- modes are reserved for the upcoming NTSC support (#181). The NTSC menu entries
-   -- (C_MENU_HDMI_*_60_N) exist already, but they are deliberately not wired up yet.
+   -- The V6 menu (#189) removed the PAL-clocked "16:9 720p 60 Hz" mode (see #105): the
+   -- NTSC-rate modes are reserved for the upcoming NTSC support (#181). The NTSC menu
+   -- entries (C_MENU_HDMI_*_5994) exist already, but they are deliberately not wired up yet.
    qnice_video_mode_o <= C_VIDEO_HDMI_5_4_50   when qnice_osm_control_i(C_MENU_HDMI_5_4_50)  = '1' else
                          C_VIDEO_HDMI_4_3_50   when qnice_osm_control_i(C_MENU_HDMI_4_3_50)  = '1' else
                          C_VIDEO_HDMI_16_9_50;                       -- C_MENU_HDMI_16_9_50
