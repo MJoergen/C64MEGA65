@@ -154,7 +154,7 @@ port (
    cart_nmi_io             : inout std_logic;
    cart_irq_oe_n_o         : out   std_logic;
    cart_irq_io             : inout std_logic;
-   cart_ctrl_en_o          : out   std_logic;
+   cart_ctrl_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_ctrl_dir_o         : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_ba_io              : inout std_logic;
    cart_rw_io              : inout std_logic;
@@ -165,11 +165,11 @@ port (
    cart_roml_oe_n_o        : out   std_logic;
    cart_roml_io            : inout std_logic;
    cart_en_o               : out   std_logic;
-   cart_addr_en_o          : out   std_logic;
+   cart_addr_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_haddr_dir_o        : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_laddr_dir_o        : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_a_io               : inout unsigned(15 downto 0);
-   cart_data_en_o          : out   std_logic;
+   cart_data_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_data_dir_o         : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_d_io               : inout unsigned(7 downto 0);
 

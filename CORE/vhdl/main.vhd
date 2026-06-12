@@ -924,10 +924,10 @@ begin
     cart_irq_o      <= '1';
     cart_roml_o     <= '0';
     cart_romh_o     <= '0';
-    cart_ba_o       <= '0';
-    cart_rw_o       <= '0';
-    cart_io1_o      <= '0';
-    cart_io2_o      <= '0';
+    cart_ba_o       <= '0';     -- controlled by cart_ctrl_oe_o
+    cart_rw_o       <= '0';     -- controlled by cart_ctrl_oe_o
+    cart_io1_o      <= '0';     -- controlled by cart_ctrl_oe_o
+    cart_io2_o      <= '0';     -- controlled by cart_ctrl_oe_o
     cart_a_o        <= (others => '0');
     cart_d_o        <= (others => '0');
 
