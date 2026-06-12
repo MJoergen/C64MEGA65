@@ -415,6 +415,15 @@ architecture synthesis of main is
   signal   core_phi2_prev       : std_logic;
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
 
+  -- Core's DMA interface (for hardware DMA cartridges and SIMREU)
+  signal   core_dma_req   : std_logic;
+  signal   core_dma_cycle : std_logic;
+  signal   core_dma_addr  : unsigned(15 downto 0);
+  signal   core_dma_dout  : unsigned(7 downto 0);
+  signal   core_dma_din   : unsigned(7 downto 0);
+  signal   core_dma_we    : std_logic;
+  signal   core_irq_ext_n : std_logic;
+
   -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
   signal   cart_a_pre            : unsigned(15 downto 0); -- combinational, includes Ultimax override
   signal   cart_a_q              : unsigned(15 downto 0);
@@ -735,13 +744,13 @@ begin
       phi2          => core_phi2,          -- output
 
       -- dma access
-      dma_req       => core_dma,                -- input
-      dma_cycle     => reu_dma_cycle,           -- output
-      dma_addr      => unsigned(reu_dma_addr),  -- input
-      dma_dout      => unsigned(reu_dma_dout),  -- input
-      dma_din       => reu_dma_din,             -- output
-      dma_we        => reu_dma_we,              -- input
-      irq_ext_n     => not reu_irq,             -- input
+      dma_req       => core_dma_req,       -- input
+      dma_cycle     => core_dma_cycle,     -- output
+      dma_addr      => core_dma_addr,      -- input
+      dma_dout      => core_dma_dout,      -- input
+      dma_din       => core_dma_din,       -- output
+      dma_we        => core_dma_we,        -- input
+      irq_ext_n     => core_irq_ext_n,     -- input
 
       -- paddle interface
       pot1          => pot1_x_i,
@@ -931,9 +940,18 @@ begin
 
     -- memory access flags
     cart_roml_n     <= not core_roml;
-    cart_romh_n     <= (not core_romh) and (not core_umax_romh);                                                                                -- normal ROMH and Ultimax VIC access ROMH
+    cart_romh_n     <= (not core_romh) and (not core_umax_romh);  -- normal ROMH and Ultimax VIC access ROMH
     cart_io1_n      <= not core_ioe;
     cart_io2_n      <= not core_iof;
+
+    -- Default is to connect the CORE's DMA interface to the SIMREU
+    core_dma_req    <= core_dma;
+    reu_dma_cycle   <= core_dma_cycle;
+    core_dma_addr   <= unsigned(reu_dma_addr);
+    core_dma_dout   <= unsigned(reu_dma_dout);
+    reu_dma_din     <= core_dma_din;
+    core_dma_we     <= reu_dma_we;
+    core_irq_ext_n  <= not reu_irq;
 
     -- Mode = Use hardware slot
     if c64_exp_port_mode_i(C_SIM_CRT) = '0' then
