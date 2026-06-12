@@ -6,8 +6,8 @@
 ; done by sy2002 in in February 2021 and licensed under GPL v3
 ; ****************************************************************************
 
-#include "../../M2M/QNICE/dist_kit/sysdef.asm"
-#include "../../M2M/QNICE/dist_kit/monitor.def"
+#include "../../QNICE/dist_kit/sysdef.asm"
+#include "../../QNICE/dist_kit/monitor.def"
 
                 .ORG    0x8000                  ; start at 0x8000
 
@@ -102,7 +102,7 @@ END             SYSCALL(crlf, 1)
 
 ; always include after an .ORG statement so that the linked list functions
 ; are located a a proper memory position
-#include "llist.asm"
+#include "../llist.asm"
 
 ; Create new linked-list element on the heap, manage the heap-head and return
 ; a pointer to the new element in R8

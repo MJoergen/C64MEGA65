@@ -6,8 +6,8 @@
 ; done by sy2002 in 2021 and licensed under GPL v3
 ; ****************************************************************************
 
-#include "../../M2M/QNICE/dist_kit/sysdef.asm"
-#include "../../M2M/QNICE/dist_kit/monitor.def"
+#include "../../QNICE/dist_kit/sysdef.asm"
+#include "../../QNICE/dist_kit/monitor.def"
 
                 .ORG    0x8000                  ; start at 0x8000
 
@@ -102,11 +102,20 @@ INPUTBUFFER    .BLOCK  161
 INPUTBUF_SIZE  .EQU 161
 SD_DEVHANDLE   .BLOCK  FAT32$DEV_STRUCT_SIZE   ; SD card device handle
 
+; variables of the directory browser, including the linked-list tail
+; tracking (_SLL_TAIL) that llist.asm needs
+#include "../dirbrowse_vars.asm"
+
+; minimal stand-ins for the SELECT_FILE context variables of shell_vars.asm
+; that dirbrowse.asm passes through to the filter function
+SF_CONTEXT      .BLOCK 1
+SF_CONTEXT_DATA .BLOCK 1
+
 ; ----------------------------------------------------------------------------
 ; Directory browser including heap for storing the sorted structure
 ; ----------------------------------------------------------------------------
 
-#include "dirbrowse.asm"
+#include "../dirbrowse.asm"
 
 HEAP_SIZE      .EQU 4096        
 HEAP           .BLOCK 1

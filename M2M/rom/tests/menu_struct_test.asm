@@ -14,8 +14,8 @@
 ; done by sy2002 in 2026 and licensed under GPL v3
 ; ****************************************************************************
 
-#include "../QNICE/dist_kit/sysdef.asm"
-#include "../QNICE/dist_kit/monitor.def"
+#include "../../QNICE/dist_kit/sysdef.asm"
+#include "../../QNICE/dist_kit/monitor.def"
 
                 .ORG    0x8000
 
@@ -241,8 +241,8 @@ ST_S_SERR       .ASCII_W " ERR C="
 ST_S_DONE       .ASCII_W "DONE"
 
 ; the component under test (menu.asm includes menu_struct.asm)
-#include "menu.asm"
-#include "menu_vars.asm"
+#include "../menu.asm"
+#include "../menu_vars.asm"
 
 ; generated fixtures
 #include "menu_test_fixtures.asm"

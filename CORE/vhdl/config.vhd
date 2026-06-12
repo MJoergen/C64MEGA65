@@ -385,7 +385,7 @@ constant OPTM_SIZE         : natural := 159; -- amount of items including empty 
 -- Net size of the Options menu on the screen in characters (excluding the frame, which is hardcoded to two characters)
 -- Without submenus: Use OPTM_SIZE as height, otherwise use the height of the largest menu view (usually the main menu):
 -- count one line per item that is visible at that level, including one line per submenu label, excluding the contents
--- of submenus. Cross-check with "python3 M2M/rom/menu_test.py verify".
+-- of submenus. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_DX           : natural := 25;
 constant OPTM_DY           : natural := 27;
 
@@ -400,7 +400,7 @@ type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC 
 -- (the HDMI settings), "OSM: %s" and "VIC-II: %s" live inside
 -- "Advanced Settings". The structure (sizes, indices, group ids and the
 -- matching C_MENU_* constants in mega65.vhd) is machine-checked against
--- the golden model: run "python3 M2M/rom/menu_test.py verify".
+-- the golden model: run "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_ITEMS        : string :=
 
    " C64 for MEGA65\n"          &

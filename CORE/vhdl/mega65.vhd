@@ -319,7 +319,7 @@ signal hr_hdmi_ff                 : std_logic;
 
 -- OSM selections within qnice_osm_control_i: one bit per OPTM_ITEMS line
 -- (flat index, see config.vhd). The values below are machine-checked
--- against the menu structure: run "python3 M2M/rom/menu_test.py verify"
+-- against the menu structure: run "python3 M2M/rom/tests/menu_test.py verify"
 -- after every menu change.
 constant C_MENU_EXP_PORT_HW   : natural := 7;
 constant C_MENU_SIM_CRT       : natural := 8;

@@ -3,12 +3,17 @@
 Golden model, fixture generator and headless test runner for the M2M menu
 structure algorithms (menu_struct.asm + menu.asm submenu state machine).
 
+Run it from anywhere; the script locates the repository relative to itself
+(it lives in M2M/rom/tests/). See the README.md in this folder for the full
+picture, including how to adapt the golden menu model when you change the
+menu in CORE/vhdl/config.vhd.
+
 Usage:
     python3 menu_test.py gen      generate fixture .asm files + expected outputs
     python3 menu_test.py run      gen + assemble testbeds + run in QNICE
                                   emulator + compare against expected outputs
-    python3 menu_test.py vhdl     print the generated config.vhd menu block and
-                                  the mega65.vhd C_MENU_* constants (V6 menu)
+    python3 menu_test.py vhdl     print the mega65.vhd C_MENU_* constants
+                                  derived from the golden menu model
     python3 menu_test.py verify   parse CORE/vhdl/config.vhd + mega65.vhd and
                                   cross-check them against the golden model
 
@@ -26,7 +31,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 
 SUBMENU = 0x4000
 
