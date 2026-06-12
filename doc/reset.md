@@ -350,13 +350,13 @@ This table is deliberately redundant. It is the fastest way to answer
 | Initiator | C64 core | Hard reset / CBM80 mask | Sim cart state | Physical cart reset output | HyperRAM/SDRAM/ascal | QNICE/OSM registers | HDMI/audio reset | Vdrives/cache protection |
 | --------- | -------- | ----------------------- | -------------- | -------------------------- | -------------------- | ------------------- | ---------------- | ------------------------ |
 | Power-on before QNICE firmware release | Held in reset by CSR bit 0 and clock-domain resets | Main/core MMCM reset can assert the hard path, but `cold_start_done = 0` prevents CBM80 masking on first boot | Neutral until loaded | Not meaningful until core runs | Domain resets until clocks lock | Reset to defaults (`x"0839"`, control flags zero) | Reset until clocks lock | Not active yet |
-| Firmware startup release | Starts C64 when CSR bit 0 is cleared | No | Preserved if already configured | No extra reset beyond core reset | No | CSR bit 0 cleared by firmware | No | N/A |
+| Firmware startup release | Starts C64 when CSR bit 0 is cleared | No | Preserved if already configured | No extra reset beyond core reset | No | CSR bit 0 cleared by firmware; `START_CONNECT` is the explicit final release point | No | N/A |
 | Short reset button | Yes | No | Preserved/re-autostarts | Yes, if in hardware slot mode and not cartridge-originated | Yes | No | No QNICE/audio/HDMI clock reset | `prevent_reset` can block C64-side reset while cache dirty |
 | Long reset button | Yes | Yes | Reset to neutral/exit | Yes | Yes | Yes | Yes | Hard reset overrides `prevent_reset` |
 | QNICE `RESET_CORE` helper | Yes | No | Preserved/re-autostarts; bank 0 cache reload via `cart_soft_reset` | Yes, if not blocked and hardware slot mode | No | No, except CSR bit 0 pulse | No | `prevent_reset` can block C64-side reset while cache dirty |
 | OSM Kernal/EXP_PORT/REU change | Same as QNICE `RESET_CORE` | No | Preserved/re-autostarts | Same as QNICE reset | No | OSM setting bits already updated | No | Same as QNICE reset |
 | OSM CRT-load pre-transition | Same as QNICE `RESET_CORE`, only when switching from hardware slot | No | Existing cart preserved until new load flow | Hardware slot decoupled first | No | Menu bit forced to SIMCRT | No | Same as QNICE reset |
-| `.crt` parse READY | Yes, via local wrapper reset | No | Newly loaded cart state preserved | No, excluded from `cart_soft_reset_i` | No | No | No | Not dirty-cache gated in wrapper; reset width is local and cache-ready gated |
+| `.crt` parse READY | Yes, via local wrapper reset | No | Newly loaded cart state preserved | No, excluded from `cart_soft_reset_i` | No | No | No | Wrapper pulse is not dirty-cache gated, but downstream C64 reset still passes through `main.vhd` `prevent_reset`; reset width is local and cache-ready gated |
 | `.prg` load request | Yes | Yes, because wired to `reset_hard_i` | Reset to neutral/exit | Yes | No M2M HR reset from this path | No | No | Hard-reset semantics in `main.vhd` |
 | Physical cart `/RESET` on R5/R6 | Yes | No | If SIMCRT mode, real cart can still reset the core because `cart_reset_i` is not mode-gated | Cartridge-originated, so not echoed back | No | No | No | Blocked while `prevent_reset = 1` |
 | EF3 heuristic reset on R3/R4 | Yes | No | Hardware-cart workaround only | Internal reset counter drives local reset behavior | No | No | No | Same protected C64 reset path |
@@ -413,11 +413,14 @@ does not start immediately after the FPGA clocks become valid.
    SD handle if available, or calls `WAIT_FOR_SD` itself if it must mount SD
    independently. `WAIT_FOR_SD` is idempotent via `SD_WAIT_DONE`.
 
-8. **`RP_SYSTEM_START` applies reset/pause configuration and releases reset.**
+8. **`RP_SYSTEM_START` applies reset/pause configuration and is the intended
+   common release step.**
    `M2M/rom/gencfg.asm` reads the `SEL_GENERAL` config block, waits
-   `M2M$CFG_RP_COUNTER`, then clears `M2M$CSR_RESET`. In this core,
-   `RESET_COUNTER = 100`, so there is an additional small firmware busy-loop
-   hold after config setup.
+   `M2M$CFG_RP_COUNTER`, then uses the CSR clear mask to delete the reset
+   state. The code relies on the firmware register-pointer convention at that
+   point, so `START_CONNECT` below remains the unambiguous final reset release.
+   In this core, `RESET_COUNTER = 100`, so there is an additional small
+   firmware busy-loop hold after config setup.
 
 9. **C64-specific `PREP_START` runs after the common firmware setup.**
    `CORE/m2m-rom/m2m-rom.asm` applies C64-specific startup work such as HDMI
@@ -425,10 +428,9 @@ does not start immediately after the FPGA clocks become valid.
 
 10. **`START_CONNECT` waits about 333 ms, clears reset again, and reconnects
     inputs.**
-    The second reset clear is defensive. In current code `RP_SYSTEM_START`
-    already clears reset, but older comments still refer to a conceptual
-    `RESET_KEEP` mode. `START_CONNECT` also ORs keyboard and joystick bits
-    back into `M2M$CSR` so the key used to leave a splash/menu does not leak
+    This is the explicit final release point: it clears `M2M$CSR_RESET`
+    directly through `M2M$CSR` and then ORs keyboard and joystick bits back
+    into `M2M$CSR`, so the key used to leave a splash/menu does not leak
     immediately into the C64.
 
 The practical result: on a normal boot with settings saved, the C64 is held
