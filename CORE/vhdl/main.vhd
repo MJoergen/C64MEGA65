@@ -264,8 +264,9 @@ architecture synthesis of main is
   signal   cia1_pb_in  : std_logic_vector(7 downto 0);
   signal   cia1_pb_out : std_logic_vector(7 downto 0);
 
-  constant C_SIM_CRT : natural                           := 0;
-  constant C_SIM_REU : natural                           := 1;
+  -- Bit positions in c64_exp_port_mode_i
+  constant C_SIM_CRT : natural := 0;
+  constant C_SIM_REU : natural := 1;
 
   -- signals for RAM
   signal   c64_ram_ce   : std_logic;
@@ -278,7 +279,7 @@ architecture synthesis of main is
   signal   alo       : std_logic_vector(15 downto 0);
   signal   aro       : std_logic_vector(15 downto 0);
 
-    -- Special keys
+  -- Special keys
   signal   restore_key_n : std_logic;   -- the Restore key is special: it creates a non maskable interrupt (NMI)
   signal   freeze_key_n  : std_logic;   -- F9 key = freezer key for simulated cartridges
 
@@ -299,8 +300,8 @@ architecture synthesis of main is
   signal   iec_srq_n_sync   : std_logic := '1';
 
   -- Simulated IEC drives
-  signal   iec_drive_ce : std_logic;                                           -- chip enable for iec_drive (clock divider, see generate_drive_ce below)
-  signal   iec_dce_sum  : integer                                  := 0;       -- caution: we expect 32-bit integers here and we expect the initialization to 0
+  signal   iec_drive_ce : std_logic;              -- chip enable for iec_drive (clock divider, see generate_drive_ce below)
+  signal   iec_dce_sum  : integer     := 0;       -- caution: we expect 32-bit integers here and we expect the initialization to 0
 
   signal   iec_img_mounted  : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   iec_img_readonly : std_logic;
@@ -662,7 +663,7 @@ begin
   end process cpu_data_in_proc;
 
   -- RAM write enable also needs to check for chip enable
-  c64_ram_we_o    <= c64_ram_ce and c64_ram_we;
+  c64_ram_we_o <= c64_ram_ce and c64_ram_we;
 
   --------------------------------------------------------------------------------------------------
   -- MiSTer Commodore 64 core / main machine
@@ -698,7 +699,7 @@ begin
       refresh       => open,
 
       cia_mode      => c64_cia_ver_i,      -- 0 - 6526 "old", 1 - 8521 "new"
-      
+
       -- Turbo Mode
       turbo_mode    => "00",
       turbo_speed   => "00",
@@ -809,7 +810,7 @@ begin
       c64rom_data_i => c64rom_data_i,
       c64rom_data_o => c64rom_data_o
     ); -- fpga64_sid_iec_inst
-    
+
   --------------------------------------------------------------------------------------------------
   -- Expansion Port (aka Cartridge Port) handling:
   --    * MEGA65's hardware expansion port
