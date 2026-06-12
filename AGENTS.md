@@ -940,9 +940,9 @@ cc M2M/QNICE/assembler/qasm2rom.c -o M2M/QNICE/assembler/qasm2rom -std=c99
 Assemble and run a test program:
 
 ```bash
-( cd M2M/rom && ../QNICE/assembler/asm llist_test.asm )
+( cd M2M/rom/tests && ../../QNICE/assembler/asm llist_test.asm )
 M2M/QNICE/emulator/qnice -b 0x8000 \
-    M2M/QNICE/monitor/monitor.out M2M/rom/llist_test.out < /dev/null
+    M2M/QNICE/monitor/monitor.out M2M/rom/tests/llist_test.out < /dev/null
 ```
 
 `-b` loads the listed `.out` files, sets SP the way the monitor cold start
@@ -960,8 +960,8 @@ CTRL-C, or stdin EOF — exit codes 0 / 1 / 130. Programs that use
   bare numbers parse as *decimal* (`RUN 0x8000`, never `RUN 8000`).
   Batch mode gets both right automatically.
 
-Write standalone testbeds in the style of `M2M/rom/llist_test.asm` and
-`M2M/rom/dirbrowse_test.asm`: `.ORG 0x8000`, `#include` the module under
+Write standalone testbeds in the style of `M2M/rom/tests/llist_test.asm` and
+`M2M/rom/tests/dirbrowse_test.asm`: `.ORG 0x8000`, `#include` the module under
 test, feed it fixed test data, print results via `SYSCALL(puts/puthex)`,
 end with `SYSCALL(exit, 1)`. Then validate the captured stdout with a
 script instead of eyeballing it — the llist testbed prints 500 strings

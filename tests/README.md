@@ -11,9 +11,9 @@ Version 6.0 - TBD
 @TODO: Test the new multi-level on-screen-menu (#189, M2M V2.1.0 nested
 submenus, see doc/path-to-OSM-submenus.md section 10 for the full plan).
 Before any hardware test, run the headless regression suite, which must
-pass: `python3 M2M/rom/menu_test.py run` (builder equivalence vs. the old
+pass: `python3 M2M/rom/tests/menu_test.py run` (builder equivalence vs. the old
 parser, structure/validation fixtures, scripted navigation of the whole V6
-menu in the QNICE emulator) and `python3 M2M/rom/menu_test.py verify`
+menu in the QNICE emulator) and `python3 M2M/rom/tests/menu_test.py verify`
 (config.vhd/mega65.vhd indices vs. the golden model). On hardware:
 
 * Navigate main menu -> Advanced Settings -> OSM Scaling and back twice:
