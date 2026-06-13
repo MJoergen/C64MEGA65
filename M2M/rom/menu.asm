@@ -170,8 +170,13 @@ OPTM_IR_STDSEL  .EQU 17
 ; array of 0s and 1s to define horizontal separator lines
 OPTM_IR_LINES   .EQU 18
 
+; pointer to the resolved per-line dependency array (see optm_deps.asm); 0
+; means the dependency feature is off (old config.vhd or no OPTM_DEP tags),
+; in which case every line is unconditionally visible
+OPTM_IR_DEPS    .EQU 19
+
 ; size of initialization record in words
-OPTM_STRUCTSIZE .EQU 19
+OPTM_STRUCTSIZE .EQU 20
 
 OPTM_NL         .DW  0x005C, 0x006E, 0x0000     ; \n
 
@@ -817,7 +822,10 @@ _OPTM_RUN_6C    MOVE    R8, R11                 ; R11: remember selection key
                 MOVE    R11, R10                ; selection key
                 MOVE    OPTM_CLBK_SEL, R7       ; call callback
                 RSUB    _OPTM_CALL, 1
-                
+
+                MOVE    R12, R8                 ; R12: group word just toggled
+                RSUB    OPTM_DEPS_AFFECTS, 1    ; toggled a dependency mother?
+                RBRA    _OPTM_RUN_SM_4, C       ; yes: redraw the current level
                 RBRA    _OPTM_RUN_SEL, 1        ; continue main loop of menu
 
                 ; proceed in case of multi-sel. with the not yet selected item
@@ -947,8 +955,20 @@ _OPTM_RUN_15    DECRB
                 RSUB    _OPTM_CALL, 1
 
                 CMP     OPTM_CLOSE, R6          ; Close?
-                RBRA    _OPTM_RUN_SEL, !Z       ; no: continue menu loop
-                MOVE    R2, R8                  ; yes: return selected item               
+                RBRA    _OPTM_RUN_SCHG, !Z      ; no: check for structure change
+                MOVE    R2, R8                  ; yes: return selected item
+                RBRA    _OPTM_RUN_RET, 1
+
+                ; A radio selection or a single-select toggle just changed the
+                ; menu state. If the changed group is the mother of a dependent
+                ; line, the set of visible lines may have changed, so redraw the
+                ; current level (cursor stays on the just-selected mother line,
+                ; which is visible, so the redraw cannot fatal). Without
+                ; dependencies OPTM_DEPS_AFFECTS always reports "no change".
+_OPTM_RUN_SCHG  MOVE    R6, R8                  ; R6: group word just changed
+                RSUB    OPTM_DEPS_AFFECTS, 1
+                RBRA    _OPTM_RUN_SM_4, C       ; mother changed: redraw level
+                RBRA    _OPTM_RUN_SEL, 1        ; otherwise continue menu loop
 
 _OPTM_RUN_RET   MOVE    OPTM_STRUCT, R7         ; important to reset to zero..
                 MOVE    0, @R7                  ; b/c it is also used as flag
@@ -1007,8 +1027,14 @@ _OPTM_RUN_SM_2  ADD     1, R2                   ; next item
                 RBRA    _OPTM_RUN_SM_3, Z       ; yes
                 ADD     1, R6                   ; no error
                 MOVE    @R6, R7
-                AND     0x40FF, R7              ; selectable or submenu marker?
+                MOVE    R7, R8                  ; a submenu opener/closer always
+                AND     0x4000, R8              ; stops the scan (it is a visible
+                RBRA    _OPTM_RUN_SM_4, !Z      ; selectable line of this level)
+                AND     0x00FF, R7              ; selectable plain line?
                 RBRA    _OPTM_RUN_SM_2, Z       ; no: continue to search
+                MOVE    R2, R8                  ; honor dependency visibility:
+                RSUB    OPTM_DEP_OK, 1          ; keep scanning past a line that
+                RBRA    _OPTM_RUN_SM_2, !C      ; is hidden by a dependency
                 RBRA    _OPTM_RUN_SM_4, 1
 
                 ; Fatal: No selectable menu item found
@@ -1438,3 +1464,9 @@ _OPTM_R_F2M_O2  MOVE    R2, R7
 ; ----------------------------------------------------------------------------
 
 #include "menu_struct.asm"
+
+; ----------------------------------------------------------------------------
+; Dependent menu entries ("smart dependencies", see optm_deps.asm)
+; ----------------------------------------------------------------------------
+
+#include "optm_deps.asm"

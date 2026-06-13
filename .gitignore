@@ -30,6 +30,8 @@ M2M/rom/tests/*.got
 M2M/rom/tests/menu_test_fixtures.asm
 M2M/rom/tests/menu_equiv_fixtures.asm
 M2M/rom/tests/menu_nav_fixtures.asm
+M2M/rom/tests/optm_deps_fixtures.asm
+M2M/rom/tests/config_deps_tb.vhd
 M2M/rom/tests/__pycache__/
 M2M/video_filters/*.out
 .claude

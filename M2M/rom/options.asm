@@ -120,16 +120,43 @@ _HLP_SSIC1      SUB     1, R4                   ; one less menu item to go
                 MOVE    M2M$CFG_OPTM_LINES, @R0
                 MOVE    M2M$RAMROM_DATA, R8
                 MOVE    R2, R9                  ; R9: free word beh. selectors
+                ADD     R3, R2                  ; R2: free word behind lines
                 MOVE    R3, R10                 ; R10: menu items counter
                 SYSCALL(memcpy, 1)
                 MOVE    HEAP, R8
                 ADD     OPTM_IR_LINES, R8
                 MOVE    R9, @R8
 
-                ; Calculate, if the menu is within its heap boundaries
-                MOVE    HEAP, R8
+                ; Copy the per-line dependency words (OPTM_DEP, see
+                ; optm_deps.asm) onto the heap and resolve them in place. The
+                ; array slot is reserved either way; when config.vhd does not
+                ; support the feature, OPTM_IR_DEPS stays 0 and the visibility
+                ; predicate (OPTM_DEP_OK) short-circuits to "always visible".
+                MOVE    R2, R9                  ; R9: dependency array on heap
+                ADD     R3, R2                  ; R2: free word behind it
+                MOVE    HEAP, R8                ; OPTM_IR_DEPS := 0 (feature off)
+                ADD     OPTM_IR_DEPS, R8
+                MOVE    0, @R8
+                RSUB    OPTM_DEPS_PROBE, 1      ; does config.vhd have it?
+                RBRA    _HLP_DEPS_OFF, !C       ; no: keep it off
+                MOVE    M2M$CFG_OPTM_DEPS, @R0  ; yes: copy the raw dep words
+                MOVE    M2M$RAMROM_DATA, R8     ; (R9: destination on heap)
+                MOVE    R3, R10                 ; R10: menu items counter
+                SYSCALL(memcpy, 1)
+                MOVE    R2, R8                  ; resolve in place:
+                SUB     R3, R8                  ; R8: dep array base (= R2 - N)
+                MOVE    R12, R9                 ; R9: groups array
+                MOVE    R3, R10                 ; R10: amount of menu items
+                RSUB    OPTM_DEPS_RESOLVE, 1
+                MOVE    HEAP, R8                ; OPTM_IR_DEPS := resolved array
+                ADD     OPTM_IR_DEPS, R8
                 MOVE    R2, R9
-                ADD     R10, R9
+                SUB     R3, R9
+                MOVE    R9, @R8
+
+_HLP_DEPS_OFF   ; Calculate, if the menu is within its heap boundaries
+                MOVE    HEAP, R8
+                MOVE    R2, R9                  ; R2: first free word on heap
                 SUB     R8, R9
                 ADD     1, R9
                 RSUB    LOG_HEAP1, 1
@@ -552,7 +579,7 @@ _HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
                 MOVE    @R8, R8
                 SUB     2, R8                   ; net height: minus the frame
                 CMP     R10, R8                 ; largest view > net height?
-                RBRA    _HLP_S_RET, !N          ; no: all good
+                RBRA    _HLP_DEPVAL, !N         ; no: all good
                 MOVE    R10, R0                 ; yes: log a warning
                 MOVE    LOG_STR_MENUHGT, R8
                 SYSCALL(puts, 1)
@@ -560,7 +587,152 @@ _HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
                 SYSCALL(puthex, 1)
                 SYSCALL(crlf, 1)
 
+                ; validate the dependent-menu-entry declarations (OPTM_DEP,
+                ; see optm_deps.asm) once at boot. The masked groups, the raw
+                ; dependency words and the special-line flags (mount, load_rom,
+                ; help and the start line, which are not part of the masked
+                ; groups window) are materialized into transient HEAP scratch -
+                ; past the init record, and rebuilt by HELP_MENU on every open -
+                ; and handed to OPTM_DEPS_VAL.
+_HLP_DEPVAL     MOVE    LOG_STR_DEPS, R8
+                SYSCALL(puts, 1)
+                RSUB    OPTM_DEPS_PROBE, 1      ; does config.vhd support it?
+                RBRA    _HLP_DEP_ON, C
+                MOVE    LOG_STR_CFG_OFF, R8     ; no: log and skip validation
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                RBRA    _HLP_S_RET, 1
+_HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+
+                MOVE    OPTM_ICOUNT, R7         ; R7: amount of menu items (N)
+                MOVE    @R7, R7
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+
+                MOVE    M2M$CFG_OPTM_GROUPS, @R0 ; masked groups -> scratch base
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9     ; scratch starts behind record
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_DEPS, @R0  ; raw dependencies -> base + N
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9
+                ADD     R7, R9
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_MOUNT, @R0 ; mount flags -> special base+2N
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9
+                ADD     R7, R9
+                ADD     R7, R9
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_HELP, @R0  ; OR in the help flags
+                RSUB    _HLP_DEP_OR, 1
+                MOVE    M2M$CFG_OPTM_CRTROM, @R0 ; OR in the load-ROM flags
+                RSUB    _HLP_DEP_OR, 1
+
+                MOVE    HEAP, R8                ; mark the start line special too
+                ADD     OPTM_STRUCTSIZE, R8
+                ADD     R7, R8
+                ADD     R7, R8
+                MOVE    OPTM_START, R9
+                ADD     @R9, R8
+                MOVE    1, @R8
+
+                MOVE    HEAP, R8                ; R8: masked groups array
+                ADD     OPTM_STRUCTSIZE, R8
+                MOVE    R7, R9                  ; R9: amount of menu items (N)
+                MOVE    R8, R10                 ; R10: dependency array (base+N)
+                ADD     R7, R10
+                MOVE    R10, R11                ; R11: special array (base+2N)
+                ADD     R7, R11
+                RSUB    OPTM_DEPS_VAL, 1
+                RBRA    _HLP_S_RET, !C          ; declarations are valid
+
+                MOVE    R10, R0                 ; R0: offending item index
+                MOVE    R9, R1                  ; R1: error class
+                MOVE    ERR_F_DEPMOTHER, R8
+                CMP     0, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPIDX, R8
+                CMP     1, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPMIX, R8
+                CMP     2, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPCHAIN, R8
+                CMP     3, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPSPECIAL, R8
+_HLP_DEPFAT     MOVE    R0, R9                  ; R9: offending index = err code
+                RBRA    FATAL, 1
+
 _HLP_S_RET      SYSCALL(leave, 1)
+                RET
+
+; OR the currently selected config window (one flag per line, in bit 0) into
+; the special-line scratch array at HEAP + OPTM_STRUCTSIZE + 2*OPTM_ICOUNT.
+; The caller selects the config window first; used by HELP_MENU_INIT to fold
+; the mount / load-ROM / help flag windows together.
+_HLP_DEP_OR     INCRB
+                MOVE    OPTM_ICOUNT, R0
+                MOVE    @R0, R0                 ; R0: amount of menu items (N)
+                MOVE    M2M$RAMROM_DATA, R1     ; R1: active config window
+                MOVE    HEAP, R2                ; R2: special array
+                ADD     OPTM_STRUCTSIZE, R2
+                ADD     R0, R2
+                ADD     R0, R2
+_HDO_LOOP       CMP     0, R0                   ; all lines folded in?
+                RBRA    _HDO_DONE, Z
+                MOVE    @R1, R3
+                OR      R3, @R2                 ; special[i] |= window[i]
+                ADD     1, R1
+                ADD     1, R2
+                SUB     1, R0
+                RBRA    _HDO_LOOP, 1
+_HDO_DONE       DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; OPTM_DEPS_PROBE: Detect whether config.vhd supports the dependency feature
+;
+; Reads the magic word at the out-of-band address 0xFFF of the SEL_OPTM_DEPS
+; window. A config.vhd that knows the feature returns 0x1DEF there; an old
+; config.vhd hits the unknown-selector default and returns 0xEEEE. This
+; doubles as a format version for future extensions. (Lives here rather than
+; in optm_deps.asm so that file stays free of config-device dependencies and
+; remains emulator-testable in isolation.)
+;
+; Input:  none
+; Output: C=1 feature available (config.vhd returned 0x1DEF), C=0 otherwise.
+;         All registers are preserved.
+; ----------------------------------------------------------------------------
+
+OPTM_DEPS_PROBE INCRB
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+                MOVE    M2M$CFG_OPTM_DEPS, @R0
+                MOVE    M2M$RAMROM_DATA, R0
+                ADD     0x0FFF, R0              ; magic word at address 0xFFF
+                MOVE    @R0, R0
+                CMP     0x1DEF, R0
+                RBRA    _ODP_ON, Z
+                AND     0xFFFB, SR              ; clear Carry: feature off
+                DECRB
+                RET
+_ODP_ON         OR      0x0004, SR              ; set Carry: feature on
+                DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
@@ -826,7 +998,9 @@ OPT_MENU_DATA   .DW     SCR$CLR, SCR$PRINTFRAME, OPT_PRINTSTR, SCR$PRINTSTRXY
                 .DW     OPTM_CB_SEL, OPTM_CB_SHOW, FATAL,
                 .DW     M2M$OPT_SEL_MULTI, 0    ; selection char + zero term.:
                 .DW     M2M$OPT_SEL_SINGLE, 0   ; multi- and single-select
-                .DW     0, 0, 0, 0, 0           ; will be filled dynamically
+                .DW     0, 0, 0, 0, 0, 0        ; will be filled dynamically
+                                                ; (size,items,groups,stdsel,
+                                                ;  lines,deps)
 
 ; Print function that handles everything incl. cursor pos and \n by itself
 ; R8 contains the string that shall be printed

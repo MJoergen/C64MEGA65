@@ -333,6 +333,7 @@ constant SEL_OPTM_SAVING_STR  : std_logic_vector(15 downto 0) := x"030A";
 constant SEL_OPTM_HELP        : std_logic_vector(15 downto 0) := x"0310";
 constant SEL_OPTM_CRTROM      : std_logic_vector(15 downto 0) := x"0311";
 constant SEL_OPTM_CRTROM_STR  : std_logic_vector(15 downto 0) := x"0312";
+constant SEL_OPTM_DEPS        : std_logic_vector(15 downto 0) := x"0313"; -- Per-line smart-dependency word (OPTM_DEP); magic x"1DEF" at index 0xFFF
 
 -- !!! DO NOT TOUCH !!! Configuration constants for OPTM_GROUPS (shell.asm and menu.asm expect them to be like this)
 constant OPTM_G_TEXT       : integer := 16#00000#;         -- text that cannot be selected
@@ -353,8 +354,11 @@ constant OPTM_G_SUBMENU    : integer := 16#0C000#;         -- starts/ends a sect
                                                            -- put a complete OPTM_G_SUBMENU .. OPTM_G_SUBMENU+OPTM_G_CLOSE
                                                            -- block inside another one
 constant OPTM_G_LOAD_ROM   : integer := 16#18000#;         -- line item means: load ROM; first occurance = rom 0, second = rom 1, ...
+constant OPTM_G_DEPENDENT  : integer := 16#20000000#;      -- dependent line (smart dependencies, see OPTM_DEP below): visible only
+                                                           -- while a specific item of a specific mother group is selected (bit 29)
 
-constant OPTM_GTC          : natural := 17;                -- Amount of significant bits in OPTM_G_* constants
+constant OPTM_GTC          : natural := 30;                -- Amount of significant bits in OPTM_G_* constants (max 30: 2**31 overflows
+                                                           -- the integer range expression below); was 17 before the smart-dependencies feature
 
 -- @TODO/REMINDER: If we added in future more configuration constants that are not meant to be saved in the
 -- configuration file, such as OPTM_G_MOUNT_DRV and OPTM_G_LOAD_ROM, then we need to make sure that we
@@ -610,6 +614,24 @@ constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- not yet wired
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 
+-- OPTM_DEP tags a menu line as dependent (smart dependencies, see issue #229
+-- and doc/path-to-OSM-dependencies.md): the line is only visible while item
+-- <item> of the mother group <mother> is selected. For a radio (multi-select)
+-- mother, <item> is the 0-based index of the controlling member; for a single-
+-- select toggle, item 1 means "visible while ON", item 0 means "visible while
+-- OFF". Add it to the line's OPTM_GROUPS entry, e.g.
+--   OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1)
+-- Authoring invariant (the firmware does NOT enforce it): place a mother group
+-- and the lines that depend on it so the cursor can never sit on a dependent
+-- line at the moment its mother changes - e.g. keep the mother in a different
+-- submenu than its dependents (V6 keeps PAL/NTSC in the Model submenu and the
+-- dependent display modes in the HDMI submenu). Otherwise a real-time reflow
+-- could hide the line under the cursor.
+function OPTM_DEP(mother : natural; item : natural) return natural is
+begin
+   return OPTM_G_DEPENDENT + (item * 16#02000000#) + (mother * 16#00020000#);
+end function OPTM_DEP;
+
 constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                        -- C64 for MEGA65
                                              OPTM_G_LINE,
                                              OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START,
@@ -649,15 +671,15 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SUBMENU,                          -- open "HDMI: %s" (settings)
                                              OPTM_G_HEADLINE,                         -- HDMI Display Mode
                                              OPTM_G_LINE,
-                                             OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL,  -- 16:9 720p 50 Hz
-                                             OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL,  -- 16:9 720p 59.94 Hz
-                                             OPTM_G_HDMI_MODES_PAL,                   -- 4:3  576p 50 Hz
-                                             OPTM_G_HDMI_MODES_NTSC,                  -- 4:3  480p 59.94 Hz
-                                             OPTM_G_HDMI_MODES_PAL,                   -- 5:4  576p 50 Hz
-                                             OPTM_G_HDMI_MODES_NTSC,                  -- 5:4  480p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 16:9 720p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 16:9 720p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL                  + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 4:3  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC                 + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 4:3  480p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL                  + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 5:4  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC                 + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 5:4  480p 59.94 Hz
                                              OPTM_G_LINE,
-                                             OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
-                                             OPTM_G_HDMI_FF_NTSC  + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
+                                             OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Flicker-free (PAL)
+                                             OPTM_G_HDMI_FF_NTSC  + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Flicker-free (NTSC)
                                              OPTM_G_HDMI_DVI      + OPTM_G_SINGLESEL,
 
                                              OPTM_G_SUBMENU,                          -- open "HDMI: %s" (filter), nested
@@ -675,7 +697,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (filter)
 
                                              OPTM_G_HDMI_ZOOM     + OPTM_G_SINGLESEL,
-                                             OPTM_G_HDMI_RAW50    + OPTM_G_SINGLESEL,
+                                             OPTM_G_HDMI_RAW50    + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Raw 50.1 Hz (PAL only)
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (settings)
 
@@ -913,6 +935,14 @@ begin
             when SEL_OPTM_CRTROM       => data_o <= x"000" & "000" & std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(16));
             when SEL_OPTM_ICOUNT       => data_o <= x"00" & std_logic_vector(to_unsigned(OPTM_SIZE, 8));
             when SEL_OPTM_DIMENSIONS   => data_o <= getDXDY(OPTM_DX, OPTM_DY, index);
+            when SEL_OPTM_DEPS         => if index = 4095 then               -- smart dependencies (OPTM_DEP):
+                                            data_o <= x"1DEF";               -- magic "DEPendency Format 1" feature probe
+                                          else                               -- per line: {000, flag(b29), item(b28..25), mother(b24..17)}
+                                            data_o <= "000" &
+                                                      std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(29)) &
+                                                      std_logic_vector(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(28 downto 25)) &
+                                                      std_logic_vector(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(24 downto 17));
+                                          end if;
 
             when others                => null;
          end case;

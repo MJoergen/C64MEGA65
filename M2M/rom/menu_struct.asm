@@ -126,9 +126,20 @@ _OSB_OPN_2      MOVE    R7, @R0++               ; store entry
                 ; plain line (including headlines, separator lines, etc.)
 _OSB_PLAIN      MOVE    R3, R7                  ; entry: id = current region
                 CMP     R3, R11                 ; visible <=> L == region
-                RBRA    _OSB_PLN_1, !Z
-                OR      0x8000, R7
-                ADD     1, R6
+                RBRA    _OSB_PLN_1, !Z          ; not at this level: hidden
+                ; the line is at this level; a dependency may still hide it.
+                ; only plain lines can be dependent (openers and closers never
+                ; are, see optm_deps.asm), so this is the only place the
+                ; dependency predicate enters the builder
+                MOVE    R8, @--SP               ; save the output array base
+                MOVE    R0, R8                  ; flat index of this line:
+                SUB     @SP, R8                 ;   output cursor - base - 1
+                SUB     1, R8
+                RSUB    OPTM_DEP_OK, 1          ; visible? (C=1 = yes)
+                MOVE    @SP++, R8               ; restore the output array base
+                RBRA    _OSB_PLN_1, !C          ; a dependency hides this line
+                OR      0x8000, R7              ; visible: set bit 15
+                ADD     1, R6                   ; and count it
 _OSB_PLN_1      MOVE    R7, @R0++               ; store entry
 
 _OSB_NEXT       ADD     1, R2                   ; next group word
@@ -296,8 +307,10 @@ _OSV_ERR        ADD     R2, SP                  ; unwind the parse stack
 ;
 ; Default semantics of the %s replacement in a submenu opener line: walk
 ; forward from the opener and return the first line that belongs to a plain
-; multi-select group (a "radio button" group) of this very region and that
-; is currently selected. Lines of nested child regions are skipped: on a
+; multi-select group (a "radio button" group) of this very region, that is
+; currently selected and that is not hidden by a dependency (see
+; OPTM_DEP_OK / optm_deps.asm; the dependency test is a no-op when the
+; feature is off). Lines of nested child regions are skipped: on a
 ; child opener the walk starts skipping, on the matching child closer it
 ; stops skipping (a depth counter, no stack needed). Reaching the closer of
 ; the region itself means the region has no radio group of its own.
@@ -352,6 +365,11 @@ _OSS_PLAIN      CMP     0, R1                   ; inside a child region?
                 MOVE    255, R10                ; be within 1 .. 254: single
                 SYSCALL(in_range_u, 1)          ; selects, headlines etc. fall
                 RBRA    _OSS_LOOP, !C           ; outside: skip the line
+
+                MOVE    R0, R8                  ; hidden by a dependency? then
+                SUB     R4, R8                  ; this radio member does not
+                RSUB    OPTM_DEP_OK, 1          ; count for the summary either
+                RBRA    _OSS_LOOP, !C           ; (no-op when deps are off)
 
                 MOVE    R0, R8                  ; selected? look up the same
                 SUB     R4, R8                  ; index in the selected-state

@@ -34,6 +34,9 @@
                 MOVE    EQ_REC, R8
                 ADD     OPTM_CLBK_FATAL, R8
                 MOVE    EQ_FATAL, @R8
+                MOVE    EQ_REC, R8              ; dependency feature off: legacy
+                ADD     OPTM_IR_DEPS, R8        ; fixtures carry no dependencies
+                MOVE    0, @R8
 
                 MOVE    EQ_FXIDX, R8            ; fixture counter := 0
                 MOVE    0, @R8
@@ -292,6 +295,6 @@ EQ_LVL          .BLOCK 1
 EQ_LASTLVL      .BLOCK 1
 EQ_CNT_OLD      .BLOCK 1
 EQ_CNT_NEW      .BLOCK 1
-EQ_REC          .BLOCK 19
+EQ_REC          .BLOCK 20
 EQ_BUF_OLD      .BLOCK 256
 EQ_BUF_NEW      .BLOCK 256

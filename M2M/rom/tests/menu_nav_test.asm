@@ -46,7 +46,7 @@ _NT_CPY         MOVE    @R0++, @R1++
                 SUB     1, R3
                 RBRA    _NT_CPY, !Z
 
-                MOVE    NT_SCEN2, R8            ; scenario flag := 0
+                MOVE    NT_SCEN, R8             ; scenario counter := 0
                 MOVE    0, @R8
                 MOVE    NT_SCRIPT_POS, R8       ; script position := 0
                 MOVE    NAV_SCRIPT, @R8
@@ -91,18 +91,26 @@ _NT_RUN         RSUB    OPTM_SHOW, 1
                 RBRA    _NT_RUN, !Z             ; no: run the menu again
 
                 ; ------------------------------------------------------------
-                ; Scenario 2: synthetic menu that covers the enter-scan stop
-                ; positions the V6 menu cannot provide (a region whose first
-                ; content is a nested child opener and an empty region); see
-                ; nav2_script() in menu_test.py
+                ; Advance to the next scenario:
+                ;  2 = synthetic menu covering the enter-scan stop positions
+                ;      the V6 menu cannot provide (a region whose first content
+                ;      is a nested child opener and an empty region)
+                ;  3 = dependency menu covering the live OPTM_RUN dependency
+                ;      paths: the enter-scan dependency skip and the real-time
+                ;      redraw on a mother toggle
+                ; (see nav2_script() / nav3_script() in menu_test.py)
                 ; ------------------------------------------------------------
 
-                MOVE    NT_SCEN2, R8            ; already in scenario 2?
-                CMP     1, @R8
-                RBRA    _NT_DONE, Z             ; yes: all done
-                MOVE    1, @R8
+                MOVE    NT_SCEN, R8
+                ADD     1, @R8
+                MOVE    @R8, R0                 ; R0: scenario number
+                CMP     1, R0
+                RBRA    _NT_SCEN2, Z
+                CMP     2, R0
+                RBRA    _NT_SCEN3, Z
+                RBRA    _NT_DONE, 1             ; all scenarios done
 
-                MOVE    NT_S_N2, R8             ; print the scenario marker
+_NT_SCEN2       MOVE    NT_S_N2, R8            ; print the scenario marker
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
 
@@ -141,6 +149,48 @@ _NT_CPY2        MOVE    @R0++, @R1++
                 MOVE    NAV2_START, @R8
                 RBRA    _NT_RUN, 1
 
+_NT_SCEN3       MOVE    NT_S_N3, R8            ; print the scenario marker
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+
+                MOVE    NAV3_STDSEL_DEF, R0     ; selected-state defaults
+                MOVE    NT_STDSEL, R1
+                MOVE    NAV3_N, R3
+_NT_CPY3        MOVE    @R0++, @R1++
+                SUB     1, R3
+                RBRA    _NT_CPY3, !Z
+
+                MOVE    NT_REC, R8              ; repoint the init record and
+                ADD     OPTM_IR_SIZE, R8        ; turn the dependency feature ON
+                MOVE    NAV3_N, @R8             ; by pointing OPTM_IR_DEPS at the
+                MOVE    NT_REC, R8              ; resolved array
+                ADD     OPTM_IR_ITEMS, R8
+                MOVE    NAV3_ITEMS, @R8
+                MOVE    NT_REC, R8
+                ADD     OPTM_IR_GROUPS, R8
+                MOVE    NAV3_GROUPS, @R8
+                MOVE    NT_REC, R8
+                ADD     OPTM_IR_DEPS, R8
+                MOVE    NAV3_DEPS, @R8
+
+                MOVE    NT_SCRIPT_POS, R8       ; switch to script 3
+                MOVE    NAV3_SCRIPT, @R8
+                MOVE    NT_SCRIPT_END, R8
+                MOVE    NAV3_SCRIPT, R9
+                ADD     NAV3_SCRIPT_CNT, R9
+                MOVE    R9, @R8
+
+                MOVE    NT_REC, R8              ; re-initialize like a boot
+                MOVE    0, R9
+                MOVE    0, R10
+                MOVE    30, R11
+                MOVE    30, R12
+                RSUB    OPTM_INIT, 1
+
+                MOVE    NT_CURSOR, R8           ; cursor := start item
+                MOVE    NAV3_START, @R8
+                RBRA    _NT_RUN, 1
+
 _NT_DONE        MOVE    NT_S_DONE, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
@@ -154,7 +204,9 @@ NT_REC          .DW     NT_STUB, NT_STUB, NT_STUB, NT_STUB
                 .DW     NT_STUB, NT_STUB, NT_GETKEY
                 .DW     NT_CB_SEL, NT_CB_SHOW, NT_FATAL
                 .DW     0x0078, 0, 0x0078, 0    ; sel. chars (inline strings)
-                .DW     NAV_N, NAV_ITEMS, NAV_GROUPS, NT_STDSEL, NT_LINES
+                .DW     NAV_N, NAV_ITEMS, NAV_GROUPS, NT_STDSEL, NT_LINES, 0
+                                                ; last word = OPTM_IR_DEPS: 0 =
+                                                ; dependency feature off here
 
                 ; all visual functions: do nothing, preserve all registers
 NT_STUB         RET
@@ -291,6 +343,7 @@ NT_S_F          .ASCII_W "F C="
 NT_S_X          .ASCII_W "X"
 NT_S_W          .ASCII_W "W I="
 NT_S_N2         .ASCII_W "N2"
+NT_S_N3         .ASCII_W "N3"
 NT_S_DONE       .ASCII_W "DONE"
 
 ; the component under test (menu.asm includes menu_struct.asm)
@@ -302,7 +355,7 @@ NT_S_DONE       .ASCII_W "DONE"
 
 NT_SCRIPT_POS   .BLOCK 1
 NT_SCRIPT_END   .BLOCK 1
-NT_SCEN2        .BLOCK 1
+NT_SCEN         .BLOCK 1
 NT_CURSOR       .BLOCK 1
 NT_STDSEL       .BLOCK 256
 NT_LINES        .BLOCK 256

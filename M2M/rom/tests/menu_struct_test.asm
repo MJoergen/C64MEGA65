@@ -23,6 +23,12 @@
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
 
+                ; no menu initialization record here, so the dependency
+                ; predicate (OPTM_DEP_OK) must short-circuit to "visible";
+                ; these fixtures carry no dependencies
+                MOVE    OPTM_DATA, R8
+                MOVE    0, @R8
+
                 ; ------------------------------------------------------------
                 ; Structure fixtures: validation + builds at every level
                 ; ------------------------------------------------------------

@@ -16,6 +16,13 @@ Usage:
                                   derived from the golden menu model
     python3 menu_test.py verify   parse CORE/vhdl/config.vhd + mega65.vhd and
                                   cross-check them against the golden model
+    python3 menu_test.py mutate   inject behavior-changing edits into the
+                                  dependency assembly and confirm the suite
+                                  catches every one (coverage proof for #229)
+    python3 menu_test.py ghdl     drive the real config.vhd SEL_OPTM_DEPS
+                                  decoder through ghdl and check the raw word
+                                  against the model (skips if ghdl is absent;
+                                  also run as part of "verify")
 
 The python implementations in this file are instruction-level ports of the
 QNICE assembly (menu_struct.asm and, for the legacy parser, the pre-V2.1.0
@@ -244,16 +251,88 @@ FLAGVAL = dict(STDSEL=F_STDSEL, LINE=F_LINE, START=F_START,
                MOUNT_DRV=F_MOUNT_DRV, HELP=F_HELP, SUBMENU=F_SUBMENU,
                LOAD_ROM=F_LOAD_ROM, CLOSEF=F_CLOSE)
 
+# Smart dependencies (OPTM_DEP, see optm_deps.asm + config.vhd): the high bits
+# of an OPTM_GROUPS element encode that a line is only visible while item
+# <item> of mother group <gid> is selected. OPTM_G_DEPENDENT is bit 29.
+F_DEPENDENT = 0x20000000
 
-def menu_words(menu):
-    """(vhdl integer, masked firmware word, stdsel, line, start) per entry"""
+
+def dep_value(gid, item):
+    """OPTM_DEP(mother, item) - the value added to an OPTM_GROUPS element."""
+    return F_DEPENDENT + (item * 0x02000000) + (gid * 0x00020000)
+
+
+# flat index -> (mother group name, item index); the dependent lines of the V6
+# menu (the PAL/NTSC HDMI variants and the two flicker-free twins + Raw 50.1)
+V6_DEPS = {
+    36: ("MACHINE_MODE", 0), 37: ("MACHINE_MODE", 1),
+    38: ("MACHINE_MODE", 0), 39: ("MACHINE_MODE", 1),
+    40: ("MACHINE_MODE", 0), 41: ("MACHINE_MODE", 1),
+    43: ("MACHINE_MODE", 0), 44: ("MACHINE_MODE", 1),
+    60: ("MACHINE_MODE", 0),
+}
+
+
+def menu_words(menu, deps=None):
+    """The full VHDL integer per entry, optionally including OPTM_DEP() bits.
+    deps maps flat index -> (mother group name, item index)."""
     out = []
-    for label, group, flags in menu:
+    for i, (label, group, flags) in enumerate(menu):
         v = G[group] if group else 0
         for f in flags:
             v += FLAGVAL[f]
+        if deps and i in deps:
+            mg, item = deps[i]
+            v += dep_value(G[mg], item)
         out.append(v)
     return out
+
+
+def menu_deps_raw(menu, deps):
+    """The raw per-line dependency word as served by SEL_OPTM_DEPS:
+    bit 12 = flag, bits 11..8 = item, bits 7..0 = mother group id."""
+    out = []
+    for i in range(len(menu)):
+        if deps and i in deps:
+            mg, item = deps[i]
+            out.append(0x1000 | (item << 8) | G[mg])
+        else:
+            out.append(0)
+    return out
+
+
+def resolve_deps(masked_groups, raw_deps):
+    """Port of OPTM_DEPS_RESOLVE: raw dependency words -> resolved words
+    (bit 15 = valid, bit 8 = expected state, bits 7..0 = controlling line)."""
+    out = []
+    for w in raw_deps:
+        if not (w & 0x1000):                    # not dependent
+            out.append(0)
+            continue
+        mother = w & 0xFF
+        item = (w >> 8) & 0xF
+        members = [j for j, g in enumerate(masked_groups) if (g & 0xFF) == mother]
+        if not members:                          # defensive (boot-validated)
+            out.append(0)
+            continue
+        if masked_groups[members[0]] & 0x8000:   # single-select mother
+            ctl, expected = members[0], item
+        else:                                     # radio mother
+            ctl, expected = members[item], 1
+        out.append(0x8000 | (expected << 8) | ctl)
+    return out
+
+
+def dep_ok(i, resolved, stdsel):
+    """Port of OPTM_DEP_OK: is line i visible w.r.t. its dependency?"""
+    if resolved is None:                          # feature off
+        return True
+    w = resolved[i]
+    if not (w & 0x8000):                          # not dependent
+        return True
+    ctl = w & 0xFF
+    expected = (w >> 8) & 1
+    return (1 if stdsel[ctl] else 0) == expected
 
 
 def menu_masked(menu):
@@ -392,8 +471,10 @@ def classify(w):
     return "plain"
 
 
-def build_new(groups, level):
-    """Port of OPTM_STRUCT_BUILD. Returns dict or {'err': idx}."""
+def build_new(groups, level, resolved=None, stdsel=None):
+    """Port of OPTM_STRUCT_BUILD. Returns dict or {'err': idx}. When resolved
+    (+ stdsel) is given, the plain-line visibility is ANDed with the
+    dependency predicate (openers/closers are never dependent)."""
     cur, nxt, vis, par, opn, lastopen = 0, 1, 0, 0, 0, 0
     stack, out = [], []
     for i, w in enumerate(groups):
@@ -417,6 +498,8 @@ def build_new(groups, level):
             cur = stack.pop()
         else:
             v = 1 if level == cur else 0
+            if v and not dep_ok(i, resolved, stdsel):
+                v = 0
             out.append(cur | (0x8000 if v else 0))
             vis += v
     if stack:
@@ -500,8 +583,9 @@ def validate(groups, start):
     return ("ok", opens, maxh)
 
 
-def summ_scan(groups, heading, stdsel):
-    """Port of OPTM_SUMM_SCAN. Returns ('found', idx) or ('err', class)."""
+def summ_scan(groups, heading, stdsel, resolved=None):
+    """Port of OPTM_SUMM_SCAN. Returns ('found', idx) or ('err', class).
+    When resolved is given, dependency-hidden radio members are skipped."""
     d, i, n = 0, heading, len(groups)
     while True:
         i += 1
@@ -520,6 +604,8 @@ def summ_scan(groups, heading, stdsel):
             continue
         if not (1 <= w < 255):
             continue
+        if not dep_ok(i, resolved, stdsel):
+            continue
         if stdsel[i] == 0:
             continue
         return ("found", i)
@@ -527,6 +613,170 @@ def summ_scan(groups, heading, stdsel):
 
 def num_regions(groups):
     return sum(1 for w in groups if classify(w) == "open")
+
+
+def validate_deps(groups, raw, special):
+    """Port of OPTM_DEPS_VAL. groups are masked words, raw are raw dependency
+    words, special[i] != 0 marks mount/load_rom/help/start lines. Returns
+    ('ok',) or ('err', class, idx) with class 0..4."""
+    n = len(groups)
+    for i in range(n):                            # pass A
+        if not (raw[i] & 0x1000):
+            continue
+        if ((groups[i] & 0x4000) or (groups[i] & 0xFF) == 255
+                or special[i]):                   # class 4: special line
+            return ("err", 4, i)                  # (incl. a bare CLOSE, id 255)
+        mother = raw[i] & 0xFF
+        item = (raw[i] >> 8) & 0xF
+        if mother == 0 or mother == 255:          # class 0: bad mother id
+            return ("err", 0, i)
+        count = single = chain = 0
+        for j in range(n):
+            if (groups[j] & 0xFF) == mother:
+                if groups[j] & 0x8000:
+                    single = 1
+                if raw[j] & 0x1000:
+                    chain = 1
+                count += 1
+        if count == 0:                            # class 0: mother has no members
+            return ("err", 0, i)
+        if chain:                                 # class 3: dependency chain
+            return ("err", 3, i)
+        if single:
+            if item > 1:                          # class 1: single-sel item > 1
+                return ("err", 1, i)
+        elif item >= count:                       # class 1: radio item overflow
+            return ("err", 1, i)
+    for i in range(n):                            # pass B: group uniformity
+        gid = groups[i] & 0xFF
+        if gid == 0 or gid == 255 or (groups[i] & 0x4000):
+            continue
+        first = next(j for j in range(n) if (groups[j] & 0xFF) == gid)
+        if first != i and raw[first] != raw[i]:   # class 2: mixed group
+            return ("err", 2, i)
+    return ("ok",)
+
+
+# A synthetic menu for the dependency testbed: a radio mother (gid 22, members
+# at idx 2/3), a single-select mother (gid 14, idx 5) and dependent radio /
+# toggle lines inside region 2 (idx 7..11).
+DEP_MOTHER_R = 22
+DEP_MOTHER_S = 14
+DEP_GROUPS = [
+    0x1000,             # 0  headline
+    0xC000,             # 1  open region 1
+    DEP_MOTHER_R,       # 2  PAL  (radio mother member 0)
+    DEP_MOTHER_R,       # 3  NTSC (radio mother member 1)
+    0xC0FF,             # 4  close region 1
+    0x8000 | DEP_MOTHER_S,  # 5  toggle (single-select mother)
+    0xC000,             # 6  open region 2 (heading for %s)
+    13,                 # 7  PAL variant a   dep(22,0)
+    25,                 # 8  NTSC variant a  dep(22,1)
+    13,                 # 9  PAL variant b   dep(22,0)
+    25,                 # 10 NTSC variant b  dep(22,1)
+    15,                 # 11 toggle-dependent line dep(14,1)
+    0xC0FF,             # 12 close region 2
+    0x00FF,             # 13 Close Menu
+]
+DEP_RAW_MAP = {7: (22, 0), 8: (22, 1), 9: (22, 0), 10: (22, 1), 11: (14, 1)}
+
+
+def dep_raw_array(rawmap, n):
+    raw = [0] * n
+    for idx, (m, it) in rawmap.items():
+        raw[idx] = 0x1000 | (it << 8) | m
+    return raw
+
+
+def deps_resolve_fixtures():
+    """(name, groups, raw) -> expected resolved array via resolve_deps."""
+    fx = []
+    fx.append(("v6 model", DEP_GROUPS, dep_raw_array(DEP_RAW_MAP, len(DEP_GROUPS))))
+    # single-select mother, expected state 0 (visible while OFF)
+    g = [0x8000 | 9, 12, 12]
+    r = [0, 0x1000 | (0 << 8) | 9, 0x1000 | (1 << 8) | 9]
+    fx.append(("single-select off/on", g, r))
+    # no dependencies at all
+    fx.append(("none", [1, 2, 0x1000], [0, 0, 0]))
+    return fx
+
+
+def deps_val_fixtures():
+    """(name, groups, raw, special) -> expected via validate_deps."""
+    n = len(DEP_GROUPS)
+    base = dep_raw_array(DEP_RAW_MAP, n)
+    fx = [("valid v6 model", DEP_GROUPS, base, [0] * n)]
+    # class 0: mother does not exist (gid 99)
+    r = list(base); r[7] = 0x1000 | (0 << 8) | 99
+    fx.append(("mother missing", DEP_GROUPS, r, [0] * n))
+    # class 1: radio item index out of range (mother 22 has 2 members)
+    r = list(base); r[7] = 0x1000 | (5 << 8) | 22
+    # keep the group uniform so the index error is hit, not the mix error
+    r[9] = r[7]
+    fx.append(("item overflow", DEP_GROUPS, r, [0] * n))
+    # class 2: members of one group carry different dependency words
+    r = list(base); r[9] = 0x1000 | (1 << 8) | 22    # idx 7 is (22,0), idx 9 (22,1)
+    fx.append(("mixed group", DEP_GROUPS, r, [0] * n))
+    # class 3: the mother group is itself dependent (chain)
+    r = list(base); r[2] = 0x1000 | (0 << 8) | 13; r[3] = r[2]
+    fx.append(("dependency chain", DEP_GROUPS, r, [0] * n))
+    # class 4: a special (load-ROM) line is dependent
+    r = list(base); r[0] = 0x1000 | (0 << 8) | 22
+    sp = [0] * n; sp[0] = 1
+    fx.append(("special line", DEP_GROUPS, r, sp))
+    # class 4: a dependency on the bare main-level Close line (group id 255,
+    # no submenu bit) - this is the case the adversarial review caught (#1)
+    r = list(base); r[13] = 0x1000 | (0 << 8) | 22
+    fx.append(("dependent bare close", DEP_GROUPS, r, [0] * n))
+    return fx
+
+
+def deps_build_fixtures():
+    """(name, groups, resolved, stdsel, level) -> expected via build_new."""
+    n = len(DEP_GROUPS)
+    res = resolve_deps(DEP_GROUPS, dep_raw_array(DEP_RAW_MAP, n))
+    # a single-select mother referenced with item 0 = "visible while OFF"; this
+    # is the only way a resolved expected-state-0 word (bit 8 = 0) reaches
+    # OPTM_DEP_OK at runtime, so it pins the predicate's expected-0 arm (#4)
+    res0 = resolve_deps(DEP_GROUPS, dep_raw_array({**DEP_RAW_MAP, 11: (14, 0)}, n))
+
+    def sd(**kw):
+        s = [0] * n
+        for k, v in kw.items():
+            s[int(k[1:])] = v
+        return s
+
+    fx = []
+    # PAL selected, toggle off: PAL variants visible, NTSC + toggle-dep hidden
+    fx.append(("region2 PAL", DEP_GROUPS, res, sd(i2=1, i5=0), 2))
+    # NTSC selected, toggle on: NTSC variants + toggle-dep visible
+    fx.append(("region2 NTSC", DEP_GROUPS, res, sd(i3=1, i5=1), 2))
+    # main level: dependents are hidden by level anyway
+    fx.append(("main level", DEP_GROUPS, res, sd(i2=1), 0))
+    # dep(G,0): the toggle-dependent line is visible while the toggle is OFF
+    fx.append(("dep(G,0) toggle OFF visible", DEP_GROUPS, res0, sd(i2=1, i5=0), 2))
+    # dep(G,0): and hidden while the toggle is ON
+    fx.append(("dep(G,0) toggle ON hidden", DEP_GROUPS, res0, sd(i2=1, i5=1), 2))
+    return fx
+
+
+def deps_summ_fixtures():
+    """(name, groups, resolved, stdsel, heading) -> expected via summ_scan."""
+    n = len(DEP_GROUPS)
+    res = resolve_deps(DEP_GROUPS, dep_raw_array(DEP_RAW_MAP, n))
+
+    def sd(**kw):
+        s = [0] * n
+        for k, v in kw.items():
+            s[int(k[1:])] = v
+        return s
+
+    fx = []
+    # PAL selected + PAL variant a selected -> the walk finds idx 7
+    fx.append(("PAL variant", DEP_GROUPS, res, sd(i2=1, i7=1, i8=1), 6))
+    # NTSC selected: idx 7 is dep-hidden even though selected; finds idx 8
+    fx.append(("NTSC skips hidden", DEP_GROUPS, res, sd(i3=1, i7=1, i8=1), 6))
+    return fx
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +787,7 @@ KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5,
 
 
 class NavSim:
-    def __init__(self, groups, stdsel, start, labels=None):
+    def __init__(self, groups, stdsel, start, labels=None, raw_deps=None):
         self.g = list(groups)
         self.sel = list(stdsel)
         self.n = len(groups)
@@ -546,9 +796,19 @@ class NavSim:
         self.cursor = start
         self.trace = []
         self.keys = []
+        self.resolved = resolve_deps(self.g, raw_deps) if raw_deps else None
 
     def _struct(self):
-        return build_new(self.g, self.level)
+        return build_new(self.g, self.level, self.resolved, self.sel)
+
+    def _affects(self, w):
+        """Port of OPTM_DEPS_AFFECTS: does group word w control a dependent?"""
+        if self.resolved is None:
+            return False
+        for rw in self.resolved:
+            if (rw & 0x8000) and self.g[rw & 0xFF] == w:
+                return True
+        return False
 
     def _visible(self, i):
         return bool(self._struct()["arr"][i] & 0x8000)
@@ -568,6 +828,23 @@ class NavSim:
         for i, t in enumerate(self.labels):
             if "%s" in t and (arr[i] & 0x8000):
                 self.trace.append("W I=%04X" % i)
+
+    def _redraw(self):
+        """A structure-rebuild redraw (the _OPTM_RUN_SM_4 path: enter / leave /
+        section-4.3 mother toggle). The runtime rebuilds the (sub)menu structure
+        and restarts OPTM_RUN with the kept cursor; if that cursor were on a
+        line the rebuild hides, _OPTM_R_F2M would halt with OPTM_F_MENUIDX. The
+        feature guarantees it never is (the cursor sits on the just-entered
+        line, the opener it left to, or the mother it just toggled - none of
+        which a dependency can hide). Assert that invariant here so a future
+        regression that strands the cursor is caught by the suite, not by a
+        QNICE halt on hardware. (Background OPTM_SET redraws do NOT rebuild the
+        struct, so this assertion deliberately does not apply to them - see the
+        refuted findings #8/#10 in the adversarial review.)"""
+        self._emit_w()
+        assert self._visible(self.cursor), (
+            "cursor %d hidden after a structure-rebuild redraw at level %d"
+            % (self.cursor, self.level))
 
     def run_start(self):
         """The testbed calls OPTM_SHOW before each OPTM_RUN, like
@@ -602,21 +879,25 @@ class NavSim:
                 rid = self._struct()["arr"][self.cursor] & 0x7FFF
                 self.level = rid
                 i = self.cursor
-                while True:
+                while True:                          # enter-cursor scan
                     i += 1
                     assert i < self.n, "NOSEL fatal"
-                    if self.g[i] & 0x40FF:
+                    if self.g[i] & 0x4000:           # child opener / own closer
                         break
+                    if (self.g[i] & 0xFF) and dep_ok(i, self.resolved, self.sel):
+                        break                        # visible selectable line
                 self.cursor = i
-                self._emit_w()                      # SM_4 calls OPTM_SHOW
+                self._redraw()                      # SM_4 rebuild + cursor check
             else:                                   # leave
                 self._leave()
-                self._emit_w()                      # SM_4 calls OPTM_SHOW
+                self._redraw()                      # SM_4 rebuild + cursor check
             return None
         if self.sel[self.cursor]:
             if w & 0x8000:                          # single-select: flip off
                 self.sel[self.cursor] = 0
                 self.trace.append("S G=%04X I=%04X K=%04X" % (w, 0, key))
+                if self._affects(w):                # toggled a mother: redraw
+                    self._redraw()
             return None                             # multi already set: ignore
         if w & 0x8000:
             self.sel[self.cursor] = 1
@@ -632,6 +913,8 @@ class NavSim:
         self.trace.append("S G=%04X I=%04X K=%04X" % (w, item, key))
         if w == 0x00FF:
             return "close"
+        if self._affects(w):                        # changed a mother: redraw
+            self._redraw()
         return None
 
     def feed(self, key):
@@ -653,7 +936,7 @@ class NavSim:
                 self.trace.append("R C=%04X" % self.cursor)
                 return "close"
             self._leave()
-            self._emit_w()                          # SM_4 calls OPTM_SHOW
+            self._redraw()                          # SM_4 rebuild + cursor check
         elif k in (KEY_SELECT, KEY_SELALT):
             if self._select(k) == "close":
                 self.trace.append("R C=%04X" % self.cursor)
@@ -812,6 +1095,62 @@ def expect_equiv():
     return "\n".join(lines) + "\n"
 
 
+def expect_deps():
+    lines = ["P8 OK"]                              # OPTM_DEPS_VAL preserves R8 (#5)
+    for k, (name, g, raw) in enumerate(deps_resolve_fixtures()):
+        res = resolve_deps(g, raw)
+        words = "".join(" %04X" % w for w in res)
+        lines.append("R %04X W=%s" % (k, words))
+    for k, (name, g, raw, sp) in enumerate(deps_val_fixtures()):
+        r = validate_deps(g, raw, sp)
+        if r[0] == "ok":
+            lines.append("V %04X OK" % k)
+        else:
+            lines.append("V %04X ERR C=%04X I=%04X" % (k, r[1], r[2]))
+    for k, (name, g, res, sd, lv) in enumerate(deps_build_fixtures()):
+        b = build_new(g, lv, res, sd)
+        words = "".join(" %04X" % w for w in b["arr"])
+        lines.append("B %04X C=%04X W=%s" % (k, b["vis"], words))
+    for k, (name, g, res, sd, h) in enumerate(deps_summ_fixtures()):
+        r = summ_scan(g, h, sd, res)
+        if r[0] == "found":
+            lines.append("D %04X FOUND I=%04X" % (k, r[1]))
+        else:
+            lines.append("D %04X ERR C=%04X" % (k, r[1]))
+    lines.append("DONE")
+    return "\n".join(lines) + "\n"
+
+
+def emit_deps_asm(path):
+    L = ["; AUTOGENERATED by menu_test.py gen - DO NOT EDIT", ""]
+
+    def block(prefix, fxs, extra):
+        out = ["", "%-15s .EQU %d" % (prefix + "_CNT", len(fxs))]
+        out += dw_label_table(prefix + "_TAB",
+                              ["%s_%04X" % (prefix, k) for k in range(len(fxs))])
+        for k, fx in enumerate(fxs):
+            arrays, head = extra(fx)
+            out.append("")
+            out.append("; %s %d: %s" % (prefix, k, fx[0]))
+            out.append("%-15s .DW     %s" % ("%s_%04X" % (prefix, k), head))
+            for a in arrays:
+                out += dw_lines(a)
+        return out
+
+    L += block("DR", deps_resolve_fixtures(),
+               lambda fx: ([fx[1], fx[2]], "0x%04X" % len(fx[1])))
+    L += block("DV", deps_val_fixtures(),
+               lambda fx: ([fx[1], fx[2], fx[3]], "0x%04X" % len(fx[1])))
+    L += block("DB", deps_build_fixtures(),
+               lambda fx: ([fx[1], fx[2], fx[3]],
+                           "0x%04X, 0x%04X" % (len(fx[1]), fx[4])))
+    L += block("DS", deps_summ_fixtures(),
+               lambda fx: ([fx[1], fx[2], fx[3]],
+                           "0x%04X, 0x%04X" % (len(fx[1]), fx[4])))
+    with open(path, "w") as f:
+        f.write("\n".join(L) + "\n")
+
+
 def nav_script():
     """Build the nav-test key script with the simulator and return
     (keys, expected trace lines)."""
@@ -921,10 +1260,56 @@ def nav2_script():
     return groups, stdsel, s.keys, s.trace
 
 
+NAV3_LABELS = [" Tog", " D:%s", " E:%s", " S:%s", " F", " G", " back", " quit"]
+
+
+def nav3_script():
+    """Dependency scenario in the live OPTM_RUN state machine: a single-select
+    mother (idx 0) with a same-view dependent (idx 1) drives the real-time
+    redraw (OPTM_DEPS_AFFECTS -> OPTM_SHOW); a submenu whose first content
+    (idx 4) is dependent drives the enter-scan dependency skip
+    (_OPTM_RUN_SM_2). Both are no-ops for the deps-off scenarios 1 and 2."""
+    groups = [
+        0x8001,   # 0 single-select toggle, mother gid 1 (START line)
+        0x0002,   # 1 dependent radio gid 2  dep(1,1)  same view as the mother
+        0x0003,   # 2 radio gid 3 (always visible)
+        0xC000,   # 3 open region 1 (submenu " S:%s")
+        0x0004,   # 4 dependent radio gid 4  dep(1,1)  first content of region 1
+        0x0005,   # 5 radio gid 5 (always visible)
+        0xC0FF,   # 6 close region 1
+        0x00FF,   # 7 Close Menu
+    ]
+    raw = [0] * 8
+    raw[1] = 0x1000 | (1 << 8) | 1     # dep(mother gid 1, item 1): visible if ON
+    raw[4] = 0x1000 | (1 << 8) | 1
+    stdsel = [0] * 8                    # toggle OFF
+    s = NavSim(groups, stdsel, 0, labels=NAV3_LABELS, raw_deps=raw)
+    s.run_start()
+    s.feed(KEY_SELECT)                  # toggle ON  -> redraw, idx1 appears
+    s.feed(KEY_SELECT)                  # toggle OFF -> redraw, idx1 hidden
+    s.until(KEY_DOWN, 3)                # to the submenu opener
+    s.feed(KEY_SELECT)                  # enter: idx4 dep-hidden (OFF), scan
+    assert (s.level, s.cursor) == (1, 5)   # skips it -> lands on idx5
+    s.feed(KEY_MENUUP)                  # back to main, cursor on the opener
+    assert (s.level, s.cursor) == (0, 3)
+    s.until(KEY_UP, 0)                  # back to the toggle
+    s.feed(KEY_SELECT)                  # toggle ON
+    s.until(KEY_DOWN, 3)               # to the opener (idx1 is visible now)
+    s.feed(KEY_SELECT)                  # enter: idx4 now visible -> lands there
+    assert (s.level, s.cursor) == (1, 4)
+    s.feed(KEY_MENUUP)
+    assert (s.level, s.cursor) == (0, 3)
+    r = s.feed(KEY_MENUUP)              # Run/Stop at main: close
+    assert r == "close"
+    return groups, stdsel, raw, s.keys, s.trace
+
+
 def expect_nav():
     _, trace = nav_script()
     _, _, _, trace2 = nav2_script()
-    return "\n".join(trace) + "\nN2\n" + "\n".join(trace2) + "\nDONE\n"
+    _, _, _, _, trace3 = nav3_script()
+    return ("\n".join(trace) + "\nN2\n" + "\n".join(trace2)
+            + "\nN3\n" + "\n".join(trace3) + "\nDONE\n")
 
 
 # ---------------------------------------------------------------------------
@@ -1035,6 +1420,22 @@ def emit_nav_asm(path):
     L.append("NAV2_SCRIPT_CNT .EQU %d" % len(keys2))
     L.append("NAV2_SCRIPT")
     L += dw_lines(keys2)
+    g3, sd3, raw3, keys3, _ = nav3_script()
+    res3 = resolve_deps(g3, raw3)
+    L.append("")
+    L.append("; scenario 3: dependency menu, see nav3_script() in menu_test.py")
+    L.append("NAV3_N          .EQU %d" % len(g3))
+    L.append("NAV3_START      .EQU 0")
+    L.append("NAV3_GROUPS")
+    L += dw_lines(g3)
+    L.append("NAV3_STDSEL_DEF")
+    L += dw_lines(sd3)
+    L.append("NAV3_DEPS")                    # resolved dependency array
+    L += dw_lines(res3)
+    L += ascii_item_lines("NAV3_ITEMS", NAV3_LABELS)
+    L.append("NAV3_SCRIPT_CNT .EQU %d" % len(keys3))
+    L.append("NAV3_SCRIPT")
+    L += dw_lines(keys3)
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
 
@@ -1128,6 +1529,127 @@ def osm_scaling_range():
     return (m[-1], m[0])
 
 
+def vhdl_tb_vectors():
+    """(28-bit address, expected 16-bit data) pairs for the SEL_OPTM_DEPS
+    decoder, derived from the golden model. Closes the VHDL->QNICE raw-word
+    contract that verify()/run() otherwise never exercise (#2)."""
+    raw = menu_deps_raw(V6_MENU, V6_DEPS)
+    SEL = 0x0313
+    vecs = []
+    for idx in sorted(V6_DEPS):                   # every dependent line
+        vecs.append((SEL << 12 | idx, raw[idx]))
+    vecs.append((SEL << 12 | 0, 0x0000))          # a non-dependent line -> 0
+    vecs.append((SEL << 12 | 0xFFF, 0x1DEF))      # the feature-probe magic
+    vecs.append((0x0999 << 12 | 0, 0xEEEE))       # unknown selector -> default
+    return vecs
+
+
+def emit_vhdl_tb(path):
+    """Generate a self-checking ghdl testbench for the real config.vhd
+    SEL_OPTM_DEPS decoder (the VHDL OPTM_DEP() producer)."""
+    vecs = vhdl_tb_vectors()
+    rows = ",\n".join('    (x"%07X", x"%04X")' % (a, d) for a, d in vecs)
+    L = '''-- AUTOGENERATED by menu_test.py gen - DO NOT EDIT
+-- Self-checking testbench for the config.vhd SEL_OPTM_DEPS decoder. Drives the
+-- real DUT and asserts the raw per-line dependency word against the golden
+-- model (menu_deps_raw). Run with: python3 menu_test.py ghdl
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity config_deps_tb is
+end entity config_deps_tb;
+
+architecture sim of config_deps_tb is
+   signal clk_i     : std_logic := '0';
+   signal address_i : std_logic_vector(27 downto 0) := (others => '0');
+   signal data_o    : std_logic_vector(15 downto 0);
+   signal done      : boolean := false;
+   type vec_t is record
+      addr : std_logic_vector(27 downto 0);
+      dat  : std_logic_vector(15 downto 0);
+   end record;
+   type vec_array is array (natural range <>) of vec_t;
+   constant VECS : vec_array := (
+%s
+   );
+begin
+   dut : entity work.config
+      port map (clk_i => clk_i, address_i => address_i, data_o => data_o);
+
+   clk_proc : process
+   begin
+      while not done loop
+         clk_i <= '0'; wait for 5 ns;
+         clk_i <= '1'; wait for 5 ns;
+      end loop;
+      wait;
+   end process;
+
+   stim : process
+      variable errors : integer := 0;
+   begin
+      for i in VECS'range loop
+         address_i <= VECS(i).addr;
+         wait until falling_edge(clk_i);
+         wait for 1 ns;
+         if data_o /= VECS(i).dat then
+            report "DEPS_TB MISMATCH at vector " & integer'image(i)
+               severity error;
+            errors := errors + 1;
+         end if;
+      end loop;
+      done <= true;
+      if errors = 0 then
+         report "DEPS_TB OK" severity note;
+      else
+         report "DEPS_TB FAIL" severity failure;
+      end if;
+      wait;
+   end process;
+end architecture sim;
+''' % rows
+    with open(path, "w") as f:
+        f.write(L)
+
+
+def vhdl_check():
+    """Compile config.vhd + the generated testbench with ghdl and run it.
+    Skips gracefully (returns 0) when ghdl is not installed."""
+    import shutil
+    import tempfile
+    ghdl = shutil.which("ghdl")
+    if not ghdl:
+        print("VHDL DECODER TB: SKIP (ghdl not found)")
+        return 0
+    tb = os.path.join(HERE, "config_deps_tb.vhd")
+    emit_vhdl_tb(tb)
+    cfg = os.path.join(REPO, "CORE/vhdl/config.vhd")
+    work = tempfile.mkdtemp(prefix="ghdl_deps_")
+    opts = ["--std=08", "--workdir=" + work]
+    try:
+        for step in ([[ghdl, "-a"] + opts + [cfg, tb],
+                      [ghdl, "-e"] + opts + ["config_deps_tb"],
+                      [ghdl, "-r"] + opts + ["config_deps_tb",
+                                             "--assert-level=error"]]):
+            r = subprocess.run(step, cwd=work, capture_output=True, text=True,
+                               timeout=120)
+            out = r.stdout + r.stderr
+            if r.returncode != 0 or "DEPS_TB FAIL" in out or "MISMATCH" in out:
+                print("VHDL DECODER TB: FAIL")
+                print(out[-2000:])
+                return 1
+        if "DEPS_TB OK" not in out:
+            print("VHDL DECODER TB: FAIL (no OK marker)")
+            print(out[-2000:])
+            return 1
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    print("VHDL DECODER TB: OK (config.vhd SEL_OPTM_DEPS decoder matches model,"
+          " %d vectors)" % len(vhdl_tb_vectors()))
+    return 0
+
+
 def vhdl_blocks():
     words = menu_words(V6_MENU)
     n = len(V6_MENU)
@@ -1207,12 +1729,25 @@ def verify():
         errors.append("OPTM_GROUPS array not found")
     else:
         body = re.sub(r"--[^\n]*", "", m.group(1))
-        entries = [e.strip() for e in body.split(",")
-                   if e.strip()]
-        # re-join entries that were split inside an expression: VHDL entries
-        # here never contain commas, so a plain split is fine
+        # split on top-level commas only: an entry may contain a comma inside
+        # an OPTM_DEP(mother, item) call
+        entries, depth, cur = [], 0, ""
+        for ch in body:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            if ch == "," and depth == 0:
+                if cur.strip():
+                    entries.append(cur.strip())
+                cur = ""
+            else:
+                cur += ch
+        if cur.strip():
+            entries.append(cur.strip())
         env = dict(gconsts)
         env.update(parse_vhdl_constants(cfg, "OPTM_G"))
+        env["OPTM_DEP"] = dep_value          # OPTM_DEP(mother, item) helper
         vals = []
         for e in entries:
             try:
@@ -1221,7 +1756,7 @@ def verify():
             except Exception:
                 errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
                 vals.append(-1)
-        model_words = menu_words(V6_MENU)
+        model_words = menu_words(V6_MENU, V6_DEPS)
         if len(vals) != len(model_words):
             errors.append("OPTM_GROUPS has %d entries, model says %d"
                           % (len(vals), len(model_words)))
@@ -1274,7 +1809,8 @@ def verify():
     print("VERIFY OK: config.vhd + mega65.vhd match the golden model")
     print("  OPTM_SIZE=%d  OPTM_DY=%d  regions=%d  C_MENU constants=%d"
           % (n, exp_dy, num_regions(menu_masked(V6_MENU)), len(C_MENU)))
-    return 0
+    # additionally drive the real SEL_OPTM_DEPS decoder through ghdl, if present
+    return vhdl_check()
 
 
 # ---------------------------------------------------------------------------
@@ -1286,9 +1822,11 @@ def gen():
     emit_fixtures_asm(os.path.join(HERE, "menu_test_fixtures.asm"))
     emit_equiv_asm(os.path.join(HERE, "menu_equiv_fixtures.asm"))
     emit_nav_asm(os.path.join(HERE, "menu_nav_fixtures.asm"))
+    emit_deps_asm(os.path.join(HERE, "optm_deps_fixtures.asm"))
     for name, content in [("menu_struct_test.exp", expect_struct()),
                           ("menu_equiv_test.exp", expect_equiv()),
-                          ("menu_nav_test.exp", expect_nav())]:
+                          ("menu_nav_test.exp", expect_nav()),
+                          ("optm_deps_test.exp", expect_deps())]:
         with open(os.path.join(HERE, name), "w") as f:
             f.write(content)
     print("generated fixtures and expected outputs")
@@ -1300,7 +1838,8 @@ def run():
     emu = os.path.join(REPO, "M2M/QNICE/emulator/qnice")
     mon = os.path.join(REPO, "M2M/QNICE/monitor/monitor.out")
     fails = 0
-    for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test"):
+    for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test",
+               "optm_deps_test"):
         r = subprocess.run([asm, tb + ".asm"], cwd=HERE,
                            capture_output=True, text=True, timeout=120)
         listing = os.path.join(HERE, tb + ".out")
@@ -1348,6 +1887,100 @@ def run():
     return fails
 
 
+# ---------------------------------------------------------------------------
+# Mutation testing: prove that the dependency code paths are actually covered.
+# Each mutant is a behavior-changing single-token edit to the assembly; a
+# correct test suite must catch (kill) every one. A surviving mutant marks a
+# blind spot. The golden model (this file) is left untouched, so the mutated
+# assembly is checked against the correct expectation.
+# ---------------------------------------------------------------------------
+
+MUTANTS = [
+    ("optm_deps.asm  OPTM_DEP_OK never hides a line",
+     "M2M/rom/optm_deps.asm",
+     "_ODO_HID        AND     0xFFFB, SR",
+     "_ODO_HID        OR      0x0004, SR"),
+    ("optm_deps.asm  RESOLVE uses the wrong expected state",
+     "M2M/rom/optm_deps.asm",
+     "MOVE    1, R8                   ; expected = 1",
+     "MOVE    0, R8                   ; expected = 1"),
+    ("optm_deps.asm  VAL skips the dependency-chain fatal",
+     "M2M/rom/optm_deps.asm",
+     "RBRA    _VAL_E_CHAIN, !Z",
+     "RBRA    _VAL_E_CHAIN, Z"),
+    ("optm_deps.asm  AFFECTS never triggers a redraw",
+     "M2M/rom/optm_deps.asm",
+     "_ODA_YES        OR      0x0004, SR",
+     "_ODA_YES        AND     0xFFFB, SR"),
+    ("menu_struct.asm  builder ignores the dependency predicate",
+     "M2M/rom/menu_struct.asm",
+     "RBRA    _OSB_PLN_1, !C",
+     "RBRA    _OSB_PLN_1, C"),
+    ("menu_struct.asm  %s walk ignores the dependency predicate",
+     "M2M/rom/menu_struct.asm",
+     "RBRA    _OSS_LOOP, !C           ; (no-op when deps are off)",
+     "RBRA    _OSS_LOOP, C            ; (no-op when deps are off)"),
+    ("menu.asm  enter-cursor scan ignores the dependency predicate",
+     "M2M/rom/menu.asm",
+     "RBRA    _OPTM_RUN_SM_2, !C",
+     "RBRA    _OPTM_RUN_SM_2, C"),
+    ("optm_deps.asm  VAL accepts a dependent bare CLOSE line (#1)",
+     "M2M/rom/optm_deps.asm",
+     "RBRA    _VAL_E_SPEC, Z          ; without the submenu marker bit",
+     "RBRA    _VAL_E_SPEC, N          ; without the submenu marker bit"),
+    ("optm_deps.asm  OPTM_DEP_OK inverts the expected-state-0 arm (#4)",
+     "M2M/rom/optm_deps.asm",
+     "CMP     0, R3                   ; expected 0: visible iff state 0\n                RBRA    _ODO_VIS, Z",
+     "CMP     0, R3                   ; expected 0: visible iff state 0\n                RBRA    _ODO_HID, Z"),
+    ("optm_deps.asm  VAL drops its R8-preservation contract (#5)",
+     "M2M/rom/optm_deps.asm",
+     "MOVE    @SP++, R8\n                AND     0xFFFB, SR              ; clear Carry: success",
+     "MOVE    @SP++, R0\n                AND     0xFFFB, SR              ; clear Carry: success"),
+]
+
+
+def _quiet_run():
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        return run()
+
+
+def mutate():
+    print("baseline (unmutated) suite must pass first:")
+    if _quiet_run() != 0:
+        print("  BASELINE FAILS - fix the suite before mutation testing")
+        return 1
+    print("  baseline OK\n")
+    fails = 0
+    for desc, rel, old, new in MUTANTS:
+        path = os.path.join(REPO, rel)
+        src = open(path).read()
+        if src.count(old) != 1:
+            print("SETUP ERROR (%d matches): %s" % (src.count(old), desc))
+            fails += 1
+            continue
+        try:
+            with open(path, "w") as f:
+                f.write(src.replace(old, new))
+            killed = _quiet_run() != 0
+        finally:
+            with open(path, "w") as f:        # always restore the original
+                f.write(src)
+        if killed:
+            print("KILLED   %s" % desc)
+        else:
+            print("SURVIVED %s   <-- TEST GAP" % desc)
+            fails += 1
+    # the suite regenerates its own fixtures on the next run, but restore a
+    # clean, unmutated set right away
+    gen()
+    print("\n%s" % ("ALL %d MUTANTS KILLED" % len(MUTANTS) if fails == 0 else
+                    "%d MUTANT(S) SURVIVED OR FAILED SETUP" % fails))
+    return fails
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "run"
     if cmd == "gen":
@@ -1358,6 +1991,10 @@ def main():
         print(vhdl_blocks())
     elif cmd == "verify":
         sys.exit(verify())
+    elif cmd == "ghdl":
+        sys.exit(vhdl_check())
+    elif cmd == "mutate":
+        sys.exit(1 if mutate() else 0)
     else:
         print(__doc__)
         sys.exit(2)
