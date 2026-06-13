@@ -1794,6 +1794,15 @@ def verify():
         if mconsts.get(name) != val:
             errors.append("%s = %s, model says %d"
                           % (name, mconsts.get(name), val))
+    # C_MENU_MODEL is the flat index of the " Model: %s" submenu opener (used by
+    # the custom SUBMENU_SUMMARY callback); it is not a group member, so check it
+    # against the model directly
+    model_idx = [i for i, (lbl, _, _) in enumerate(V6_MENU) if lbl == " Model: %s"]
+    if not model_idx:
+        errors.append("no \" Model: %s\" opener found in the golden model")
+    elif mconsts.get("C_MENU_MODEL") != model_idx[0]:
+        errors.append("C_MENU_MODEL = %s, model says %d"
+                      % (mconsts.get("C_MENU_MODEL"), model_idx[0]))
     m = re.search(r"subtype\s+C_MENU_OSM_SCALING\s+is\s+natural\s+range\s+"
                   r"(\d+)\s+downto\s+(\d+)", mega)
     hi, lo = osm_scaling_range()

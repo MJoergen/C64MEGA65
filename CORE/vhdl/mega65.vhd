@@ -325,6 +325,9 @@ constant C_MENU_EXP_PORT_HW   : natural := 7;
 constant C_MENU_SIM_CRT       : natural := 8;
 constant C_MENU_SIM_REU       : natural := 10;
 -- Model submenu: machine mode and turbo are not yet wired, see #181
+-- C_MENU_MODEL is the flat index of the " Model: %s" submenu opener; the
+-- custom SUBMENU_SUMMARY callback in m2m-rom.asm uses it to recognize that line
+constant C_MENU_MODEL         : natural := 14;
 constant C_MENU_MACHINE_PAL   : natural := 17;
 constant C_MENU_MACHINE_NTSC  : natural := 18;
 constant C_MENU_TURBO_OFF     : natural := 22;

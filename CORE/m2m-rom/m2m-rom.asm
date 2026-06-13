@@ -57,8 +57,182 @@ START_FIRMWARE  RBRA    START_SHELL, 1
 ;   R8: 0, if no custom SUBMENU_SUMMARY, else:
 ;       string pointer to completely new headline (do not modify/re-use R8)
 ;   R9, R10: unchanged
+;
+; Custom semantics for the "Model: %s" submenu (the one that contains the
+; PAL/NTSC machine-mode group): on top of PAL or NTSC, also show the active
+; turbo mode and turbo speed, so the user sees the speed-up at a glance without
+; entering the submenu:
+;
+;   no turbo (Off) -> "Model: PAL"          (standard semantics: PAL or NTSC)
+;   turbo active   -> "Model: PAL C128 2x"  (machine, turbo mode, turbo speed,
+;                                            separated by a single space each)
+;
+; The Model submenu is recognized by its flat menu index C64_OSM_MODEL, and the
+; live selection is read at the fixed indices C64_OSM_MACHINE_PAL / _NTSC,
+; C64_OSM_TURBO_OFF / _C128 / _SMART and C64_OSM_TURBO_2X / _3X / _4X. These all
+; come from osm_const.asm, which make_rom.sh regenerates from config.vhd plus
+; mega65.vhd and which menu_test.py verifies, so reordering the menu cannot
+; silently break this callback. Every other submenu returns R8 = 0 (standard
+; semantics). The labels (PAL/NTSC/...) are read from the live OPTM_ITEMS so
+; that renaming a menu item in config.vhd needs no change here either.
 
-SUBMENU_SUMMARY XOR     R8, R8                  ; R8 = 0 = no custom string
+SUBMENU_SUMMARY MOVE    R9, @--SP               ; save the contract registers
+                MOVE    R10, @--SP              ; R9 / R10 across the helper and
+                INCRB                           ; M2M$RPL_S calls below
+
+                MOVE    R8, R0                  ; R0: original string (Model: %s)
+
+                ; is this the "Model: %s" opener? its flat index == C64_OSM_MODEL
+                SUB     M2M$RAMROM_DATA, R9     ; R9: flat index of this opener
+                CMP     C64_OSM_MODEL, R9
+                RBRA    _SS_DEFAULT, !Z         ; no: another submenu -> default
+
+                MOVE    HEAP, R1                ; R1: live selected-state array,
+                ADD     OPTM_IR_STDSEL, R1      ; one 0/1 per menu line
+                MOVE    @R1, R1
+
+                ; R3 := flat index of the selected machine mode (PAL or NTSC)
+                MOVE    C64_OSM_MACHINE_PAL, R3
+                MOVE    R1, R6
+                ADD     R3, R6
+                CMP     0, @R6                  ; PAL selected?
+                RBRA    _SS_MACH_OK, !Z
+                MOVE    C64_OSM_MACHINE_NTSC, R3
+                MOVE    R1, R6
+                ADD     R3, R6
+                CMP     0, @R6                  ; NTSC selected?
+                RBRA    _SS_DEFAULT, Z          ; neither (cannot happen): guard
+_SS_MACH_OK
+
+                ; turbo mode: "Off" -> standard semantics; C128/Smart -> custom
+                MOVE    R1, R6
+                ADD     C64_OSM_TURBO_OFF, R6
+                CMP     0, @R6                  ; turbo "Off" selected?
+                RBRA    _SS_DEFAULT, !Z         ; yes -> plain PAL/NTSC
+                MOVE    C64_OSM_TURBO_C128, R4
+                MOVE    R1, R6
+                ADD     R4, R6
+                CMP     0, @R6                  ; C128 selected?
+                RBRA    _SS_TM_OK, !Z
+                MOVE    C64_OSM_TURBO_SMART, R4
+                MOVE    R1, R6
+                ADD     R4, R6
+                CMP     0, @R6                  ; Smart selected?
+                RBRA    _SS_DEFAULT, Z          ; none (cannot happen): guard
+_SS_TM_OK       ; R4: flat index of the selected turbo mode line
+
+                ; turbo speed: 2x / 3x / 4x
+                MOVE    C64_OSM_TURBO_2X, R5
+                MOVE    R1, R6
+                ADD     R5, R6
+                CMP     0, @R6
+                RBRA    _SS_TS_OK, !Z
+                MOVE    C64_OSM_TURBO_3X, R5
+                MOVE    R1, R6
+                ADD     R5, R6
+                CMP     0, @R6
+                RBRA    _SS_TS_OK, !Z
+                MOVE    C64_OSM_TURBO_4X, R5
+                MOVE    R1, R6
+                ADD     R5, R6
+                CMP     0, @R6
+                RBRA    _SS_DEFAULT, Z          ; none (cannot happen): guard
+_SS_TS_OK       ; R5: flat index of the selected turbo speed line
+
+                ; build "<machine> <turbo mode> <turbo speed>" into SS_VALUE,
+                ; bounded by SS_VALUE_LEN so an over-long (e.g. future-renamed)
+                ; label can never overflow the buffer - it only truncates
+                MOVE    SS_VALUE, R8            ; R8: destination cursor
+                MOVE    SS_VALUE, R6            ; R6: write limit; the last word
+                ADD     SS_VALUE_LEN, R6        ; is reserved for the terminator
+                SUB     1, R6
+                MOVE    R3, R9                  ; PAL or NTSC
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_LABEL, 1
+                CMP     R6, R8                 ; one space, if room is left
+                RBRA    _SS_SP1, Z
+                MOVE    0x0020, @R8
+                ADD     1, R8
+_SS_SP1         MOVE    R4, R9                  ; C128 or Smart
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_LABEL, 1
+                CMP     R6, R8                 ; one space, if room is left
+                RBRA    _SS_SP2, Z
+                MOVE    0x0020, @R8
+                ADD     1, R8
+_SS_SP2         MOVE    R5, R9                  ; 2x, 3x or 4x
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_LABEL, 1
+                MOVE    0, @R8                  ; zero-terminate (R8 <= the limit)
+
+                ; splice the value into the original " ... %s" string; this way
+                ; the "Model: " prefix is kept in config.vhd, not hardcoded here
+                MOVE    R0, R8                  ; R8: source string with %s
+                MOVE    SS_LINE, R9             ; R9: target line buffer
+                MOVE    SS_VALUE, R10           ; R10: replacement for %s
+                MOVE    SCR$OSM_O_DX, R11       ; R11: clamp to the menu width,
+                MOVE    @R11, R11
+                SUB     2, R11
+                CMP     SS_LINE_LEN, R11       ; ..but never past SS_LINE itself
+                RBRA    _SS_RPL, N              ; R11 < SS_LINE_LEN: it fits
+                MOVE    SS_LINE_LEN, R11        ; else clamp to the buffer size
+                SUB     1, R11
+_SS_RPL         RSUB    M2M$RPL_S, 1            ; clobbers R0..R7, keeps R8..R12
+                MOVE    SS_LINE, R8             ; R8: return the custom string
+                RBRA    _SS_RET, 1
+
+_SS_DEFAULT     XOR     R8, R8                  ; R8 = 0: use standard semantics
+
+_SS_RET         DECRB
+                MOVE    @SP++, R10              ; restore the contract registers
+                MOVE    @SP++, R9
+                RET
+
+; Helper for SUBMENU_SUMMARY: append the leading-space-trimmed label of one
+; menu line to a destination buffer (no zero terminator is added). The copy is
+; bounded by the destination limit, so it can never overflow the buffer.
+; CAUTION: a label appended here must not contain a literal backslash (0x5C),
+; because that is the first byte of the "\n" line separator in OPTM_ITEMS and is
+; therefore treated here as end-of-label.
+; Input:  R8: destination cursor, R9: flat menu line index,
+;        R10: destination limit (one past the last writable word)
+; Output: R8: destination cursor advanced past the copied label (R8 <= R10)
+;         R9..R12 are destroyed; R0..R7 are preserved
+_SS_APPEND_LABEL INCRB
+                MOVE    R8, R0                  ; R0: destination cursor
+                MOVE    R9, R1                  ; R1: amount of segments to skip
+                MOVE    R10, R4                 ; R4: destination limit
+                MOVE    HEAP, R2                ; R2: walk ptr into OPTM_ITEMS,
+                ADD     OPTM_IR_ITEMS, R2       ; the \n-separated items string
+                MOVE    @R2, R2
+_SS_AL_SEG      CMP     0, R1                   ; reached the wanted segment?
+                RBRA    _SS_AL_TRIM, Z
+                MOVE    R2, R8                  ; no: advance to the next "\n"
+                MOVE    OPTM_NL, R9
+                SYSCALL(strstr, 1)
+                CMP     0, R10                  ; no separator (bad/short index)?
+                RBRA    _SS_AL_DONE, Z          ; stop safely instead of deref-ing
+                MOVE    R10, R2                 ; R10: ptr to the found "\n"
+                ADD     2, R2                   ; skip the two \n characters
+                SUB     1, R1
+                RBRA    _SS_AL_SEG, 1
+_SS_AL_TRIM     CMP     0x0020, @R2             ; skip leading spaces
+                RBRA    _SS_AL_COPY, !Z
+                ADD     1, R2
+                RBRA    _SS_AL_TRIM, 1
+_SS_AL_COPY     CMP     R4, R0                  ; destination buffer full?
+                RBRA    _SS_AL_DONE, Z          ; yes: truncate, do not overflow
+                MOVE    @R2, R3                 ; copy until "\n" (0x5C) or zero
+                CMP     0x005C, R3
+                RBRA    _SS_AL_DONE, Z
+                CMP     0, R3
+                RBRA    _SS_AL_DONE, Z
+                MOVE    R3, @R0
+                ADD     1, R0
+                ADD     1, R2
+                RBRA    _SS_AL_COPY, 1
+_SS_AL_DONE     MOVE    R0, R8                  ; return the advanced dest cursor
+                DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
@@ -564,6 +738,14 @@ END_OF_ROM      .DW 0
 ; M2M shell variables
 #include "../../M2M/rom/shell_vars.asm"
 
+; Scratch buffers for the custom SUBMENU_SUMMARY ("Model: %s") callback above.
+; They are written and consumed within a single OPTM_SHOW pass (the line is
+; drawn immediately after the callback returns), so a single static set is safe.
+SS_VALUE_LEN    .EQU 24                         ; capacity of SS_VALUE (words)
+SS_LINE_LEN     .EQU 32                         ; capacity of SS_LINE (words)
+SS_VALUE        .BLOCK SS_VALUE_LEN             ; built %s value, e.g. "PAL C128 2x"
+SS_LINE         .BLOCK SS_LINE_LEN              ; full custom line "Model: PAL C128 2x"
+
 ; ----------------------------------------------------------------------------
 ; Heap and Stack: Need to be located in RAM after the variables
 ; ----------------------------------------------------------------------------
@@ -602,9 +784,9 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x81E8 and subtract the result from 0xFEE0. This yields
-; currently a stack size of 1784, which is more than 1.5k words, and therefore
-; sufficient for this program.
+; is currently 0x8220 (the SS_VALUE/SS_LINE buffers above sit just before it)
+; and subtract the result from 0xFEE0. This yields currently a stack size of
+; 1728, which is more than 1.5k words, and therefore sufficient for this program.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation
 #endif
