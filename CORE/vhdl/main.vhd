@@ -415,13 +415,16 @@ architecture synthesis of main is
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
 
   -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
-  signal   cart_a_pre           : unsigned(15 downto 0); -- combinational, includes Ultimax override
-  signal   cart_a_q             : unsigned(15 downto 0);
-  signal   cart_roml_q          : std_logic;
-  signal   cart_romh_q          : std_logic;
-  signal   cart_io1_q           : std_logic;
-  signal   cart_io2_q           : std_logic;
-  signal   cart_rw_q            : std_logic;
+  signal   cart_a_pre            : unsigned(15 downto 0); -- combinational, includes Ultimax override
+  signal   cart_a_q              : unsigned(15 downto 0);
+  signal   cart_roml_n_q         : std_logic;
+  signal   cart_romh_n_q         : std_logic;
+  signal   cart_io1_n_q          : std_logic;
+  signal   cart_io2_n_q          : std_logic;
+  signal   cart_rw_q             : std_logic;
+  signal   cart_d_q              : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
+  signal   cart_sel_live         : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
+  signal   cart_sel_q            : std_logic;             -- registered:    any cart-window access still showing at the pin
 
   -- Hardware Expansion Port (aka Cartridge Port)
   signal   cart_roml_n    : std_logic;
@@ -811,7 +814,7 @@ begin
   -- Expansion Port (aka Cartridge Port) handling:
   --    * MEGA65's hardware expansion port
   --    * Simulated 1750 REU 512KB
-  --    * Simulateed cartridge using data from .crt file
+  --    * Simulated cartridge using data from .crt file
   --------------------------------------------------------------------------------------------------
 
   -- Combinational pre-register address (includes Ultimax A14/A15 override).
@@ -820,13 +823,26 @@ begin
   cart_a_pre <= "11" & c64_ram_addr_o(13 downto 0) when core_umax_romh = '1'
                 else c64_ram_addr_o;
 
+  -- Live (combinational) and registered (one-cycle-held) "is the current access targeting
+  -- the cart"? The live view leads the cart pins by one clk_main_i tick; the registered
+  -- view is in phase with what the cartridge physically sees on /ROML, /ROMH, /IO1, /IO2.
+  -- The data-direction envelope below uses both: live opens the window for early release /
+  -- early write-data setup, registered holds the window closed through the pin tail.
+  cart_sel_live <= '1' when cart_roml_n   = '0' or cart_romh_n   = '0' or
+                            cart_io1_n    = '0' or cart_io2_n    = '0' or
+                            core_umax_unmapped   = '1' else '0';
+
   -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
   -- vicAddr) that change on the same clock edge, producing combinational glitches during
   -- CPU<->VIC bus handoffs. These glitches reach the Expansion Port connector on address,
   -- ROML, ROMH, IO1, IO2, and R/W and would corrupt edge-triggered cart sampling.
   --
-  -- We register all six signals here through a single flip-flop stage, which filters out
-  -- the transient values and presents only stable, post-settling values at the cart pin.
+  -- We register the six pin-facing signals here through a single flip-flop stage, which
+  -- filters out the transient values and presents only stable, post-settling values at the
+  -- cart pin (cart_a_q, cart_roml_n_q, cart_romh_n_q, cart_io1_n_q, cart_io2_n_q, cart_rw_q).
+  --
+  -- We also register cart_d_q, a one-cycle-delayed copy of the C64's outgoing write byte,
+  -- to hold valid write data during the registered tail of a cart write.
   --
   -- BA and dotclock are NOT registered because they come from clean register outputs in
   -- the core (VIC-II output and clock divider respectively) with no combinational mux
@@ -836,12 +852,14 @@ begin
   cart_output_pipeline_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
-      cart_a_q       <= cart_a_pre;       -- includes Ultimax override
-      cart_roml_q    <= cart_roml_n;
-      cart_romh_q    <= cart_romh_n;
-      cart_io1_q     <= cart_io1_n;
-      cart_io2_q     <= cart_io2_n;
-      cart_rw_q      <= not c64_ram_we;
+      cart_a_q              <= cart_a_pre;            -- includes Ultimax override
+      cart_roml_n_q         <= cart_roml_n;
+      cart_romh_n_q         <= cart_romh_n;
+      cart_io1_n_q          <= cart_io1_n;
+      cart_io2_n_q          <= cart_io2_n;
+      cart_rw_q             <= not c64_ram_we;
+      cart_d_q              <= c64_ram_data_o;
+      cart_sel_q            <= cart_sel_live;
     end if;
   end process cart_output_pipeline_proc;
 
@@ -943,10 +961,10 @@ begin
       -- See comment block before cart_output_pipeline_proc to understand the separation
       -- of unregistered and registered signals here.
       cart_a_o        <= cart_a_q;      -- Ultimax override is baked in via cart_a_pre
-      cart_roml_o     <= cart_roml_q;
-      cart_romh_o     <= cart_romh_q;
-      cart_io1_o      <= cart_io1_q;
-      cart_io2_o      <= cart_io2_q;
+      cart_roml_o     <= cart_roml_n_q;
+      cart_romh_o     <= cart_romh_n_q;
+      cart_io1_o      <= cart_io1_n_q;
+      cart_io2_o      <= cart_io2_n_q;
       cart_rw_o       <= cart_rw_q;
 
       -- Connect physical input lines (inputs are NOT pipelined - read combinationally)
@@ -961,16 +979,30 @@ begin
       cart_addr_oe_o  <= '1';
 
       -- Switch the data lines bi-directionally so that the CPU can also
-      -- write to the cartridge, e.g. for bank switching
-      if c64_ram_we = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or cart_io1_n = '0' or cart_io2_n = '0' or core_umax_unmapped = '1') then
-        cart_data_oe_o <= '0';  -- input
+      -- write to the cartridge, e.g. for bank switching.
+      --
+      -- Envelope on the level-shifter direction (cart_data_oe_o) AND on the outgoing
+      -- write data (cart_d_o): the live decode opens the cart-read / cart-write window
+      -- one clk_main_i tick before the cart pins (/ROML, /ROMH, /IO1, /IO2, R/W, A0..A15)
+      -- update, and the registered decode keeps it open for one tick after the pins
+      -- update again. That gives the cart "release early" / "drive early" at the leading
+      -- edge of an access (a small bus-settle margin before /ROML asserts) and "hold
+      -- late" at the trailing edge (no FPGA-vs-cart contention while /ROML still shows
+      -- asserted at the connector). Also kills combinational-glitch propagation onto
+      -- F_DATA_DIR for the same reason the strobe pipeline kills it onto the strobes.
+      if (c64_ram_we = '0' and cart_sel_live = '1') or (cart_rw_q = '1' and cart_sel_q = '1') then
+        cart_data_oe_o <= '0';                  -- input (FPGA tri-stated, cart may drive)
         data_from_cart <= cart_d_i;
       else
-        cart_data_oe_o <= '1';  -- output
-        if c64_ram_we = '0' then
-          cart_d_o <= c64_ram_data_i;
+        cart_data_oe_o <= '1';                  -- output (FPGA drives)
+        if c64_ram_we = '1' and cart_sel_live = '1' then
+          cart_d_o <= c64_ram_data_o;           -- live cart write: drive byte early for setup margin
+        elsif cart_rw_q = '0' and cart_sel_q = '1' then
+          cart_d_o <= cart_d_q;                 -- registered cart write: hold byte through the pin tail
+        elsif c64_ram_we = '0' then
+          cart_d_o <= c64_ram_data_i;           -- preserved non-cart default: mirror C64 read data
         else
-          cart_d_o <= c64_ram_data_o;
+          cart_d_o <= c64_ram_data_o;           -- preserved non-cart default: mirror C64 write data
         end if;
       end if;
     end if;

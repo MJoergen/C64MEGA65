@@ -27,6 +27,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A14    | 05/21/26 | 1af0705 | SIM CRT: Add support for separate FREEZE button (issue #217)
 | WIP-V6-A15    | 05/24/26 | 5ed6a70 | Wire the IEC SRQ line to CIA1 /FLAG so SRQ-using IEC devices work, e.g. Meatloaf modem emulation (issue #219)
 | WIP-V6-A16    | 06/06/26 | b2e2e45 | New naming convention for the C64MEGA65 config file (issue #182); auto-reset of the core and any connected HW cartridge on Expansion Port mode change and on SIM REU toggle (issues #225 and #226); fix T65 regression introduced by Alpha 14 (issue #221); HDMI scaling filters (#223)
+| WIP-V6-A16X1  | 06/07/26 | fb08354 | Further improved Expansion Port timing: extend register envelope to data-direction and write-data to close the one-cycle skew left by Alpha 12 (issue #227)
 
 ## Version 5.2
 
