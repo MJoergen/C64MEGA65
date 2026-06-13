@@ -65,7 +65,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A16X1";
+constant CORE_VERSION : string := "WIP-V6-A17";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -333,6 +333,7 @@ constant SEL_OPTM_SAVING_STR  : std_logic_vector(15 downto 0) := x"030A";
 constant SEL_OPTM_HELP        : std_logic_vector(15 downto 0) := x"0310";
 constant SEL_OPTM_CRTROM      : std_logic_vector(15 downto 0) := x"0311";
 constant SEL_OPTM_CRTROM_STR  : std_logic_vector(15 downto 0) := x"0312";
+constant SEL_OPTM_DEPS        : std_logic_vector(15 downto 0) := x"0313"; -- Per-line smart-dependency word (OPTM_DEP); magic x"1DEF" at index 0xFFF
 
 -- !!! DO NOT TOUCH !!! Configuration constants for OPTM_GROUPS (shell.asm and menu.asm expect them to be like this)
 constant OPTM_G_TEXT       : integer := 16#00000#;         -- text that cannot be selected
@@ -347,10 +348,17 @@ constant OPTM_G_HEADLINE   : integer := 16#01000#;         -- like OPTM_G_TEXT b
 constant OPTM_G_SINGLESEL  : integer := 16#08000#;         -- single select item
 constant OPTM_G_MOUNT_DRV  : integer := 16#08800#;         -- line item means: mount drive; first occurance = drive 0, second = drive 1, ...
 constant OPTM_G_HELP       : integer := 16#0A000#;         -- line item means: help screen; first occurance = WHS(1), second = WHS(2), ...
-constant OPTM_G_SUBMENU    : integer := 16#0C000#;         -- starts/ends a section that is treated as submenu
+constant OPTM_G_SUBMENU    : integer := 16#0C000#;         -- starts/ends a section that is treated as submenu:
+                                                           -- the line that starts a submenu doubles as its label in the
+                                                           -- parent menu; submenus nest to arbitrary depth (M2M V2.1.0+):
+                                                           -- put a complete OPTM_G_SUBMENU .. OPTM_G_SUBMENU+OPTM_G_CLOSE
+                                                           -- block inside another one
 constant OPTM_G_LOAD_ROM   : integer := 16#18000#;         -- line item means: load ROM; first occurance = rom 0, second = rom 1, ...
+constant OPTM_G_DEPENDENT  : integer := 16#20000000#;      -- dependent line (smart dependencies, see OPTM_DEP below): visible only
+                                                           -- while a specific item of a specific mother group is selected (bit 29)
 
-constant OPTM_GTC          : natural := 17;                -- Amount of significant bits in OPTM_G_* constants
+constant OPTM_GTC          : natural := 30;                -- Amount of significant bits in OPTM_G_* constants (max 30: 2**31 overflows
+                                                           -- the integer range expression below); was 17 before the smart-dependencies feature
 
 -- @TODO/REMINDER: If we added in future more configuration constants that are not meant to be saved in the
 -- configuration file, such as OPTM_G_MOUNT_DRV and OPTM_G_LOAD_ROM, then we need to make sure that we
@@ -373,21 +381,30 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 110; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 159; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
 
 -- Net size of the Options menu on the screen in characters (excluding the frame, which is hardcoded to two characters)
--- Without submenus: Use OPTM_SIZE as height, otherwise count how large the actually visible main menu is.
+-- Without submenus: Use OPTM_SIZE as height, otherwise use the height of the largest menu view (usually the main menu):
+-- count one line per item that is visible at that level, including one line per submenu label, excluding the contents
+-- of submenus. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_DX           : natural := 25;
-constant OPTM_DY           : natural := 31;
+constant OPTM_DY           : natural := 27;
 
 -- !!! DO NOT TOUCH THE TYPE DEFINITION IN THE NEXT LINE AND CONTINUE YOUR CONFIGURATION ONE LINE LATER
 type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC - 1;
 
 -- CONTINUE YOUR CONFIGURATION FROM HERE ON
 
+-- V6 menu structure as specified in GitHub issue #189 and in
+-- doc/path-to-OSM-submenus.md section 6. Three submenus are nested two
+-- levels deep: "HDMI: %s" (the filter selection) lives inside "HDMI: %s"
+-- (the HDMI settings), "OSM: %s" and "VIC-II: %s" live inside
+-- "Advanced Settings". The structure (sizes, indices, group ids and the
+-- matching C_MENU_* constants in mega65.vhd) is machine-checked against
+-- the golden model: run "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_ITEMS        : string :=
 
    " C64 for MEGA65\n"          &
@@ -404,7 +421,72 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " C64 Configuration\n"       &
    "\n"                         &
+
+   " Model: %s\n"               &  -- Model submenu
+   " Model\n"                   &
+   "\n"                         &
+   " PAL\n"                     &
+   " NTSC\n"                    &  -- not yet wired in mega65.vhd, see #181
+   "\n"                         &
+   " Turbo mode\n"              &
+   "\n"                         &
+   " Off\n"                     &  -- the whole turbo block is not yet wired in mega65.vhd
+   " C128\n"                    &
+   " Smart\n"                   &
+   "\n"                         &
+   " Turbo speed\n"             &
+   " 2x\n"                      &
+   " 3x\n"                      &
+   " 4x\n"                      &
+   "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
+
    " Flip joystick ports\n"     &
+
+   " HDMI: %s\n"                &  -- HDMI submenu
+   " HDMI Display Mode\n"       &
+   "\n"                         &
+   " 16:9 720p 50 Hz\n"         &  -- PAL modes; with the dependencies feature (#229) only the matching
+   " 16:9 720p 59.94 Hz\n"      &  -- machine-mode variants will be shown, hence no (PAL)/(NTSC) suffixes
+   " 4:3  576p 50 Hz\n"         &  -- the NTSC display modes (59.94 Hz) are not yet wired in mega65.vhd,
+   " 4:3  480p 59.94 Hz\n"      &  -- see #181/#105
+   " 5:4  576p 50 Hz\n"         &
+   " 5:4  480p 59.94 Hz\n"      &
+   "\n"                         &
+   " HDMI: Flicker-free\n"      &
+   " HDMI: Flicker-free\n"      &  -- NTSC twin of the line above; not yet wired, see #181 and path-to-OSM-dependencies.md
+   " HDMI: DVI (no sound)\n"    &
+
+   " HDMI: %s\n"                &  -- HDMI Filter submenu, nested inside the HDMI submenu
+   " HDMI Filter\n"             &
+   "\n"                         &
+   " No Filter\n"               &  -- nearest-neighbour (intentionally exposes the #223 wonky-pixel look as a power-user opt-in)
+   " Sharp Bilinear\n"          &  -- ascal native SBILINEAR (cubic-warped lerp; see ascal.vhd:783-821)
+   " Bicubic\n"                 &  -- ascal native bicubic (mode 011), between Sharp Bilinear and Smooth perceptually
+   " Smooth\n"                  &
+   " Lanczos\n"                 &
+   " Scanlines\n"               &  -- default: bit-identical to V5's CRT emulation look
+   " CRT (S-Video)\n"           &
+   " CRT (Composite)\n"         &
+   "\n"                         &
+   " Back\n"                    &  -- returns to the HDMI submenu
+
+   " HDMI: Zoom-in\n"           &
+   " HDMI: Raw 50.1 Hz\n"       &  -- not yet wired in mega65.vhd
+   "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
+
+   " VGA: %s\n"                 &  -- VGA submenu
+   " VGA Display Mode\n"        &
+   "\n"                         &
+   " Standard\n"                &
+   "\n"                         &
+   " Retro 15 kHz mode\n"       &
+   "\n"                         &
+   " 15 kHz with HS/VS\n"       &
+   " 15 kHz with CSYNC\n"       &
+   "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
 
    " SID: %s\n"                 &  -- SID submenu
    " SID Settings\n"            &
@@ -431,9 +513,8 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Audio improvements\n"      &
    "\n"                         &
-   " Back to main menu\n"       &
+   " Back\n"                    &  -- returns to the main menu
 
-   " CIA: Use 8521 (C64C)\n"    &
    " IEC: Use hardware port\n"  &
 
    " Kernal: %s\n"              &  -- Kernal submenu
@@ -444,54 +525,31 @@ constant OPTM_ITEMS        : string :=
    " Japanese\n"                &
    " JiffyDOS\n"                &
    "\n"                         &
-   " Back to main menu\n"       &
+   " Back\n"                    &  -- returns to the main menu
 
+   " Volume: %s\n"              &  -- Volume submenu
+   " Volume Control\n"          &
    "\n"                         &
-   " Display Settings\n"        &
+   " 100%\n"                    &  -- the whole volume block is not yet wired in mega65.vhd, see #85
+   " 90%\n"                     &
+   " 80%\n"                     &
+   " 70%\n"                     &
+   " 60%\n"                     &
+   " 50%\n"                     &
+   " 40%\n"                     &
+   " 30%\n"                     &
+   " 20%\n"                     &
+   " 10%\n"                     &
+   " 0%\n"                      &
    "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
 
-   " HDMI: %s\n"                &  -- HDMI submenu
-   " HDMI Display Mode\n"       &
+   " Advanced Settings\n"       &  -- Advanced Settings submenu
+   " Advanced Settings\n"       &
    "\n"                         &
-   " 16:9 720p 50 Hz\n"         &
-   " 16:9 720p 60 Hz\n"         &
-   " 4:3  576p 50 Hz\n"         &
-   " 5:4  576p 50 Hz\n"         &
-   "\n"                         &
-   " HDMI: Flicker-free\n"      &
-   " HDMI: DVI (no sound)\n"    &
-   "\n"                         &
-   " Back to main menu\n"       &
+   " RTC for GEOS\n"            &  -- not yet wired in mega65.vhd
 
-   " HDMI: %s\n"                &  -- HDMI Filter submenu (replaces V1's CRT emulation toggle)
-   " HDMI Filter\n"             &
-   "\n"                         &
-   " No Filter\n"               &  -- nearest-neighbour (intentionally exposes the #223 wonky-pixel look as a power-user opt-in)
-   " Sharp Bilinear\n"          &  -- ascal native SBILINEAR (cubic-warped lerp; see ascal.vhd:783-821)
-   " Bicubic\n"                 &  -- ascal native bicubic (mode 011), between Sharp Bilinear and Smooth perceptually
-   " Smooth\n"                  &
-   " Lanczos\n"                 &
-   " Scanlines\n"               &  -- default: bit-identical to V5's CRT emulation look
-   " CRT (S-Video)\n"           &
-   " CRT (Composite)\n"         &
-   "\n"                         &
-   " Back to main menu\n"       &
-
-   " HDMI: Zoom-in\n"           &
-
-   " VGA: %s\n"                 &  -- VGA submenu
-   " VGA Display Mode\n"        &
-   "\n"                         &
-   " Standard\n"                &
-   "\n"                         &
-   " Retro 15 kHz mode\n"       &
-   "\n"                         &
-   " 15 kHz with HS/VS\n"       &
-   " 15 kHz with CSYNC\n"       &
-   "\n"                         &
-   " Back to main menu\n"       &
-
-   " OSM: %s\n"                 &  -- OSM submenu
+   " OSM: %s\n"                 &  -- OSM Scaling submenu, nested inside Advanced Settings
    " OSM Scaling\n"             &
    "\n"                         &
    " 100%\n"                    &
@@ -504,7 +562,21 @@ constant OPTM_ITEMS        : string :=
    " 53%\n"                     &
    " 50%\n"                     &
    "\n"                         &
-   " Back to main menu\n"       &
+   " Back\n"                    &  -- returns to Advanced Settings
+
+   " CIA: Use 8521 (C64C)\n"    &
+
+   " VIC-II: %s\n"              &  -- VIC-II submenu, nested inside Advanced Settings
+   " VIC-II model\n"            &
+   "\n"                         &
+   " 656x/NMOS\n"               &  -- not yet wired in mega65.vhd
+   " 856x/HMOS\n"               &
+   " 856x/old HMOS\n"           &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Advanced Settings
+
+   "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
 
    "\n"                         &
    " About & Help\n"            &
@@ -523,7 +595,7 @@ constant OPTM_G_IMPROVE_AUDIO : integer := 9;
 constant OPTM_G_CIA_8521      : integer := 10;
 constant OPTM_G_IEC           : integer := 11;
 constant OPTM_G_KERNAL_MODES  : integer := 12;
-constant OPTM_G_HDMI_MODES    : integer := 13;
+constant OPTM_G_HDMI_MODES_PAL : integer := 13; -- PAL HDMI display modes (the NTSC modes are a group of their own)
 constant OPTM_G_HDMI_FF       : integer := 14;
 constant OPTM_G_HDMI_DVI      : integer := 15;
 constant OPTM_G_HDMI_FILTER   : integer := 16;  -- HDMI: %s submenu (filter radio); replaces V1's CRT emulation toggle
@@ -532,82 +604,86 @@ constant OPTM_G_VGA_MODES     : integer := 18;
 constant OPTM_G_OSM_MODE      : integer := 19;
 constant OPTM_G_ABOUT_HELP    : integer := 20;
 constant OPTM_G_REU           : integer := 21;
+constant OPTM_G_MACHINE_MODE  : integer := 22;  -- PAL/NTSC; the C64 core itself is not yet wired, see #181
+constant OPTM_G_TURBO_MODE    : integer := 23;  -- not yet wired
+constant OPTM_G_TURBO_SPEED   : integer := 24;  -- not yet wired
+constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes; not yet wired, see #181/#105
+constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF; not yet wired
+constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
+constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
+constant OPTM_G_RTC_GEOS      : integer := 29;  -- not yet wired
+constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 
-constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,
+-- OPTM_DEP tags a menu line as dependent (smart dependencies, see issue #229
+-- and doc/path-to-OSM-dependencies.md): the line is only visible while item
+-- <item> of the mother group <mother> is selected. For a radio (multi-select)
+-- mother, <item> is the 0-based index of the controlling member; for a single-
+-- select toggle, item 1 means "visible while ON", item 0 means "visible while
+-- OFF". Add it to the line's OPTM_GROUPS entry, e.g.
+--   OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1)
+-- Authoring invariant (the firmware does NOT enforce it): place a mother group
+-- and the lines that depend on it so the cursor can never sit on a dependent
+-- line at the moment its mother changes - e.g. keep the mother in a different
+-- submenu than its dependents (V6 keeps PAL/NTSC in the Model submenu and the
+-- dependent display modes in the HDMI submenu). Otherwise a real-time reflow
+-- could hide the line under the cursor.
+function OPTM_DEP(mother : natural; item : natural) return natural is
+begin
+   return OPTM_G_DEPENDENT + (item * 16#02000000#) + (mother * 16#00020000#);
+end function OPTM_DEP;
+
+constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                        -- C64 for MEGA65
                                              OPTM_G_LINE,
                                              OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START,
                                              OPTM_G_LOAD_PRG      + OPTM_G_LOAD_ROM,
                                              OPTM_G_LINE,
-                                             OPTM_G_HEADLINE,
+                                             OPTM_G_HEADLINE,                         -- Expansion Port
                                              OPTM_G_LINE,
                                              OPTM_G_EXP_PORT      + OPTM_G_STDSEL,    -- Use hardware slot
                                              OPTM_G_EXP_PORT,                         -- Simulate cartridge:
                                              OPTM_G_MOUNT_CRT     + OPTM_G_LOAD_ROM,  -- CRT:%s
                                              OPTM_G_REU           + OPTM_G_SINGLESEL, -- Simulate 1750 REU 512 kB
                                              OPTM_G_LINE,
-                                             OPTM_G_HEADLINE,
+                                             OPTM_G_HEADLINE,                         -- C64 Configuration
                                              OPTM_G_LINE,
+
+                                             OPTM_G_SUBMENU,                          -- open "Model: %s"
+                                             OPTM_G_HEADLINE,                         -- Model
+                                             OPTM_G_LINE,
+                                             OPTM_G_MACHINE_MODE  + OPTM_G_STDSEL,    -- PAL
+                                             OPTM_G_MACHINE_MODE,                     -- NTSC
+                                             OPTM_G_LINE,
+                                             OPTM_G_HEADLINE,                         -- Turbo mode
+                                             OPTM_G_LINE,
+                                             OPTM_G_TURBO_MODE    + OPTM_G_STDSEL,    -- Off
+                                             OPTM_G_TURBO_MODE,                       -- C128
+                                             OPTM_G_TURBO_MODE,                       -- Smart
+                                             OPTM_G_LINE,
+                                             OPTM_G_HEADLINE,                         -- Turbo speed
+                                             OPTM_G_TURBO_SPEED   + OPTM_G_STDSEL,    -- 2x
+                                             OPTM_G_TURBO_SPEED,                      -- 3x
+                                             OPTM_G_TURBO_SPEED,                      -- 4x
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Model: %s"
+
                                              OPTM_G_FLIP_JOYS     + OPTM_G_SINGLESEL,
 
-                                             OPTM_G_SUBMENU,
-                                             OPTM_G_HEADLINE,
+                                             OPTM_G_SUBMENU,                          -- open "HDMI: %s" (settings)
+                                             OPTM_G_HEADLINE,                         -- HDMI Display Mode
                                              OPTM_G_LINE,
-                                             OPTM_G_TEXT,
+                                             OPTM_G_HDMI_MODES_PAL  + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 16:9 720p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 16:9 720p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL                  + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 4:3  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC                 + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 4:3  480p 59.94 Hz
+                                             OPTM_G_HDMI_MODES_PAL                  + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 5:4  576p 50 Hz
+                                             OPTM_G_HDMI_MODES_NTSC                 + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 5:4  480p 59.94 Hz
                                              OPTM_G_LINE,
-                                             OPTM_G_SID_SETUP     + OPTM_G_STDSEL,
-                                             OPTM_G_SID_SETUP,
-                                             OPTM_G_LINE,
-                                             OPTM_G_TEXT,
-                                             OPTM_G_LINE,
-                                             OPTM_G_SID_SETUP,
-                                             OPTM_G_SID_SETUP,
-                                             OPTM_G_SID_SETUP,
-                                             OPTM_G_SID_SETUP,
-                                             OPTM_G_LINE,
-                                             OPTM_G_TEXT,
-                                             OPTM_G_LINE,
-                                             OPTM_G_SID_PORT      + OPTM_G_STDSEL,
-                                             OPTM_G_SID_PORT,
-                                             OPTM_G_SID_PORT,
-                                             OPTM_G_SID_PORT,
-                                             OPTM_G_SID_PORT,
-                                             OPTM_G_LINE,
-                                             OPTM_G_IMPROVE_AUDIO + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
-                                             OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,
-
-                                             OPTM_G_CIA_8521      + OPTM_G_SINGLESEL,
-                                             OPTM_G_IEC           + OPTM_G_SINGLESEL,
-
-                                             OPTM_G_SUBMENU,
-                                             OPTM_G_HEADLINE,
-                                             OPTM_G_LINE,
-                                             OPTM_G_KERNAL_MODES  + OPTM_G_STDSEL,
-                                             OPTM_G_KERNAL_MODES,
-                                             OPTM_G_KERNAL_MODES,
-                                             OPTM_G_KERNAL_MODES,
-                                             OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,
-
-                                             OPTM_G_LINE,
-                                             OPTM_G_HEADLINE,
-                                             OPTM_G_LINE,
-
-                                             OPTM_G_SUBMENU,
-                                             OPTM_G_HEADLINE,
-                                             OPTM_G_LINE,
-                                             OPTM_G_HDMI_MODES    + OPTM_G_STDSEL,
-                                             OPTM_G_HDMI_MODES,
-                                             OPTM_G_HDMI_MODES,
-                                             OPTM_G_HDMI_MODES,
-                                             OPTM_G_LINE,
-                                             OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
+                                             OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Flicker-free (PAL)
+                                             OPTM_G_HDMI_FF_NTSC  + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Flicker-free (NTSC)
                                              OPTM_G_HDMI_DVI      + OPTM_G_SINGLESEL,
-                                             OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,
 
-                                             OPTM_G_SUBMENU,                          -- " HDMI: %s"
-                                             OPTM_G_HEADLINE,                         -- " HDMI Filter"
+                                             OPTM_G_SUBMENU,                          -- open "HDMI: %s" (filter), nested
+                                             OPTM_G_HEADLINE,                         -- HDMI Filter
                                              OPTM_G_LINE,
                                              OPTM_G_HDMI_FILTER,                      -- No Filter
                                              OPTM_G_HDMI_FILTER,                      -- Sharp Bilinear
@@ -618,36 +694,114 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,
                                              OPTM_G_HDMI_FILTER,                      -- CRT (S-Video)
                                              OPTM_G_HDMI_FILTER,                      -- CRT (Composite)
                                              OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- " Back to main menu"
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (filter)
 
                                              OPTM_G_HDMI_ZOOM     + OPTM_G_SINGLESEL,
+                                             OPTM_G_HDMI_RAW50    + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Raw 50.1 Hz (PAL only)
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (settings)
 
-                                             OPTM_G_SUBMENU,
-                                             OPTM_G_HEADLINE,
+                                             OPTM_G_SUBMENU,                          -- open "VGA: %s"
+                                             OPTM_G_HEADLINE,                         -- VGA Display Mode
                                              OPTM_G_LINE,
-                                             OPTM_G_VGA_MODES     + OPTM_G_STDSEL,
+                                             OPTM_G_VGA_MODES     + OPTM_G_STDSEL,    -- Standard
                                              OPTM_G_LINE,
-                                             OPTM_G_TEXT,
+                                             OPTM_G_TEXT,                             -- Retro 15 kHz mode
                                              OPTM_G_LINE,
-                                             OPTM_G_VGA_MODES,
-                                             OPTM_G_VGA_MODES,
+                                             OPTM_G_VGA_MODES,                        -- 15 kHz with HS/VS
+                                             OPTM_G_VGA_MODES,                        -- 15 kHz with CSYNC
                                              OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "VGA: %s"
 
-                                             OPTM_G_SUBMENU,                        -- OSM:
-                                             OPTM_G_HEADLINE,                       -- OSM scaling
+                                             OPTM_G_SUBMENU,                          -- open "SID: %s"
+                                             OPTM_G_HEADLINE,                         -- SID Settings
                                              OPTM_G_LINE,
-                                             OPTM_G_OSM_MODE      + OPTM_G_STDSEL,  -- Standard
-                                             OPTM_G_OSM_MODE,                       -- 6%
-                                             OPTM_G_OSM_MODE,                       -- 13%
-                                             OPTM_G_OSM_MODE,                       -- 19%
-                                             OPTM_G_OSM_MODE,                       -- 25%
-                                             OPTM_G_OSM_MODE,                       -- 31%
-                                             OPTM_G_OSM_MODE,                       -- 38%
-                                             OPTM_G_OSM_MODE,                       -- 44%
-                                             OPTM_G_OSM_MODE,                       -- 50%
+                                             OPTM_G_TEXT,                             -- Mono SID
                                              OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU, -- Back to main menu
+                                             OPTM_G_SID_SETUP     + OPTM_G_STDSEL,    -- 6581 (default, as in all releases so far)
+                                             OPTM_G_SID_SETUP,                        -- 8580
+                                             OPTM_G_LINE,
+                                             OPTM_G_TEXT,                             -- Stereo SID
+                                             OPTM_G_LINE,
+                                             OPTM_G_SID_SETUP,                        -- L: 6581 R: 6581
+                                             OPTM_G_SID_SETUP,                        -- L: 6581 R: 8580
+                                             OPTM_G_SID_SETUP,                        -- L: 8580 R: 6581
+                                             OPTM_G_SID_SETUP,                        -- L: 8580 R: 8580
+                                             OPTM_G_LINE,
+                                             OPTM_G_TEXT,                             -- Right SID Port
+                                             OPTM_G_LINE,
+                                             OPTM_G_SID_PORT      + OPTM_G_STDSEL,    -- D420
+                                             OPTM_G_SID_PORT,                         -- D500
+                                             OPTM_G_SID_PORT,                         -- DE00
+                                             OPTM_G_SID_PORT,                         -- DF00
+                                             OPTM_G_SID_PORT,                         -- Same as left SID port
+                                             OPTM_G_LINE,
+                                             OPTM_G_IMPROVE_AUDIO + OPTM_G_SINGLESEL + OPTM_G_STDSEL,
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "SID: %s"
+
+                                             OPTM_G_IEC           + OPTM_G_SINGLESEL,
+
+                                             OPTM_G_SUBMENU,                          -- open "Kernal: %s"
+                                             OPTM_G_HEADLINE,                         -- Kernal Selection
+                                             OPTM_G_LINE,
+                                             OPTM_G_KERNAL_MODES  + OPTM_G_STDSEL,    -- Standard
+                                             OPTM_G_KERNAL_MODES,                     -- Games System
+                                             OPTM_G_KERNAL_MODES,                     -- Japanese
+                                             OPTM_G_KERNAL_MODES,                     -- JiffyDOS
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Kernal: %s"
+
+                                             OPTM_G_SUBMENU,                          -- open "Volume: %s"
+                                             OPTM_G_HEADLINE,                         -- Volume Control
+                                             OPTM_G_LINE,
+                                             OPTM_G_VOLUME        + OPTM_G_STDSEL,    -- 100%
+                                             OPTM_G_VOLUME,                           -- 90%
+                                             OPTM_G_VOLUME,                           -- 80%
+                                             OPTM_G_VOLUME,                           -- 70%
+                                             OPTM_G_VOLUME,                           -- 60%
+                                             OPTM_G_VOLUME,                           -- 50%
+                                             OPTM_G_VOLUME,                           -- 40%
+                                             OPTM_G_VOLUME,                           -- 30%
+                                             OPTM_G_VOLUME,                           -- 20%
+                                             OPTM_G_VOLUME,                           -- 10%
+                                             OPTM_G_VOLUME,                           -- 0%
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Volume: %s"
+
+                                             OPTM_G_SUBMENU,                          -- open "Advanced Settings"
+                                             OPTM_G_HEADLINE,                         -- Advanced Settings
+                                             OPTM_G_LINE,
+                                             OPTM_G_RTC_GEOS      + OPTM_G_SINGLESEL, -- RTC for GEOS
+
+                                             OPTM_G_SUBMENU,                          -- open "OSM: %s", nested
+                                             OPTM_G_HEADLINE,                         -- OSM Scaling
+                                             OPTM_G_LINE,
+                                             OPTM_G_OSM_MODE      + OPTM_G_STDSEL,    -- 100%
+                                             OPTM_G_OSM_MODE,                         -- 89%
+                                             OPTM_G_OSM_MODE,                         -- 80%
+                                             OPTM_G_OSM_MODE,                         -- 73%
+                                             OPTM_G_OSM_MODE,                         -- 67%
+                                             OPTM_G_OSM_MODE,                         -- 62%
+                                             OPTM_G_OSM_MODE,                         -- 57%
+                                             OPTM_G_OSM_MODE,                         -- 53%
+                                             OPTM_G_OSM_MODE,                         -- 50%
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "OSM: %s"
+
+                                             OPTM_G_CIA_8521      + OPTM_G_SINGLESEL,
+
+                                             OPTM_G_SUBMENU,                          -- open "VIC-II: %s", nested
+                                             OPTM_G_HEADLINE,                         -- VIC-II model
+                                             OPTM_G_LINE,
+                                             OPTM_G_VICII_MODEL   + OPTM_G_STDSEL,    -- 656x/NMOS
+                                             OPTM_G_VICII_MODEL,                      -- 856x/HMOS
+                                             OPTM_G_VICII_MODEL,                      -- 856x/old HMOS
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "VIC-II: %s"
+
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Advanced Settings"
 
                                              OPTM_G_LINE,
                                              OPTM_G_ABOUT_HELP    + OPTM_G_HELP,
@@ -781,6 +935,14 @@ begin
             when SEL_OPTM_CRTROM       => data_o <= x"000" & "000" & std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(16));
             when SEL_OPTM_ICOUNT       => data_o <= x"00" & std_logic_vector(to_unsigned(OPTM_SIZE, 8));
             when SEL_OPTM_DIMENSIONS   => data_o <= getDXDY(OPTM_DX, OPTM_DY, index);
+            when SEL_OPTM_DEPS         => if index = 4095 then               -- smart dependencies (OPTM_DEP):
+                                            data_o <= x"1DEF";               -- magic "DEPendency Format 1" feature probe
+                                          else                               -- per line: {000, flag(b29), item(b28..25), mother(b24..17)}
+                                            data_o <= "000" &
+                                                      std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(29)) &
+                                                      std_logic_vector(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(28 downto 25)) &
+                                                      std_logic_vector(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(24 downto 17));
+                                          end if;
 
             when others                => null;
          end case;

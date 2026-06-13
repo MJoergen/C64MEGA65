@@ -47,8 +47,9 @@ OPTM_SEL_TLLSEL .EQU 3
 OPTM_STR_SPACE  .ASCII_W " "
 
 OPTM_F_MENUSUB  .ASCII_P "menu.asm: One or more submenu is not\n"
-                .ASCII_P "specified correctly:\n"
-                .ASCII_W "Missing submenu-end-flag.\n"
+                .ASCII_P "specified correctly: Unbalanced submenu\n"
+                .ASCII_P "start/end flags in OPTM_GROUPS.\n"
+                .ASCII_W "Item index = error code.\n"
 OPTM_F_F2M      .ASCII_P "menu.asm: _OPTM_R_F2M:\n"
                 .ASCII_P "Corrupt memory layout: Flat coordinate is\n"
                 .ASCII_W "larger than menu size.\n"
@@ -169,8 +170,13 @@ OPTM_IR_STDSEL  .EQU 17
 ; array of 0s and 1s to define horizontal separator lines
 OPTM_IR_LINES   .EQU 18
 
+; pointer to the resolved per-line dependency array (see optm_deps.asm); 0
+; means the dependency feature is off (old config.vhd or no OPTM_DEP tags),
+; in which case every line is unconditionally visible
+OPTM_IR_DEPS    .EQU 19
+
 ; size of initialization record in words
-OPTM_STRUCTSIZE .EQU 19
+OPTM_STRUCTSIZE .EQU 20
 
 OPTM_NL         .DW  0x005C, 0x006E, 0x0000     ; \n
 
@@ -204,7 +210,9 @@ OPTM_INIT       INCRB
                 MOVE    R12, @R0
                 MOVE    OPTM_MENULEVEL, R0
                 MOVE    0, @R0
-                MOVE    OPTM_MAINSEL, R0
+                MOVE    OPTM_LVL_PARENT, R0
+                MOVE    0, @R0
+                MOVE    OPTM_LVL_OPENER, R0
                 MOVE    0, @R0
                 MOVE    OPTM_CUR_SEL, R0
                 MOVE    0, @R0
@@ -381,7 +389,17 @@ _OPTM_HM_1A     CMP     '%', @R0                ; search for "%s"
                 RBRA    _OPTM_HM_2, !Z          ; no
                 ADD     1, R0                   ; skip character
                 CMP     's', @R0                ; "%s" found?
-                RBRA    _OPTM_HM_2, !Z          ; no
+                RBRA    _OPTM_HM_0, !Z          ; no: re-examine the current
+                                                ; character instead of
+                                                ; skipping it: if a percent
+                                                ; sign is the last character
+                                                ; of a menu item, then the
+                                                ; backslash of the \n that
+                                                ; follows it must still be
+                                                ; seen by the newline check
+                                                ; above, otherwise the menu
+                                                ; item counter runs out of
+                                                ; sync for all further items
                 ADD     1, R0                   ; skip character
 
                 ; respect (sub)menu structure: skip invisible items by
@@ -716,9 +734,9 @@ _OPTM_RUN_5A    CMP     OPTM_KEY_CLOSE, R8      ; key: close?
 _OPTM_RUN_5B    MOVE    R2, R8                  ; return selected item
                 RBRA    _OPTM_RUN_RET, 1
 
-                ; One menu level up (i.e. as long as we only have one submenu
-                ; level this means: back to main menu) - or - close menu if
-                ; we are already in the main menu
+                ; One menu level up, i.e. from a (sub)menu of any depth back
+                ; to its parent menu - or - close menu if we are already in
+                ; the main menu
 _OPTM_RUN_5C    CMP     OPTM_KEY_MENUUP, R8     ; key: menu up?
                 RBRA    _OPTM_RUN_6A, !Z        ; no: check other key
                 MOVE    OPTM_MENULEVEL, R7      ; already at main menu level?
@@ -804,7 +822,10 @@ _OPTM_RUN_6C    MOVE    R8, R11                 ; R11: remember selection key
                 MOVE    R11, R10                ; selection key
                 MOVE    OPTM_CLBK_SEL, R7       ; call callback
                 RSUB    _OPTM_CALL, 1
-                
+
+                MOVE    R12, R8                 ; R12: group word just toggled
+                RSUB    OPTM_DEPS_AFFECTS, 1    ; toggled a dependency mother?
+                RBRA    _OPTM_RUN_SM_4, C       ; yes: redraw the current level
                 RBRA    _OPTM_RUN_SEL, 1        ; continue main loop of menu
 
                 ; proceed in case of multi-sel. with the not yet selected item
@@ -934,8 +955,20 @@ _OPTM_RUN_15    DECRB
                 RSUB    _OPTM_CALL, 1
 
                 CMP     OPTM_CLOSE, R6          ; Close?
-                RBRA    _OPTM_RUN_SEL, !Z       ; no: continue menu loop
-                MOVE    R2, R8                  ; yes: return selected item               
+                RBRA    _OPTM_RUN_SCHG, !Z      ; no: check for structure change
+                MOVE    R2, R8                  ; yes: return selected item
+                RBRA    _OPTM_RUN_RET, 1
+
+                ; A radio selection or a single-select toggle just changed the
+                ; menu state. If the changed group is the mother of a dependent
+                ; line, the set of visible lines may have changed, so redraw the
+                ; current level (cursor stays on the just-selected mother line,
+                ; which is visible, so the redraw cannot fatal). Without
+                ; dependencies OPTM_DEPS_AFFECTS always reports "no change".
+_OPTM_RUN_SCHG  MOVE    R6, R8                  ; R6: group word just changed
+                RSUB    OPTM_DEPS_AFFECTS, 1
+                RBRA    _OPTM_RUN_SM_4, C       ; mother changed: redraw level
+                RBRA    _OPTM_RUN_SEL, 1        ; otherwise continue menu loop
 
 _OPTM_RUN_RET   MOVE    OPTM_STRUCT, R7         ; important to reset to zero..
                 MOVE    0, @R7                  ; b/c it is also used as flag
@@ -966,25 +999,42 @@ _OPTM_RUN_SM    MOVE    OPTM_MENULEVEL, R9
                 AND     OPTM_CLOSE, R7          ; leave submenu?
                 RBRA    _OPTM_RUN_SM_1, Z       ; no: enter submenu
 
-                ; Leave submenu
-_OPTM_RUN_SM_L  MOVE    0, @R9                  ; 0=main menu
-                MOVE    OPTM_MAINSEL, R8
-                MOVE    @R8, R2                 ; restore main menu selection
+                ; Leave (sub)menu: pop exactly one menu level. The parent
+                ; region id and the flat index of the opener of the region
+                ; that we are leaving were recorded in OPTM_LVL_PARENT and
+                ; OPTM_LVL_OPENER by _OPTM_STRUCT as a byproduct of the most
+                ; recent structure build, so the cursor lands on the label
+                ; of the (sub)menu that the user came from
+_OPTM_RUN_SM_L  MOVE    OPTM_LVL_PARENT, R8
+                MOVE    @R8, @R9                ; menu level := parent id
+                MOVE    OPTM_LVL_OPENER, R8
+                MOVE    @R8, R2                 ; cursor := opener we leave
                 RBRA    _OPTM_RUN_SM_4, 1       ; execute level change
 
                 ; Enter submenu
 _OPTM_RUN_SM_1  MOVE    R8, @R9                 ; R8: submenu number
-                MOVE    OPTM_MAINSEL, R8        ; remember main menu selection
-                MOVE    R2, @R8
 
-                ; Calculate the menu item that will be selected
+                ; Calculate the menu item that will be selected: the first
+                ; line after the opener that is either selectable (nonzero
+                ; group id in the low byte) or that carries the submenu
+                ; marker. The marker stops the search because it is either
+                ; the label of a nested child submenu (a visible, selectable
+                ; line of the entered level) or the closer of the entered
+                ; region itself; the search can therefore never run into the
+                ; contents of a nested child or onto an invisible line
 _OPTM_RUN_SM_2  ADD     1, R2                   ; next item
                 CMP     R0, R2                  ; error condition?
                 RBRA    _OPTM_RUN_SM_3, Z       ; yes
                 ADD     1, R6                   ; no error
                 MOVE    @R6, R7
-                AND     0x00FF, R7              ; selectable item?
+                MOVE    R7, R8                  ; a submenu opener/closer always
+                AND     0x4000, R8              ; stops the scan (it is a visible
+                RBRA    _OPTM_RUN_SM_4, !Z      ; selectable line of this level)
+                AND     0x00FF, R7              ; selectable plain line?
                 RBRA    _OPTM_RUN_SM_2, Z       ; no: continue to search
+                MOVE    R2, R8                  ; honor dependency visibility:
+                RSUB    OPTM_DEP_OK, 1          ; keep scanning past a line that
+                RBRA    _OPTM_RUN_SM_2, !C      ; is hidden by a dependency
                 RBRA    _OPTM_RUN_SM_4, 1
 
                 ; Fatal: No selectable menu item found
@@ -1031,13 +1081,16 @@ OPTM_SELECT     SYSCALL(enter, 1)
 
                 MOVE    OPTM_F_MS_SLCT, R9
                 RSUB    _OPTM_R_F2M_O, 1        ; convert R8 to screen coord.
+                RBRA    _OPTM_SELECT_R, C       ; index is outside of the
+                                                ; currently active (sub)menu:
+                                                ; tolerate and draw nothing
 
                 ; Select menu item
                 MOVE    OPTM_FP_SELECT, R7      ; select line
                 MOVE    OPTM_SEL_SEL, R9        ; R8 contains screen coords.
                 RSUB    _OPTM_CALL, 1
 
-                SYSCALL(leave, 1)
+_OPTM_SELECT_R  SYSCALL(leave, 1)
                 RET
 
 ; ----------------------------------------------------------------------------
@@ -1243,123 +1296,62 @@ _OPTM_CALL      MOVE    R7, @--SP               ; save R7 for usage & restore
 ; bits 0..14) of each item in the array is a number and represents one menu
 ; item. A zero represents that this item is located on the main menu level and
 ; any integer value represents that this item is located in a certain submenu
-; (counting from one).
+; region (counting from one, in the order in which the submenu openers appear
+; in OPTM_GROUPS). Submenus nest to arbitrary depth since M2M V2.1.0; the
+; opener of a nested submenu doubles as its label line in the parent submenu.
 ;
 ; The highest bit (bit 15) is 1, when the entry is shown in the current menu
-; level indicated by OPTM_MENULEVEL, otherwise it is 0. There is a special
-; case around the very first entry of a sub-menu structure: If we are in the
-; main menu (OPTM_MENULEVEL is 0) then we treat the very first entry of the
-; sub-menu structure as the "headline"/"label" of the sub-menu, i.e. it needs
-; to be shown in the menu menu (bit 15 is 1). If we are within a sub-menu,
-; then this very first line is being ignored (bit 15 is 0).
+; level indicated by OPTM_MENULEVEL, otherwise it is 0. The label/"headline"
+; of a submenu (= its opener line) is shown in the parent menu and hidden
+; within its own submenu; the contents and the closer line of a submenu are
+; only shown within the submenu itself.
+;
+; The actual algorithm is the pure function OPTM_STRUCT_BUILD, see
+; menu_struct.asm. This wrapper feeds it from the initialization record and
+; OPTM_MENULEVEL, stores the leave bookkeeping (parent region id and opener
+; index of the current level) in OPTM_LVL_PARENT/OPTM_LVL_OPENER for
+; _OPTM_RUN_SM_L, and goes fatal on unbalanced submenu brackets.
 ;
 ; Input:
 ;   R8: pointer to a memory region that is as large as all items together
+;       plus one extra word for the leading size information
 ;   R9: amount of menu items
 ; Output:
 ;   R8: unchanged
 ;   R9: amount of items in currently active menu level
 _OPTM_STRUCT    INCRB
 
-                MOVE    R8, R0                  ; R0: current array element
-                MOVE    R9, R1                  ; R1: amount of menu items
-                MOVE    OPTM_DATA, R2           ; R2: OPTM_IR_GROUPS array
-                MOVE    @R2, R2
-                ADD     OPTM_IR_GROUPS, R2
-                MOVE    @R2, R2
-                XOR     R3, R3                  ; R3: current main/submen id
-                MOVE    1, R4                   ; R4: next submen id
-                XOR     R5, R5                  ; R5: submenu region flag
+                MOVE    R10, R0                 ; preserve R10 .. R12
+                MOVE    R11, R1
+                MOVE    R12, R2
 
-                MOVE    R1, @R0++               ; 1st element = size
+                MOVE    OPTM_DATA, R10          ; R10: OPTM_IR_GROUPS array
+                MOVE    @R10, R10
+                ADD     OPTM_IR_GROUPS, R10
+                MOVE    @R10, R10
+                MOVE    OPTM_MENULEVEL, R11     ; R11: current menu level
+                MOVE    @R11, R11
+                RSUB    OPTM_STRUCT_BUILD, 1    ; see menu_struct.asm
+                RBRA    _OPTM_STRUCT_F, C       ; unbalanced brackets: fatal
 
-_OPTM_STRUCT_1  MOVE    @R2++, R6               ; R6: next menu group item
-                AND     OPTM_SUBMENU, R6        ; check for submenu marker
-                RBRA    _OPTM_STRUCT_3, Z       ; jump, if no submenu marker
+                MOVE    OPTM_LVL_PARENT, R7     ; store leave bookkeeping:
+                MOVE    R10, @R7                ; parent region id of level..
+                MOVE    OPTM_LVL_OPENER, R7     ; ..and flat index of the
+                MOVE    R11, @R7                ; opener of the level
 
-                CMP     1, R5                   ; are we already in a region?
-                RBRA    _OPTM_STRUCT_2, Z       ; yes: jump
-                MOVE    1, R5                   ; no: set region flag
-                MOVE    R4, R3                  ; current submen id = next..
-                ADD     1, R4                   ; ..submen id and inc. next
-                RBRA    _OPTM_STRUCT_3, 1       ; continue with storing
-
-_OPTM_STRUCT_2  MOVE    R3, @R0++               ; store item in struct array
-                XOR     R5, R5                  ; clear region flag
-                XOR     R3, R3                  ; current id = main menu
-                RBRA    _OPTM_STRUCT_4, 1       ; continue with next iteration
-
-_OPTM_STRUCT_3  MOVE    R3, @R0++               ; store item in struct array
-_OPTM_STRUCT_4  SUB     1, R1                   ; more menu items?
-                RBRA    _OPTM_STRUCT_1, !Z      ; yes: loop
-
-                CMP     1, R5                   ; no: region cntr still actve?
-                RBRA    _OPTM_STRUCT_C, !Z      ; no: all good: continue
-                MOVE    OPTM_CLBK_FATAL, R7     ; yes: fatal
-                MOVE    OPTM_F_MENUSUB, R8
-                XOR     R9, R9
-                RBRA    _OPTM_CALL, 1           ; RBRA because of fatal
-
-_OPTM_STRUCT_C  MOVE    R9, R0                  ; R0: size of menu (#items)
-                MOVE    R8, R1                  ; R1: current array entry
-                ADD     1, R1                   ; skip size information
-                MOVE    OPTM_MENULEVEL, R3      ; R3: current menu level
-                MOVE    @R3, R3
-                XOR     R7, R7                  ; R7: count active menu items
-
-_OPTM_STRUCT_5  CMP     R3, @R1                 ; are we in the curr. men. lvl
-                RBRA    _OPTM_STRUCT_7, Z       ; yes: set to 1 and next entry
-_OPTM_STRUCT_6  AND     0x7FFF, @R1++           ; no: highest bit = 0 and next
-                RBRA    _OPTM_STRUCT_8, 1
-_OPTM_STRUCT_7  OR      0x8000, @R1++           ; active itm: highest bit to 1
-                ADD     1, R7                   ; one more active item
-_OPTM_STRUCT_8  SUB     1, R0                   ; more entries?
-                RBRA    _OPTM_STRUCT_5, !Z      ; yes: iterate
-
-                MOVE    R9, R4                  ; R4: preserve overall amount
-                MOVE    R7, R9                  ; return amount of active itms
-
-                ; Correct for the special case described above: In the case
-                ; that we are in main menu, the first item is part of the
-                ; list and otherwise it is not.
-                XOR     R1, R1                  ; R1: last menu number
-                MOVE    1, R5                   ; R5: first occurance flag
-                MOVE    R8, R7                  ; R7: ptr. to curr. itm in lst
-                ADD     1, R7                   ; skip size info
-_OPTM_STRUCT_9  MOVE    @R7, R6
-                AND     0x00FF, R6
-                CMP     R1, R6                  ; last menu number changed?
-                RBRA    _OPTM_STRUCT_10, Z      ; no
-                MOVE    R6, R1                  ; yes: store this num as last
-                MOVE    1, R5                   ; set first occurance flag
-
-_OPTM_STRUCT_10 MOVE    @R7, R6
-                AND     0x8000, R6              ; part of current list?
-                RBRA    _OPTM_STRUCT_11, !Z     ; yes
-
-                CMP     0, R3                   ; are we in the main menu?
-                RBRA    _OPTM_STRUCT_12, !Z     ; no
-                CMP     1, R5                   ; yes: and is it first ocurr.?
-                RBRA    _OPTM_STRUCT_12, !Z     ; no
-                XOR     R5, R5                  ; yes: delete flag and..
-                OR      0x8000, @R7             ; ..make it part of the list
-                ADD     1, R9                   ; one more active item
-                RBRA    _OPTM_STRUCT_12, 1
-
-_OPTM_STRUCT_11 CMP     0, R3                   ; are we in the main menu?
-                RBRA    _OPTM_STRUCT_12, Z      ; yes: move on
-                CMP     1, R5                   ; no: and is it first ocurr.?
-                RBRA    _OPTM_STRUCT_12, !Z     ; no
-                XOR     R5, R5                  ; yes: delete flag and..
-                AND     0x7FFF, @R7             ; ..remove it from the list
-                SUB     1, R9                   ; one less active item         
-
-_OPTM_STRUCT_12 ADD     1, R7                   ; next list element
-                SUB     1, R4                   ; one less item to process
-                RBRA    _OPTM_STRUCT_9, !Z
+                MOVE    R0, R10                 ; restore R10 .. R12
+                MOVE    R1, R11
+                MOVE    R2, R12
 
                 DECRB
                 RET
+
+                ; Fatal: unbalanced submenu brackets; R10 contains the flat
+                ; index of the offending line and is reported as error code
+_OPTM_STRUCT_F  MOVE    OPTM_CLBK_FATAL, R7
+                MOVE    R10, R9
+                MOVE    OPTM_F_MENUSUB, R8
+                RBRA    _OPTM_CALL, 1           ; RBRA because of fatal
 
 ; _OPTM_R_F2M
 ;
@@ -1466,3 +1458,15 @@ _OPTM_R_F2M_O2  MOVE    R2, R7
 
                 DECRB
                 RET
+
+; ----------------------------------------------------------------------------
+; Menu structure algorithms (pure functions, emulator-testable)
+; ----------------------------------------------------------------------------
+
+#include "menu_struct.asm"
+
+; ----------------------------------------------------------------------------
+; Dependent menu entries ("smart dependencies", see optm_deps.asm)
+; ----------------------------------------------------------------------------
+
+#include "optm_deps.asm"

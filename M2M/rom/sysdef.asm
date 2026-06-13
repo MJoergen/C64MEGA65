@@ -270,6 +270,7 @@ M2M$CFG_OPTM_SSTR   .EQU 0x030A     ; Saving string to display instead of %s
 M2M$CFG_OPTM_HELP   .EQU 0x0310     ; Menu item = show a help menu
 M2M$CFG_OPTM_CRTROM .EQU 0x0311     ; Menu item = manually load CRT/ROM
 M2M$CFG_OPTM_CRSTR  .EQU 0x0312     ; CRT/ROM load str. to show instead of %s
+M2M$CFG_OPTM_DEPS   .EQU 0x0313     ; Per-line menu dependency (OPTM_DEP) word
 
 ; M2M$CFG_WHS
 

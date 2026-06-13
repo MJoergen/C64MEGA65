@@ -6,8 +6,8 @@
 ; done by sy2002 in 2021 and licensed under GPL v3
 ; ****************************************************************************
 
-#include "../../M2M/QNICE/dist_kit/sysdef.asm"
-#include "../../M2M/QNICE/dist_kit/monitor.def"
+#include "../../QNICE/dist_kit/sysdef.asm"
+#include "../../QNICE/dist_kit/monitor.def"
 
                 .ORG    0x8000
 
@@ -127,10 +127,32 @@ CLEAR_CHR       .ASCII_W " "
 ; Framework and Variables 
 ; ----------------------------------------------------------------------------
 
-#include "keyboard.asm"
-#include "screen.asm"
-#include "sysdef.asm"
-#include "tools.asm"
+#include "../keyboard.asm"
+#include "../screen.asm"
+#include "../strings.asm"
+#include "../sysdef.asm"
+#include "../tools.asm"
 
-#include "keyboard_vars.asm"
-#include "screen_vars.asm"
+#include "../keyboard_vars.asm"
+#include "../screen_vars.asm"
+
+; ----------------------------------------------------------------------------
+; Minimal stand-ins for Shell symbols that tools.asm references, so that
+; this testbed assembles without including the whole Shell (shell.asm,
+; menu.asm, shell_vars.asm). None of these are exercised by this testbed.
+; ----------------------------------------------------------------------------
+
+FATAL           SYSCALL(puts, 1)                ; R8: error message
+                MOVE    R9, R8                  ; R9: error code
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+                SYSCALL(exit, 1)
+
+OPTM_SET        RET                             ; menu.asm is not included
+
+SD_WAIT         .EQU   0x05F6                   ; value from shell_vars.asm
+ASCAL_FILTER_LEN .EQU  0x0100                   ; value from filters.asm
+SD_CYC_MID      .BLOCK 1
+SD_CYC_HI       .BLOCK 1
+SD_WAIT_DONE    .BLOCK 1
+OPTM_ICOUNT     .BLOCK 1

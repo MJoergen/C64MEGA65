@@ -8,6 +8,79 @@ effort, it might be that we are not always doing it.
 Version 6.0 - TBD
 -----------------
 
+@TODO: Test the new multi-level on-screen-menu (#189, M2M V2.1.0 nested
+submenus, see doc/path-to-OSM-submenus.md section 10 for the full plan).
+Before any hardware test, run the headless regression suite, which must
+pass: `python3 M2M/rom/tests/menu_test.py run` (builder equivalence vs. the old
+parser, structure/validation fixtures, scripted navigation of the whole V6
+menu in the QNICE emulator) and `python3 M2M/rom/tests/menu_test.py verify`
+(config.vhd/mega65.vhd indices vs. the golden model). On hardware:
+
+* Navigate main menu -> Advanced Settings -> OSM Scaling and back twice:
+  leaving lands the cursor on " OSM: %s" and then on " Advanced Settings"
+* Run/Stop pops exactly one level from a sub-submenu (OSM Scaling /
+  VIC-II / HDMI Filter), pops to the main menu from a depth-1 submenu and
+  closes the OSM at the main menu
+* Close the OSM with Help while inside the VIC-II sub-submenu, reopen:
+  still inside that sub-submenu, cursor preserved
+* Mount a disk image, write to it, then enter a sub-submenu while
+  `<Saving>` shows: the background redraw keeps level and cursor
+* All %s summaries show the selected item of their own submenu at every
+  level, including both " HDMI: %s" headings (display mode vs. filter)
+* All pre-V6 features still react: every entry of Expansion Port, HDMI
+  display modes/flicker-free/DVI/filter/zoom, VGA modes, SID settings,
+  IEC, Kernal selection, OSM scaling, CIA model, flip joystick, REU,
+  improve audio, PRG/CRT/D64 loading (the new Model/Turbo/Volume/RTC/
+  VIC-II/NTSC entries are intentionally silent placeholders)
+* Settings save/restore across a power cycle with the new 159-byte
+  config file `/c64/c64mega65-<CORE_VERSION>` (re-generate it with
+  M2M/tools/make_config.sh)
+* Provoke each authoring fatal once in a scratch config.vhd: unbalanced
+  brackets (boot fatal with item index), OPTM_G_START inside a submenu
+  (boot fatal), oversized submenu view (serial-console warning only)
+
+@TODO: Test the new smart dependencies (#229, M2M V2.1.0 OPTM_DEP, see
+doc/path-to-OSM-dependencies.md section 8). The headless suite already covers
+the algorithms: `python3 M2M/rom/tests/menu_test.py run` includes the
+optm_deps_test testbed (resolution, the five boot fatals, the OPTM_DEP_OK
+predicate via the builder and the %s walk) and a dependency navigation
+scenario, and `python3 M2M/rom/tests/menu_test.py mutate` proves every
+dependency code path is covered (it must report "ALL ... MUTANTS KILLED").
+`verify` checks the OPTM_DEP() tags in config.vhd against the model and, when
+ghdl is installed, drives the real config.vhd SEL_OPTM_DEPS decoder and checks
+its raw output against the model (also available standalone as
+`menu_test.py ghdl`). On hardware (the V6 menu wires PAL/NTSC in the Model
+submenu as the mother of the HDMI display-mode and flicker-free lines):
+
+* Open the HDMI submenu with PAL selected: only the three PAL display modes
+  (16:9/4:3/5:4 50 Hz) and the PAL flicker-free + Raw 50.1 Hz lines show;
+  the " HDMI: %s" heading summarizes the selected PAL mode
+* Switch to NTSC in the Model submenu, reopen HDMI: now only the three NTSC
+  modes (59.94 Hz) and the NTSC flicker-free line show, Raw 50.1 Hz is gone,
+  and the heading summarizes the selected NTSC mode
+* The menu reflows immediately when the mother changes in a shared view and
+  the cursor never lands on a hidden line
+* Per-mode memory: a PAL HDMI choice and an NTSC HDMI choice are each
+  remembered across PAL<->NTSC switches and across a power cycle (the hidden
+  lines keep their config-file byte)
+* On the serial console the boot log reports "Smart dependencies (OPTM_DEP):
+  ON"; an unmodified other-core config.vhd reports "OFF" and behaves as before
+* Provoke each dependency fatal once in a scratch config.vhd: a missing
+  mother group, an out-of-range item index, a mixed group, a dependency
+  chain and a dependency on a submenu/mount/load/help/start line
+
+Known automated-coverage gaps (adversarial review, June 2026; all inspected
+and found correct on the shipped V6 config, but worth a manual eye until a
+harness exists): the production boot wiring `HELP_MENU` / `HELP_MENU_INIT`
+(heap accounting, the SEL_OPTM_DEPS feature probe, the special-line array the
+boot validator is fed, and the error-class to ERR_F_DEP* mapping) is exercised
+by no automated testbed - confirm on the serial console that the OSM opens,
+the deps log line is correct, and a deliberately broken dependency boot-fatals
+with a sensible message. Also note `FATAL` omits the numeric "Error code"
+when the offending item is flat index 0 (shared with the pre-existing
+ERR_F_MENUSUB / ERR_F_MENUSTRT2 fatals); the message string still identifies
+the error class.
+
 @TODO: Update the "Test HDMI modes" sub-checklist. The single "CRT emulation"
 toggle from earlier versions has been replaced by an "HDMI: %s" submenu with
 six filter pairs (Sharp / Smooth / Lanczos / Scanlines / CRT (S-Video) /

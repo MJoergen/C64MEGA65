@@ -203,9 +203,6 @@ signal hdmi_osm_vram_data     : std_logic_vector(15 downto 0);
 signal hdmi_video_mode        : std_logic_vector(3 downto 0);
 signal hdmi_zoom_crop         : std_logic;
 
--- QNICE On Screen Menu selections
-signal hdmi_osm_control_m     : std_logic_vector(255 downto 0);
-
 ---------------------------------------------------------------------------------------------
 -- MiSTer audio filter
 ---------------------------------------------------------------------------------------------

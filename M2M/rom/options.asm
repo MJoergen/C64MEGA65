@@ -120,16 +120,43 @@ _HLP_SSIC1      SUB     1, R4                   ; one less menu item to go
                 MOVE    M2M$CFG_OPTM_LINES, @R0
                 MOVE    M2M$RAMROM_DATA, R8
                 MOVE    R2, R9                  ; R9: free word beh. selectors
+                ADD     R3, R2                  ; R2: free word behind lines
                 MOVE    R3, R10                 ; R10: menu items counter
                 SYSCALL(memcpy, 1)
                 MOVE    HEAP, R8
                 ADD     OPTM_IR_LINES, R8
                 MOVE    R9, @R8
 
-                ; Calculate, if the menu is within its heap boundaries
-                MOVE    HEAP, R8
+                ; Copy the per-line dependency words (OPTM_DEP, see
+                ; optm_deps.asm) onto the heap and resolve them in place. The
+                ; array slot is reserved either way; when config.vhd does not
+                ; support the feature, OPTM_IR_DEPS stays 0 and the visibility
+                ; predicate (OPTM_DEP_OK) short-circuits to "always visible".
+                MOVE    R2, R9                  ; R9: dependency array on heap
+                ADD     R3, R2                  ; R2: free word behind it
+                MOVE    HEAP, R8                ; OPTM_IR_DEPS := 0 (feature off)
+                ADD     OPTM_IR_DEPS, R8
+                MOVE    0, @R8
+                RSUB    OPTM_DEPS_PROBE, 1      ; does config.vhd have it?
+                RBRA    _HLP_DEPS_OFF, !C       ; no: keep it off
+                MOVE    M2M$CFG_OPTM_DEPS, @R0  ; yes: copy the raw dep words
+                MOVE    M2M$RAMROM_DATA, R8     ; (R9: destination on heap)
+                MOVE    R3, R10                 ; R10: menu items counter
+                SYSCALL(memcpy, 1)
+                MOVE    R2, R8                  ; resolve in place:
+                SUB     R3, R8                  ; R8: dep array base (= R2 - N)
+                MOVE    R12, R9                 ; R9: groups array
+                MOVE    R3, R10                 ; R10: amount of menu items
+                RSUB    OPTM_DEPS_RESOLVE, 1
+                MOVE    HEAP, R8                ; OPTM_IR_DEPS := resolved array
+                ADD     OPTM_IR_DEPS, R8
                 MOVE    R2, R9
-                ADD     R10, R9
+                SUB     R3, R9
+                MOVE    R9, @R8
+
+_HLP_DEPS_OFF   ; Calculate, if the menu is within its heap boundaries
+                MOVE    HEAP, R8
+                MOVE    R2, R9                  ; R2: first free word on heap
                 SUB     R8, R9
                 ADD     1, R9
                 RSUB    LOG_HEAP1, 1
@@ -513,38 +540,199 @@ _HLP_S2         SUB     1, R3                   ; one less menu item to go
                 RBRA    _HLP_S3, Z              ; no: do not destroy @R1
                 MOVE    R5, @R1                 ; yes: update @R1
 
-                ; determine the amount of submenus (if any)
-                ; fatal if the amount is an odd number, because this indicates
-                ; that at least one "opened" OPTM_G_SUBMENU in config.vhd is
-                ; not "closed" by another instance of OPTM_G_SUBMENU
+                ; determine the amount of submenus (if any) and validate the
+                ; menu structure: the submenu start/end flags in OPTM_GROUPS
+                ; must form balanced brackets (submenus may nest since M2M
+                ; V2.1.0) and the OPTM_G_START item must be visible in the
+                ; main menu; see OPTM_STRUCT_VAL in menu_struct.asm
 _HLP_S3         MOVE    M2M$RAMROM_DEV, R0
                 MOVE    M2M$CONFIG, @R0
                 MOVE    M2M$RAMROM_4KWIN, R0
                 MOVE    M2M$CFG_OPTM_GROUPS, @R0
-                MOVE    M2M$RAMROM_DATA, R0     ; R0: ptr cur men itm grp id
 
-                MOVE    OPTM_ICOUNT, R1
-                MOVE    @R1, R1                 ; R1: amount of menu items
-                XOR     R8, R8                  ; R8: amount of submenus
+                MOVE    M2M$RAMROM_DATA, R8     ; R8: menu item groups
+                MOVE    OPTM_ICOUNT, R9
+                MOVE    @R9, R9                 ; R9: amount of menu items
+                MOVE    OPTM_START, R10
+                MOVE    @R10, R10               ; R10: OPTM_G_START item
+                RSUB    OPTM_STRUCT_VAL, 1
+                RBRA    _HLP_S4, !C             ; structure is OK
 
-_HLP_S4         MOVE    @R0++, R2
-                AND     OPTM_SUBMENU, R2        ; is a submenu?
-                RBRA    _HLP_S5, Z              ; no
-                ADD     1, R8                   ; yes
-_HLP_S5         SUB     1, R1                   ; one more item done
-                RBRA    _HLP_S4, !Z             ; iterate until done
+                CMP     2, R9                   ; which fatal?
+                RBRA    _HLP_S5, Z
+                MOVE    R10, R9                 ; unbalanced submenu flags
+                MOVE    ERR_F_MENUSUB, R8       ; R9: offending item index
+                RBRA    FATAL, 1
+_HLP_S5         MOVE    R10, R9                 ; OPTM_G_START on an item
+                MOVE    ERR_F_MENUSTRT2, R8     ; invisible in the main menu
+                RBRA    FATAL, 1                ; R9: offending item index
 
-                AND     0xFFFB, SR              ; clear Carry
-                SHR     1, R8                   ; divide R8 by two
-                RBRA    _HLP_S_RET, !X          ; R8 was an even number..
-                MOVE    ERR_F_MENUSUB, R8       ; ..else fatal
-                XOR     R9, R9
+_HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
+                MOVE    R9, @R0
+
+                ; sanity check the menu geometry: menu.asm draws without
+                ; clipping, so a menu view that is taller than the window
+                ; height (OPTM_DY) overflows the frame; this is an authoring
+                ; error in config.vhd, but a benign one, so only log it on
+                ; the serial console instead of going fatal
+                MOVE    SCR$OSM_O_DY, R8
+                MOVE    @R8, R8
+                SUB     2, R8                   ; net height: minus the frame
+                CMP     R10, R8                 ; largest view > net height?
+                RBRA    _HLP_DEPVAL, !N         ; no: all good
+                MOVE    R10, R0                 ; yes: log a warning
+                MOVE    LOG_STR_MENUHGT, R8
+                SYSCALL(puts, 1)
+                MOVE    R0, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+
+                ; validate the dependent-menu-entry declarations (OPTM_DEP,
+                ; see optm_deps.asm) once at boot. The masked groups, the raw
+                ; dependency words and the special-line flags (mount, load_rom,
+                ; help and the start line, which are not part of the masked
+                ; groups window) are materialized into transient HEAP scratch -
+                ; past the init record, and rebuilt by HELP_MENU on every open -
+                ; and handed to OPTM_DEPS_VAL.
+_HLP_DEPVAL     MOVE    LOG_STR_DEPS, R8
+                SYSCALL(puts, 1)
+                RSUB    OPTM_DEPS_PROBE, 1      ; does config.vhd support it?
+                RBRA    _HLP_DEP_ON, C
+                MOVE    LOG_STR_CFG_OFF, R8     ; no: log and skip validation
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                RBRA    _HLP_S_RET, 1
+_HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+
+                MOVE    OPTM_ICOUNT, R7         ; R7: amount of menu items (N)
+                MOVE    @R7, R7
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+
+                MOVE    M2M$CFG_OPTM_GROUPS, @R0 ; masked groups -> scratch base
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9     ; scratch starts behind record
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_DEPS, @R0  ; raw dependencies -> base + N
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9
+                ADD     R7, R9
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_MOUNT, @R0 ; mount flags -> special base+2N
+                MOVE    M2M$RAMROM_DATA, R8
+                MOVE    HEAP, R9
+                ADD     OPTM_STRUCTSIZE, R9
+                ADD     R7, R9
+                ADD     R7, R9
+                MOVE    R7, R10
+                SYSCALL(memcpy, 1)
+
+                MOVE    M2M$CFG_OPTM_HELP, @R0  ; OR in the help flags
+                RSUB    _HLP_DEP_OR, 1
+                MOVE    M2M$CFG_OPTM_CRTROM, @R0 ; OR in the load-ROM flags
+                RSUB    _HLP_DEP_OR, 1
+
+                MOVE    HEAP, R8                ; mark the start line special too
+                ADD     OPTM_STRUCTSIZE, R8
+                ADD     R7, R8
+                ADD     R7, R8
+                MOVE    OPTM_START, R9
+                ADD     @R9, R8
+                MOVE    1, @R8
+
+                MOVE    HEAP, R8                ; R8: masked groups array
+                ADD     OPTM_STRUCTSIZE, R8
+                MOVE    R7, R9                  ; R9: amount of menu items (N)
+                MOVE    R8, R10                 ; R10: dependency array (base+N)
+                ADD     R7, R10
+                MOVE    R10, R11                ; R11: special array (base+2N)
+                ADD     R7, R11
+                RSUB    OPTM_DEPS_VAL, 1
+                RBRA    _HLP_S_RET, !C          ; declarations are valid
+
+                MOVE    R10, R0                 ; R0: offending item index
+                MOVE    R9, R1                  ; R1: error class
+                MOVE    ERR_F_DEPMOTHER, R8
+                CMP     0, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPIDX, R8
+                CMP     1, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPMIX, R8
+                CMP     2, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPCHAIN, R8
+                CMP     3, R1
+                RBRA    _HLP_DEPFAT, Z
+                MOVE    ERR_F_DEPSPECIAL, R8
+_HLP_DEPFAT     MOVE    R0, R9                  ; R9: offending index = err code
                 RBRA    FATAL, 1
 
-_HLP_S_RET      MOVE    OPTM_SCOUNT, R0         ; store in variable
-                MOVE    R8, @R0
+_HLP_S_RET      SYSCALL(leave, 1)
+                RET
 
-                SYSCALL(leave, 1)
+; OR the currently selected config window (one flag per line, in bit 0) into
+; the special-line scratch array at HEAP + OPTM_STRUCTSIZE + 2*OPTM_ICOUNT.
+; The caller selects the config window first; used by HELP_MENU_INIT to fold
+; the mount / load-ROM / help flag windows together.
+_HLP_DEP_OR     INCRB
+                MOVE    OPTM_ICOUNT, R0
+                MOVE    @R0, R0                 ; R0: amount of menu items (N)
+                MOVE    M2M$RAMROM_DATA, R1     ; R1: active config window
+                MOVE    HEAP, R2                ; R2: special array
+                ADD     OPTM_STRUCTSIZE, R2
+                ADD     R0, R2
+                ADD     R0, R2
+_HDO_LOOP       CMP     0, R0                   ; all lines folded in?
+                RBRA    _HDO_DONE, Z
+                MOVE    @R1, R3
+                OR      R3, @R2                 ; special[i] |= window[i]
+                ADD     1, R1
+                ADD     1, R2
+                SUB     1, R0
+                RBRA    _HDO_LOOP, 1
+_HDO_DONE       DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; OPTM_DEPS_PROBE: Detect whether config.vhd supports the dependency feature
+;
+; Reads the magic word at the out-of-band address 0xFFF of the SEL_OPTM_DEPS
+; window. A config.vhd that knows the feature returns 0x1DEF there; an old
+; config.vhd hits the unknown-selector default and returns 0xEEEE. This
+; doubles as a format version for future extensions. (Lives here rather than
+; in optm_deps.asm so that file stays free of config-device dependencies and
+; remains emulator-testable in isolation.)
+;
+; Input:  none
+; Output: C=1 feature available (config.vhd returned 0x1DEF), C=0 otherwise.
+;         All registers are preserved.
+; ----------------------------------------------------------------------------
+
+OPTM_DEPS_PROBE INCRB
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+                MOVE    M2M$CFG_OPTM_DEPS, @R0
+                MOVE    M2M$RAMROM_DATA, R0
+                ADD     0x0FFF, R0              ; magic word at address 0xFFF
+                MOVE    @R0, R0
+                CMP     0x1DEF, R0
+                RBRA    _ODP_ON, Z
+                AND     0xFFFB, SR              ; clear Carry: feature off
+                DECRB
+                RET
+_ODP_ON         OR      0x0004, SR              ; set Carry: feature on
+                DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
@@ -810,7 +998,9 @@ OPT_MENU_DATA   .DW     SCR$CLR, SCR$PRINTFRAME, OPT_PRINTSTR, SCR$PRINTSTRXY
                 .DW     OPTM_CB_SEL, OPTM_CB_SHOW, FATAL,
                 .DW     M2M$OPT_SEL_MULTI, 0    ; selection char + zero term.:
                 .DW     M2M$OPT_SEL_SINGLE, 0   ; multi- and single-select
-                .DW     0, 0, 0, 0, 0           ; will be filled dynamically
+                .DW     0, 0, 0, 0, 0, 0        ; will be filled dynamically
+                                                ; (size,items,groups,stdsel,
+                                                ;  lines,deps)
 
 ; Print function that handles everything incl. cursor pos and \n by itself
 ; R8 contains the string that shall be printed
@@ -1056,14 +1246,15 @@ _OPTM_GK_MNT_X1 MOVE    1, R9
 _OPTM_GK_MNT_3  RSUB    OPTM_SET, 1             ; set/unset menu item
                                                 ; (R8=menu item, R9=value)
 
-                ; update M2M$CFM_DATA accordingly:
-                ; window within M2M$CFM_DATA = R0 / 16
-                ; bit within window = R0 % 16
+                ; update M2M$CFM_DATA accordingly; R8 contains the flat menu
+                ; item index that VD_MENGRP returned:
+                ; window within M2M$CFM_DATA = R8 / 16
+                ; bit within window = R8 % 16
                 MOVE    R8, R3
                 MOVE    R8, R4
                 AND     0xFFFB, SR              ; clear Carry
-                SHR     4, R3                   ; R3 = R0 / 16
-                AND     0x000F, R4              ; R4 = R0 % 16
+                SHR     4, R3                   ; R3 = R8 / 16
+                AND     0x000F, R4              ; R4 = R8 % 16
                 MOVE    M2M$CFM_ADDR, R5
                 MOVE    R3, @R5
 
@@ -1352,35 +1543,30 @@ OPTM_CB_SHOW    SYSCALL(enter, 1)
                 MOVE    R9, R3                  ; R3: ptr to current men. item
 
                 ; Search for the first menu group within the submenu and
-                ; within this menu group, find the currently selected item
-_OPTM_CBS_A     ADD     1, R3                   ; next item
-                CMP     R6, R3                  ; end of (overall)menu?
-                RBRA    _OPTM_CBS_B, !Z         ; no: continue
-                MOVE    ERR_F_MENUSUB, R8       ; yes: fatal
-                XOR     R9, R9
-                RBRA    FATAL, 1
-_OPTM_CBS_B     MOVE    @R3, R1
-                AND     OPTM_SUBMENU, R1        ; end-of-submenu marker?
-                RBRA    _OPTM_CBS_C, Z          ; no: continue
-                MOVE    ERR_F_MENUNGRP, R8      ; yes: fatal
-                MOVE    R5, R9
-                RBRA    FATAL, 1
-_OPTM_CBS_C     MOVE    @R3, R8
-                MOVE    1, R9
-                MOVE    255, R10
-                SYSCALL(in_range_u, 1)          ; is the item a menu group?
-                RBRA    _OPTM_CBS_A, !C         ; no: next item
-                MOVE    HEAP, R8                ; get selected menu group item
-                ADD     OPTM_IR_STDSEL, R8
-                MOVE    @R8, R8
-                ADD     R3, R8
-                SUB     M2M$RAMROM_DATA, R8     ; R3 is relative to RAMROM_DTA
-                MOVE    @R8, R8                 ; is the item selected?
-                RBRA    _OPTM_CBS_A, Z          ; no
+                ; within this menu group, find the currently selected item;
+                ; the contents of nested submenus are skipped, see
+                ; OPTM_SUMM_SCAN in menu_struct.asm
+                MOVE    R3, R8                  ; R8: ptr to the submenu item
+                MOVE    R6, R9                  ; R9: end-of-menu sentinel
+                MOVE    HEAP, R10               ; R10: selected-state array
+                ADD     OPTM_IR_STDSEL, R10
+                MOVE    @R10, R10
+                MOVE    M2M$RAMROM_DATA, R11    ; R11: groups array base
+                RSUB    OPTM_SUMM_SCAN, 1
+                MOVE    R8, R3                  ; R3: ptr to the found item
+                RBRA    _OPTM_CBS_C, C          ; found: extract the label
+                CMP     0, R8                   ; not found: which fatal?
+                RBRA    _OPTM_CBS_B, !Z
+                MOVE    ERR_F_MENUSUB, R8       ; reached the end of the
+                MOVE    R5, R9                  ; whole menu: broken
+                RBRA    FATAL, 1                ; menu structure
+_OPTM_CBS_B     MOVE    ERR_F_MENUNGRP, R8      ; reached the end of the
+                MOVE    R5, R9                  ; submenu: no selected menu
+                RBRA    FATAL, 1                ; group item inside
 
                 ; extract the label of the selected item from the \n separated
                 ; OPTM_ITEMS string
-                SUB     M2M$RAMROM_DATA, R3     ; R3: index of selected item
+_OPTM_CBS_C     SUB     M2M$RAMROM_DATA, R3     ; R3: index of selected item
                 MOVE    HEAP, R1
                 ADD     OPTM_IR_ITEMS, R1
                 MOVE    @R1, R1                 ; R1: current segment in strng
@@ -1473,10 +1659,10 @@ _OPTM_CBS_I2    MOVE    @R0++, R1               ; is current item a submenu?
                 MOVE    R1, R2
                 AND     OPTM_SUBMENU, R1
                 RBRA    _OPTM_CBS_I3, Z         ; no
-                AND     0x00FF, R2              ; yes, but is it a close flag?
-                CMP     OPTM_CLOSE, R2
-                RBRA    _OPTM_CBS_I3, Z         ; yes: so do not count it
-                ADD     1, R9                   ; no: increase submenu index
+                AND     0x00FF, R2              ; yes, but only count the
+                CMP     0, R2                   ; opener (low byte 0x00) and
+                RBRA    _OPTM_CBS_I3, !Z        ; not the submenu-end item
+                ADD     1, R9                   ; opener: incr. submenu index
 
 _OPTM_CBS_I3    CMP     0, R8                   ; done?
                 RBRA    _OPTM_CBS_I4, Z         ; yes
@@ -1512,7 +1698,6 @@ _OPTM_CBS_I5    MOVE    VDRIVES_NUM, R8
                 SUB     2, R11
                 RSUB    M2M$RPL_S, 1            ; replace %s
 
-                ADD     1, @R2                  ; next iteration of callback
                 MOVE    R9, R0                  ; return target string
                 MOVE    R7, SP                  ; restore SP
 
