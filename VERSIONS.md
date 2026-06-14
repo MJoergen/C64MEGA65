@@ -9,6 +9,12 @@ Version 6 - MONTH DAY, 2026
 
 ## New Features
 
+* Virtual drive 8 can now mount `*.d81` disk images on a simulated Commodore
+  1581 drive, in addition to the existing `*.d64` images. Just go to the disk
+  mount menu and browse for either a D64 or a D81. D81 images must be exactly
+  819,200 bytes. JiffyDOS now also accelerates the simulated 1581 if you supplythe optional `jd-c1581.bin` ROM (see doc/jiffy.md).
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/91)
+
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)and CRT (Composite).
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/223)

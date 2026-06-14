@@ -89,15 +89,44 @@ constant C_DEV_C64_CRT           : std_logic_vector(15 downto 0) := x"0103";    
 constant C_DEV_C64_PRG           : std_logic_vector(15 downto 0) := x"0104";     -- PRG loader
 constant C_DEV_C64_KERNAL_C64    : std_logic_vector(15 downto 0) := x"0105";     -- Custom Kernal: C64
 constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";     -- Custom Kernal: (simulated) C1541
+constant C_DEV_C64_KERNAL_C1581  : std_logic_vector(15 downto 0) := x"0107";     -- Custom Kernal: (simulated) C1581 (D81 enable)
 
 ----------------------------------------------------------------------------------------------------------
 -- HyperRAM memory map (in units of 4 kW = 8 kB)
 ----------------------------------------------------------------------------------------------------------
 
+-- The concept of "guards" is a fallout of the currently still unresolved discussion:
+-- https://github.com/MJoergen/C64MEGA65/issues/218
+--
+-- It works. There is a theory why, which is here:
+-- https://github.com/MJoergen/C64MEGA65/blob/ecd8573249fbf3e3e9aad5dc3af4bb744de74627/doc/issue_214_simreu_hyperram.md
+--
+-- But the theory is an unproven AI assumption - that happens to work reliably - which is why
+-- issue 218 is still open as a research issue to either confirm this or find the ground truth.
+--
+-- Until then, we work with 8kW guards between each memory region:
+--
+-- Each region is followed by enough unused space (or an explicit 8 kB guard) that a spurious
+-- write one window past a region boundary cannot corrupt the next region:
+--   * M2M -> CRT     : M2M only uses a fraction of its 4 MB, so CRT is never reached.
+--   * CRT -> VD0     : the largest supported .crt is 2 MB, leaving > 0.7 MB of CRT-pool slack.
+--   * VD0 -> guard   : a D81 fills VD0 exactly (100 windows), so an explicit 8 kB guard window
+--                      (x"03BE") sits between VD0 and SIMREU.
+--   * REU -> guard   : the original 8 kB SIMREU burst guard (x"03FF").
 constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework (4 MB)
-constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (approx. 3.49 MB before SIMREU)
+constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (346 windows = 2.70 MB before VD0; >= 2 MB MD2 ceiling)
+constant C_HMAP_VD0              : std_logic_vector(15 downto 0) := x"035A";     -- Drive 8 disk-image staging (100 windows = 819,200 B = one D81), ends x"03BD"; D81 enable
+constant C_HMAP_VD0_GUARD        : std_logic_vector(15 downto 0) := x"03BE";     -- 8 kB guard between VD0 and SIMREU (absorbs a spurious write 1 past the VD0 boundary)
 constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"03BF";     -- Used for SIMREU (0.5 MB)
 constant C_HMAP_SIZE             : std_logic_vector(15 downto 0) := x"0400";     -- Total size of HyperRAM; final 8 kB is a guard for SIMREU bursts
+
+-- Max .crt file size = the SIMCRT pool size in bytes = (VD0 base - CRT base) windows * 8 KB.
+-- Self-derived from the map above so it tracks any retune. It is enforced by the Shell in
+-- CORE/m2m-rom/m2m-rom.asm PREP_LOAD_IMAGE, so an oversized cartridge cannot stream past the
+-- SIMCRT pool into the VD0 disk-image buffer. make_rom.sh exports this value to the Shell as
+-- C64_CRT_MAX_SIZE_HI/LO (globals.asm), so the two never drift on a map retune.
+constant C_CRT_MAX_SIZE          : natural :=
+   (to_integer(unsigned(C_HMAP_VD0)) - to_integer(unsigned(C_HMAP_CRT))) * 8192;  -- = 346*8192 = 2,834,432
 
 ----------------------------------------------------------------------------------------------------------
 -- Virtual Drive Management System
@@ -168,16 +197,23 @@ constant C_CRTROMS_MAN           : crtrom_buf_array := ( C_CRTROMTYPE_DEVICE, C_
 --               c) Don't forget to finish the C_CRTROMS_AUTO array with x"EEEE"
 
 -- C64 core specific ROMs
+-- jd-c1581.bin is a full 32 KB replacement of the 1581 DOS ROM (no concatenation, unlike
+-- jd-c64.bin). It is APPENDED as auto-load entry #2 so the existing #0/#1 JiffyDOS check in
+-- PREP_START is untouched and a missing jd-c1581.bin degrades gracefully (the 1581 then runs
+-- its INITFILE'd standard DOS -- see c1581_multi.sv).
 constant JIFFY_DOS_C64           : string  := "/c64/jd-c64.bin" & ENDSTR;
 constant JIFFY_DOS_C1541         : string  := "/c64/jd-c1541.bin" & ENDSTR;
+constant JIFFY_DOS_C1581         : string  := "/c64/jd-c1581.bin" & ENDSTR;
 constant JIFFY_DOS_C64_START     : std_logic_vector(15 downto 0) := x"0000";
 constant JIFFY_DOS_C1541_START   : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(JIFFY_DOS_C64'length, 16));
+constant JIFFY_DOS_C1581_START   : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(JIFFY_DOS_C64'length + JIFFY_DOS_C1541'length, 16));
 
 -- M2M framework constants
-constant C_CRTROMS_AUTO_NUM      : natural := 2;                                       -- Amount of automatically loadable ROMs and carts, maximum is 16
-constant C_CRTROMS_AUTO_NAMES    : string  := JIFFY_DOS_C64 & JIFFY_DOS_C1541;     
+constant C_CRTROMS_AUTO_NUM      : natural := 3;                                       -- Amount of automatically loadable ROMs and carts, maximum is 16
+constant C_CRTROMS_AUTO_NAMES    : string  := JIFFY_DOS_C64 & JIFFY_DOS_C1541 & JIFFY_DOS_C1581;
 constant C_CRTROMS_AUTO          : crtrom_buf_array := ( C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C64,   C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C64_START,
                                                          C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C1541, C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C1541_START,
+                                                         C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C1581, C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C1581_START,
                                                          x"EEEE");                     -- Always finish the array using x"EEEE"
 
 ----------------------------------------------------------------------------------------------------------

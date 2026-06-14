@@ -2,7 +2,8 @@ Using JiffyDOS
 ==============
 
 The advantage of JiffyDOS is that you can load files from the simulated
-1541 disk drive (`*.d64` files) significantly faster. It also works with real
+1541 disk drive (`*.d64` files) and the simulated 1581 disk drive (`*.d81`
+files) significantly faster. It also works with real
 hardware disk drives that you attach via the MEGA65's IEC port as long as you
 have installed the JiffyDOS ROM on those drives, too.
 
@@ -21,15 +22,18 @@ JiffyDOS is commercial software. We recommend, that you either buy from
 or from
 [RETRO Innovations (click here)](http://store.go4retro.com/search.php?search_query=JiffyDOS&x=0&y=0).
 
-You need to buy and download two ROM images, one for the C64 and one for the
-1541. While both shops use the same name for the C64 ROM image, the name for
-the 1541 ROM image differs:
+You need to buy and download at least two ROM images, one for the C64 and one
+for the 1541. If you also want JiffyDOS on the simulated 1581 drive, buy a third
+image for the 1581. While both shops use the same name for the C64 ROM image,
+the names for the drive ROM images differ:
 
 * C64 ROM image: **JiffyDOS 64 KERNAL ROM Overlay Image**
 
 * 1541 ROM image at Restore-Store: **JiffyDOS 1541 DOS ROM Overlay Image**
 
 * 1541 ROM image at RETRO Innovations: **JiffyDOS 1541/1541C/1541II DOS ROM Overlay Image**
+
+* 1581 ROM image (optional): **JiffyDOS 1581 DOS ROM Overlay Image**
 
 Make sure you double-check the name of what you buy, otherwise you might
 end up with a ROM variant that is not supported by the C64 core.
@@ -40,10 +44,12 @@ steps, you only need the `*.bin` files.
 Prepare the files
 -----------------
 
-The C64 for MEGA65 core needs two files to run JiffyDOS and each of them needs
-to be exactly `16 kB = 16,384 bytes` in size. One file is the C64 Kernal ROM
-`jd-c64.bin` and one file is the 1541 DOS ROM `jd-c1541.bin`. Perform the
-following steps to create these files from the `*.bin` files you purchased.
+The C64 for MEGA65 core needs two files to run JiffyDOS: the C64 Kernal ROM
+`jd-c64.bin` and the 1541 DOS ROM `jd-c1541.bin`, each exactly
+`16 kB = 16,384 bytes` in size. Optionally, you can add a third file, the 1581
+DOS ROM `jd-c1581.bin`, which is exactly `32 kB = 32,768 bytes` in size, to also
+run JiffyDOS on the simulated 1581 drive. Perform the following steps to create
+these files from the `*.bin` files you purchased.
 
 ### C64 Kernal ROM: `jd-c64.bin`
 
@@ -78,6 +84,17 @@ Hint: Do not omit the `/b` (for binary) in the copy command above.
 The JiffyDOS download package contains two `*.bin` files. Take the one that
 is exactly `16 kB = 16,384 bytes` in size and rename it to `jd-c1541.bin`.
 
+### C1581 DOS ROM: `jd-c1581.bin` (optional)
+
+The 1581 JiffyDOS download package contains a single ROM image that is exactly
+`32 kB = 32,768 bytes` in size. Unlike `jd-c64.bin`, there is no concatenation
+step: just rename that file to `jd-c1581.bin`. Make sure the size is exactly
+32,768 bytes, otherwise the image will be loaded incorrectly.
+
+If you do not provide `jd-c1581.bin`, the simulated 1581 simply keeps using its
+standard DOS while the C64 and the 1541 still use JiffyDOS. Mixing JiffyDOS and
+standard DOS on the IEC bus works without problems.
+
 Install and use JiffyDOS
 ------------------------
 
@@ -87,7 +104,8 @@ Install and use JiffyDOS
   C64 for MEGA65 core boots. Remember, that the SD card slot on the back of
   the MEGA65 takes precedence over the SD card slot at the bottom.
 
-* Copy `jd-c64.bin` and `jd-c1541.bin` to the `/c64` folder of your SD card.
+* Copy `jd-c64.bin` and `jd-c1541.bin` (and optionally `jd-c1581.bin`) to the
+  `/c64` folder of your SD card.
 
 * Start the core with the updated SD card
 

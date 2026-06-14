@@ -113,7 +113,8 @@ constant HELP_1 : string :=
    " Quickstart:\n\n" &
 
    " * Create a /c64 folder on your SD card &\n" &
-   "   place your D64, CRT and PRG files there\n" &
+   "   place your D64/D81, CRT and PRG files\n" &
+   "   there\n" &
    " * You can work with long file names and\n" &
    "   with arbitrary sub-folders\n" &
    " * Both SD card slots are supported. Back\n" &
@@ -144,7 +145,7 @@ constant HELP_2 : string :=
    " Run/Stop:           Leave sub-menu\n" &
    " Settings are saved when closing the menu\n\n" &
 
-   " When browsing for D64, CRT and PRG:\n\n" &
+   " When browsing for D64/D81, CRT and PRG:\n\n" &
 
    " Cursor up/down:     File up/down\n" &
    " Cursor left/right:  Page up/down\n" &

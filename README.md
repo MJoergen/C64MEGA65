@@ -56,8 +56,8 @@ Features of the C64 for MEGA65 core
 
 With our [Release 6](VERSIONS.md), we are striving for a **retro C64
 experience**: The core turns your MEGA65 into a Commodore 64 with a C1541
-drive (you can mount `*.d64`) images. It supports the following hardware
-ports of the MEGA65:
+drive (you can mount `*.d64` images) and a C1581 drive (you can mount `*.d81`
+images). It supports the following hardware ports of the MEGA65:
 
 * Joystick port for joysticks, mice and paddles
 * Expansion port for C64 cartridges: Games, freezers, fast loader
@@ -175,8 +175,8 @@ Installation
    [alternative MEGA65 cores](https://cores.mega65.org)
    website or read the section "Bitstream Utility" in the
    [MEGA65 Starter Guide](https://files.mega65.org?id=315bbad5-f97b-4070-bab4-3ff06d5ab8ba).
-4. The core supports FAT32 formatted SD cards to mount `.D64` disk images
-   for the C1541 at drive 8.
+4. The core supports FAT32 formatted SD cards to mount `.D64` (C1541) and
+   `.D81` (C1581) disk images at drive 8.
 5. If you put your disk images into a folder called `/c64`, then the core will
    display this folder on startup. Otherwise the root folder will be shown.
    If you want the core to remember the settings, make sure you read the

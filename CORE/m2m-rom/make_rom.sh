@@ -65,6 +65,15 @@ awk '/constant C_VDNUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; 
 awk '/constant C_CRTROMS_MAN_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_MAN_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 awk '/constant C_CRTROMS_AUTO_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_AUT_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 
+# Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_VD0 - C_HMAP_CRT) windows * 8 KB,
+# so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never drift
+# from the HyperRAM map in globals.vhd when it is retuned.
+crt_base=$(awk '/constant C_HMAP_CRT / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
+vd0_base=$(awk '/constant C_HMAP_VD0 / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
+crt_max=$(( (0x${vd0_base} - 0x${crt_base}) * 8192 ))
+printf 'C64_CRT_MAX_SIZE_HI         .EQU 0x%04X\n' $(( (crt_max >> 16) & 0xFFFF )) >> globals.asm
+printf 'C64_CRT_MAX_SIZE_LO         .EQU 0x%04X\n' $((  crt_max        & 0xFFFF )) >> globals.asm
+
 ##############################################################################
 # M2M framework: Generate shell_fhandles.asm
 ##############################################################################
@@ -133,3 +142,28 @@ print_file_handles "HNDL_RM_FILES" "HANDLE_RM_FILE" $crtrom_man_max
 ##############################################################################
 
 ../../M2M/QNICE/assembler/asm m2m-rom.asm
+ASM_RC=$?
+
+##############################################################################
+# Guard the Shell-ROM budget. QNICE reserves 0x7000-0x7FFF for memory-mapped
+# I/O, so the usable ROM is 0x0000-0x6FFF = 28672 words. The assembler does NOT
+# check this; an overflow would otherwise fail obscurely later (in Vivado). The
+# m2m-rom.rom holds exactly one 16-bit word (binary) per line.
+##############################################################################
+ROM_MAX_WORDS=28672
+
+# The asm wrapper deletes m2m-rom.rom up front and only regenerates it on success,
+# so a missing .rom (or a non-zero exit) means assembly failed -- fail the build
+# loudly instead of silently skipping the size guard and exiting 0.
+if [ "$ASM_RC" -ne 0 ] || [ ! -f m2m-rom.rom ]; then
+    echo "ERROR: assembling m2m-rom.asm failed (asm exit ${ASM_RC}); m2m-rom.rom was not produced."
+    exit 1
+fi
+
+ROM_WORDS=$(wc -l < m2m-rom.rom | tr -d ' ')
+if [ "$ROM_WORDS" -gt "$ROM_MAX_WORDS" ]; then
+    echo "ERROR: m2m-rom.rom is ${ROM_WORDS} words, exceeds the ${ROM_MAX_WORDS}-word"
+    echo "       Shell-ROM budget (0x0000-0x6FFF; 0x7000+ is QNICE MMIO)."
+    exit 1
+fi
+echo "Shell ROM: ${ROM_WORDS}/${ROM_MAX_WORDS} words."
