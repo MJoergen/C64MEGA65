@@ -97,6 +97,75 @@ The key local C64MEGA65 files are:
    A bridge must decide whether to preserve WD1772 semantics above the backend
    or replace a much larger part of the 1581 emulation.
 
+## Extraction Verdict
+
+The MEGA65 does have a real HDL floppy controller. The F011/F018 registers are
+the software facade, not a sign that software bit-bangs the floppy. Behind that
+facade, `sdcardio.vhdl` and its helper blocks do the hard physical-controller
+work: motor/select/side/step control, raw read-data pulse decoding, MFM/RLL byte
+recovery, sector-header detection, CRC, sector buffering, write serialization,
+write-gate timing, and format/write-track sequencing.
+
+For C64MEGA65, the right conclusion is selective extraction, not a rewrite from
+scratch and not a wholesale import.
+
+Worth extracting or directly adapting:
+
+- `mfm_decoder.vhdl` and its gap/bit/byte helper chain.
+- `crc1581.vhdl`.
+- `mfm_bits_to_gaps.vhdl` for MFM write serialization.
+- `rll27_*` and `raw_bits_to_gaps.vhdl` only if we later want MEGA65 extended
+  formats or raw diagnostics.
+- The real-drive read-sector FSM structure: wait for a fresh target sector,
+  capture 512 bytes, track CRC/RNF/LOST status, and timeout on index rotations.
+- The real-drive write-sector structure: wait for the target sector, open
+  write gate, write gap/sync/data/CRC/trailing gap, then close write gate.
+- The proven physical-pin handling lessons: active-low select/motor/write gate,
+  index and track0 polarity, disk-change latching, side caveats, and one-owner
+  write-data policy.
+
+Not worth extracting as an architectural block:
+
+- `sdcardio.vhdl` as a complete entity.
+- The `$D080-$D08A` F011 programming interface as our primary interface.
+- The `$D680-$D6AF` MEGA65 extension register page.
+- MEGA65 SD-card disk-image mode.
+- HYPPO virtual-F011 trap machinery.
+- MEGA65 firmware policy for mounting `MEGA65.D81` or choosing real drive vs
+  image.
+- `internal1581.vhdl`.
+
+The reason is that we are not trying to build a C65 internal drive. We want the
+C64-facing MiSTer 1581 to keep its 1581 DOS, IEC behavior, and WD1772-visible
+semantics, while replacing or augmenting the media backend beneath it. The
+MEGA65 physical controller is valuable because the magnetic media under a 1581
+disk is still MFM 512-byte sector media on a 3.5-inch mechanism. Its C65/F011
+front-end is the wrong interface for us, but its physical-media machinery is
+highly relevant.
+
+The target shape should therefore be:
+
+```text
+MiSTer c1581_drv / 1581 DOS / WD1772-facing behavior
+        |
+        v
+fdc1772 media request: LBA or track/side/sector
+        |
+        v
+C64MEGA65 physical_1581_sector_service
+        |
+        v
+selectively extracted MEGA65 MFM/CRC/read/write/step logic
+        |
+        v
+MEGA65 physical floppy pins
+```
+
+So the current recommendation is: do not redo the low-level magnetic decoding
+and writing unless extraction proves impossible. Also do not make `sdcardio` the
+dependency boundary. Use it as the reference implementation and carve out a
+C64MEGA65-native physical sector service.
+
 ## What Drive Hardware Is In The MEGA65?
 
 The MEGA65 documentation says the machine includes a PC-standard 34-pin floppy
