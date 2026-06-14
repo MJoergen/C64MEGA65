@@ -889,8 +889,11 @@ begin
     end if;
   end process cart_output_pipeline_proc;
 
-  -- Cartridge input ports are treated as asynchronuous to clk_main_i and
-  -- must be registered to avoid metastability.
+  -- Cartridge input ports are treated as asynchronuous to clk_main_i and must be registered to avoid metastability.
+  -- From UG473 Chapter 1 we have this wonderful paragraph:
+  --   The setup time of the block RAM address and write enable pins must not be violated.  Violating the address setup
+  --   time (even if write enable is Low) can corrupt the data contents of the block RAM.
+  -- Without these input registers we do indeed see corruption of Block RAM.
   cart_input_pipeline_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
