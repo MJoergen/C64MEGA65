@@ -363,7 +363,7 @@ architecture synthesis of main is
   -- QNICE delay loop between the OR/AND CSR writes to widen the pulse to >= 64 main_clk cycles
   -- after the 2-stage CDC in framework.vhd). All three sources honor the 32-cycle minimum.
   --
-  -- A reset that is coming from a hardware cartridge via cart_reset_i (which is low active) is treated
+  -- A reset that is coming from a hardware cartridge via cart_reset_q (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are
   -- aware of minimum reset durations. (Example: The EF3 pulses the reset for 7xphi2, which is way longer
   -- then 32 cycles.)
@@ -435,6 +435,22 @@ architecture synthesis of main is
   signal   cart_d_q              : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
   signal   cart_sel_live         : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
   signal   cart_sel_q            : std_logic;             -- registered:    any cart-window access still showing at the pin
+
+  -- Cart-port input registration: see comment block at cart_input_pipeline_proc below
+  signal   cart_dma_q            : std_logic;
+  signal   cart_reset_q          : std_logic;
+  signal   cart_game_q           : std_logic;
+  signal   cart_exrom_q          : std_logic;
+  signal   cart_nmi_q            : std_logic;
+  signal   cart_irq_q            : std_logic;
+  signal   cart_roml_q           : std_logic;
+  signal   cart_romh_q           : std_logic;
+  signal   cart_ba_q             : std_logic;
+  signal   cart_rw_in_q          : std_logic;
+  signal   cart_io1_q            : std_logic;
+  signal   cart_io2_q            : std_logic;
+  signal   cart_a_in_q           : unsigned(15 downto 0);
+  signal   cart_d_in_q           : unsigned( 7 downto 0);
 
   -- Hardware Expansion Port (aka Cartridge Port)
   signal   cart_roml_n    : std_logic;
@@ -609,11 +625,11 @@ begin
   begin
     reset_core_n <= '1';
 
-    -- cart_reset_i becomes cart_reset_o as soon as cart_reset_oe_o = '1', and the latter one becomes '1' as soon
-    -- as reset_core_int_n = '0' so we need to ignore cart_reset_i in this case
+    -- cart_reset_q becomes cart_reset_o as soon as cart_reset_oe_o = '1', and the latter one becomes '1' as soon
+    -- as reset_core_int_n = '0' so we need to ignore cart_reset_q in this case
     if reset_core_int_n = '0' then
       reset_core_n <= '0';
-    elsif cart_reset_i = '0' and prevent_reset = '0' then
+    elsif cart_reset_q = '0' and prevent_reset = '0' then
       reset_core_n <= '0';
     end if;
   end process combined_reset_proc;
@@ -873,6 +889,28 @@ begin
     end if;
   end process cart_output_pipeline_proc;
 
+  -- Cartridge input ports are treated as asynchronuous to clk_main_i and
+  -- must be registered to avoid metastability.
+  cart_input_pipeline_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      cart_dma_q   <= cart_dma_i;
+      cart_reset_q <= cart_reset_i;
+      cart_game_q  <= cart_game_i;
+      cart_exrom_q <= cart_exrom_i;
+      cart_nmi_q   <= cart_nmi_i;
+      cart_irq_q   <= cart_irq_i;
+      cart_roml_q  <= cart_roml_i;
+      cart_romh_q  <= cart_romh_i;
+      cart_ba_q    <= cart_ba_i;
+      cart_rw_in_q <= cart_rw_i;
+      cart_io1_q   <= cart_io1_i;
+      cart_io2_q   <= cart_io2_i;
+      cart_a_in_q  <= cart_a_i;
+      cart_d_in_q  <= cart_d_i;
+    end if;
+  end process cart_input_pipeline_proc;
+
   -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
   begin
@@ -907,7 +945,7 @@ begin
     -- The "zero" here is (similar to above) just the deactivated output in non-hardware cartridge mode.
     -- As soon as hardware cartridge mode is on, we will switch back and forth between READ and WRITE.
     -- On R3/R3A boards, we will never be able to read, because the driver is uni-directional output-only.
-    -- This fact is mitigated by top_mega65-r3.vhd setting cart_reset_i to '1' and therefore we are always
+    -- This fact is mitigated by top_mega65-r3.vhd setting cart_reset_q to '1' and therefore we are always
     -- "reading" the situation "no reset from the cartridge" on R3/R3A boards.
     -- But on R5/R6 and newer boards, we will be able to sense the reset from the cartridge and therefore we will
     -- not need i_cartridge_heuristics and handle_cartridge_triggered_resets. Instead, cartridges like the EF3
@@ -986,12 +1024,12 @@ begin
       cart_io2_o      <= cart_io2_n_q;
       cart_rw_o       <= cart_rw_q;
 
-      -- Connect physical input lines (inputs are NOT pipelined - read combinationally)
-      cart_nmi_n      <= cart_nmi_i;
-      cart_irq_n      <= cart_irq_i;
-      cart_dma_n      <= cart_dma_i;
-      cart_exrom_n    <= cart_exrom_i;
-      cart_game_n     <= cart_game_i;
+      -- Connect physical input lines (use registered signals to avoid metastability)
+      cart_nmi_n      <= cart_nmi_q;
+      cart_irq_n      <= cart_irq_q;
+      cart_dma_n      <= cart_dma_q;
+      cart_exrom_n    <= cart_exrom_q;
+      cart_game_n     <= cart_game_q;
 
       -- @TODO: As soon as we want to support DMA-enabled cartridges,
       -- we need to treat the address bus as a bi-directional port
@@ -1011,7 +1049,7 @@ begin
       -- F_DATA_DIR for the same reason the strobe pipeline kills it onto the strobes.
       if (c64_ram_we = '0' and cart_sel_live = '1') or (cart_rw_q = '1' and cart_sel_q = '1') then
         cart_data_oe_o <= '0';                  -- input (FPGA tri-stated, cart may drive)
-        data_from_cart <= cart_d_i;
+        data_from_cart <= cart_d_in_q;
       else
         cart_data_oe_o <= '1';                  -- output (FPGA drives)
         if c64_ram_we = '1' and cart_sel_live = '1' then
