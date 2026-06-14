@@ -1031,8 +1031,7 @@ begin
       cart_exrom_n    <= cart_exrom_q;
       cart_game_n     <= cart_game_q;
 
-      -- @TODO: As soon as we want to support DMA-enabled cartridges,
-      -- we need to treat the address bus as a bi-directional port
+      -- Default in non-DMA mode
       cart_addr_oe_o  <= '1';
 
       -- Switch the data lines bi-directionally so that the CPU can also
@@ -1047,7 +1046,35 @@ begin
       -- late" at the trailing edge (no FPGA-vs-cart contention while /ROML still shows
       -- asserted at the connector). Also kills combinational-glitch propagation onto
       -- F_DATA_DIR for the same reason the strobe pipeline kills it onto the strobes.
-      if (c64_ram_we = '0' and cart_sel_live = '1') or (cart_rw_q = '1' and cart_sel_q = '1') then
+
+      if cart_dma_q = '0' then
+        -- When changing to DMA mode, we first set the FPGA pins to input (tristate)
+        -- because the cartridge is driving the buses
+        cart_ctrl_oe_o  <= '0';
+        cart_addr_oe_o  <= '0';
+        cart_data_oe_o  <= '0';
+
+        -- Sample the values on the cartridge port
+        -- and forward to the CORE's DMA interface.
+        core_dma_addr  <= unsigned(cart_a_in_q);
+        core_dma_dout  <= unsigned(cart_d_in_q);
+        core_dma_we    <= not cart_rw_in_q;
+        cart_d_o       <= core_dma_din;
+        cart_data_oe_o <= cart_rw_in_q;
+
+        if core_ba = '0' then
+          -- When in DMA mode we need to sense the cart_rw_in_q pin. However, we also need to drive the cart_ba_o output.
+          -- Due to a hardware limitation, we can not do both at the same time. Fortunately, we don't need to,
+          -- since when BA is to be driven low, we don't care about the RW signal.
+          -- When VIC needs the bus, set cartridge signals to safe values
+          cart_ctrl_oe_o <= '1';
+          cart_ba_o      <= '0';
+          cart_io1_o     <= '1';
+          cart_io2_o     <= '1';
+          cart_rw_o      <= '1';
+          cart_data_oe_o <= '0'; -- Leave data bus floating
+        end if;
+      elsif (c64_ram_we = '0' and cart_sel_live = '1') or (cart_rw_q = '1' and cart_sel_q = '1') then
         cart_data_oe_o <= '0';                  -- input (FPGA tri-stated, cart may drive)
         data_from_cart <= cart_d_in_q;
       else
