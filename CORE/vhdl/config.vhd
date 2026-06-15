@@ -38,6 +38,9 @@ constant CHR_LINE_50 : string := CHR_LINE_10 & CHR_LINE_10 & CHR_LINE_10 & CHR_L
 
 --------------------------------------------------------------------------------------------------------------------
 -- Welcome and Help Screens (Selectors 0x1000 .. 0x1FFF)
+--
+-- Learn how to use the Welcome and Help system:
+-- https://github.com/sy2002/MiSTer2MEGA65/wiki/Welcome-and-Help-Screens
 --------------------------------------------------------------------------------------------------------------------
 
 -- define the amount of WHS array elements: between 1 and 16
@@ -237,6 +240,9 @@ constant CFG_FILE          : string := "/c64/c64mega65-" & CORE_VERSION;
 
 --------------------------------------------------------------------------------------------------------------------
 -- General configuration settings: Reset, Pause, OSD behavior, Ascal, etc. (Selector 0x0110)
+--
+-- Learn how to work with these settings:
+-- https://github.com/sy2002/MiSTer2MEGA65/wiki/config.vhd-Switches-and-Settings
 --------------------------------------------------------------------------------------------------------------------
 
 constant SEL_GENERAL       : std_logic_vector(15 downto 0) := x"0110";  -- !!! DO NOT TOUCH !!!
@@ -333,7 +339,7 @@ constant SEL_OPTM_SAVING_STR  : std_logic_vector(15 downto 0) := x"030A";
 constant SEL_OPTM_HELP        : std_logic_vector(15 downto 0) := x"0310";
 constant SEL_OPTM_CRTROM      : std_logic_vector(15 downto 0) := x"0311";
 constant SEL_OPTM_CRTROM_STR  : std_logic_vector(15 downto 0) := x"0312";
-constant SEL_OPTM_DEPS        : std_logic_vector(15 downto 0) := x"0313"; -- Per-line smart-dependency word (OPTM_DEP); magic x"1DEF" at index 0xFFF
+constant SEL_OPTM_DEPS        : std_logic_vector(15 downto 0) := x"0313";
 
 -- !!! DO NOT TOUCH !!! Configuration constants for OPTM_GROUPS (shell.asm and menu.asm expect them to be like this)
 constant OPTM_G_TEXT       : integer := 16#00000#;         -- text that cannot be selected
@@ -369,6 +375,9 @@ constant OPTM_GTC          : natural := 30;                -- Amount of signific
 
 --------------------------------------------------------------------------------------------------------------------
 -- "Help" menu / Options menu: START YOUR CONFIGURATION BELOW THIS LINE
+--
+-- Learn how to build your own OSM:
+-- https://github.com/sy2002/MiSTer2MEGA65/wiki/On%E2%80%90Screen%E2%80%90Menu-%28OSM%29
 --------------------------------------------------------------------------------------------------------------------
 
 -- Strings with which %s will be replaced in case the menu item is of type OPTM_G_MOUNT_DRV
@@ -397,14 +406,6 @@ constant OPTM_DY           : natural := 27;
 type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC - 1;
 
 -- CONTINUE YOUR CONFIGURATION FROM HERE ON
-
--- V6 menu structure as specified in GitHub issue #189 and in
--- doc/path-to-OSM-submenus.md section 6. Three submenus are nested two
--- levels deep: "HDMI: %s" (the filter selection) lives inside "HDMI: %s"
--- (the HDMI settings), "OSM: %s" and "VIC-II: %s" live inside
--- "Advanced Settings". The structure (sizes, indices, group ids and the
--- matching C_MENU_* constants in mega65.vhd) is machine-checked against
--- the golden model: run "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_ITEMS        : string :=
 
    " C64 for MEGA65\n"          &
@@ -460,9 +461,9 @@ constant OPTM_ITEMS        : string :=
    " HDMI: %s\n"                &  -- HDMI Filter submenu, nested inside the HDMI submenu
    " HDMI Filter\n"             &
    "\n"                         &
-   " No Filter\n"               &  -- nearest-neighbour (intentionally exposes the #223 wonky-pixel look as a power-user opt-in)
-   " Sharp Bilinear\n"          &  -- ascal native SBILINEAR (cubic-warped lerp; see ascal.vhd:783-821)
-   " Bicubic\n"                 &  -- ascal native bicubic (mode 011), between Sharp Bilinear and Smooth perceptually
+   " No Filter\n"               &
+   " Sharp Bilinear\n"          &
+   " Bicubic\n"                 &
    " Smooth\n"                  &
    " Lanczos\n"                 &
    " Scanlines\n"               &  -- default: bit-identical to V5's CRT emulation look
@@ -585,9 +586,9 @@ constant OPTM_ITEMS        : string :=
 
 constant OPTM_G_MOUNT_8       : integer := 1;
 constant OPTM_G_MOUNT_9       : integer := 2;   -- not used, yet; each drive needs a unique group ID
-constant OPTM_G_LOAD_PRG      : integer := 3;   -- used in CORE/m2m-rom/m2m.asm: change there, too, if you change it here
+constant OPTM_G_LOAD_PRG      : integer := 3;
 constant OPTM_G_EXP_PORT      : integer := 4;
-constant OPTM_G_MOUNT_CRT     : integer := 5;   -- used in CORE/m2m-rom/m2m.asm: change there, too, if you change it here
+constant OPTM_G_MOUNT_CRT     : integer := 5;
 constant OPTM_G_FLIP_JOYS     : integer := 6;
 constant OPTM_G_SID_SETUP     : integer := 7;
 constant OPTM_G_SID_PORT      : integer := 8;
@@ -595,10 +596,10 @@ constant OPTM_G_IMPROVE_AUDIO : integer := 9;
 constant OPTM_G_CIA_8521      : integer := 10;
 constant OPTM_G_IEC           : integer := 11;
 constant OPTM_G_KERNAL_MODES  : integer := 12;
-constant OPTM_G_HDMI_MODES_PAL : integer := 13; -- PAL HDMI display modes (the NTSC modes are a group of their own)
+constant OPTM_G_HDMI_MODES_PAL : integer := 13; -- PAL HDMI display modes (the NTSC modes are a group of their own, see below)
 constant OPTM_G_HDMI_FF       : integer := 14;
 constant OPTM_G_HDMI_DVI      : integer := 15;
-constant OPTM_G_HDMI_FILTER   : integer := 16;  -- HDMI: %s submenu (filter radio); replaces V1's CRT emulation toggle
+constant OPTM_G_HDMI_FILTER   : integer := 16;
 constant OPTM_G_HDMI_ZOOM     : integer := 17;
 constant OPTM_G_VGA_MODES     : integer := 18;
 constant OPTM_G_OSM_MODE      : integer := 19;
@@ -614,24 +615,13 @@ constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- not yet wired
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 
--- OPTM_DEP tags a menu line as dependent (smart dependencies, see issue #229
--- and doc/path-to-OSM-dependencies.md): the line is only visible while item
--- <item> of the mother group <mother> is selected. For a radio (multi-select)
--- mother, <item> is the 0-based index of the controlling member; for a single-
--- select toggle, item 1 means "visible while ON", item 0 means "visible while
--- OFF". Add it to the line's OPTM_GROUPS entry, e.g.
---   OPTM_G_HDMI_MODES_NTSC + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1)
--- Authoring invariant (the firmware does NOT enforce it): place a mother group
--- and the lines that depend on it so the cursor can never sit on a dependent
--- line at the moment its mother changes - e.g. keep the mother in a different
--- submenu than its dependents (V6 keeps PAL/NTSC in the Model submenu and the
--- dependent display modes in the HDMI submenu). Otherwise a real-time reflow
--- could hide the line under the cursor.
+-- !!! DO NOT TOUCH THE FUNCTION DEFINITION IN THE NEXT FOUR LINES
 function OPTM_DEP(mother : natural; item : natural) return natural is
 begin
    return OPTM_G_DEPENDENT + (item * 16#02000000#) + (mother * 16#00020000#);
 end function OPTM_DEP;
 
+-- CONTINUE YOUR CONFIGURATION FROM HERE ON
 constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                        -- C64 for MEGA65
                                              OPTM_G_LINE,
                                              OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START,
