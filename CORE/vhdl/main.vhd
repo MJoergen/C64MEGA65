@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------
 -- Commodore 64 for MEGA65
 --
--- Wrapper for the MiSTer core that runs exclusively in the core's clock domanin
+-- Wrapper for the MiSTer core that runs exclusively in the core's clock domain
 --
 -- based on C64_MiSTer by the MiSTer development team
 -- port done by MJoergen and sy2002 in 2023 and licensed under GPL v3
@@ -254,6 +254,49 @@ end entity main;
 
 architecture synthesis of main is
 
+  --------------------------------------------------------------------------------------------------
+  -- SIGNAL-FAMILY LEGEND (read this before the declarations below)
+  --------------------------------------------------------------------------------------------------
+  --
+  -- Signals in this architecture are grouped by name prefix. Each family has its own direction and
+  -- polarity conventions; the prefix tells you which "world" a signal lives in:
+  --
+  --   core_*        MiSTer C64 core side (fpga64_sid_iec). Bus-access decodes/strobes are
+  --                 ACTIVE-HIGH (core_roml, core_romh, core_ioe [= IO1 = $DExx],
+  --                 core_iof [= IO2 = $DFxx], core_ba, core_dma); the genuinely low-active lines
+  --                 carry _n (core_irq_n, core_nmi_n, core_exrom_n, core_game_n).
+  --
+  --   cart_out_* /  Physical Expansion Port (connector-pin) side. cart_out_* is driven OUT toward
+  --   cart_in_*     the pin (or the core-side decode of such an access); cart_in_* is sensed IN from
+  --                 the pin. Suffix _n = active-low (the slash lines /ROML /ROMH /IO1 /IO2 /DMA
+  --                 /RESET /GAME /EXROM /NMI /IRQ); _q = the register nearest the connector;
+  --                 bare = combinational / core-facing. Pipeline shape:
+  --                     core --> cart_out_X  --(flop)--> cart_out_X_q --> pin
+  --                     pin  --> cart_in_X_q --(gate)--> cart_in_X    --> core
+  --
+  --   cart_*_i /    The actual entity PORTS to the level-shifted connector (wired up in mega65.vhd).
+  --   cart_*_o /    cart_*_oe_o is the output-enable: '1' drives the pin, '0' tristates / senses it.
+  --   cart_*_oe_o
+  --
+  --   crt_*         Simulated ".crt" cartridge path (SIMCRT): BRAM bank-cache data, exrom/game,
+  --                 IO write-enables. Fed from sw_cartridge_wrapper / cartridge.vhd in mega65.vhd.
+  --
+  --   reu_* /       Simulated 1750 REU. reu_dma_* = DMA between MiSTer's reu and the C64 core;
+  --   sim_reu_* /   sim_reu_* = reu <-> reu_mapper; map_* = the reu_mapper <-> avm_cache Avalon
+  --   map_*         bridge out to HyperRAM (see the avm_* top-level ports).
+  --
+  --   c64_iec_* /   Serial IEC bus (all lines low-active, hence the ANDing). c64_iec_* = the C64
+  --   iec_* /       core's bus lines; hw_iec_* = sensed from the hardware CBM-488 port; iec_* = the
+  --   hw_iec_*      simulated drives plus the SD/mount interface and the hardware-port entity ports.
+  --
+  --   c64_ram_* /   The core's external RAM bus, the raw (unprocessed, pre-scaler) video output, and
+  --   vga_* /       the SID audio. NB: vga_* is just pre-pipeline RGB and feeds BOTH the analog VGA
+  --   audio_*       and the HDMI path downstream, despite the name.
+  --
+  --   Resets: see the RESET SEMANTICS block further down. reset_core_n is the go-to reset for this
+  --   file; NEVER use reset_soft_i / reset_hard_i directly.
+  --------------------------------------------------------------------------------------------------
+
   -- Generic MiSTer C64 signals
   signal   c64_pause     : std_logic;
   signal   c64_drive_led : std_logic;
@@ -343,7 +386,7 @@ architecture synthesis of main is
   -- The C64 core implements core specific semantics: A standard reset of the core is a soft reset and
   -- will not interfere with any "reset protections". This also means that a soft reset will start
   -- soft- and hardware cartridges. A hard reset on the other hand does circumvent "reset protections"
-  -- and will therefore also exit games which prevent you from exitting them via reset and you can
+  -- and will therefore also exit games which prevent you from exiting them via reset and you can
   -- also exit from simulated cartridges using a hard reset.
   --
   -- Three-tier reset hierarchy (each tier strictly contains the one below):
@@ -383,7 +426,7 @@ architecture synthesis of main is
   -- protected by using the signal prevent_reset.
   --
   -- hard_reset_n IS NOT MEANT TO BE USED IN MAIN.VHD
-  -- with the exception of the "cpu_data_in" the reset input of "i_cartridge".
+  -- with the exception of the "cpu_data_in" the reset input of "cartridge_inst".
   signal   reset_core_n     : std_logic                            := '1';
   signal   reset_core_int_n : std_logic                            := '1';
   signal   hard_reset_n     : std_logic                            := '1';
@@ -581,7 +624,7 @@ begin
                      x"FFFF00";
 
   -- the drive led is on if either the C64 is writing to the virtual disk (cached in RAM)
-  -- or if the dirty cache is dirty and/orcurrently being flushed to the SD card
+  -- or if the dirty cache is dirty and/or currently being flushed to the SD card
   drive_led_o     <= c64_drive_led when unsigned(cache_dirty) = 0 else
                      '1';
 
@@ -951,7 +994,7 @@ begin
     -- This fact is mitigated by top_mega65-r3.vhd setting cart_in_reset_n_q to '1' and therefore we are always
     -- "reading" the situation "no reset from the cartridge" on R3/R3A boards.
     -- But on R5/R6 and newer boards, we will be able to sense the reset from the cartridge and therefore we will
-    -- not need i_cartridge_heuristics and handle_cartridge_triggered_resets. Instead, cartridges like the EF3
+    -- not need cartridge_heuristics_inst and handle_cartridge_triggered_resets. Instead, cartridges like the EF3
     -- and the KFF "are just working" on these newer boards.
     cart_reset_oe_o <= '0';
 
@@ -1126,7 +1169,7 @@ begin
       core_nmi_n   <= cart_in_nmi_n and restore_key_n;
       core_io_ext  <= core_ioe or core_iof;
       core_io_data <= cart_in_data;
-      core_dma_v   := not cart_in_dma_n; -- MFJ
+      core_dma_v   := not cart_in_dma_n; -- a hardware cart asserts /DMA (active low) to request a CPU DMA hold
     end if;
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
@@ -1257,7 +1300,7 @@ begin
   -- IMPORTANT: The component sets the correct exrom_o and game_o while cart_loading_i='1'.
   -- During a reset signal via "rst_i" exrom_o, game_o and other stateful signals are reset
   -- to the neutral state. Due to the fact, that sw_cartridge_wrapper uses a soft reset to
-  -- make sure the C64 starts the cartridge, we must not reset i_cartridge on soft reset.
+  -- make sure the C64 starts the cartridge, we must not reset cartridge_inst on soft reset.
   --
   -- cart_soft_reset is OR'd into cart_loading_i (NOT into rst_i): on OSM-driven soft resets
   -- this re-runs the global init block AND the per-cart case-arm's cart_loading_i='1'
@@ -1417,7 +1460,7 @@ begin
   audio_processing_proc : process (all)
     variable alm, arm : std_logic_vector(16 downto 0);
   begin
-    -- "alm" and "alr" are used to mix various audio sources
+    -- "alm" and "arm" are used to mix various audio sources
     -- Additional to SID, MiSTer supports OPL, DAC and the noise of the tape drive. All these sound
     -- inputs are meant to be added here (see c64.sv in the MiSTER source) as soon as we support it.
     alm(16)          := c64_sid_l(17);
@@ -1460,10 +1503,10 @@ begin
 
     -- Since IEC is a bus, we need to connect the input lines coming from the hardware port
     -- to all participants of the bus. At this time these are:
-    --    C64: i_fpga64_sid_iec using the iec_ signals
-    --    Simulated disk drives: i_iec_drive using the iec_ signals
+    --    C64: fpga64_sid_iec_inst using the iec_ signals
+    --    Simulated disk drives: iec_drive_inst using the iec_ signals
     -- All signals are LOW active, so we need to AND them.
-    -- As soon as we have more participants than just i_fpga64_sid_iec and i_iec_drive we will
+    -- As soon as we have more participants than just fpga64_sid_iec_inst and iec_drive_inst we will
     -- need to have some more signals for the bus instead of directly connecting them as we do today.
     hw_iec_clk_n_in  <= '1';
     hw_iec_data_n_in <= '1';
@@ -1492,7 +1535,7 @@ begin
       iec_reset_n_o    <= reset_core_n;
       iec_atn_n_o      <= c64_iec_atn_out;
 
-      -- Read from the hardware IEC port (see comment above: We need to connect this to i_fpga64_sid_iec and i_iec_drive)
+      -- Read from the hardware IEC port (see comment above: We need to connect this to fpga64_sid_iec_inst and iec_drive_inst)
       hw_iec_clk_n_in  <= iec_clk_n_i;
       hw_iec_data_n_in <= iec_data_n_i;
 
@@ -1677,13 +1720,13 @@ begin
   --------------------------------------------------------------------------------------------------
 
   -- Consists of a three-stage pipeline:
-  -- 1) i_avm_fifo does the CDC using a FIFO (as the name suggests) by utilizing Xilinx the specific "xpm_fifo_axis":
+  -- 1) main2hr_avm_fifo does the CDC using a FIFO (as the name suggests) by utilizing Xilinx the specific "xpm_fifo_axis":
   --    It connects to the raw HyperRAM Avalon Memory Mapped interface that M2M's arbiter offers and converts the
   --    signals into the core's clock domain
-  -- 2) i_avm_cache optimizes latency, particularly for longer, subsequent RAM accesses
-  -- 3) i_reu_mapper: Converts the Avalon interface into the interface that the REU expects PLUS
+  -- 2) avm_cache_inst optimizes latency, particularly for longer, subsequent RAM accesses
+  -- 3) reu_mapper_inst: Converts the Avalon interface into the interface that the REU expects PLUS
   --    it includes an optimization ("hack") that ensures that the REU is cycle accurate
-  -- The result of stage (3) is then passed to i_main which uses these signals directly with MiSTer's i_reu
+  -- The result of stage (3) is then passed to i_main which uses these signals directly with MiSTer's reu_inst
   reu_mapper_inst : entity work.reu_mapper
     generic map (
       G_BASE_ADDRESS => X"0" & C_HMAP_REU & X"000"
