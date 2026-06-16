@@ -522,7 +522,7 @@ Routing for hardware mode (`c64_exp_port_mode_i(C_SIM_CRT) = '0'`) lives in
 - `cart_phi2_o`, `cart_dotclock_o`, `cart_ba_o` go out **combinationally**
   (must be in lockstep with the C64's clock).
 - `cart_a_o` carries the registered address. In Ultimax + VIC fetch the
-  upper bits are forced via `cart_a_pre` so the cart sees `$3xxx` mapped to
+  upper bits are forced via `cart_out_a` so the cart sees `$3xxx` mapped to
   the ROMH window.
 - The data bus `cart_d_io` is bidirectional: written when CPU writes to the
   ROM/IO window (e.g. for bank-switch registers), read when CPU reads from
@@ -539,10 +539,10 @@ The CPU's read mux for hardware-cart mode is just:
 
 ```vhdl
 elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and
-      (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
-   c64_ram_data <= data_from_cart;
+      (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_umax_unmapped = '1') then
+   c64_ram_data <= cart_in_data;
 ```
-(`main.vhd:609-610` — `data_from_cart` comes from `cart_d_i` and is captured in `handle_hardware_expansion_proc`.)
+(`main.vhd:609-610` — `cart_in_data` comes from `cart_d_i` and is captured in `handle_hardware_expansion_proc`.)
 
 #### EasyFlash 3 / cart-driven reset on R3/R3A (and R4)
 

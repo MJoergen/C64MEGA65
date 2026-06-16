@@ -291,7 +291,7 @@ part of reset behavior:
 1. If `hard_reset_n = 0`, `cold_start_done = 1`, and the C64 address is in
    `$8000-$8FFF`, return `$00`.
 2. Else, if hardware cartridge mode is selected and the C64 is reading a
-   hardware cartridge window, return `data_from_cart`.
+   hardware cartridge window, return `cart_in_data`.
 3. Else, if simulated cartridge mode is selected and the C64 is reading a
    simulated cartridge ROM/IO window, return the corresponding CRT cache or
    cartridge IO byte.

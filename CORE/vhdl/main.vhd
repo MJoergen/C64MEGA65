@@ -363,7 +363,7 @@ architecture synthesis of main is
   -- QNICE delay loop between the OR/AND CSR writes to widen the pulse to >= 64 main_clk cycles
   -- after the 2-stage CDC in framework.vhd). All three sources honor the 32-cycle minimum.
   --
-  -- A reset that is coming from a hardware cartridge via cart_reset_q (which is low active) is treated
+  -- A reset that is coming from a hardware cartridge via cart_in_reset_n_q (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are
   -- aware of minimum reset durations. (Example: The EF3 pulses the reset for 7xphi2, which is way longer
   -- then 32 cycles.)
@@ -425,44 +425,44 @@ architecture synthesis of main is
   signal   core_irq_ext_n : std_logic;
 
   -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
-  signal   cart_a_pre            : unsigned(15 downto 0); -- combinational, includes Ultimax override
-  signal   cart_a_q              : unsigned(15 downto 0);
-  signal   cart_roml_n_q         : std_logic;
-  signal   cart_romh_n_q         : std_logic;
-  signal   cart_io1_n_q          : std_logic;
-  signal   cart_io2_n_q          : std_logic;
-  signal   cart_rw_q             : std_logic;
-  signal   cart_d_q              : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
-  signal   cart_sel_live         : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
-  signal   cart_sel_q            : std_logic;             -- registered:    any cart-window access still showing at the pin
+  signal   cart_out_a        : unsigned(15 downto 0); -- combinational, includes Ultimax override
+  signal   cart_out_a_q      : unsigned(15 downto 0);
+  signal   cart_out_roml_n_q : std_logic;
+  signal   cart_out_romh_n_q : std_logic;
+  signal   cart_out_io1_n_q  : std_logic;
+  signal   cart_out_io2_n_q  : std_logic;
+  signal   cart_out_rw_q     : std_logic;
+  signal   cart_out_d_q      : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
+  signal   cart_out_sel      : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
+  signal   cart_out_sel_q    : std_logic;             -- registered:    any cart-window access still showing at the pin
 
   -- Cart-port input registration: see comment block at cart_input_pipeline_proc below
-  signal   cart_dma_q            : std_logic;
-  signal   cart_reset_q          : std_logic;
-  signal   cart_game_q           : std_logic;
-  signal   cart_exrom_q          : std_logic;
-  signal   cart_nmi_q            : std_logic;
-  signal   cart_irq_q            : std_logic;
-  signal   cart_roml_q           : std_logic;
-  signal   cart_romh_q           : std_logic;
-  signal   cart_ba_q             : std_logic;
-  signal   cart_rw_in_q          : std_logic;
-  signal   cart_io1_q            : std_logic;
-  signal   cart_io2_q            : std_logic;
-  signal   cart_a_in_q           : unsigned(15 downto 0);
-  signal   cart_d_in_q           : unsigned( 7 downto 0);
+  signal   cart_in_dma_n_q   : std_logic;
+  signal   cart_in_reset_n_q : std_logic;
+  signal   cart_in_game_n_q  : std_logic;
+  signal   cart_in_exrom_n_q : std_logic;
+  signal   cart_in_nmi_n_q   : std_logic;
+  signal   cart_in_irq_n_q   : std_logic;
+  signal   cart_in_roml_n_q  : std_logic;
+  signal   cart_in_romh_n_q  : std_logic;
+  signal   cart_in_ba_q      : std_logic;
+  signal   cart_in_rw_q      : std_logic;
+  signal   cart_in_io1_n_q   : std_logic;
+  signal   cart_in_io2_n_q   : std_logic;
+  signal   cart_in_a_q       : unsigned(15 downto 0);
+  signal   cart_in_d_q       : unsigned( 7 downto 0);
 
   -- Hardware Expansion Port (aka Cartridge Port)
-  signal   cart_roml_n    : std_logic;
-  signal   cart_romh_n    : std_logic;
-  signal   cart_io1_n     : std_logic;
-  signal   cart_io2_n     : std_logic;
-  signal   cart_nmi_n     : std_logic;
-  signal   cart_irq_n     : std_logic;
-  signal   cart_dma_n     : std_logic;
-  signal   cart_exrom_n   : std_logic;
-  signal   cart_game_n    : std_logic;
-  signal   data_from_cart : unsigned(7 downto 0);
+  signal   cart_out_roml_n : std_logic;
+  signal   cart_out_romh_n : std_logic;
+  signal   cart_out_io1_n  : std_logic;
+  signal   cart_out_io2_n  : std_logic;
+  signal   cart_in_nmi_n   : std_logic;
+  signal   cart_in_irq_n   : std_logic;
+  signal   cart_in_dma_n   : std_logic;
+  signal   cart_in_exrom_n : std_logic;
+  signal   cart_in_game_n  : std_logic;
+  signal   cart_in_data    : unsigned(7 downto 0);
 
   -- Hardware Expansion Port: Handle specifics of certain cartridges
   constant C_EF3_RESET_LEN    : natural                            := 7;       -- measured in phi2 cycles
@@ -625,11 +625,11 @@ begin
   begin
     reset_core_n <= '1';
 
-    -- cart_reset_q becomes cart_reset_o as soon as cart_reset_oe_o = '1', and the latter one becomes '1' as soon
-    -- as reset_core_int_n = '0' so we need to ignore cart_reset_q in this case
+    -- cart_in_reset_n_q becomes cart_reset_o as soon as cart_reset_oe_o = '1', and the latter one becomes '1' as soon
+    -- as reset_core_int_n = '0' so we need to ignore cart_in_reset_n_q in this case
     if reset_core_int_n = '0' then
       reset_core_n <= '0';
-    elsif cart_reset_q = '0' and prevent_reset = '0' then
+    elsif cart_in_reset_n_q = '0' and prevent_reset = '0' then
       reset_core_n <= '0';
     end if;
   end process combined_reset_proc;
@@ -663,16 +663,16 @@ begin
       c64_ram_data <= x"00";
 
     -- Access the hardware cartridge
-    elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and (cart_roml_n = '0' or cart_romh_n = '0' or core_umax_unmapped = '1') then
-      c64_ram_data <= data_from_cart;
+    elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_umax_unmapped = '1') then
+      c64_ram_data <= cart_in_data;
 
     -- Access the simulated cartridge
-    elsif c64_exp_port_mode_i(C_SIM_CRT) = '1' and (cart_roml_n = '0' or cart_romh_n = '0' or core_ioe = '1' or core_iof = '1') then
-      c64_ram_data <= unsigned(crt_ram_data_i)                 when cart_roml_n = '0' and crt_roml_we       = '1'                           else
-                      unsigned(crt_lo_ram_data_i(15 downto 8)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '1'                           else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_roml_n = '0' and crt_addr_bus_o(0) = '0'                           else
-                      unsigned(crt_hi_ram_data_i(15 downto 8)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '1'                           else
-                      unsigned(crt_hi_ram_data_i( 7 downto 0)) when cart_romh_n = '0' and crt_addr_bus_o(0) = '0'                           else
+    elsif c64_exp_port_mode_i(C_SIM_CRT) = '1' and (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_ioe = '1' or core_iof = '1') then
+      c64_ram_data <= unsigned(crt_ram_data_i)                 when cart_out_roml_n = '0' and crt_roml_we       = '1'                           else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when cart_out_roml_n = '0' and crt_addr_bus_o(0) = '1'                           else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_out_roml_n = '0' and crt_addr_bus_o(0) = '0'                           else
+                      unsigned(crt_hi_ram_data_i(15 downto 8)) when cart_out_romh_n = '0' and crt_addr_bus_o(0) = '1'                           else
+                      unsigned(crt_hi_ram_data_i( 7 downto 0)) when cart_out_romh_n = '0' and crt_addr_bus_o(0) = '0'                           else
                       unsigned(crt_lo_ram_data_i(15 downto 8)) when core_ioe    = '1' and crt_addr_bus_o(0) = '1' and  crt_ioe_wr_ena = '0' else
                       unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_ioe    = '1' and crt_addr_bus_o(0) = '0' and  crt_ioe_wr_ena = '0' else
                       unsigned(crt_lo_ram_data_i(15 downto 8)) when core_iof    = '1' and crt_addr_bus_o(0) = '1' and  crt_iof_wr_ena = '0' else
@@ -846,7 +846,7 @@ begin
   -- Combinational pre-register address (includes Ultimax A14/A15 override).
   -- According to "The PLA Dissected", A12-A15 are pulled up by RP4 whenever the
   -- VIC-II has the bus, so they appear as %1111 to the cart in Ultimax mode.
-  cart_a_pre <= "11" & c64_ram_addr_o(13 downto 0) when core_umax_romh = '1'
+  cart_out_a <= "11" & c64_ram_addr_o(13 downto 0) when core_umax_romh = '1'
                 else c64_ram_addr_o;
 
   -- Live (combinational) and registered (one-cycle-held) "is the current access targeting
@@ -854,8 +854,8 @@ begin
   -- view is in phase with what the cartridge physically sees on /ROML, /ROMH, /IO1, /IO2.
   -- The data-direction envelope below uses both: live opens the window for early release /
   -- early write-data setup, registered holds the window closed through the pin tail.
-  cart_sel_live <= '1' when cart_roml_n   = '0' or cart_romh_n   = '0' or
-                            cart_io1_n    = '0' or cart_io2_n    = '0' or
+  cart_out_sel <= '1' when cart_out_roml_n   = '0' or cart_out_romh_n   = '0' or
+                            cart_out_io1_n    = '0' or cart_out_io2_n    = '0' or
                             core_umax_unmapped   = '1' else '0';
 
   -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
@@ -865,9 +865,9 @@ begin
   --
   -- We register the six pin-facing signals here through a single flip-flop stage, which
   -- filters out the transient values and presents only stable, post-settling values at the
-  -- cart pin (cart_a_q, cart_roml_n_q, cart_romh_n_q, cart_io1_n_q, cart_io2_n_q, cart_rw_q).
+  -- cart pin (cart_out_a_q, cart_out_roml_n_q, cart_out_romh_n_q, cart_out_io1_n_q, cart_out_io2_n_q, cart_out_rw_q).
   --
-  -- We also register cart_d_q, a one-cycle-delayed copy of the C64's outgoing write byte,
+  -- We also register cart_out_d_q, a one-cycle-delayed copy of the C64's outgoing write byte,
   -- to hold valid write data during the registered tail of a cart write.
   --
   -- BA and dotclock are NOT registered because they come from clean register outputs in
@@ -878,14 +878,14 @@ begin
   cart_output_pipeline_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
-      cart_a_q              <= cart_a_pre;            -- includes Ultimax override
-      cart_roml_n_q         <= cart_roml_n;
-      cart_romh_n_q         <= cart_romh_n;
-      cart_io1_n_q          <= cart_io1_n;
-      cart_io2_n_q          <= cart_io2_n;
-      cart_rw_q             <= not c64_ram_we;
-      cart_d_q              <= c64_ram_data_o;
-      cart_sel_q            <= cart_sel_live;
+      cart_out_a_q      <= cart_out_a;            -- includes Ultimax override
+      cart_out_roml_n_q <= cart_out_roml_n;
+      cart_out_romh_n_q <= cart_out_romh_n;
+      cart_out_io1_n_q  <= cart_out_io1_n;
+      cart_out_io2_n_q  <= cart_out_io2_n;
+      cart_out_rw_q     <= not c64_ram_we;
+      cart_out_d_q      <= c64_ram_data_o;
+      cart_out_sel_q    <= cart_out_sel;
     end if;
   end process cart_output_pipeline_proc;
 
@@ -897,20 +897,20 @@ begin
   cart_input_pipeline_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
-      cart_dma_q   <= cart_dma_i;
-      cart_reset_q <= cart_reset_i;
-      cart_game_q  <= cart_game_i;
-      cart_exrom_q <= cart_exrom_i;
-      cart_nmi_q   <= cart_nmi_i;
-      cart_irq_q   <= cart_irq_i;
-      cart_roml_q  <= cart_roml_i;
-      cart_romh_q  <= cart_romh_i;
-      cart_ba_q    <= cart_ba_i;
-      cart_rw_in_q <= cart_rw_i;
-      cart_io1_q   <= cart_io1_i;
-      cart_io2_q   <= cart_io2_i;
-      cart_a_in_q  <= cart_a_i;
-      cart_d_in_q  <= cart_d_i;
+      cart_in_dma_n_q   <= cart_dma_i;
+      cart_in_reset_n_q <= cart_reset_i;
+      cart_in_game_n_q  <= cart_game_i;
+      cart_in_exrom_n_q <= cart_exrom_i;
+      cart_in_nmi_n_q   <= cart_nmi_i;
+      cart_in_irq_n_q   <= cart_irq_i;
+      cart_in_roml_n_q  <= cart_roml_i;
+      cart_in_romh_n_q  <= cart_romh_i;
+      cart_in_ba_q      <= cart_ba_i;
+      cart_in_rw_q      <= cart_rw_i;
+      cart_in_io1_n_q   <= cart_io1_i;
+      cart_in_io2_n_q   <= cart_io2_i;
+      cart_in_a_q       <= cart_a_i;
+      cart_in_d_q       <= cart_d_i;
     end if;
   end process cart_input_pipeline_proc;
 
@@ -948,7 +948,7 @@ begin
     -- The "zero" here is (similar to above) just the deactivated output in non-hardware cartridge mode.
     -- As soon as hardware cartridge mode is on, we will switch back and forth between READ and WRITE.
     -- On R3/R3A boards, we will never be able to read, because the driver is uni-directional output-only.
-    -- This fact is mitigated by top_mega65-r3.vhd setting cart_reset_q to '1' and therefore we are always
+    -- This fact is mitigated by top_mega65-r3.vhd setting cart_in_reset_n_q to '1' and therefore we are always
     -- "reading" the situation "no reset from the cartridge" on R3/R3A boards.
     -- But on R5/R6 and newer boards, we will be able to sense the reset from the cartridge and therefore we will
     -- not need i_cartridge_heuristics and handle_cartridge_triggered_resets. Instead, cartridges like the EF3
@@ -972,18 +972,18 @@ begin
     cart_a_o        <= (others => '0');
     cart_d_o        <= (others => '0');
 
-    cart_nmi_n      <= '1';
-    cart_irq_n      <= '1';
-    cart_dma_n      <= '1';
-    cart_exrom_n    <= '1';
-    cart_game_n     <= '1';
-    data_from_cart  <= x"00";
+    cart_in_nmi_n      <= '1';
+    cart_in_irq_n      <= '1';
+    cart_in_dma_n      <= '1';
+    cart_in_exrom_n    <= '1';
+    cart_in_game_n     <= '1';
+    cart_in_data  <= x"00";
 
     -- memory access flags
-    cart_roml_n     <= not core_roml;
-    cart_romh_n     <= (not core_romh) and (not core_umax_romh);  -- normal ROMH and Ultimax VIC access ROMH
-    cart_io1_n      <= not core_ioe;
-    cart_io2_n      <= not core_iof;
+    cart_out_roml_n     <= not core_roml;
+    cart_out_romh_n     <= (not core_romh) and (not core_umax_romh);  -- normal ROMH and Ultimax VIC access ROMH
+    cart_out_io1_n      <= not core_ioe;
+    cart_out_io2_n      <= not core_iof;
 
     -- Default is to connect the CORE's DMA interface to the SIMREU
     core_dma_req    <= core_dma;
@@ -1020,19 +1020,19 @@ begin
       --
       -- See comment block before cart_output_pipeline_proc to understand the separation
       -- of unregistered and registered signals here.
-      cart_a_o        <= cart_a_q;      -- Ultimax override is baked in via cart_a_pre
-      cart_roml_o     <= cart_roml_n_q;
-      cart_romh_o     <= cart_romh_n_q;
-      cart_io1_o      <= cart_io1_n_q;
-      cart_io2_o      <= cart_io2_n_q;
-      cart_rw_o       <= cart_rw_q;
+      cart_a_o        <= cart_out_a_q;      -- Ultimax override is baked in via cart_out_a
+      cart_roml_o     <= cart_out_roml_n_q;
+      cart_romh_o     <= cart_out_romh_n_q;
+      cart_io1_o      <= cart_out_io1_n_q;
+      cart_io2_o      <= cart_out_io2_n_q;
+      cart_rw_o       <= cart_out_rw_q;
 
       -- Connect physical input lines (use registered signals to avoid metastability)
-      cart_nmi_n      <= cart_nmi_q;
-      cart_irq_n      <= cart_irq_q;
-      cart_dma_n      <= cart_dma_q;
-      cart_exrom_n    <= cart_exrom_q;
-      cart_game_n     <= cart_game_q;
+      cart_in_nmi_n      <= cart_in_nmi_n_q;
+      cart_in_irq_n      <= cart_in_irq_n_q;
+      cart_in_dma_n      <= cart_in_dma_n_q;
+      cart_in_exrom_n    <= cart_in_exrom_n_q;
+      cart_in_game_n     <= cart_in_game_n_q;
 
       -- Default in non-DMA mode
       cart_addr_oe_o  <= '1';
@@ -1050,7 +1050,7 @@ begin
       -- asserted at the connector). Also kills combinational-glitch propagation onto
       -- F_DATA_DIR for the same reason the strobe pipeline kills it onto the strobes.
 
-      if cart_dma_q = '0' then
+      if cart_in_dma_n_q = '0' then
         -- When changing to DMA mode, we first set the FPGA pins to input (tristate)
         -- because the cartridge is driving the buses
         cart_ctrl_oe_o  <= '0';
@@ -1059,14 +1059,14 @@ begin
 
         -- Sample the values on the cartridge port
         -- and forward to the CORE's DMA interface.
-        core_dma_addr  <= unsigned(cart_a_in_q);
-        core_dma_dout  <= unsigned(cart_d_in_q);
-        core_dma_we    <= not cart_rw_in_q;
+        core_dma_addr  <= unsigned(cart_in_a_q);
+        core_dma_dout  <= unsigned(cart_in_d_q);
+        core_dma_we    <= not cart_in_rw_q;
         cart_d_o       <= core_dma_din;
-        cart_data_oe_o <= cart_rw_in_q;
+        cart_data_oe_o <= cart_in_rw_q;
 
         if core_ba = '0' then
-          -- When in DMA mode we need to sense the cart_rw_in_q pin. However, we also need to drive the cart_ba_o output.
+          -- When in DMA mode we need to sense the cart_in_rw_q pin. However, we also need to drive the cart_ba_o output.
           -- Due to a hardware limitation, we can not do both at the same time. Fortunately, we don't need to,
           -- since when BA is to be driven low, we don't care about the RW signal.
           -- When VIC needs the bus, set cartridge signals to safe values
@@ -1077,15 +1077,15 @@ begin
           cart_rw_o      <= '1';
           cart_data_oe_o <= '0'; -- Leave data bus floating
         end if;
-      elsif (c64_ram_we = '0' and cart_sel_live = '1') or (cart_rw_q = '1' and cart_sel_q = '1') then
+      elsif (c64_ram_we = '0' and cart_out_sel = '1') or (cart_out_rw_q = '1' and cart_out_sel_q = '1') then
         cart_data_oe_o <= '0';                  -- input (FPGA tri-stated, cart may drive)
-        data_from_cart <= cart_d_in_q;
+        cart_in_data <= cart_in_d_q;
       else
         cart_data_oe_o <= '1';                  -- output (FPGA drives)
-        if c64_ram_we = '1' and cart_sel_live = '1' then
+        if c64_ram_we = '1' and cart_out_sel = '1' then
           cart_d_o <= c64_ram_data_o;           -- live cart write: drive byte early for setup margin
-        elsif cart_rw_q = '0' and cart_sel_q = '1' then
-          cart_d_o <= cart_d_q;                 -- registered cart write: hold byte through the pin tail
+        elsif cart_out_rw_q = '0' and cart_out_sel_q = '1' then
+          cart_d_o <= cart_out_d_q;                 -- registered cart write: hold byte through the pin tail
         elsif c64_ram_we = '0' then
           cart_d_o <= c64_ram_data_i;           -- preserved non-cart default: mirror C64 read data
         else
@@ -1120,13 +1120,13 @@ begin
       core_nmi_n <= not crt_nmi; -- SIMCRT controls the NMI to the CPU which includes the Restore key
     else
       -- Use hardware slot
-      core_game_n  <= cart_game_n;
-      core_exrom_n <= cart_exrom_n;
-      core_irq_n   <= cart_irq_n;
-      core_nmi_n   <= cart_nmi_n and restore_key_n;
+      core_game_n  <= cart_in_game_n;
+      core_exrom_n <= cart_in_exrom_n;
+      core_irq_n   <= cart_in_irq_n;
+      core_nmi_n   <= cart_in_nmi_n and restore_key_n;
       core_io_ext  <= core_ioe or core_iof;
-      core_io_data <= data_from_cart;
-      core_dma_v   := not cart_dma_n; -- MFJ
+      core_io_data <= cart_in_data;
+      core_dma_v   := not cart_in_dma_n; -- MFJ
     end if;
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
@@ -1149,10 +1149,10 @@ begin
     port map (
       clk_main_i     => clk_main_i,
       reset_core_n_i => reset_core_n,
-      cart_exrom_n_i => cart_exrom_n,
-      cart_game_n_i  => cart_game_n,
-      cart_io1_n_i   => cart_io1_n,
-      cart_io2_n_i   => cart_io2_n,
+      cart_exrom_n_i => cart_in_exrom_n,
+      cart_game_n_i  => cart_in_game_n,
+      cart_io1_n_i   => cart_out_io1_n,
+      cart_io2_n_i   => cart_out_io2_n,
       c64_ram_we_i   => c64_ram_we,
       c64_ram_addr_i => std_logic_vector(c64_ram_addr_o),
       phi2_i         => core_phi2,
@@ -1192,7 +1192,7 @@ begin
         -- And/or look at the EF3 source code:
         --   What happens when "start-entry" key is pressed in the main menu: https://gitlab.com/easyflash/easyflash3-bootimage/-/blob/master/efmenu/src/efmenu.c#L361
         --   Set the EF ROM bank and change to the given cartridge mode: https://gitlab.com/easyflash/easyflash3-bootimage/-/blob/master/efmenu/src/efmenu_asm.s#L96
-        if cart_is_an_ef3 = '1' and c64_ram_we = '1' and cart_io1_n = '0' and c64_ram_addr_o = x"DE0F" then
+        if cart_is_an_ef3 = '1' and c64_ram_we = '1' and cart_out_io1_n = '0' and c64_ram_addr_o = x"DE0F" then
           -- Modes that lead to a reset: https://gitlab.com/easyflash/easyflash3-core/-/blob/master/src/ef3.vhdl#L695
           -- We are deliberately not supporting the Kernal mode x"02" of the EF3, because in Kernal mode, the EF3 manipulates the address line A14.
           -- While we could emulate the behavior on our side of the transciever, the problem is, that the transciever and the EF3 would fight" against
