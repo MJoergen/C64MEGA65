@@ -7,13 +7,11 @@ Version 6 - MONTH DAY, 2026
 @TODO: Document increased compatibility due to the resolved RTC regression
 @TODO: Document correct BA signal which should also increase compatibility
 
-## New Features & Improved Compatibility: 2024+ MEGA65 (aka R6/R6A) only
+## New Features
 
 * Full DMA support for hardware cartridges such as hardware REUs (for example
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
-
-## New Features: All MEGA65
 
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)
@@ -52,15 +50,16 @@ Version 6 - MONTH DAY, 2026
 * The file browser loads large directories up to 15x faster.
   (https://github.com/MJoergen/C64MEGA65/issues/228)
 
-## Improved Compatibility of the Core: All MEGA65
+## Improved Compatibility of the Core
 
-* Generally improved hardware cartridge compatibility, thanks to three
+* Generally improved hardware cartridge compatibility, thanks to four
   fixes/improvements that benefit cartridges beyond the ones we explicitly
-  tested: more faithful timing on the Expansion Port (signals at the cart
-  connector now reproduce real-C64 setup and hold relationships), the BA 
-  signal is now routed to the Expansion port and proper Ultimax-mode memory 
-  mapping (previously the C64 core saw floating data in some memory ranges 
-  instead of cartridge-provided RAM/ROM).
+  tested: the BA signal is now routed to the Expansion port, DMA support
+  (including a correct R/W signal), more faithful timing on the Expansion Port
+  (signals at the cart connector now reproduce real-C64 setup and hold
+  relationships), and proper Ultimax-mode memory mapping (previously the C64
+  core saw floating data in some memory ranges instead of cartridge-provided
+  RAM/ROM).
 
 * Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
   flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
