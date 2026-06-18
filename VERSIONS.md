@@ -95,6 +95,9 @@ Version 6 - MONTH DAY, 2026
   - Meatloaf
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/219)
 
+  - TeensyROM and TeensyROM+
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/143)
+
 * Simulated cartridges (`*.crt`) are now supporting:
 
   - Super Snapshot and Snappy ROM freezer cartridges
