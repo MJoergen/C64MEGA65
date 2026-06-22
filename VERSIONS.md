@@ -86,17 +86,34 @@ Version 6 - MONTH DAY, 2026
 
 * Hardware support for these cartridges:
 
+  - 1541 Ultimate II+
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/139)
+
+  - BackBit Cartridge
+
+  - Chat64 Cartridge
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/177)
+
   - IDE64
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/176)
 
   - Idun
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/204)
 
+  - Magic Formel
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/211)
+
   - Meatloaf
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/219)
 
   - TeensyROM and TeensyROM+
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/143)
+
+  - RR-Net MK3
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/115)
+
+  - Various REUs such as: REU 1750, REU Grande, RAD Expansion Unit
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/205)
 
 * Simulated cartridges (`*.crt`) are now supporting:
 
