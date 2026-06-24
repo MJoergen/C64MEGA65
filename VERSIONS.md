@@ -112,6 +112,9 @@ Version 6 - MONTH DAY, 2026
   - RR-Net MK3
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/115)
 
+  - Super Expander 64
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/130)
+
   - Various REUs such as: REU 1750, REU Grande, RAD Expansion Unit
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/205)
 
