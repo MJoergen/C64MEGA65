@@ -103,6 +103,8 @@ Version 6 - MONTH DAY, 2026
   - Magic Formel
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/211)
 
+  - FM-YAM
+
   - Meatloaf
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/219)
 
