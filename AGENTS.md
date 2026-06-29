@@ -512,7 +512,7 @@ into the core's `cart_*_i / cart_*_o / cart_*_oe_o` ports
 (`*_oe_o = '1'`) or sense it (`*_oe_o = '0'`).
 
 Routing for hardware mode (`c64_exp_port_mode_i(C_SIM_CRT) = '0'`) lives in
-**`handle_hardware_expansion_proc`** at `main.vhd:884-940`:
+**`handle_hardware_expansion_proc`** at `main.vhd:961-1139`:
 
 - `core_roml/romh/ioe/iof` come from inside the MiSTer core (`fpga64_sid_iec`
   → `fpga64_buslogic`) and are **registered** through `cart_*_q` (see the
@@ -526,14 +526,42 @@ Routing for hardware mode (`c64_exp_port_mode_i(C_SIM_CRT) = '0'`) lives in
   the ROMH window.
 - The data bus `cart_d_io` is bidirectional: written when CPU writes to the
   ROM/IO window (e.g. for bank-switch registers), read when CPU reads from
-  it. The expression at `main.vhd:929-939` does the direction switch.
+  it. The expression at `main.vhd:1123-1137` does the direction switch.
 - `cart_en_o` is **always `'1'`** even when no cart is plugged in — there is
   a hardware bug on R5/R6 where joystick port B fails if the cart-port
   level shifter is disabled (`main.vhd:825-827`). Don't "fix" this.
 - `cart_game_oe_o`, `cart_exrom_oe_o`, `cart_nmi_oe_o`, `cart_irq_oe_o` are
-  hardcoded to `'0'` (read-only / sense). MEGA65 currently does not act as
-  a busmaster on the slot. Comments in main.vhd flag this as a `@TODO`
-  blocker for DMA-capable cartridges.
+  hardcoded to `'0'` (read-only / sense): the core senses GAME/EXROM/NMI/IRQ
+  from the cartridge but does not drive them, so a cartridge cannot use those
+  lines to reconfigure the bus. A `@TODO` in `main.vhd` notes this is the
+  remaining limit for *fully* busmastering modules that need to drive those
+  control lines.
+
+**DMA bus-mastering (V6 — "Full DMA support for hardware cartridges").** Despite
+the read-only control lines above, the core **does** support cartridges that
+take over the bus via the `/DMA` line (REU Grande, 1541 Ultimate II+, IDE64,
+TeensyROM, Sidekick64, …; GitHub issue #199). This works on **all** supported
+boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
+`/DMA` low (`cart_in_dma_n_q = '0'`), `handle_hardware_expansion_proc`:
+1. puts the C64 core's CPU into a DMA hold via `core_dma` —
+   `core_dma_v := not cart_in_dma_n` in
+   `handle_cores_expansion_port_signals_proc`;
+2. tri-states the FPGA's own `cart_ctrl_oe_o` / `cart_addr_oe_o` /
+   `cart_data_oe_o` so the cartridge can drive address/data/RW;
+3. samples the cart-driven bus into the core's DMA interface
+   (`core_dma_addr <= cart_in_a_q`, `core_dma_dout <= cart_in_d_q`,
+   `core_dma_we <= not cart_in_rw_q`) and returns read data via
+   `cart_d_o <= core_dma_din`; and
+4. yields to the VIC when `core_ba = '0'` (drives safe values, lets the VIC
+   take its cycle).
+
+The same `core_dma` interface is shared with SIMREU and the `.crt` cacher (see
+`handle_cores_expansion_port_signals_proc`). So the older statement "MEGA65
+does not act as a busmaster on the slot" is **no longer true as of V6**; what is
+still missing is *full* busmastering (driving GAME/EXROM/NMI/IRQ), per the
+`@TODO` above. Note: known-difficult cases remain — e.g. a *continuous* full-CPU
+busmaster such as the Z80/CP/M cartridge (issue #238) is still under
+investigation even though the DMA path itself works.
 
 The CPU's read mux for hardware-cart mode is just:
 
@@ -542,7 +570,7 @@ elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and
       (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_umax_unmapped = '1') then
    c64_ram_data <= cart_in_data;
 ```
-(`main.vhd:609-610` — `cart_in_data` comes from `cart_d_i` and is captured in `handle_hardware_expansion_proc`.)
+(`main.vhd:709-710` in `cpu_data_in_proc` — `cart_in_data` comes from `cart_d_i` and is captured in `handle_hardware_expansion_proc`.)
 
 #### EasyFlash 3 / cart-driven reset on R3/R3A (and R4)
 
