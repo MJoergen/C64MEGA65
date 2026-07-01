@@ -6,7 +6,7 @@
 ;
 ; The execution starts at the label START_FIRMWARE.
 ;
-; done by sy2002 in 2023 and licensed under GPL v3
+; done by sy2002 in 2026 and licensed under GPL v3
 ; ****************************************************************************
 
 ; If the define RELEASE is defined, then the ROM will be a self-contained and
@@ -75,6 +75,10 @@ START_FIRMWARE  RBRA    START_SHELL, 1
 ; silently break this callback. Every other submenu returns R8 = 0 (standard
 ; semantics). The labels (PAL/NTSC/...) are read from the live OPTM_ITEMS so
 ; that renaming a menu item in config.vhd needs no change here either.
+;
+; Custom semantics for the "Kernal: %s submenu": Show "JiffyDOS <drive>", if
+; either the 1541 or the 1581 JiffyDOS ROM is available and show
+; "Jiffy 1541+1581" if both are available.
 
 SUBMENU_SUMMARY MOVE    R9, @--SP               ; save the contract registers
                 MOVE    R10, @--SP              ; R9 / R10 across the helper and
@@ -85,7 +89,7 @@ SUBMENU_SUMMARY MOVE    R9, @--SP               ; save the contract registers
                 ; is this the "Model: %s" opener? its flat index == C64_OSM_MODEL
                 SUB     M2M$RAMROM_DATA, R9     ; R9: flat index of this opener
                 CMP     C64_OSM_MODEL, R9
-                RBRA    _SS_DEFAULT, !Z         ; no: another submenu -> default
+                RBRA    _SS_TRY_KERNAL, !Z      ; not Model: try the Kernal opener
 
                 MOVE    HEAP, R1                ; R1: live selected-state array,
                 ADD     OPTM_IR_STDSEL, R1      ; one 0/1 per menu line
@@ -102,10 +106,9 @@ SUBMENU_SUMMARY MOVE    R9, @--SP               ; save the contract registers
                 ADD     R3, R6
                 CMP     0, @R6                  ; NTSC selected?
                 RBRA    _SS_DEFAULT, Z          ; neither (cannot happen): guard
-_SS_MACH_OK
 
                 ; turbo mode: "Off" -> standard semantics; C128/Smart -> custom
-                MOVE    R1, R6
+_SS_MACH_OK     MOVE    R1, R6
                 ADD     C64_OSM_TURBO_OFF, R6
                 CMP     0, @R6                  ; turbo "Off" selected?
                 RBRA    _SS_DEFAULT, !Z         ; yes -> plain PAL/NTSC
@@ -119,10 +122,10 @@ _SS_MACH_OK
                 ADD     R4, R6
                 CMP     0, @R6                  ; Smart selected?
                 RBRA    _SS_DEFAULT, Z          ; none (cannot happen): guard
-_SS_TM_OK       ; R4: flat index of the selected turbo mode line
 
+                ; R4: flat index of the selected turbo mode line
                 ; turbo speed: 2x / 3x / 4x
-                MOVE    C64_OSM_TURBO_2X, R5
+_SS_TM_OK       MOVE    C64_OSM_TURBO_2X, R5
                 MOVE    R1, R6
                 ADD     R5, R6
                 CMP     0, @R6
@@ -137,12 +140,12 @@ _SS_TM_OK       ; R4: flat index of the selected turbo mode line
                 ADD     R5, R6
                 CMP     0, @R6
                 RBRA    _SS_DEFAULT, Z          ; none (cannot happen): guard
-_SS_TS_OK       ; R5: flat index of the selected turbo speed line
 
+                ; R5: flat index of the selected turbo speed line
                 ; build "<machine> <turbo mode> <turbo speed>" into SS_VALUE,
                 ; bounded by SS_VALUE_LEN so an over-long (e.g. future-renamed)
                 ; label can never overflow the buffer - it only truncates
-                MOVE    SS_VALUE, R8            ; R8: destination cursor
+_SS_TS_OK       MOVE    SS_VALUE, R8            ; R8: destination cursor
                 MOVE    SS_VALUE, R6            ; R6: write limit; the last word
                 ADD     SS_VALUE_LEN, R6        ; is reserved for the terminator
                 SUB     1, R6
@@ -166,8 +169,11 @@ _SS_SP2         MOVE    R5, R9                  ; 2x, 3x or 4x
                 MOVE    0, @R8                  ; zero-terminate (R8 <= the limit)
 
                 ; splice the value into the original " ... %s" string; this way
-                ; the "Model: " prefix is kept in config.vhd, not hardcoded here
-                MOVE    R0, R8                  ; R8: source string with %s
+                ; the "Model: "/"Kernal: " prefix is kept in config.vhd, not
+                ; hardcoded here. Shared by the Model and Kernal branches: the
+                ; caller leaves the built value in SS_VALUE and the original
+                ; opener string (with %s) in R0.
+_SS_SPLICE      MOVE    R0, R8                  ; R8: source string with %s
                 MOVE    SS_LINE, R9             ; R9: target line buffer
                 MOVE    SS_VALUE, R10           ; R10: replacement for %s
                 MOVE    SCR$OSM_O_DX, R11       ; R11: clamp to the menu width,
@@ -180,6 +186,69 @@ _SS_SP2         MOVE    R5, R9                  ; 2x, 3x or 4x
 _SS_RPL         RSUB    M2M$RPL_S, 1            ; clobbers R0..R7, keeps R8..R12
                 MOVE    SS_LINE, R8             ; R8: return the custom string
                 RBRA    _SS_RET, 1
+
+                ; "Kernal: %s" opener. R0 still holds the opener string and R9
+                ; the flat index. When JiffyDOS is the live selection and jd-c64
+                ; loaded, render which JiffyDOS drive ROMs are installed instead
+                ; of the plain radio label; the tags reflect ROM provisioning
+                ; (CRTROM_AUT_LDF), not the live engine (only the 1541 or the
+                ; 1581 runs at a time) and not real external IEC drives.
+_SS_TRY_KERNAL  CMP     C64_OSM_KERNAL, R9      ; the " Kernal: %s" opener?
+                RBRA    _SS_DEFAULT, !Z         ; no: another submenu -> default
+
+                MOVE    HEAP, R1                ; R1: live selected-state array
+                ADD     OPTM_IR_STDSEL, R1
+                MOVE    @R1, R1
+                ADD     C64_OSM_KERNAL_JIFFY, R1
+                CMP     0, @R1                  ; JiffyDOS radio selected?
+                RBRA    _SS_DEFAULT, Z          ; no -> plain radio label
+
+                MOVE    CRTROM_AUT_LDF, R2      ; R2 -> load-flag base
+                CMP     0, @R2                  ; jd-c64 (LDF[0]) loaded?
+                RBRA    _SS_DEFAULT, Z          ; no -> do not advertise JiffyDOS
+
+                MOVE    R2, R3                  ; R3 = LDF[1] (jd-c1541)
+                ADD     1, R3
+                MOVE    @R3, R3
+                MOVE    R2, R4                  ; R4 = LDF[2] (jd-c1581)
+                ADD     2, R4
+                MOVE    @R4, R4
+
+                MOVE    SS_VALUE, R8            ; R8: SS_VALUE build cursor
+                MOVE    SS_VALUE, R6            ; R6: write limit (reserve term.)
+                ADD     SS_VALUE_LEN, R6
+                SUB     1, R6
+
+                ; both drive ROMs -> compact "Jiffy 1541+1581" (fits the 25-col
+                ; OSM, unlike the full "JiffyDOS 1541+1581")
+                CMP     0, R3
+                RBRA    _SS_K_NOT_BOTH, Z
+                CMP     0, R4
+                RBRA    _SS_K_NOT_BOTH, Z
+                MOVE    SS_K_BOTH, R9           ; "Jiffy 1541+1581"
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_STR, 1
+                RBRA    _SS_K_DONE, 1
+
+_SS_K_NOT_BOTH  MOVE    R3, R5                  ; neither drive ROM? (cannot
+                ADD     R4, R5                  ; normally happen: boot gate would
+                CMP     0, R5                   ; have reverted; guards a runtime
+                RBRA    _SS_DEFAULT, Z          ; JiffyDOS pick with no drive ROM)
+
+                ; exactly one drive ROM: reuse "JiffyDOS" from its menu line so
+                ; the word itself costs no extra ROM, then append the drive tag
+                MOVE    C64_OSM_KERNAL_JIFFY, R9
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_LABEL, 1     ; append "JiffyDOS"
+                MOVE    SS_KT_1581, R9          ; default tag " 1581"
+                CMP     0, R3                   ; jd-c1541 present?
+                RBRA    _SS_K_TAG, Z
+                MOVE    SS_KT_1541, R9          ; yes -> " 1541"
+_SS_K_TAG       MOVE    R6, R10
+                RSUB    _SS_APPEND_STR, 1
+
+_SS_K_DONE      MOVE    0, @R8                  ; zero-terminate (R8 <= the limit)
+                RBRA    _SS_SPLICE, 1           ; share the Model width-clamp tail
 
 _SS_DEFAULT     XOR     R8, R8                  ; R8 = 0: use standard semantics
 
@@ -232,6 +301,31 @@ _SS_AL_COPY     CMP     R4, R0                  ; destination buffer full?
                 ADD     1, R2
                 RBRA    _SS_AL_COPY, 1
 _SS_AL_DONE     MOVE    R0, R8                  ; return the advanced dest cursor
+                DECRB
+                RET
+
+; Helper for SUBMENU_SUMMARY: append a zero-terminated literal string to a
+; destination buffer (no terminator added). Bounded by the destination limit,
+; so it can never overflow the buffer. Companion to _SS_APPEND_LABEL, which
+; copies from an OPTM_ITEMS menu line; this one copies a plain string literal.
+; Input:  R8: destination cursor, R9: source string,
+;        R10: destination limit (one past the last writable word)
+; Output: R8: destination cursor advanced past the copied string (R8 <= R10)
+;         R0..R7 and R9..R12 are preserved
+_SS_APPEND_STR  INCRB
+                MOVE    R8, R0                  ; R0: destination cursor
+                MOVE    R9, R1                  ; R1: source pointer
+                MOVE    R10, R2                 ; R2: destination limit
+_SS_AS_COPY     CMP     R2, R0                  ; destination buffer full?
+                RBRA    _SS_AS_DONE, Z          ; yes: truncate, do not overflow
+                MOVE    @R1, R3                 ; copy until the zero terminator
+                CMP     0, R3
+                RBRA    _SS_AS_DONE, Z
+                MOVE    R3, @R0
+                ADD     1, R0
+                ADD     1, R1
+                RBRA    _SS_AS_COPY, 1
+_SS_AS_DONE     MOVE    R0, R8                  ; return the advanced dest cursor
                 DECRB
                 RET
 
@@ -396,7 +490,7 @@ _PREP_LI_NEXT   SUB     1, R2                   ; next variant
 
                 ; filesize wrong (neither a valid D64 nor a valid D81)
 _PREP_LI_WRONG  MOVE    1, R8                   ; R8: error code
-                MOVE    WRN_WRONG_D64, R9       ; R9: error message (names D64 + D81)
+                MOVE    WRN_WRONG_IMG, R9       ; R9: error message (names D64 + D81)
                 RBRA    _PREP_LI_RET, 1
 
                 ; filesize correct (valid D64)
@@ -437,39 +531,121 @@ PREP_START      INCRB
                 ; look bit-identically.
                 RSUB    LOAD_HDMI_FILTER, 1
 
-                ; Check if JiffyDOS is configured as the default Kernal but
-                ; the JiffyDOS ROMs cannot be found: In this case we switch
-                ; back to the default Kernal.
+                ; ------------------------------------------------------------
+                ; JiffyDOS gate plus debug-console status report
+                ; ------------------------------------------------------------
+                ; JiffyDOS needs a JiffyDOS C64 Kernal (jd-c64.bin) plus at
+                ; least one JiffyDOS drive DOS: the 1541 (jd-c1541.bin) and/or
+                ; the 1581 (jd-c1581.bin). All three are optional auto-load ROMs
+                ; (globals.vhd); CRTROM_AUT_LDF[i] is 1 when ROM i has loaded:
+                ;   [0] = jd-c64    [1] = jd-c1541    [2] = jd-c1581
                 ;
-                ; In globals.vhd we configured the JiffyDOS ROMs to be ROM #0
-                ; and ROM #1, that means if both of them are loaded correctly,
-                ; then the elements #0 and #1 of the CRTROM_AUT_LDF array
-                ; should both be 1.
+                ; When JiffyDOS is the selected Kernal we print a per-component
+                ; status block to the debug console and then keep JiffyDOS if
+                ; jd-c64 AND (jd-c1541 OR jd-c1581) loaded. Otherwise we revert
+                ; the LIVE Kernal to Standard for this session only. A missing
+                ; drive ROM degrades to its standard DOS (the 1541 and 1581
+                ; custom ROM slots are INITFILEd with the stock DOS), so every
+                ; ROM combination still boots a working C64 and a working drive.
+                ;
+                ; M2M$SET_SETTING writes only the in-memory M2M$CFM_DATA mirror,
+                ; not the SD config file (tools.asm), so the saved JiffyDOS
+                ; preference survives a transient missing-ROM boot.
                 MOVE    C64_OSM_KERNAL_JIFFY, R8
-                RSUB    M2M$GET_SETTING, 1
+                RSUB    M2M$GET_SETTING, 1      ; is JiffyDOS the selected Kernal?
                 CMP     1, R9
-                RBRA    PREP_START_R, !Z
+                RBRA    PREP_START_R, !Z        ; no -> nothing to gate, stay silent
 
-                MOVE    CRTROM_AUT_LDF, R0
-                MOVE    @R0++, R1
-                ADD     @R0, R1
-                CMP     2, R1
-                RBRA    PREP_START_R, Z
-
-                MOVE    WRN_JIFFY, R8           ; output warning on dbg cnsl
+                MOVE    JDS_HEADER, R8          ; "JiffyDOS status:"
                 SYSCALL(puts, 1)
 
+                ; C64 Kernal component line plus the jd-c64 gate
+                MOVE    CRTROM_AUT_LDF, R0      ; R0 -> CRTROM_AUT_LDF base
+                MOVE    JDS_L_C64, R8           ; label "  C64 Kernal: "
+                MOVE    @R0, R9                 ; R9 = LDF[0] (jd-c64)
+                MOVE    JDS_F_C64, R10          ; basename "c64"
+                RSUB    _JD_RPT_LINE, 1
+                CMP     0, @R0                  ; jd-c64 loaded?
+                RBRA    _JD_HAVE_C64, !Z        ; yes -> report the drive ROMs
+                MOVE    JDS_R_NOC64, R8         ; no -> reason "no JiffyDOS C64 Kernal"
+                RBRA    _JD_REVERT, 1
+
+                ; 1541 component line (R1 keeps LDF[1] for the drive gate below)
+_JD_HAVE_C64    MOVE    CRTROM_AUT_LDF, R0
+                ADD     1, R0                   ; R0 -> LDF[1] (jd-c1541)
+                MOVE    JDS_L_1541, R8          ; label "  1541 DOS  : "
+                MOVE    @R0, R9                 ; R9 = LDF[1]
+                MOVE    JDS_F_1541, R10         ; basename "c1541"
+                RSUB    _JD_RPT_LINE, 1
+                MOVE    @R0, R1                 ; R1 = LDF[1]
+
+                ; 1581 component line (accumulate LDF[2] into R1)
+                MOVE    CRTROM_AUT_LDF, R0
+                ADD     2, R0                   ; R0 -> LDF[2] (jd-c1581)
+                MOVE    JDS_L_1581, R8          ; label "  1581 DOS  : "
+                MOVE    @R0, R9                 ; R9 = LDF[2]
+                MOVE    JDS_F_1581, R10         ; basename "c1581"
+                RSUB    _JD_RPT_LINE, 1
+                ADD     @R0, R1                 ; R1 = LDF[1] + LDF[2]
+
+                CMP     0, R1                   ; at least one drive ROM present?
+                RBRA    _JD_NODRV, Z            ; none -> revert (no drive benefit)
+                MOVE    JDS_V_ACTIVE, R8        ; "  -> JiffyDOS active"
+                SYSCALL(puts, 1)
+                RBRA    PREP_START_R, 1
+
+_JD_NODRV       MOVE    JDS_R_NODRV, R8         ; reason "no drive ROM"
+
+                ; revert: print the disabled verdict (PRE + reason + SUF, shared
+                ; by both revert paths) then clear the live JiffyDOS bit and set
+                ; Standard.
+_JD_REVERT      MOVE    R8, R0                  ; R0 = reason string
+                MOVE    JDS_V_DIS_PRE, R8       ; "  -> JiffyDOS disabled ("
+                SYSCALL(puts, 1)
+                MOVE    R0, R8                  ; reason
+                SYSCALL(puts, 1)
+                MOVE    JDS_V_DIS_SUF, R8       ; "), using standard Kernal"
+                SYSCALL(puts, 1)
                 MOVE    C64_OSM_KERNAL_JIFFY, R8
                 XOR     R9, R9
-                RSUB    M2M$SET_SETTING, 1
+                RSUB    M2M$SET_SETTING, 1      ; clear the JiffyDOS bit
                 MOVE    C64_OSM_KERNAL_STD, R8
                 MOVE    1, R9
-                RSUB    M2M$SET_SETTING, 1
+                RSUB    M2M$SET_SETTING, 1      ; set the Standard bit
 
 PREP_START_R    XOR     R8, R8
                 XOR     R9, R9
 
                 DECRB
+                RET
+
+; _JD_RPT_LINE helper (for the PREP_START JiffyDOS status report):
+;
+; Print one component status line. The three lines share the "JiffyDOS" and
+; "standard (jd-...not found)" fragments through this helper instead of storing
+; one full string per component, which keeps the report cheap in ROM.
+;
+; Input:  R8  = label string, e.g. "  C64 Kernal: "
+;         R9  = load flag (0 = ROM not loaded, else loaded)
+;         R10 = ROM file basename ("c64" / "c1541" / "c1581"); printed only when
+;               R9 = 0, spliced between "standard (jd-" and ".bin not found)"
+; Output: none; R0..R7 and R9..R12 preserved (R8 is clobbered)
+_JD_RPT_LINE    INCRB
+                MOVE    R9, R0                  ; R0 = load flag
+                MOVE    R10, R1                 ; R1 = file basename
+                SYSCALL(puts, 1)                ; R8 is the label: print it
+                CMP     0, R0                   ; ROM loaded?
+                RBRA    _JD_RPT_STD, Z          ; no -> "standard (jd-<name>...)"
+                MOVE    JDS_V_JIFFY, R8         ; "JiffyDOS"
+                SYSCALL(puts, 1)
+                RBRA    _JD_RPT_RET, 1
+_JD_RPT_STD     MOVE    JDS_STD_PRE, R8         ; "standard (jd-"
+                SYSCALL(puts, 1)
+                MOVE    R1, R8                  ; "c64" / "c1541" / "c1581"
+                SYSCALL(puts, 1)
+                MOVE    JDS_STD_SUF, R8         ; ".bin not found)"
+                SYSCALL(puts, 1)
+_JD_RPT_RET     DECRB
                 RET
 
 ; RESET_CORE helper:
@@ -623,7 +799,7 @@ _CUSTOM_MSG_RET DECRB
 #include "osm_const.asm"
 
 ; Warning: We only support exact-size standard D64 and D81 images
-WRN_WRONG_D64   .ASCII_P "\n\nA D64 disk image must be exactly 174848\n"
+WRN_WRONG_IMG   .ASCII_P "\n\nA D64 disk image must be exactly 174848\n"
                 .ASCII_P "bytes (35 tracks) or 196608 bytes (40\n"
                 .ASCII_P "tracks). A D81 must be exactly 819200 bytes\n"
                 .ASCII_P "(error-info variants are not supported)."
@@ -647,11 +823,36 @@ WRN_NO_D64      .ASCII_P "This core uses D64 and D81 disk images.\n\n"
                 .ASCII_P "Nothing to browse.\n\n"
                 .ASCII_W "Press Space to continue."
 
-; Warning: JiffyDOS is the currently active but no Jiffy Kernal is available
-; This warning is only shown in the debug console
-WRN_JIFFY       .ASCII_P "JiffyDOS is the currently active Kernal but the "
-                .ASCII_P "JiffyDOS ROMs were not loaded. Switching back to "
-                .ASCII_W "the standard Kernal.\n"
+; JiffyDOS status report, printed to the debug console by PREP_START when
+; JiffyDOS is the selected Kernal. The component value ("JiffyDOS") and the
+; "standard (jd-<name>.bin not found)" fragments are shared by _JD_RPT_LINE
+; across all three lines; the two revert verdicts share PRE and SUF. This keeps
+; the report cheaper in ROM than one full string per case.
+JDS_HEADER      .ASCII_W "JiffyDOS status:\n"
+JDS_L_C64       .ASCII_W "  C64 Kernal: "
+JDS_L_1541      .ASCII_W "  1541 DOS  : "
+JDS_L_1581      .ASCII_W "  1581 DOS  : "
+JDS_V_JIFFY     .ASCII_W "JiffyDOS\n"
+JDS_STD_PRE     .ASCII_W "standard (jd-"
+JDS_STD_SUF     .ASCII_W ".bin not found)\n"
+JDS_F_C64       .ASCII_W "c64"
+JDS_F_1541      .ASCII_W "c1541"
+JDS_F_1581      .ASCII_W "c1581"
+JDS_V_ACTIVE    .ASCII_W "  -> JiffyDOS active\n"
+JDS_V_DIS_PRE   .ASCII_W "  -> JiffyDOS disabled ("
+JDS_R_NOC64     .ASCII_W "no JiffyDOS C64 Kernal"
+JDS_R_NODRV     .ASCII_W "no drive ROM"
+JDS_V_DIS_SUF   .ASCII_W "), using standard Kernal\n"
+
+; On-screen "Kernal: %s" summary tags built by SUBMENU_SUMMARY (_SS_TRY_KERNAL).
+; The single-drive cases reuse the " JiffyDOS" menu label for the word itself,
+; so only the drive tags and the compact both-drives form cost ROM here. The
+; both-drives form is shortened to "Jiffy 1541+1581" (15 chars) so the rendered
+; line " Kernal: Jiffy 1541+1581" (24) fits the 25-column OSM width clamp; the
+; full "JiffyDOS 1541+1581" would be 27 and get truncated.
+SS_K_BOTH       .ASCII_W "Jiffy 1541+1581"
+SS_KT_1541      .ASCII_W " 1541"
+SS_KT_1581      .ASCII_W " 1581"
 
 ; C64 specific file extensions (need to be upper case)
 C64_IMGFILE_D64 .ASCII_W ".D64"

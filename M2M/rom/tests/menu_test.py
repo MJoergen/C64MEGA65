@@ -1803,6 +1803,15 @@ def verify():
     elif mconsts.get("C_MENU_MODEL") != model_idx[0]:
         errors.append("C_MENU_MODEL = %s, model says %d"
                       % (mconsts.get("C_MENU_MODEL"), model_idx[0]))
+    # C_MENU_KERNAL is the flat index of the " Kernal: %s" submenu opener (used by
+    # the custom SUBMENU_SUMMARY callback to render which JiffyDOS drive ROMs are
+    # installed); like C_MENU_MODEL it is an opener, not a group member
+    kernal_idx = [i for i, (lbl, _, _) in enumerate(V6_MENU) if lbl == " Kernal: %s"]
+    if not kernal_idx:
+        errors.append("no \" Kernal: %s\" opener found in the golden model")
+    elif mconsts.get("C_MENU_KERNAL") != kernal_idx[0]:
+        errors.append("C_MENU_KERNAL = %s, model says %d"
+                      % (mconsts.get("C_MENU_KERNAL"), kernal_idx[0]))
     m = re.search(r"subtype\s+C_MENU_OSM_SCALING\s+is\s+natural\s+range\s+"
                   r"(\d+)\s+downto\s+(\d+)", mega)
     hi, lo = osm_scaling_range()

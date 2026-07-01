@@ -138,6 +138,30 @@ buffer relocation MUST be exercised on hardware on all four board revisions:
 * Flush duration on a D81 is ~4.7x a D64 (819,200 vs 196,608 bytes); confirm a
   GEOS-style periodically-writing program still completes a flush
 
+@TODO: Test per-drive JiffyDOS, i.e. the 1541 JiffyDOS ROM is now optional too
+(#91). Headless FIRST, both must pass: `python3 M2M/rom/tests/jiffy_test.py`
+(asserts the boot gate decision, the debug-console status report and the
+on-screen Kernal summary for every decision-table row) and
+`python3 M2M/rom/tests/menu_test.py verify` (the new C_MENU_KERNAL=101 opener
+index). On hardware, with Kernal = JiffyDOS selected:
+
+* Dead-1541 canary: with `jd-c64.bin` + `jd-c1581.bin` but NO `jd-c1541.bin`,
+  mount a `.d64` -> a WORKING standard-speed 1541 (not a dead all-`$00` drive),
+  and the 1581 runs JiffyDOS for a `.d81` (the case the old boot gate forbade)
+* With `jd-c64.bin` + `jd-c1541.bin` but NO `jd-c1581.bin`: 1541 runs JiffyDOS,
+  1581 runs stock (the unchanged 1581-optional path)
+* With `jd-c64.bin` only (neither drive ROM): boot reverts the live Kernal to
+  Standard; the debug console prints "disabled (no drive ROM)"
+* With `jd-c1541.bin` present, the 1541 still runs fast JiffyDOS (no
+  regression); Standard / Games System / Japanese unchanged in every combination
+* The main-menu "Kernal" line reads back the installed drive ROMs as
+  "JiffyDOS 1541", "JiffyDOS 1581" or "Jiffy 1541+1581" (24 columns, fits the
+  menu width); no JiffyDOS is advertised while `jd-c64.bin` is absent
+* Config-orphan awareness: finalizing CORE_VERSION renames the config file, so
+  saved settings reset to Standard -- re-select JiffyDOS once (not a gate bug)
+* Transient missing `jd-c64.bin`: the live revert is session-only, so a later
+  normal boot with the file present restores the saved JiffyDOS choice
+
 Version 5.2 - April 21, 2025
 ----------------------------
 

@@ -406,14 +406,14 @@ constant C_MENU_STEREO_R_DF00 : natural := 94;
 constant C_MENU_IMPROVE_AUDIO : natural := 97;
 constant C_MENU_IEC           : natural := 100;
 -- Kernal submenu
+constant C_MENU_KERNAL        : natural := 101; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm 
 constant C_MENU_KERNAL_STD    : natural := 104;
 constant C_MENU_KERNAL_GS     : natural := 105;
 constant C_MENU_KERNAL_JAPAN  : natural := 106;
 constant C_MENU_KERNAL_JIFFY  : natural := 107;
 -- Volume submenu: not yet wired, see #85
 subtype C_MENU_VOLUME is natural range 123 downto 113;
--- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not
--- yet wired)
+-- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not yet wired)
 constant C_MENU_RTC_GEOS      : natural := 129;
 subtype C_MENU_OSM_SCALING is natural range 141 downto 133;
 constant C_MENU_8521          : natural := 144;
@@ -421,8 +421,7 @@ constant C_MENU_VICII_NMOS    : natural := 148;
 constant C_MENU_VICII_HMOS    : natural := 149;
 constant C_MENU_VICII_OLDHMOS : natural := 150;
 
--- D81 enable: HyperRAM-backed disk-image mount buffer (replaces the old mount_buf_ram BRAM,
--- which was 256 KB and could not hold an 819,200-byte D81). QNICE 4k-window byte protocol.
+-- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
 signal qnice_mnt_qnice_we           : std_logic;
 signal qnice_mnt_qnice_data         : std_logic_vector(15 downto 0);
@@ -510,7 +509,7 @@ begin
       end if;
    end process;
 
-   -- D81 enable: 3-master HyperRAM arbiter (REU, CRT, MOUNT). avm_arbit_general uses
+   -- 3-master HyperRAM arbiter (REU, CRT, MOUNT). avm_arbit_general uses
    -- flattened slave vectors; slave index k occupies bits ((k+1)*W-1 downto k*W), so a
    -- VHDL "a & b & c" concatenation puts a at the MSBs. Index 0 = REU (LSBs), 1 = CRT,
    -- 2 = MOUNT. The new MOUNT slave only touches HyperRAM during disk mount/serve/flush
@@ -956,7 +955,7 @@ begin
             qnice_dev_data_o           <= x"00" & qnice_c1541rom_data_from;
             qnice_c1541rom_data_to     <= qnice_dev_data_i(7 downto 0);
 
-         -- Custom Kernal Access: C1581 ROM (D81 enable). Same shared carrier as the c1541
+         -- Custom Kernal Access: C1581 ROM. Same shared carrier as the c1541
          -- ROM, but bit 15 = '1' steers writes/reads to the 1581's 32 KB DOS ROM window.
          when C_DEV_C64_KERNAL_C1581 =>
             qnice_c1541rom_addr        <= '1' & qnice_dev_addr_i(14 downto 0);
@@ -967,11 +966,6 @@ begin
          when others => null;
       end case;
    end process core_specific_devices;
-
-   -- D81 enable: the disk-image mount buffer now lives in HyperRAM (i_mount_buf_wrapper,
-   -- below) instead of an on-chip BRAM, because an 819,200-byte D81 does not fit in BRAM.
-   -- The buffer is QNICE-only staging RAM (the core never reads it directly), so this
-   -- relocation is invisible to the core side and the Shell arithmetic is unchanged.
 
    -- PRG file loader
    i_prg_loader : entity work.prg_loader
@@ -1123,8 +1117,8 @@ begin
       hr_waitrequest_i       => hr_crt_waitrequest
    ); -- i_sw_cartridge_wrapper
 
-   -- D81 enable: HyperRAM-backed disk-image mount buffer (replaces the old mount_buf_ram
-   -- BRAM). QNICE side is the C_DEV_C64_MOUNT device; HyperRAM side is the 3rd arbiter slave.
+   -- HyperRAM-backed disk-image mount buffer
+   -- QNICE side is the C_DEV_C64_MOUNT device; HyperRAM side is the 3rd arbiter slave.
    i_mount_buf_wrapper : entity work.mount_buf_wrapper
       generic map (
          G_BASE_ADDRESS => C_HMAP_VD0(9 downto 0) & X"000"
