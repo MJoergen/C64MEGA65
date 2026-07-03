@@ -13,6 +13,15 @@ Version 6 - MONTH DAY, 2026
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
 
+* Virtual drive 8 can now mount `*.d81` disk images on a simulated Commodore
+  1581 drive, in addition to the existing `*.d64` images. Just go to the disk
+  mount menu and browse for either a D64 or a D81. D81 images must be exactly
+  819,200 bytes. JiffyDOS support is now per drive: `jd-c1541.bin` and
+  `jd-c1581.bin` are both optional (you need at least one), so you can run
+  JiffyDOS on the simulated 1541, the simulated 1581, or both, depending on
+  which drive ROMs you install.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/91)
+
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)
   and CRT (Composite).

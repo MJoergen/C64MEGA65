@@ -29,6 +29,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A16    | 06/06/26 | b2e2e45 | New naming convention for the C64MEGA65 config file (issue #182); auto-reset of the core and any connected HW cartridge on Expansion Port mode change and on SIM REU toggle (issues #225 and #226); fix T65 regression introduced by Alpha 14 (issue #221); HDMI scaling filters (#223)
 | WIP-V6-A16X1  | 06/07/26 | fb08354 | Further improved Expansion Port timing: extend register envelope to data-direction and write-data to close the one-cycle skew left by Alpha 12 (issue #227)
 | WIP-V6-A17    | 06/14/26 | c556cdc | DMA support for hardware cartridges (issues #199 and #205); fix two hardware cartridge regressions introduced by Alpha 12 (issues #220, #222 and #227); the file browser loads large directories up to 15x faster (issue #228); implemented first version of V6 OSM (issues #229 and #230)
+| WIP-V6-A18    | 07/03/26 | 3d80b81 | Simulate 1581 drive and add support for D81 disk images (issue #91)
 
 ## Version 5.2
 
