@@ -56,8 +56,8 @@ Features of the C64 for MEGA65 core
 
 With our [Release 6](VERSIONS.md), we are striving for a **retro C64
 experience**: The core turns your MEGA65 into a Commodore 64 with a C1541
-drive (you can mount `*.d64`) images. It supports the following hardware
-ports of the MEGA65:
+drive (you can mount `*.d64` images) and a C1581 drive (you can mount `*.d81`
+images). It supports the following hardware ports of the MEGA65:
 
 * Joystick port for joysticks, mice and paddles
 * Expansion port for C64 cartridges: Games, freezers, fast loader
@@ -133,7 +133,6 @@ some nice features such as:
 
 * Use the MEGA65's physical drive as a C1581
 * Mounting tapes (`*.tap`)
-* Supporting D81 disk images (`*.d81`)
 * Supporting G64 disk images (`*.g64`)
 * Formatting disk images (`*.d64` and `*.g64`)
 * Supporting MiSTer's GCR-level disk manipulation
@@ -141,7 +140,7 @@ some nice features such as:
 And there is much more. Have a look at our [Roadmap](ROADMAP.md)
 to learn what we plan to do in future.
 
-Since we do this as a hobby, it might take a year or longer until these
+Since we do this as a hobby, it might take a while until these
 things are supported. So please bear with us or [help us](CONTRIBUTING.md).
 
 Some demo pictures
@@ -175,14 +174,20 @@ Installation
    [alternative MEGA65 cores](https://cores.mega65.org)
    website or read the section "Bitstream Utility" in the
    [MEGA65 Starter Guide](https://files.mega65.org?id=315bbad5-f97b-4070-bab4-3ff06d5ab8ba).
-4. The core supports FAT32 formatted SD cards to mount `.D64` disk images
-   for the C1541 at drive 8.
+4. The core supports FAT32 formatted SD cards to mount `.D64` (C1541) and
+   `.D81` (C1581) disk images at drive 8.
 5. If you put your disk images into a folder called `/c64`, then the core will
    display this folder on startup. Otherwise the root folder will be shown.
    If you want the core to remember the settings, make sure you read the
-   section [Config file](https://c64.mega65.org/installation.html#config-file) in the user's guide.
-6. Optional: Install [JiffyDOS](https://c64.mega65.org/jiffydos-and-alternative-kernals.html) and install the Real-Time-Clock
-   (RTC) [driver for GEOS](doc/RTC.md).
+   section [Config file](https://c64.mega65.org/installation.html#config-file)
+   in the user's guide. Starting with Version 6 the config file name includes
+   the core version (for example `c64mega65-V6`). When you upgrade to a core
+   with a different version, the new core does not find the old file and
+   starts from the factory defaults, so re-select your settings (for example
+   the Kernal) once and let the matching config file save them again.
+6. Optional: Install
+   [JiffyDOS](https://c64.mega65.org/jiffydos-and-alternative-kernals.html)
+   and install the Real-Time-Clock (RTC) [driver for GEOS](doc/RTC.md).
 7. Press the <kbd>Help</kbd> key on your MEGA65 keyboard as soon as the core
    is running to mount disks and to configure the core.
    
@@ -197,4 +202,3 @@ into the FPGA of the MEGA65 and automatically started.
 Using `.bit` files is very useful, in case you want to try out multiple cores
 or core versions quickly without going through the lengthy process of
 flashing `.cor` files.
-

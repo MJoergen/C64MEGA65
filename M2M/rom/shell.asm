@@ -724,6 +724,8 @@ _LI_FOPEN_OK    MOVE    R5, R8
                 MOVE    R9, R7                  ; R7: img type or error msg
                 CMP     0, R6                   ; everything OK?
                 RBRA    _LI_FREAD_RET, !Z       ; no
+                MOVE    LOAD_IMAGE_TYPE, R8
+                MOVE    R9, @R8                 ; keep type across progress regs
 
                 ; For showing a progress bar: Take the remaining size of the
                 ; file, which is filesize minus current read position after
@@ -870,10 +872,12 @@ _LI_FREAD_CONT2 CMP     R3, R2                  ; end of 4k page reached?
                 RBRA    _LI_FREAD_NXTWN, 1      ; set next window
 
                 ; End of file reached
-_LI_FREAD_EOF   XOR     R6, R6                  ; R6 and R7 are status flags
-                XOR     R7, R7                  ; 0 means all good
+_LI_FREAD_EOF   XOR     R6, R6                  ; 0 means all good
+                XOR     R7, R7                  ; default image type/error msg
                 CMP     0, R4                   ; disk image mode?
                 RBRA    _LI_FREAD_PM, !Z        ; no
+                MOVE    LOAD_IMAGE_TYPE, R8
+                MOVE    @R8, R7                 ; restore disk image type
                 MOVE    LOG_STR_LOADOK, R8      ; yes
                 SYSCALL(puts, 1)
                 RBRA    _LI_FREAD_RET, 1

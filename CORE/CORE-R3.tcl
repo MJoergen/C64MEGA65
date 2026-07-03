@@ -117,7 +117,8 @@ read_vhdl -vhdl2008 { \
       vhdl/main.vhd \
       vhdl/mega65.vhd \
       vhdl/prg_loader.vhd \
-      vhdl/reu_mapper.vhd \
+      vhdl/reu_mapper.vhd \      vhdl/mount_buf_wrapper.vhd \
+
       vhdl/sw_cartridge_csr.vhd \
       vhdl/sw_cartridge_wrapper.vhd }
 
@@ -127,6 +128,10 @@ read_verilog {
       C64_MiSTerMEGA65/rtl/iec_drive/c1541_logic.sv \
       C64_MiSTerMEGA65/rtl/iec_drive/c1541_multi.sv \
       C64_MiSTerMEGA65/rtl/iec_drive/c1541_track.sv \
+      C64_MiSTerMEGA65/rtl/iec_drive/c1581_multi.sv \
+      C64_MiSTerMEGA65/rtl/iec_drive/c1581_drv.sv \
+      C64_MiSTerMEGA65/rtl/iec_drive/iecdrv_mos8520.v \
+      C64_MiSTerMEGA65/rtl/iec_drive/floppy.v \
       C64_MiSTerMEGA65/rtl/iec_drive/iec_drive.sv \
       C64_MiSTerMEGA65/rtl/iec_drive/iecdrv_misc.sv \
       C64_MiSTerMEGA65/rtl/mos6526.v \
@@ -135,6 +140,7 @@ read_verilog {
 
 read_verilog -sv {
       C64_MiSTerMEGA65/rtl/reu.v \
+      C64_MiSTerMEGA65/rtl/iec_drive/fdc1772.v \
       C64_MiSTerMEGA65/rtl/rtcF83.sv \
       C64_MiSTerMEGA65/rtl/sid/sid_envelope.sv \
       C64_MiSTerMEGA65/rtl/sid/sid_filters.sv \

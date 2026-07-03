@@ -311,6 +311,29 @@ signal hr_crt_readdata            : std_logic_vector(15 downto 0);
 signal hr_crt_readdatavalid       : std_logic;
 signal hr_crt_waitrequest         : std_logic;
 
+-- D81 enable: HyperRAM avalon master for the disk-image mount buffer (3rd arbiter slave)
+signal hr_mnt_write               : std_logic;
+signal hr_mnt_read                : std_logic;
+signal hr_mnt_address             : std_logic_vector(31 downto 0);
+signal hr_mnt_writedata           : std_logic_vector(15 downto 0);
+signal hr_mnt_byteenable          : std_logic_vector( 1 downto 0);
+signal hr_mnt_burstcount          : std_logic_vector( 7 downto 0);
+signal hr_mnt_readdata            : std_logic_vector(15 downto 0);
+signal hr_mnt_readdatavalid       : std_logic;
+signal hr_mnt_waitrequest         : std_logic;
+
+-- D81 enable: packed slave buses for the 3-master HyperRAM arbiter (avm_arbit_general)
+-- slave index 0 = REU, 1 = CRT, 2 = MOUNT
+signal hr_arb_write               : std_logic_vector( 2 downto 0);
+signal hr_arb_read                : std_logic_vector( 2 downto 0);
+signal hr_arb_address             : std_logic_vector(95 downto 0);
+signal hr_arb_writedata           : std_logic_vector(47 downto 0);
+signal hr_arb_byteenable          : std_logic_vector( 5 downto 0);
+signal hr_arb_burstcount          : std_logic_vector(23 downto 0);
+signal hr_arb_readdata            : std_logic_vector(47 downto 0);
+signal hr_arb_readdatavalid       : std_logic_vector( 2 downto 0);
+signal hr_arb_waitrequest         : std_logic_vector( 2 downto 0);
+
 signal hr_hdmi_ff                 : std_logic;
 
 ---------------------------------------------------------------------------------------------
@@ -383,14 +406,14 @@ constant C_MENU_STEREO_R_DF00 : natural := 94;
 constant C_MENU_IMPROVE_AUDIO : natural := 97;
 constant C_MENU_IEC           : natural := 100;
 -- Kernal submenu
+constant C_MENU_KERNAL        : natural := 101; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm 
 constant C_MENU_KERNAL_STD    : natural := 104;
 constant C_MENU_KERNAL_GS     : natural := 105;
 constant C_MENU_KERNAL_JAPAN  : natural := 106;
 constant C_MENU_KERNAL_JIFFY  : natural := 107;
 -- Volume submenu: not yet wired, see #85
 subtype C_MENU_VOLUME is natural range 123 downto 113;
--- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not
--- yet wired)
+-- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not yet wired)
 constant C_MENU_RTC_GEOS      : natural := 129;
 subtype C_MENU_OSM_SCALING is natural range 141 downto 133;
 constant C_MENU_8521          : natural := 144;
@@ -398,9 +421,11 @@ constant C_MENU_VICII_NMOS    : natural := 148;
 constant C_MENU_VICII_HMOS    : natural := 149;
 constant C_MENU_VICII_OLDHMOS : natural := 150;
 
--- RAMs for the C64
-signal qnice_c64_mount_buf_ram_we   : std_logic;
-signal qnice_c64_mount_buf_ram_data : std_logic_vector(7 downto 0);  -- Disk mount buffer
+-- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
+signal qnice_mnt_qnice_ce           : std_logic;
+signal qnice_mnt_qnice_we           : std_logic;
+signal qnice_mnt_qnice_data         : std_logic_vector(15 downto 0);
+signal qnice_mnt_qnice_wait         : std_logic;
 
 -- Custom Kernal access: C64 ROM
 signal qnice_c64rom_we              : std_logic;
@@ -484,42 +509,55 @@ begin
       end if;
    end process;
 
-   i_avm_arbit : entity work.avm_arbit
+   -- 3-master HyperRAM arbiter (REU, CRT, MOUNT). avm_arbit_general uses
+   -- flattened slave vectors; slave index k occupies bits ((k+1)*W-1 downto k*W), so a
+   -- VHDL "a & b & c" concatenation puts a at the MSBs. Index 0 = REU (LSBs), 1 = CRT,
+   -- 2 = MOUNT. The new MOUNT slave only touches HyperRAM during disk mount/serve/flush
+   -- (QNICE-paced, <1% of HyperRAM bandwidth) so it cannot starve the real-time REU.
+   hr_arb_write      <= hr_mnt_write      & hr_crt_write      & hr_reu_write;
+   hr_arb_read       <= hr_mnt_read       & hr_crt_read       & hr_reu_read;
+   hr_arb_address    <= hr_mnt_address    & hr_crt_address    & hr_reu_address;
+   hr_arb_writedata  <= hr_mnt_writedata  & hr_crt_writedata  & hr_reu_writedata;
+   hr_arb_byteenable <= hr_mnt_byteenable & hr_crt_byteenable & hr_reu_byteenable;
+   hr_arb_burstcount <= hr_mnt_burstcount & hr_crt_burstcount & hr_reu_burstcount;
+
+   hr_reu_readdata      <= hr_arb_readdata(15 downto  0);
+   hr_crt_readdata      <= hr_arb_readdata(31 downto 16);
+   hr_mnt_readdata      <= hr_arb_readdata(47 downto 32);
+   hr_reu_readdatavalid <= hr_arb_readdatavalid(0);
+   hr_crt_readdatavalid <= hr_arb_readdatavalid(1);
+   hr_mnt_readdatavalid <= hr_arb_readdatavalid(2);
+   hr_reu_waitrequest   <= hr_arb_waitrequest(0);
+   hr_crt_waitrequest   <= hr_arb_waitrequest(1);
+   hr_mnt_waitrequest   <= hr_arb_waitrequest(2);
+
+   i_avm_arbit : entity work.avm_arbit_general
       generic map (
-         G_PREFER_SWAP  => true,
+         G_NUM_SLAVES   => 3,
          G_ADDRESS_SIZE => 32,
          G_DATA_SIZE    => 16
       )
       port map (
-         clk_i                  => hr_clk_i,
-         rst_i                  => hr_rst_i,
-         s0_avm_write_i         => hr_reu_write,
-         s0_avm_read_i          => hr_reu_read,
-         s0_avm_address_i       => hr_reu_address,
-         s0_avm_writedata_i     => hr_reu_writedata,
-         s0_avm_byteenable_i    => hr_reu_byteenable,
-         s0_avm_burstcount_i    => hr_reu_burstcount,
-         s0_avm_readdata_o      => hr_reu_readdata,
-         s0_avm_readdatavalid_o => hr_reu_readdatavalid,
-         s0_avm_waitrequest_o   => hr_reu_waitrequest,
-         s1_avm_write_i         => hr_crt_write,
-         s1_avm_read_i          => hr_crt_read,
-         s1_avm_address_i       => hr_crt_address,
-         s1_avm_writedata_i     => hr_crt_writedata,
-         s1_avm_byteenable_i    => hr_crt_byteenable,
-         s1_avm_burstcount_i    => hr_crt_burstcount,
-         s1_avm_readdata_o      => hr_crt_readdata,
-         s1_avm_readdatavalid_o => hr_crt_readdatavalid,
-         s1_avm_waitrequest_o   => hr_crt_waitrequest,
-         m_avm_write_o          => hr_core_write_o,
-         m_avm_read_o           => hr_core_read_o,
-         m_avm_address_o        => hr_core_address_o,
-         m_avm_writedata_o      => hr_core_writedata_o,
-         m_avm_byteenable_o     => hr_core_byteenable_o,
-         m_avm_burstcount_o     => hr_core_burstcount_o,
-         m_avm_readdata_i       => hr_core_readdata_i,
-         m_avm_readdatavalid_i  => hr_core_readdatavalid_i,
-         m_avm_waitrequest_i    => hr_core_waitrequest_i
+         clk_i                 => hr_clk_i,
+         rst_i                 => hr_rst_i,
+         s_avm_write_i         => hr_arb_write,
+         s_avm_read_i          => hr_arb_read,
+         s_avm_address_i       => hr_arb_address,
+         s_avm_writedata_i     => hr_arb_writedata,
+         s_avm_byteenable_i    => hr_arb_byteenable,
+         s_avm_burstcount_i    => hr_arb_burstcount,
+         s_avm_readdata_o      => hr_arb_readdata,
+         s_avm_readdatavalid_o => hr_arb_readdatavalid,
+         s_avm_waitrequest_o   => hr_arb_waitrequest,
+         m_avm_write_o         => hr_core_write_o,
+         m_avm_read_o          => hr_core_read_o,
+         m_avm_address_o       => hr_core_address_o,
+         m_avm_writedata_o     => hr_core_writedata_o,
+         m_avm_byteenable_o    => hr_core_byteenable_o,
+         m_avm_burstcount_o    => hr_core_burstcount_o,
+         m_avm_readdata_i      => hr_core_readdata_i,
+         m_avm_readdatavalid_i => hr_core_readdatavalid_i,
+         m_avm_waitrequest_i   => hr_core_waitrequest_i
       ); -- i_avm_arbit
 
    ---------------------------------------------------------------------------------------------
@@ -845,7 +883,8 @@ begin
       qnice_dev_wait_o           <= '0';
       qnice_c64_qnice_ce         <= '0';
       qnice_c64_qnice_we         <= '0';
-      qnice_c64_mount_buf_ram_we <= '0';
+      qnice_mnt_qnice_ce         <= '0';
+      qnice_mnt_qnice_we         <= '0';
       qnice_prg_qnice_ce         <= '0';
       qnice_prg_qnice_we         <= '0';
       qnice_prg_c64ram_d_frm     <= (others => '0');
@@ -875,10 +914,13 @@ begin
             qnice_c64_qnice_we         <= qnice_dev_we_i;
             qnice_dev_data_o           <= qnice_c64_qnice_data;
 
-         -- Disk mount buffer RAM
+         -- Disk mount buffer (now HyperRAM-backed; see i_mount_buf_wrapper). The byte
+         -- data + wait-state come from the bridge, mirroring the CRT device arm below.
          when C_DEV_C64_MOUNT =>
-            qnice_c64_mount_buf_ram_we <= qnice_dev_we_i;
-            qnice_dev_data_o           <= x"00" & qnice_c64_mount_buf_ram_data;
+            qnice_mnt_qnice_ce         <= qnice_dev_ce_i;
+            qnice_mnt_qnice_we         <= qnice_dev_we_i;
+            qnice_dev_data_o           <= qnice_mnt_qnice_data;
+            qnice_dev_wait_o           <= qnice_mnt_qnice_wait;
 
          -- PRG file loader (*.PRG)
          when C_DEV_C64_PRG =>
@@ -905,9 +947,18 @@ begin
             qnice_dev_data_o           <= x"00" & qnice_c64rom_data_from;
             qnice_c64rom_data_to       <= qnice_dev_data_i(7 downto 0);
 
-         -- Custom Kernal Access: C1541 ROM
+         -- Custom Kernal Access: C1541 ROM. Bit 15 of the shared drive-ROM address bus
+         -- selects the engine inside iec_drive.sv: 0 = c1541 (16 KB), 1 = c1581 (32 KB).
          when C_DEV_C64_KERNAL_C1541 =>
-            qnice_c1541rom_addr        <= "00" & qnice_dev_addr_i(13 downto 0);
+            qnice_c1541rom_addr        <= '0' & qnice_dev_addr_i(14 downto 0);
+            qnice_c1541rom_we          <= qnice_dev_we_i;
+            qnice_dev_data_o           <= x"00" & qnice_c1541rom_data_from;
+            qnice_c1541rom_data_to     <= qnice_dev_data_i(7 downto 0);
+
+         -- Custom Kernal Access: C1581 ROM. Same shared carrier as the c1541
+         -- ROM, but bit 15 = '1' steers writes/reads to the 1581's 32 KB DOS ROM window.
+         when C_DEV_C64_KERNAL_C1581 =>
+            qnice_c1541rom_addr        <= '1' & qnice_dev_addr_i(14 downto 0);
             qnice_c1541rom_we          <= qnice_dev_we_i;
             qnice_dev_data_o           <= x"00" & qnice_c1541rom_data_from;
             qnice_c1541rom_data_to     <= qnice_dev_data_i(7 downto 0);
@@ -915,25 +966,6 @@ begin
          when others => null;
       end case;
    end process core_specific_devices;
-
-   -- For now: Let's use a simple BRAM (using only 1 port will make a BRAM) for buffering
-   -- the disks that we are mounting. This will work for D64 only.
-   -- @TODO: Switch to HyperRAM at a later stage
-   mount_buf_ram : entity work.dualport_2clk_ram
-      generic map (
-         ADDR_WIDTH        => 18,
-         DATA_WIDTH        => 8,
-         MAXIMUM_SIZE      => 197376,        -- maximum size of any D64 image: non-standard 40-track incl. 768 error bytes
-         FALLING_A         => true
-      )
-      port map (
-         -- QNICE only
-         clock_a           => qnice_clk_i,
-         address_a         => qnice_dev_addr_i(17 downto 0),
-         data_a            => qnice_dev_data_i(7 downto 0),
-         wren_a            => qnice_c64_mount_buf_ram_we,
-         q_a               => qnice_c64_mount_buf_ram_data
-      ); -- mount_buf_ram
 
    -- PRG file loader
    i_prg_loader : entity work.prg_loader
@@ -1084,6 +1116,34 @@ begin
       hr_readdatavalid_i     => hr_crt_readdatavalid,
       hr_waitrequest_i       => hr_crt_waitrequest
    ); -- i_sw_cartridge_wrapper
+
+   -- HyperRAM-backed disk-image mount buffer
+   -- QNICE side is the C_DEV_C64_MOUNT device; HyperRAM side is the 3rd arbiter slave.
+   i_mount_buf_wrapper : entity work.mount_buf_wrapper
+      generic map (
+         G_BASE_ADDRESS => C_HMAP_VD0(9 downto 0) & X"000"
+      )
+      port map (
+         qnice_clk_i        => qnice_clk_i,
+         qnice_rst_i        => qnice_rst_i,
+         qnice_addr_i       => qnice_dev_addr_i,
+         qnice_data_i       => qnice_dev_data_i,
+         qnice_ce_i         => qnice_mnt_qnice_ce,
+         qnice_we_i         => qnice_mnt_qnice_we,
+         qnice_data_o       => qnice_mnt_qnice_data,
+         qnice_wait_o       => qnice_mnt_qnice_wait,
+         hr_clk_i           => hr_clk_i,
+         hr_rst_i           => hr_rst_i,
+         hr_write_o         => hr_mnt_write,
+         hr_read_o          => hr_mnt_read,
+         hr_address_o       => hr_mnt_address,
+         hr_writedata_o     => hr_mnt_writedata,
+         hr_byteenable_o    => hr_mnt_byteenable,
+         hr_burstcount_o    => hr_mnt_burstcount,
+         hr_readdata_i      => hr_mnt_readdata,
+         hr_readdatavalid_i => hr_mnt_readdatavalid,
+         hr_waitrequest_i   => hr_mnt_waitrequest
+      ); -- i_mount_buf_wrapper
 
    main2hr_avm_fifo : entity work.avm_fifo
       generic map (

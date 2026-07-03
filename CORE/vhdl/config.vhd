@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A17";
+constant CORE_VERSION : string := "WIP-V6-A18";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -116,7 +116,8 @@ constant HELP_1 : string :=
    " Quickstart:\n\n" &
 
    " * Create a /c64 folder on your SD card &\n" &
-   "   place your D64, CRT and PRG files there\n" &
+   "   place your D64/D81, CRT and PRG files\n" &
+   "   there\n" &
    " * You can work with long file names and\n" &
    "   with arbitrary sub-folders\n" &
    " * Both SD card slots are supported. Back\n" &
@@ -147,7 +148,7 @@ constant HELP_2 : string :=
    " Run/Stop:           Leave sub-menu\n" &
    " Settings are saved when closing the menu\n\n" &
 
-   " When browsing for D64, CRT and PRG:\n\n" &
+   " When browsing for D64/D81, CRT and PRG:\n\n" &
 
    " Cursor up/down:     File up/down\n" &
    " Cursor left/right:  Page up/down\n" &
