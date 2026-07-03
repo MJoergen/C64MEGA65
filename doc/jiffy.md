@@ -18,24 +18,21 @@ Where and what to buy
 ---------------------
 
 JiffyDOS is commercial software. We recommend, that you either buy from
-[Restore-Store (click here)](https://restore-store.de/89-jiffydos)
-or from
-[RETRO Innovations (click here)](http://store.go4retro.com/search.php?search_query=JiffyDOS&x=0&y=0).
+[RETRO Innovations (click here)](http://store.go4retro.com/search.php?search_query=JiffyDOS&x=0&y=0) or that you have a look at the
+[list of recommended resellers](https://www.jiffydos.com/).
 
 You need to buy and download the C64 ROM image plus at least one drive ROM
 image. The C64 image is required; the 1541 and the 1581 drive images are each
 optional, but you need at least one of them. Buy the drive image (or images) for
 whichever simulated drive you want to accelerate: the 1541, the 1581, or both.
-While both shops use the same name for the C64 ROM image, the names for the
-drive ROM images differ:
+The RETRO Innovations shop uses the following names for the ROM images, other
+shops might use different naming conventions:
 
 * C64 ROM image: **JiffyDOS 64 KERNAL ROM Overlay Image**
 
-* 1541 ROM image at Restore-Store: **JiffyDOS 1541 DOS ROM Overlay Image**
+* 1541 ROM image: **JiffyDOS 1541/1541C/1541II DOS ROM Overlay Image**
 
-* 1541 ROM image at RETRO Innovations: **JiffyDOS 1541/1541C/1541II DOS ROM Overlay Image**
-
-* 1581 ROM image (optional): **JiffyDOS 1581 DOS ROM Overlay Image**
+* 1581 ROM image: **JiffyDOS 1581 DOS ROM Overlay Image**
 
 Make sure you double-check the name of what you buy, otherwise you might
 end up with a ROM variant that is not supported by the C64 core.
@@ -55,6 +52,10 @@ JiffyDOS on the 1541, on the 1581, or on both, depending on which drive ROMs you
 provide. If you install `jd-c64.bin` but neither drive ROM, JiffyDOS stays
 disabled and the core falls back to the standard Kernal. Perform the following
 steps to create these files from the `*.bin` files you purchased.
+
+This describes the **simulated** drives. A **real** disk drive that you attach
+to the MEGA65 IEC port runs JiffyDOS only if a JiffyDOS ROM is installed in that
+physical drive, which is independent of the `jd-*.bin` files on the SD card.
 
 ### C64 Kernal ROM: `jd-c64.bin`
 
@@ -92,20 +93,7 @@ is exactly `16 kB = 16,384 bytes` in size and rename it to `jd-c1541.bin`.
 ### C1581 DOS ROM: `jd-c1581.bin` (optional)
 
 The 1581 JiffyDOS download package contains a single ROM image that is exactly
-`32 kB = 32,768 bytes` in size. Unlike `jd-c64.bin`, there is no concatenation
-step: just rename that file to `jd-c1581.bin`. Make sure the size is exactly
-32,768 bytes, otherwise the image will be loaded incorrectly.
-
-You do not have to provide every file. Each simulated drive uses JiffyDOS only
-if you installed its drive ROM, and otherwise keeps its standard DOS: with
-`jd-c64.bin` plus `jd-c1541.bin` you get JiffyDOS on the C64 and the 1541; with
-`jd-c64.bin` plus `jd-c1581.bin` you get JiffyDOS on the C64 and the 1581; with
-all three you get JiffyDOS everywhere. Mixing JiffyDOS and standard DOS on the
-IEC bus works without problems.
-
-This describes the **simulated** drives. A **real** disk drive that you attach
-to the MEGA65 IEC port runs JiffyDOS only if a JiffyDOS ROM is installed in that
-physical drive, which is independent of the `jd-*.bin` files on the SD card.
+`32 kB = 32,768 bytes` in size. Just rename that file to `jd-c1581.bin`.
 
 Install and use JiffyDOS
 ------------------------
