@@ -7,19 +7,24 @@ Given a release name (e.g. V6, V6.1, WIP-V6-A6, WIP-V6-A13X1, or with
 validates the version string against config.vhd, sanity-checks alpha releases
 against doc/inofficial.md and the git history unless --ignore was passed,
 copies the per-board bitstreams from CORE/CORE-R{3..6}.runs/impl_1/, produces
-.cor files via the external `bit2core` tool, generates the
+.cor files via the external `coretool` or `bit2core` tool, generates the
 `c64mega65-<version>` config file via M2M/tools/make_config.sh, and copies
 VERSIONS.md into the release folder. Alpha releases also copy
 doc/inofficial.md (timestamps preserved).
+
+By default the script prints only the final release summary; pass
+--verbatim to print the full step-by-step log.
 """
 
 import argparse
 import datetime as _dt
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -30,6 +35,8 @@ from pathlib import Path
 CORE_NAME       = "C64 for MEGA65"
 CORE_FILE_BASE  = "C64MEGA65"
 BIT2CORE_TAIL   = "=default,c64cart+c64cart"
+CORETOOL_FLAGS  = "c64cart"
+CORETOOL_CAPS   = "c64cart,default"
 BOARD_REVS      = ("R3", "R4", "R5", "R6")
 
 # Regex for the three accepted version conventions.
@@ -64,18 +71,26 @@ def _supports_color() -> bool:
 
 
 _COLOR = _supports_color()
+_VERBATIM = False
 
 
 def _c(code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _COLOR else text
 
 
+def set_verbatim(enabled: bool) -> None:
+    global _VERBATIM
+    _VERBATIM = enabled
+
+
 def info(msg: str) -> None:
-    print(f"{_c('36', '[INFO]')} {msg}")
+    if _VERBATIM:
+        print(f"{_c('36', '[INFO]')} {msg}")
 
 
 def ok(msg: str) -> None:
-    print(f"{_c('32', '[ OK ]')} {msg}")
+    if _VERBATIM:
+        print(f"{_c('32', '[ OK ]')} {msg}")
 
 
 _WARNINGS: list = []
@@ -83,7 +98,8 @@ _WARNINGS: list = []
 
 def warn(msg: str) -> None:
     _WARNINGS.append(msg)
-    print(f"{_c('33', '[WARN]')} {msg}")
+    if _VERBATIM:
+        print(f"{_c('33', '[WARN]')} {msg}")
 
 
 def err(msg: str) -> None:
@@ -266,29 +282,96 @@ def warn_if_stale(repo: Path, targets: tuple) -> None:
 
 
 # ---------------------------------------------------------------------------
-# bit2core / bitstreams
+# coretool / bit2core / bitstreams
 # ---------------------------------------------------------------------------
 
-def _resolve_bit2core_via_shell_rc() -> str:
-    """If bit2core isn't on PATH, try to resolve a shell alias defined in
-    the user's bash/zsh startup files. Returns an absolute path to an
-    executable or "" if nothing usable was found.
+OUTPUT_SEPARATE = "separate"
+OUTPUT_MERGED_PYTHON = "merged-python"
 
-    Subprocesses don't inherit shell aliases, so a user with
-    `alias bit2core='~/some/path/bit2core'` in their .bash_profile won't
-    be visible to shutil.which. We re-source the common rc files in a
-    bash subshell with expand_aliases set, ask `type` what it resolves
-    to, then parse out a path. Windows has no equivalent and is skipped.
+
+@dataclass(frozen=True)
+class CoreFileTool:
+    """External tool used to produce .cor files from .bit files."""
+
+    name: str
+    command_prefix: tuple
+    source: str
+    output_mode: str
+
+
+def _format_command_prefix(prefix: tuple) -> str:
+    return " ".join(_quote(part) for part in prefix)
+
+
+def _normalize_command_prefix(parts: list) -> tuple:
+    """Validate and normalize a command prefix parsed from PATH or an alias."""
+    if not parts:
+        return ()
+
+    expanded = [os.path.expandvars(os.path.expanduser(part)) for part in parts]
+    exe = expanded[0]
+    if os.sep in exe:
+        if not (Path(exe).is_file() and os.access(exe, os.X_OK)):
+            return ()
+    else:
+        resolved = shutil.which(exe)
+        if not resolved:
+            return ()
+        expanded[0] = resolved
+
+    return tuple(expanded)
+
+
+def _parse_shell_type_output(tool_name: str, out: str) -> tuple:
+    """Parse bash/zsh-ish `type` output into a runnable command prefix."""
+    if "is a function" in out:
+        return ()
+
+    alias_patterns = (
+        rf"^{re.escape(tool_name)} is aliased to [`'](.+)'$",
+        rf"^{re.escape(tool_name)}: aliased to (.+)$",
+    )
+    path_patterns = (
+        rf"^{re.escape(tool_name)} is (~?/.*)$",
+        rf"^{re.escape(tool_name)}: (~?/.*)$",
+    )
+
+    for raw_line in out.splitlines():
+        line = raw_line.strip()
+        for pattern in alias_patterns:
+            m = re.match(pattern, line)
+            if m:
+                try:
+                    return _normalize_command_prefix(shlex.split(m.group(1)))
+                except ValueError:
+                    return ()
+        for pattern in path_patterns:
+            m = re.match(pattern, line)
+            if m:
+                return _normalize_command_prefix([m.group(1)])
+
+    return ()
+
+
+def _resolve_tool_via_shell_rc(tool_name: str) -> tuple:
+    """Resolve a tool from shell startup files if it is not on PATH.
+
+    Subprocesses do not inherit shell aliases, so a user with
+    `alias coretool='~/some/path/coretool'` in their .bash_profile is not
+    visible to shutil.which. Source the common rc files in a bash subshell
+    with expand_aliases set, ask `type` what the name resolves to, then parse
+    the result into a command prefix. Aliases that include a launcher, such as
+    `alias coretool='python3 ~/bin/coretool'`, are supported too.
     """
     if os.name == "nt":
-        return ""
+        return ()
 
     snippet = (
         "shopt -s expand_aliases 2>/dev/null; "
         "for rc in ~/.bash_profile ~/.bashrc ~/.zshrc ~/.zprofile ~/.profile; do "
         "  [ -f \"$rc\" ] && . \"$rc\" >/dev/null 2>&1; "
         "done; "
-        "type bit2core 2>/dev/null"
+        f"type {shlex.quote(tool_name)} 2>/dev/null"
     )
 
     try:
@@ -297,49 +380,57 @@ def _resolve_bit2core_via_shell_rc() -> str:
             capture_output=True, text=True, timeout=10,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return ""
+        return ()
 
     out = (result.stdout or "") + "\n" + (result.stderr or "")
-
-    # Functions can't be reduced to a single path — give up cleanly.
-    if "is a function" in out:
-        return ""
-
-    # Pull the first path-looking token (~/... or /...) out of the
-    # `type` output. Common forms produced by bash/zsh:
-    #   bit2core is aliased to `~/.dev/.../bit2core'
-    #   bit2core: aliased to /usr/local/bin/bit2core
-    #   bit2core is /usr/local/bin/bit2core
-    m = re.search(r"['\"`]?(~?/[^\s'\"`]+)", out)
-    if not m:
-        return ""
-
-    candidate = os.path.expanduser(m.group(1))
-    if Path(candidate).is_file() and os.access(candidate, os.X_OK):
-        return candidate
-    return ""
+    return _parse_shell_type_output(tool_name, out)
 
 
-def check_bit2core() -> str:
-    path = shutil.which("bit2core")
+def _tool_output_mode(tool_name: str) -> str:
+    if tool_name == "coretool":
+        return OUTPUT_MERGED_PYTHON
+    if tool_name == "bit2core":
+        return OUTPUT_SEPARATE
+    raise ValueError(f"Unsupported core-file tool: {tool_name}")
+
+
+def _find_core_file_tool(tool_name: str):
+    path = shutil.which(tool_name)
     if path:
-        ok(f"Found bit2core at {path}.")
-        return path
+        return CoreFileTool(tool_name, (path,), "PATH", _tool_output_mode(tool_name))
 
-    # Not on PATH — maybe it's a shell alias.
-    resolved = _resolve_bit2core_via_shell_rc()
-    if resolved:
-        ok(f"Found bit2core via shell alias at {resolved}.")
-        return resolved
+    prefix = _resolve_tool_via_shell_rc(tool_name)
+    if prefix:
+        return CoreFileTool(tool_name, prefix, "shell startup files",
+                            _tool_output_mode(tool_name))
 
-    die("'bit2core' not found. It is neither on PATH nor resolvable as "
-        "a bash/zsh alias from your startup files. Install mega65-tools "
-        "(which provides bit2core) or add it to your PATH/aliases and "
-        "try again.")
+    return None
+
+
+def check_core_file_tool() -> CoreFileTool:
+    tools = []
+    for tool_name in ("coretool", "bit2core"):
+        tool = _find_core_file_tool(tool_name)
+        if tool:
+            tools.append(tool)
+            ok(f"Found {tool.name} via {tool.source}: "
+               f"{_format_command_prefix(tool.command_prefix)}.")
+
+    if not tools:
+        die("'coretool' or 'bit2core' not found. Neither tool is on PATH nor "
+            "resolvable from bash/zsh startup files. Install mega65-tools or "
+            "add coretool/bit2core to your PATH/aliases and try again.")
+
+    selected = next((tool for tool in tools if tool.name == "coretool"), tools[0])
+    if selected.name == "coretool" and any(tool.name == "bit2core" for tool in tools):
+        info("Both coretool and bit2core are available; using coretool.")
+    else:
+        info(f"Using {selected.name} to generate .cor files.")
+    return selected
 
 
 def board_to_machine(rev: str) -> str:
-    """bit2core's `machine` argument: 'mega65rN'."""
+    """coretool target / bit2core machine argument: 'mega65rN'."""
     return f"mega65r{rev[1:].lower()}"
 
 
@@ -384,10 +475,9 @@ def generate_shell_config(repo: Path, dst: Path) -> None:
     info(f"Running: bash {script.relative_to(repo)} {dst.name} auto")
     result = subprocess.run(cmd, cwd=str(tools_dir),
                             capture_output=True, text=True)
-    for stream in (result.stdout, result.stderr):
-        if stream and stream.strip():
-            for line in stream.rstrip().splitlines():
-                print(f"        {line}")
+    if _VERBATIM or result.returncode != 0:
+        for stream in (result.stdout, result.stderr):
+            _print_tool_output(stream)
     if result.returncode != 0:
         die(f"make_config.sh failed (exit code {result.returncode}).")
     if not dst.is_file():
@@ -412,38 +502,121 @@ def copy_inofficial_md(repo: Path, out: Path) -> Path:
     return dst
 
 
-def run_bit2core(bit2core: str, machine: str, src_bit: Path,
-                 core_name: str, version: str, dst_cor: Path) -> None:
-    cmd = [
-        bit2core, machine, str(src_bit),
+def _build_coretool_args(machine: str, src_bit: Path, core_name: str,
+                         version: str, dst_cor: Path,
+                         overwrite: bool) -> tuple:
+    args = [
+        "-B", str(dst_cor),
+        "--bit", str(src_bit),
+        "--target", machine,
+        "--bit-name", core_name,
+        "--bit-version", version,
+        "--flags", CORETOOL_FLAGS,
+        "--caps", CORETOOL_CAPS,
+    ]
+    display = [
+        "-B", _quote(str(dst_cor)),
+        "--bit", _quote(str(src_bit)),
+        "--target", machine,
+        "--bit-name", _force_quote(core_name),
+        "--bit-version", _force_quote(version),
+        "--flags", CORETOOL_FLAGS,
+        "--caps", _quote(CORETOOL_CAPS),
+    ]
+    if overwrite:
+        args.insert(0, "--force")
+        display.insert(0, "--force")
+    return tuple(args), tuple(display)
+
+
+def _build_bit2core_args(machine: str, src_bit: Path, core_name: str,
+                         version: str, dst_cor: Path) -> tuple:
+    args = [
+        machine, str(src_bit),
         core_name, version,
         str(dst_cor),
         BIT2CORE_TAIL,
     ]
-    # Build a human-readable log line. core_name and version are always
-    # force-quoted (regardless of whether they happen to contain spaces or
-    # special characters) so the printed command exactly mirrors how a user
-    # would type it. Note: subprocess.run with a list does NOT pass these
-    # quotes to bit2core itself — each list element is one argv slot.
+    # core_name and version are always force-quoted in the display output so
+    # the printed command mirrors how a user would type it. subprocess.run
+    # still receives each unquoted value as one argv slot.
     display = (
-        [bit2core, machine, _quote(str(src_bit))]
+        [machine, _quote(str(src_bit))]
         + [_force_quote(core_name), _force_quote(version)]
         + [_quote(str(dst_cor)), _quote(BIT2CORE_TAIL)]
     )
-    info("Running: " + " ".join(display))
+    return tuple(args), tuple(display)
+
+
+def _build_core_file_command(tool: CoreFileTool, machine: str, src_bit: Path,
+                             core_name: str, version: str, dst_cor: Path,
+                             overwrite: bool) -> tuple:
+    if tool.name == "coretool":
+        args, display_args = _build_coretool_args(
+            machine, src_bit, core_name, version, dst_cor, overwrite
+        )
+    elif tool.name == "bit2core":
+        args, display_args = _build_bit2core_args(
+            machine, src_bit, core_name, version, dst_cor
+        )
+    else:
+        raise ValueError(f"Unsupported core-file tool: {tool.name}")
+
+    cmd = tuple(tool.command_prefix) + args
+    display = tuple(_quote(part) for part in tool.command_prefix) + display_args
+    return cmd, display
+
+
+def _print_tool_output(stream: str, force: bool = False) -> None:
+    if (_VERBATIM or force) and stream and stream.strip():
+        for line in stream.rstrip().splitlines():
+            print(f"        {line}")
+
+
+def _run_separate_capture(tool: CoreFileTool, cmd: tuple, machine: str) -> None:
     # bit2core emits Xilinx-header validation lines on stdout and the
-    # WARNING/INFO/"Core file written" lines on stderr. We capture them
-    # separately and print stdout first, then stderr — matching the order
-    # bit2core produces in an interactive terminal. (A merged-stream pipe
-    # would reorder them due to stdout becoming block-buffered when not
-    # connected to a TTY.)
+    # WARNING/INFO/"Core file written" lines on stderr. Capture them
+    # separately and print stdout first, then stderr, matching the order
+    # bit2core produces in an interactive terminal. A merged-stream pipe would
+    # reorder them due to stdout becoming block-buffered when not connected to
+    # a TTY.
     result = subprocess.run(cmd, capture_output=True, text=True)
+    force_output = result.returncode != 0
     for stream in (result.stdout, result.stderr):
-        if stream and stream.strip():
-            for line in stream.rstrip().splitlines():
-                print(f"        {line}")
+        _print_tool_output(stream, force=force_output)
     if result.returncode != 0:
-        die(f"bit2core failed for {machine} (exit code {result.returncode}).")
+        die(f"{tool.name} failed for {machine} (exit code {result.returncode}).")
+
+
+def _run_python_merged_capture(tool: CoreFileTool, cmd: tuple, machine: str) -> None:
+    # coretool is a Python program. PYTHONUNBUFFERED keeps stdout/stderr write
+    # order stable when both streams are merged into one captured pipe.
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    result = subprocess.run(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, env=env)
+    _print_tool_output(result.stdout, force=result.returncode != 0)
+    if result.returncode != 0:
+        die(f"{tool.name} failed for {machine} (exit code {result.returncode}).")
+
+
+def run_core_file_tool(tool: CoreFileTool, machine: str, src_bit: Path,
+                       core_name: str, version: str, dst_cor: Path,
+                       overwrite: bool) -> None:
+    cmd, display = _build_core_file_command(
+        tool, machine, src_bit, core_name, version, dst_cor, overwrite
+    )
+    info(f"Running ({tool.name}): " + " ".join(display))
+    try:
+        if tool.output_mode == OUTPUT_SEPARATE:
+            _run_separate_capture(tool, cmd, machine)
+        elif tool.output_mode == OUTPUT_MERGED_PYTHON:
+            _run_python_merged_capture(tool, cmd, machine)
+        else:
+            raise ValueError(f"Unsupported output mode: {tool.output_mode}")
+    except FileNotFoundError:
+        die(f"{tool.name} executable not found while running: "
+            f"{_format_command_prefix(tool.command_prefix)}")
 
 
 def _quote(arg: str) -> str:
@@ -464,7 +637,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="make_release.py",
         description="Package a C64MEGA65 release: copy R3..R6 bitstreams, "
-                    "produce .cor files via bit2core, generate the "
+                    "produce .cor files via coretool or bit2core, generate the "
                     "c64mega65-<version> config file and copy VERSIONS.md "
                     "into the output folder. Alpha releases also copy "
                     "inofficial.md.",
@@ -502,6 +675,7 @@ def main() -> None:
             "  make_release.py A15test1 /tmp/builds R6 --ignore\n"
             "  make_release.py V6.1 ./out R3,R6\n"
             "  make_release.py V6.1 ./out R3,R6 --force\n"
+            "  make_release.py V6.1 ./out R6 --verbatim\n"
         ),
     )
     parser.add_argument("version",
@@ -526,7 +700,13 @@ def main() -> None:
                              "skip the doc/inofficial.md alpha-release row "
                              "check. The version string is still required to "
                              "appear in CORE/vhdl/config.vhd.")
+    parser.add_argument("-v", "--verbatim", action="store_true",
+                        help="Print the full step-by-step output, including "
+                             "external tool commands and captured tool output. "
+                             "By default only the final release summary is "
+                             "printed.")
     args = parser.parse_args()
+    set_verbatim(args.verbatim)
 
     # 1) Validate version format up front.
     if args.ignore:
@@ -546,8 +726,8 @@ def main() -> None:
     repo = find_repo_root()
     info(f"Repository root: {repo}")
 
-    # 3) Check that bit2core is available before doing anything expensive.
-    bit2core = check_bit2core()
+    # 3) Check that a .cor builder is available before doing anything expensive.
+    core_file_tool = check_core_file_tool()
 
     # 4) Cross-check config.vhd.
     check_config_vhd(repo, args.version)
@@ -626,10 +806,10 @@ def main() -> None:
         ok(f"[{rev}] {dst_bit.name} ({dst_bit.stat().st_size:,} bytes)")
 
         info(f"[{rev}] Generating {dst_cor.name}")
-        run_bit2core(bit2core, board_to_machine(rev), dst_bit,
-                     CORE_NAME, args.version, dst_cor)
+        run_core_file_tool(core_file_tool, board_to_machine(rev), dst_bit,
+                           CORE_NAME, args.version, dst_cor, args.force)
         if not dst_cor.is_file():
-            die(f"[{rev}] bit2core did not produce {dst_cor}.")
+            die(f"[{rev}] {core_file_tool.name} did not produce {dst_cor}.")
         ok(f"[{rev}] {dst_cor.name} ({dst_cor.stat().st_size:,} bytes)")
 
     # 10) Generate the c64mega65-<version> config file alongside the cores so
@@ -653,8 +833,8 @@ def main() -> None:
         imd = copy_inofficial_md(repo, out)
         ok(f"{imd.name} ({imd.stat().st_size:,} bytes)")
 
-    # 12) Final summary so the user can see at-a-glance what was produced
-    #     without having to scroll back through the verbose live output.
+    # 12) Final summary so the default output stays concise and verbatim mode
+    #     still ends with an at-a-glance view of what was produced.
     print_summary(args.version, kind, targets, cfg_dst, vmd, imd, out)
 
 
@@ -666,7 +846,8 @@ def print_summary(version: str, kind: str, targets: tuple,
     warn_mark = _c("33", "[!!]")
     title = _c("1", f"Release Summary — {version} ({kind})")
 
-    print()
+    if _VERBATIM:
+        print()
     print(_c("36", bar))
     print(" " + title)
     print(_c("36", bar))
@@ -685,7 +866,7 @@ def print_summary(version: str, kind: str, targets: tuple,
         print(f" {warn_mark} {len(_WARNINGS)} warning(s) emitted during the run:")
         for w in _WARNINGS:
             # Keep summary lines short — show first line only of multi-line
-            # warnings; user can scroll up for full context.
+            # warnings.
             first = w.splitlines()[0]
             if len(first) > 56:
                 first = first[:53] + "..."
