@@ -486,13 +486,6 @@ begin
    dbg_io_10             <= 'Z';
    dbg_io_11             <= 'Z';
 
-   eth_clock_o           <= '0';
-   eth_led2_o            <= '0';
-   eth_mdc_o             <= '0';
-   eth_mdio_io           <= 'Z';
-   eth_reset_o           <= '1';
-   eth_txd_o             <= (others => '0');
-   eth_txen_o            <= '0';
    -- MEGA65 physical internal 1581 (issue #90): the read-path control outputs
    -- (f_motora/f_selecta/f_side1/f_stepdir/f_step/f_density) are now driven by
    -- the physical_1581_controller via MEGA65_Core. Drive B and the write pins
@@ -705,7 +698,17 @@ begin
       fpga_sda_io             => fpga_sda_io,
       fpga_scl_io             => fpga_scl_io,
       grove_sda_io            => grove_sda_io,
-      grove_scl_io            => grove_scl_io
+      grove_scl_io            => grove_scl_io,
+      eth_clock_o             => eth_clock_o,
+      eth_led2_o              => eth_led2_o,
+      eth_mdc_o               => eth_mdc_o,
+      eth_mdio_io             => eth_mdio_io,
+      eth_reset_o             => eth_reset_o,
+      eth_rxd_i               => eth_rxd_i,
+      eth_rxdv_i              => eth_rxdv_i,
+      eth_rxer_i              => eth_rxer_i,
+      eth_txd_o               => eth_txd_o,
+      eth_txen_o              => eth_txen_o
    ); -- i_framework
 
 

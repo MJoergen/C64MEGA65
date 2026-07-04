@@ -28,6 +28,9 @@ entity clk_m2m is
       qnice_clk_o       : out std_logic;   -- QNICE's 50 MHz main clock
       qnice_rst_o       : out std_logic;   -- QNICE's reset, synchronized
 
+      eth_clk_o         : out std_logic;   -- Ethernet's 50 MHz main clock
+      eth_rst_o         : out std_logic;   -- Ethernet's reset, synchronized
+
       hr_clk_o          : out std_logic;   -- MEGA65 HyperRAM @ 100 MHz
       hr_clk_del_o      : out std_logic;   -- MEGA65 HyperRAM @ 100 MHz phase delayed
       hr_delay_refclk_o : out std_logic;   -- MEGA65 HyperRAM @ 200 MHz
@@ -48,6 +51,7 @@ architecture rtl of clk_m2m is
 signal audio_fb_mmcm        : std_logic;
 signal qnice_fb_mmcm        : std_logic;
 signal qnice_clk_mmcm       : std_logic;
+signal eth_clk_mmcm         : std_logic;
 signal hr_clk_mmcm          : std_logic;
 signal hr_clk_del_mmcm      : std_logic;
 signal hr_delay_refclk_mmcm : std_logic;
@@ -91,6 +95,9 @@ begin
          CLKOUT4_DIVIDE       => 6,          -- SDRAM @ 166 MHz
          CLKOUT4_DUTY_CYCLE   => 0.500,
          CLKOUT4_PHASE        => 0.000,
+         CLKOUT5_DIVIDE       => 20,         -- QNICE @ 50 MHz
+         CLKOUT5_DUTY_CYCLE   => 0.500,
+         CLKOUT5_PHASE        => 0.000,
          DIVCLK_DIVIDE        => 1,
          REF_JITTER1          => 0.010,
          STARTUP_WAIT         => "FALSE"
@@ -104,6 +111,7 @@ begin
          CLKOUT2             => hr_delay_refclk_mmcm,
          CLKOUT3             => hr_clk_del_mmcm,
          CLKOUT4             => sr_clk_mmcm,
+         CLKOUT5             => eth_clk_mmcm,
          LOCKED              => qnice_locked,
          PWRDWN              => '0',
          RST                 => '0'
@@ -166,6 +174,12 @@ begin
          O => sr_clk_o
       );
 
+   eth_clk_bufg : BUFG
+      port map (
+         I => eth_clk_mmcm,
+         O => eth_clk_o
+      );
+
    audio_clk_bufg : BUFG
       port map (
          I => audio_clk_mmcm,
@@ -213,6 +227,19 @@ begin
          src_arst  => not (qnice_locked and sys_rstn_i and core_rstn_i),
          dest_clk  => sr_clk_o,         -- 1-bit input: Destination clock.
          dest_arst => sr_rst_o          -- 1-bit output: src_rst synchronized to the destination clock domain.
+                                        -- This output is registered.
+      );
+
+   i_xpm_cdc_async_rst_eth : xpm_cdc_async_rst
+      generic map (
+         RST_ACTIVE_HIGH => 1,
+         DEST_SYNC_FF    => 6
+      )
+      port map (
+         -- 1-bit input: Source reset signal
+         src_arst  => not (qnice_locked and sys_rstn_i),
+         dest_clk  => eth_clk_o,        -- 1-bit input: Destination clock.
+         dest_arst => eth_rst_o         -- 1-bit output: src_rst synchronized to the destination clock domain.
                                         -- This output is registered.
       );
 

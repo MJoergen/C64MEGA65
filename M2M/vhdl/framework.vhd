@@ -245,7 +245,18 @@ port (
    -- U38. RV-3032-C7.  Address 0x51. Real-Time Clock Module.
    -- U39. 24LC128.     Address 0x56. 128K CMOS Serial EEPROM.
    fpga_sda_io             : inout std_logic;
-   fpga_scl_io             : inout std_logic
+   fpga_scl_io             : inout std_logic;
+
+   eth_clock_o             : out   std_logic;
+   eth_led2_o              : out   std_logic;
+   eth_mdc_o               : out   std_logic;
+   eth_mdio_io             : inout std_logic;
+   eth_reset_o             : out   std_logic;
+   eth_rxd_i               : in    std_logic_vector(1 downto 0);
+   eth_rxdv_i              : in    std_logic;
+   eth_rxer_i              : in    std_logic;
+   eth_txd_o               : out   std_logic_vector(1 downto 0);
+   eth_txen_o              : out   std_logic
 );
 end entity framework;
 
@@ -448,6 +459,10 @@ signal sdram_dq_oe_n          : std_logic_vector(15 downto 0); -- Output enable 
 signal scl_out                : std_logic_vector(7 downto 0);
 signal sda_out                : std_logic_vector(7 downto 0);
 
+-- Ethernet
+signal eth_clk       : std_logic;                     -- Must be 50 MHz, same as PHY reference clock
+signal eth_rst       : std_logic;                     -- Synchronous, active-high reset
+
 begin
 
    ---------------------------------------------------------------------------------------------------------------
@@ -461,6 +476,8 @@ begin
          core_rstn_i       => reset_core_n,       -- reset only the core (means the HyperRAM needs to be reset, too)
          qnice_clk_o       => qnice_clk,
          qnice_rst_o       => qnice_rst,
+         eth_clk_o         => eth_clk,
+         eth_rst_o         => eth_rst,
          hr_clk_o          => hr_clk,
          hr_clk_del_o      => hr_clk_del,
          hr_delay_refclk_o => hr_delay_refclk,
@@ -1156,6 +1173,27 @@ begin
    vga_scl_io   <= '0' when scl_out(4) = '0' else 'Z';
    audio_sda_io <= '0' when sda_out(5) = '0' else 'Z';
    audio_scl_io <= '0' when scl_out(5) = '0' else 'Z';
+
+
+   ---------------------------------------------------------------------------------------------------------------
+   -- Ethernet controller
+   ---------------------------------------------------------------------------------------------------------------
+
+   eth_wrapper_inst : entity work.eth_wrapper
+      port map (
+         eth_clk_i    => eth_clk,
+         eth_rst_i    => eth_rst,
+         eth_clk_o    => eth_clock_o,
+         eth_rst_n_o  => eth_reset_o,
+         eth_led2_o   => eth_led2_o,
+         eth_mdc_o    => eth_mdc_o,
+         eth_mdio_io  => eth_mdio_io,
+         eth_rx_d_i   => eth_rxd_i,
+         eth_rxer_i   => eth_rxer_i,
+         eth_crs_dv_i => eth_rxdv_i,
+         eth_tx_d_o   => eth_txd_o,
+         eth_tx_en_o  => eth_txen_o
+      ); -- eth_wrapper_inst
 
 end architecture synthesis;
 
