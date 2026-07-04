@@ -1,0 +1,69 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Sat Jul  4 08:05:10 2026
+[*]
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.ghw"
+[dumpfile_mtime] "Sat Jul  4 08:03:04 2026"
+[dumpfile_size] 11725997
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.gtkw"
+[timestart] 0
+[size] 1276 835
+[pos] -1600 42
+*-36.278175 136640000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.tb_eth_rmii.
+[treeopen] top.tb_eth_rmii.eth_rmii_inst.
+[sst_width] 239
+[signals_width] 291
+[sst_expanded] 1
+[sst_vpaned_height] 240
+@800200
+-eth_rmii
+@28
+top.tb_eth_rmii.eth_rmii_inst.eth_clk_i
+top.tb_eth_rmii.eth_rmii_inst.eth_rst_i
+top.tb_eth_rmii.eth_rmii_inst.rx_valid_o
+top.tb_eth_rmii.eth_rmii_inst.rx_last_o
+top.tb_eth_rmii.eth_rmii_inst.rx_ok_o
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.rx_data_o[7:0]} top.tb_eth_rmii.eth_rmii_inst.rx_data_o[7] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[6] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[5] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[4] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[3] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[2] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[1] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[0]
+@28
+top.tb_eth_rmii.eth_rmii_inst.tx_ready_o
+top.tb_eth_rmii.eth_rmii_inst.tx_valid_i
+top.tb_eth_rmii.eth_rmii_inst.tx_last_i
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.tx_data_i[7:0]} top.tb_eth_rmii.eth_rmii_inst.tx_data_i[7] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[6] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[5] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[4] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[3] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[2] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[1] top.tb_eth_rmii.eth_rmii_inst.tx_data_i[0]
+@28
+#{top.tb_eth_rmii.eth_rmii_inst.eth_rxd_i[1:0]} top.tb_eth_rmii.eth_rmii_inst.eth_rxd_i[1] top.tb_eth_rmii.eth_rmii_inst.eth_rxd_i[0]
+top.tb_eth_rmii.eth_rmii_inst.eth_rxerr_i
+top.tb_eth_rmii.eth_rmii_inst.eth_crsdv_i
+#{top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[1:0]} top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[1] top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[0]
+top.tb_eth_rmii.eth_rmii_inst.eth_txen_o
+@420
+top.tb_eth_rmii.eth_rmii_inst.rx_fsm_state
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.rx_byte[7:0]} top.tb_eth_rmii.eth_rmii_inst.rx_byte[7] top.tb_eth_rmii.eth_rmii_inst.rx_byte[6] top.tb_eth_rmii.eth_rmii_inst.rx_byte[5] top.tb_eth_rmii.eth_rmii_inst.rx_byte[4] top.tb_eth_rmii.eth_rmii_inst.rx_byte[3] top.tb_eth_rmii.eth_rmii_inst.rx_byte[2] top.tb_eth_rmii.eth_rmii_inst.rx_byte[1] top.tb_eth_rmii.eth_rmii_inst.rx_byte[0]
+@420
+top.tb_eth_rmii.eth_rmii_inst.rx_dibit_cnt
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.rx_crc[31:0]} top.tb_eth_rmii.eth_rmii_inst.rx_crc[31] top.tb_eth_rmii.eth_rmii_inst.rx_crc[30] top.tb_eth_rmii.eth_rmii_inst.rx_crc[29] top.tb_eth_rmii.eth_rmii_inst.rx_crc[28] top.tb_eth_rmii.eth_rmii_inst.rx_crc[27] top.tb_eth_rmii.eth_rmii_inst.rx_crc[26] top.tb_eth_rmii.eth_rmii_inst.rx_crc[25] top.tb_eth_rmii.eth_rmii_inst.rx_crc[24] top.tb_eth_rmii.eth_rmii_inst.rx_crc[23] top.tb_eth_rmii.eth_rmii_inst.rx_crc[22] top.tb_eth_rmii.eth_rmii_inst.rx_crc[21] top.tb_eth_rmii.eth_rmii_inst.rx_crc[20] top.tb_eth_rmii.eth_rmii_inst.rx_crc[19] top.tb_eth_rmii.eth_rmii_inst.rx_crc[18] top.tb_eth_rmii.eth_rmii_inst.rx_crc[17] top.tb_eth_rmii.eth_rmii_inst.rx_crc[16] top.tb_eth_rmii.eth_rmii_inst.rx_crc[15] top.tb_eth_rmii.eth_rmii_inst.rx_crc[14] top.tb_eth_rmii.eth_rmii_inst.rx_crc[13] top.tb_eth_rmii.eth_rmii_inst.rx_crc[12] top.tb_eth_rmii.eth_rmii_inst.rx_crc[11] top.tb_eth_rmii.eth_rmii_inst.rx_crc[10] top.tb_eth_rmii.eth_rmii_inst.rx_crc[9] top.tb_eth_rmii.eth_rmii_inst.rx_crc[8] top.tb_eth_rmii.eth_rmii_inst.rx_crc[7] top.tb_eth_rmii.eth_rmii_inst.rx_crc[6] top.tb_eth_rmii.eth_rmii_inst.rx_crc[5] top.tb_eth_rmii.eth_rmii_inst.rx_crc[4] top.tb_eth_rmii.eth_rmii_inst.rx_crc[3] top.tb_eth_rmii.eth_rmii_inst.rx_crc[2] top.tb_eth_rmii.eth_rmii_inst.rx_crc[1] top.tb_eth_rmii.eth_rmii_inst.rx_crc[0]
+@28
+top.tb_eth_rmii.eth_rmii_inst.eth_crsdv_d
+@420
+top.tb_eth_rmii.eth_rmii_inst.tx_fsm_state
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.tx_shift[7:0]} top.tb_eth_rmii.eth_rmii_inst.tx_shift[7] top.tb_eth_rmii.eth_rmii_inst.tx_shift[6] top.tb_eth_rmii.eth_rmii_inst.tx_shift[5] top.tb_eth_rmii.eth_rmii_inst.tx_shift[4] top.tb_eth_rmii.eth_rmii_inst.tx_shift[3] top.tb_eth_rmii.eth_rmii_inst.tx_shift[2] top.tb_eth_rmii.eth_rmii_inst.tx_shift[1] top.tb_eth_rmii.eth_rmii_inst.tx_shift[0]
+#{top.tb_eth_rmii.eth_rmii_inst.tx_data[7:0]} top.tb_eth_rmii.eth_rmii_inst.tx_data[7] top.tb_eth_rmii.eth_rmii_inst.tx_data[6] top.tb_eth_rmii.eth_rmii_inst.tx_data[5] top.tb_eth_rmii.eth_rmii_inst.tx_data[4] top.tb_eth_rmii.eth_rmii_inst.tx_data[3] top.tb_eth_rmii.eth_rmii_inst.tx_data[2] top.tb_eth_rmii.eth_rmii_inst.tx_data[1] top.tb_eth_rmii.eth_rmii_inst.tx_data[0]
+@420
+top.tb_eth_rmii.eth_rmii_inst.tx_byte_cnt
+@28
+#{top.tb_eth_rmii.eth_rmii_inst.tx_twobit_cnt[1:0]} top.tb_eth_rmii.eth_rmii_inst.tx_twobit_cnt[1] top.tb_eth_rmii.eth_rmii_inst.tx_twobit_cnt[0]
+@22
+#{top.tb_eth_rmii.eth_rmii_inst.tx_crc[31:0]} top.tb_eth_rmii.eth_rmii_inst.tx_crc[31] top.tb_eth_rmii.eth_rmii_inst.tx_crc[30] top.tb_eth_rmii.eth_rmii_inst.tx_crc[29] top.tb_eth_rmii.eth_rmii_inst.tx_crc[28] top.tb_eth_rmii.eth_rmii_inst.tx_crc[27] top.tb_eth_rmii.eth_rmii_inst.tx_crc[26] top.tb_eth_rmii.eth_rmii_inst.tx_crc[25] top.tb_eth_rmii.eth_rmii_inst.tx_crc[24] top.tb_eth_rmii.eth_rmii_inst.tx_crc[23] top.tb_eth_rmii.eth_rmii_inst.tx_crc[22] top.tb_eth_rmii.eth_rmii_inst.tx_crc[21] top.tb_eth_rmii.eth_rmii_inst.tx_crc[20] top.tb_eth_rmii.eth_rmii_inst.tx_crc[19] top.tb_eth_rmii.eth_rmii_inst.tx_crc[18] top.tb_eth_rmii.eth_rmii_inst.tx_crc[17] top.tb_eth_rmii.eth_rmii_inst.tx_crc[16] top.tb_eth_rmii.eth_rmii_inst.tx_crc[15] top.tb_eth_rmii.eth_rmii_inst.tx_crc[14] top.tb_eth_rmii.eth_rmii_inst.tx_crc[13] top.tb_eth_rmii.eth_rmii_inst.tx_crc[12] top.tb_eth_rmii.eth_rmii_inst.tx_crc[11] top.tb_eth_rmii.eth_rmii_inst.tx_crc[10] top.tb_eth_rmii.eth_rmii_inst.tx_crc[9] top.tb_eth_rmii.eth_rmii_inst.tx_crc[8] top.tb_eth_rmii.eth_rmii_inst.tx_crc[7] top.tb_eth_rmii.eth_rmii_inst.tx_crc[6] top.tb_eth_rmii.eth_rmii_inst.tx_crc[5] top.tb_eth_rmii.eth_rmii_inst.tx_crc[4] top.tb_eth_rmii.eth_rmii_inst.tx_crc[3] top.tb_eth_rmii.eth_rmii_inst.tx_crc[2] top.tb_eth_rmii.eth_rmii_inst.tx_crc[1] top.tb_eth_rmii.eth_rmii_inst.tx_crc[0]
+#{top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[31:0]} top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[31] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[30] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[29] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[28] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[27] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[26] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[25] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[24] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[23] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[22] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[21] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[20] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[19] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[18] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[17] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[16] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[15] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[14] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[13] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[12] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[11] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[10] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[9] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[8] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[7] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[6] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[5] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[4] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[3] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[2] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[1] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[0]
+@28
+top.tb_eth_rmii.eth_rmii_inst.tx_crc_enable
+@1000200
+-eth_rmii
+[pattern_trace] 1
+[pattern_trace] 0
