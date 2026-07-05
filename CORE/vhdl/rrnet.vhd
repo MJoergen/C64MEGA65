@@ -1,7 +1,10 @@
 -- ----------------------------------------------------------
 -- Description: Simulates an CS8900A ethernet chip
 --
--- From documentation: https://www.mi.fu-berlin.de/inf/groups/ag-tech/projects/ScatterWeb/moduleComponents/EWS_CS8900.pdf
+-- Datasheet: https://www.mi.fu-berlin.de/inf/groups/ag-tech/projects/ScatterWeb/moduleComponents/EWS_CS8900.pdf
+--
+-- Only I/O Space Operation is supported, see section 4.10 in datasheet.
+--
 -- PacketPage Address:
 -- 0000 - 0045 : Bus Interface Registers
 -- 0100 - 013F : Status and Control Registers
