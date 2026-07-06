@@ -33,12 +33,12 @@ SAVE = $(TB).gtkw
 
 LOG_FILE = cpulog.txt
 
-STOPTIME = 1us
+STOPTIME = 10us
 
-PROG_SRC = rrnet.asm
+PROG_SRC = rrnet.asm cs8900a.asm
 PROG_OBJ = $(PROG_SRC:.asm=.o)
-PROG_BIN = $(PROG_SRC:.asm=.bin)
-PROG_HEX = $(PROG_SRC:.asm=.hex)
+PROG_BIN = rrnet.bin
+PROG_HEX = rrnet.hex
 LD_CFG   = ld.cfg
 
 GENERIC += -gG_ROM_FILE=$(PROG_HEX) -gG_LOG_FILE=$(LOG_FILE)
@@ -52,7 +52,7 @@ show: $(WAVE)
 	gtkwave $(WAVE) $(SAVE)
 
 %.o: %.asm
-	ca65 $<
+	ca65 -t c64 $<
 
 $(PROG_BIN): $(PROG_OBJ) $(LD_CFG)
 	ld65 -C $(LD_CFG) $(PROG_OBJ)
