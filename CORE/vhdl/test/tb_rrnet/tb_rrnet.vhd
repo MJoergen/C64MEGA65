@@ -21,6 +21,7 @@ architecture tb of tb_rrnet is
 
   signal clk : std_logic := '1';
   signal rst : std_logic := '1';
+  signal ce  : std_logic := '1';
 
   signal cpu_addr      : std_logic_vector(15 downto 0);
   signal cpu_wr_en     : std_logic;
@@ -37,9 +38,10 @@ architecture tb of tb_rrnet is
 
 begin
 
-  -- Clock and reset
+  -- Clock, reset, and clock enable
   clk         <= not clk after 5 ns;
   rst         <= '1', '0' after 100 ns;
+  ce          <= not ce when rising_edge(clk);
 
   -- Instantiate DUT
   rrnet_inst : entity work.rrnet
@@ -123,9 +125,9 @@ begin
       G_VARIANT  => "6502"
     )
     port map (
-      clk_i       => not clk,
+      clk_i       => clk,
       rst_i       => rst,
-      ce_i        => '1',
+      ce_i        => ce,
       nmi_i       => '0',
       irq_i       => '0',
       addr_o      => cpu_addr,
