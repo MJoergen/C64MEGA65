@@ -70,8 +70,10 @@ Version 6 - MONTH DAY, 2026
   core saw floating data in some memory ranges instead of cartridge-provided
   RAM/ROM).
 
-* Increased simulated REU compatibiltiy, fREUd demo by Hoaxers now works
-  flawlessly.(GitHub issue https://github.com/MJoergen/C64MEGA65/issues/180)
+* Increased simulated REU accuracy and therefore compatibility: fREUd demo by
+  Hoaxers and TreuLove by Booze Design both now work flawlessly.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/150 and
+  https://github.com/MJoergen/C64MEGA65/issues/180)
 
 * The simulated REU now only claims the primary REU register window at
   `$DF00-$DF1F` when used together with a hardware cartridge. The remaining
