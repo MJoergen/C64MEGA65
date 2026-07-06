@@ -68,8 +68,8 @@ architecture synthesis of tdp_ram is
    end;
 
    signal ram           : t_ram := InitRAM(ROM_FILE);
-   signal address_a_reg : std_logic_vector(ADDR_WIDTH-1 downto 0);
-   signal address_b_reg : std_logic_vector(ADDR_WIDTH-1 downto 0);
+   signal address_a_reg : std_logic_vector(ADDR_WIDTH-1 downto 0) := (others => '0');
+   signal address_b_reg : std_logic_vector(ADDR_WIDTH-1 downto 0) := (others => '0');
 
 begin
 
