@@ -128,6 +128,9 @@ Version 6 - MONTH DAY, 2026
   - Super Expander 64
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/130)
 
+  - Super Smash
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/131)
+
   - Various REUs such as: REU 1750, REU Grande, RAD Expansion Unit
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/205)
 
