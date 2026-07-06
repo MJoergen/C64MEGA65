@@ -35,3 +35,4 @@ M2M/rom/tests/config_deps_tb.vhd
 M2M/rom/tests/__pycache__/
 M2M/video_filters/*.out
 .claude
+__pycache__
