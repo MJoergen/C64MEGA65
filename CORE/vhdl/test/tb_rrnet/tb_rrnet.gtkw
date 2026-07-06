@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Mon Jul  6 06:09:31 2026
+[*] Mon Jul  6 06:16:11 2026
 [*]
 [dumpfile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_rrnet/tb_rrnet.ghw"
-[dumpfile_mtime] "Mon Jul  6 06:08:25 2026"
-[dumpfile_size] 752818
+[dumpfile_mtime] "Mon Jul  6 06:13:48 2026"
+[dumpfile_size] 753061
 [savefile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_rrnet/tb_rrnet.gtkw"
-[timestart] 254600000
+[timestart] 921900000
 [size] 1673 854
 [pos] 0 4
-*-26.128428 520400000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-27.128428 1462500000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_rrnet.
 [sst_width] 276
@@ -24,7 +24,13 @@ top.tb_rrnet.rst
 top.tb_rrnet.ce
 @22
 #{top.tb_rrnet.cpu_addr[15:0]} top.tb_rrnet.cpu_addr[15] top.tb_rrnet.cpu_addr[14] top.tb_rrnet.cpu_addr[13] top.tb_rrnet.cpu_addr[12] top.tb_rrnet.cpu_addr[11] top.tb_rrnet.cpu_addr[10] top.tb_rrnet.cpu_addr[9] top.tb_rrnet.cpu_addr[8] top.tb_rrnet.cpu_addr[7] top.tb_rrnet.cpu_addr[6] top.tb_rrnet.cpu_addr[5] top.tb_rrnet.cpu_addr[4] top.tb_rrnet.cpu_addr[3] top.tb_rrnet.cpu_addr[2] top.tb_rrnet.cpu_addr[1] top.tb_rrnet.cpu_addr[0]
+@28
+top.tb_rrnet.cpu_wr_en
+@22
 #{top.tb_rrnet.cpu_wr_data[7:0]} top.tb_rrnet.cpu_wr_data[7] top.tb_rrnet.cpu_wr_data[6] top.tb_rrnet.cpu_wr_data[5] top.tb_rrnet.cpu_wr_data[4] top.tb_rrnet.cpu_wr_data[3] top.tb_rrnet.cpu_wr_data[2] top.tb_rrnet.cpu_wr_data[1] top.tb_rrnet.cpu_wr_data[0]
+@28
+top.tb_rrnet.cpu_rd_en
+@22
 #{top.tb_rrnet.cpu_rd_data[7:0]} top.tb_rrnet.cpu_rd_data[7] top.tb_rrnet.cpu_rd_data[6] top.tb_rrnet.cpu_rd_data[5] top.tb_rrnet.cpu_rd_data[4] top.tb_rrnet.cpu_rd_data[3] top.tb_rrnet.cpu_rd_data[2] top.tb_rrnet.cpu_rd_data[1] top.tb_rrnet.cpu_rd_data[0]
 @28
 top.tb_rrnet.rrnet_cs

@@ -54,6 +54,7 @@ architecture rtl of rrnet is
   signal   pp_wrdat : std_logic_vector(15 downto 0);
   signal   pp_rddat : std_logic_vector(15 downto 0);
 
+  signal   cs_d : std_logic := '0';
 
   -- This holds the entire 2k words of PacketPage memory.
   type     byte_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
@@ -76,8 +77,7 @@ begin
 
   pp_proc : process (clk_i)
   begin
-    -- Note: Deliberately using falling edge
-    if falling_edge(clk_i) then
+    if rising_edge(clk_i) then
       if pp_we = '1' then
         packet_page(to_integer(pp_ptr)) <= pp_wrdat;
       end if;
@@ -88,8 +88,12 @@ begin
   fsm_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
+      cs_d <= cs_i;
       if cs_i = '1' then
         if we_i = '1' then
+          if cs_d = '0' then
+            report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
+          end if;
 
           case unsigned(addr_i) is
 
@@ -129,6 +133,10 @@ begin
           end case;
 
         else
+          if cs_d = '0' then
+            report "RRNET: READ FROM $DE" & to_hstring(addr_i);
+          end if;
+
           rd_data_o <= (others => '0');
 
           case unsigned(addr_i) is
