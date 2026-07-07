@@ -370,17 +370,8 @@ about how to get started with doing this and about the
 
 ## 22) I am a total newby and want to learn FPGA development and making or porting cores
 
-If you own a MEGA65, then
-[this short article](https://files.mega65.org?ar=898d573b-d30d-4438-8893-09455bd16400)
-is a smooth start to FPGA development. It uses some of the tutorials of the
-[MiSTer2MEGA65 framework](https://github.com/sy2002/MiSTer2MEGA65/wiki)
-and some resources from the web to get you started.
+Go to the [MiSTer2MEGA65 Wiki](https://github.com/sy2002/MiSTer2MEGA65/wiki). It starts
+with a "New to FPGAs?" chapter that will smoothly guide you on your adventure.
 
-Moreover, the
-[Learning Resources for FPGA Development](https://discord.com/channels/719326990221574164/1180179132668203118)
-post on Discord is a great place to meet likeminded people and to ask questions.
-
-[Download and read](https://github.com/sy2002/MiSTer2MEGA65/blob/master/doc/wiki/assets/FPGAs_VHDL_First_Steps_v2p3.pdf)
-Helen DeBlumont's beginner "FPGAs with VHDL: First Steps" or go deep by working through the textbook
-[The Designer's Guide to VHDL](https://picture.iczhiku.com/resource/eetop/sYiEyoAUyiEkPBBb.pdf)
-by Peter J. Ashenden.
+You can also go through [this tutorial](https://files.mega65.org?ar=898d573b-d30d-4438-8893-09455bd16400)
+on the MEGA65 FileHost.
