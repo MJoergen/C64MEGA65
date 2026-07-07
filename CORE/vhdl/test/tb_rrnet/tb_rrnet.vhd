@@ -19,9 +19,9 @@ end entity tb_rrnet;
 
 architecture tb of tb_rrnet is
 
-  signal clk : std_logic := '1';
-  signal rst : std_logic := '1';
-  signal ce  : std_logic := '1';
+  signal clk : std_logic          := '1';
+  signal rst : std_logic          := '1';
+  signal ce  : std_logic          := '1';
 
   signal cpu_addr      : std_logic_vector(15 downto 0);
   signal cpu_wr_en     : std_logic;
@@ -36,6 +36,16 @@ architecture tb of tb_rrnet is
   signal rom_cs   : std_logic;
   signal ram_cs   : std_logic;
 
+  -- Ethernet interface
+  signal eth_rx_valid : std_logic;                    -- One-cycle strobe per received byte
+  signal eth_rx_last  : std_logic;                    -- Last byte of frame
+  signal eth_rx_ok    : std_logic;                    -- Only meaningful when rx_last_i = '1'
+  signal eth_rx_data  : std_logic_vector(7 downto 0); -- Received byte
+  signal eth_tx_ready : std_logic;                    -- Pulses '1' on the byte-boundary cycle
+  signal eth_tx_valid : std_logic;                    -- Client presents a byte
+  signal eth_tx_last  : std_logic;                    -- Client marks the last byte
+  signal eth_tx_data  : std_logic_vector(7 downto 0); -- Byte to transmit
+
 begin
 
   -- Clock, reset, and clock enable
@@ -46,14 +56,29 @@ begin
   -- Instantiate DUT
   rrnet_inst : entity work.rrnet
     port map (
-      clk_i     => clk,
-      rst_i     => rst,
-      cs_i      => rrnet_cs,
-      addr_i    => cpu_addr(7 downto 0),
-      we_i      => cpu_wr_en,
-      wr_data_i => cpu_wr_data,
-      rd_data_o => rrnet_rd_data
+      clk_i          => clk,
+      rst_i          => rst,
+      cs_i           => rrnet_cs,
+      addr_i         => cpu_addr(7 downto 0),
+      we_i           => cpu_wr_en,
+      wr_data_i      => cpu_wr_data,
+      rd_data_o      => rrnet_rd_data,
+      eth_rx_valid_i => eth_rx_valid,
+      eth_rx_last_i  => eth_rx_last,
+      eth_rx_ok_i    => eth_rx_ok,
+      eth_rx_data_i  => eth_rx_data,
+      eth_tx_ready_i => eth_tx_ready,
+      eth_tx_valid_o => eth_tx_valid,
+      eth_tx_last_o  => eth_tx_last,
+      eth_tx_data_o  => eth_tx_data
     ); -- rrnet_inst
+
+  -- Simple loopback
+  eth_rx_valid <= eth_tx_valid;
+  eth_rx_last  <= eth_tx_last;
+  eth_rx_ok    <= '1';
+  eth_rx_data  <= eth_tx_data;
+  eth_tx_ready <= not rst;
 
   -- Simple address decoding
   rrnet_cs    <= '1' when cpu_addr(15 downto 8) = x"DE" else

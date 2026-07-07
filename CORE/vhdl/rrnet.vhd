@@ -20,15 +20,24 @@ library ieee;
 
 entity rrnet is
   port (
-    clk_i     : in    std_logic;
-    rst_i     : in    std_logic;
-
     -- CPU interface
-    cs_i      : in    std_logic; -- Connect to IO1 ($DExx)
-    addr_i    : in    std_logic_vector(7 downto 0);
-    we_i      : in    std_logic;
-    wr_data_i : in    std_logic_vector(7 downto 0);
-    rd_data_o : out   std_logic_vector(7 downto 0)
+    clk_i          : in    std_logic;
+    rst_i          : in    std_logic;
+    cs_i           : in    std_logic;                    -- Connect to IO1 ($DExx)
+    addr_i         : in    std_logic_vector(7 downto 0);
+    we_i           : in    std_logic;
+    wr_data_i      : in    std_logic_vector(7 downto 0);
+    rd_data_o      : out   std_logic_vector(7 downto 0);
+
+    -- Ethernet interface
+    eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
+    eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
+    eth_rx_ok_i    : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
+    eth_rx_data_i  : in    std_logic_vector(7 downto 0); -- Received byte
+    eth_tx_ready_i : in    std_logic;                    -- Pulses '1' on the byte-boundary cycle
+    eth_tx_valid_o : out   std_logic;                    -- Client presents a byte
+    eth_tx_last_o  : out   std_logic;                    -- Client marks the last byte
+    eth_tx_data_o  : out   std_logic_vector(7 downto 0)  -- Byte to transmit
   );
 end entity rrnet;
 
@@ -54,7 +63,7 @@ architecture rtl of rrnet is
   signal   pp_wrdat : std_logic_vector(15 downto 0);
   signal   pp_rddat : std_logic_vector(15 downto 0);
 
-  signal   cs_d : std_logic := '0';
+  signal   cs_d : std_logic                         := '0';
 
   -- This holds the entire 2k words of PacketPage memory.
   type     byte_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
@@ -74,6 +83,11 @@ architecture rtl of rrnet is
   signal   packet_page : byte_array_type(0 to 2047) := get_packet_page_init;
 
 begin
+
+  -- TBD!!!
+  eth_tx_valid_o <= eth_rx_valid_i;
+  eth_tx_last_o  <= eth_rx_last_i;
+  eth_tx_data_o  <= eth_rx_data_i;
 
   pp_proc : process (clk_i)
   begin

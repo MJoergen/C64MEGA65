@@ -149,7 +149,7 @@ port (
    cart_exrom_i            : in    std_logic;                  -- Input only on R4. Should be inout.
    cart_nmi_i              : in    std_logic;                  -- Input only on R4. Should be inout.
    cart_irq_i              : in    std_logic;                  -- Input only on R4. Should be inout.
-   cart_ctrl_en_o          : out   std_logic;
+   cart_ctrl_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_ctrl_dir_o         : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_ba_io              : inout std_logic;
    cart_rw_io              : inout std_logic;
@@ -157,11 +157,11 @@ port (
    cart_io2_io             : inout std_logic;
    cart_romh_io            : inout std_logic;
    cart_roml_io            : inout std_logic;
-   cart_addr_en_o          : out   std_logic;
+   cart_addr_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_haddr_dir_o        : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_laddr_dir_o        : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_a_io               : inout unsigned(15 downto 0);
-   cart_data_en_o          : out   std_logic;
+   cart_data_en_o          : out   std_logic;                  -- active low, =1 means tri-state
    cart_data_dir_o         : out   std_logic;                  -- =1 means FPGA->Port, =0 means Port->FPGA
    cart_d_io               : inout unsigned(7 downto 0);
 
@@ -422,6 +422,16 @@ architecture synthesis of mega65_r4 is
    signal i2c_sda                : std_logic := 'H';
    signal i2c_scl                : std_logic := 'H';
 
+   -- Ethernet
+   signal main_eth_rx_valid      : std_logic;                    -- One-cycle strobe per received byte
+   signal main_eth_rx_last       : std_logic;                    -- Last byte of frame
+   signal main_eth_rx_ok         : std_logic;                    -- Only meaningful when eth_rx_last = '1'
+   signal main_eth_rx_data       : std_logic_vector(7 downto 0); -- Received byte
+   signal main_eth_tx_ready      : std_logic;                    -- Pulses '1' on the byte-boundary cycle
+   signal main_eth_tx_valid      : std_logic;                    -- Client presents a byte
+   signal main_eth_tx_last       : std_logic;                    -- Client marks the last byte
+   signal main_eth_tx_data       : std_logic_vector(7 downto 0); -- Byte to transmit
+
 begin
 
    -- Driver for the audio DAC (AK4432VT).
@@ -641,6 +651,14 @@ begin
       main_pot2_x_o           => main_pot2_x,
       main_pot2_y_o           => main_pot2_y,
       main_rtc_o              => main_rtc,
+      main_eth_rx_valid_o     => main_eth_rx_valid,
+      main_eth_rx_last_o      => main_eth_rx_last,
+      main_eth_rx_ok_o        => main_eth_rx_ok,
+      main_eth_rx_data_o      => main_eth_rx_data,
+      main_eth_tx_ready_o     => main_eth_tx_ready,
+      main_eth_tx_valid_i     => main_eth_tx_valid,
+      main_eth_tx_last_i      => main_eth_tx_last,
+      main_eth_tx_data_i      => main_eth_tx_data,
 
       -- Provide HyperRAM to core (in HyperRAM clock domain)
       hr_clk_o                => hr_clk,
@@ -946,7 +964,17 @@ begin
          --
          cart_addr_oe_o    => cart_addr_oe, -- 0 : tristate (i.e. input), 1 : output
          cart_a_i          => cart_a_in,
-         cart_a_o          => cart_a_out
+         cart_a_o                => cart_a_out,
+
+         -- Ethernet
+         eth_rx_valid_i          => main_eth_rx_valid,
+         eth_rx_last_i           => main_eth_rx_last,
+         eth_rx_ok_i             => main_eth_rx_ok,
+         eth_rx_data_i           => main_eth_rx_data,
+         eth_tx_ready_i          => main_eth_tx_ready,
+         eth_tx_valid_o          => main_eth_tx_valid,
+         eth_tx_last_o           => main_eth_tx_last,
+         eth_tx_data_o           => main_eth_tx_data
       ); -- CORE
 
 end architecture synthesis;

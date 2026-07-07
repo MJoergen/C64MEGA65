@@ -71,7 +71,8 @@ entity main is
     -- Mode selection for Expansion Port (aka Cartridge Port):
     -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port
     -- bit 1: Simulate REU
-    c64_exp_port_mode_i    : in    std_logic_vector(1 downto 0);
+    -- bit 2: Simulate RR-NET
+    c64_exp_port_mode_i    : in    std_logic_vector(2 downto 0);
 
     ---------------------------
     -- Commodore 64 I/O ports
@@ -268,6 +269,16 @@ entity main is
     c1541rom_data_i        : in    std_logic_vector(7 downto 0);
     c1541rom_data_o        : out   std_logic_vector(7 downto 0);
 
+    -- Ethernet interface
+    eth_rx_valid_i         : in    std_logic;                    -- One-cycle strobe per received byte
+    eth_rx_last_i          : in    std_logic;                    -- Last byte of frame
+    eth_rx_ok_i            : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
+    eth_rx_data_i          : in    std_logic_vector(7 downto 0); -- Received byte
+    eth_tx_ready_i         : in    std_logic;                    -- Pulses '1' on the byte-boundary cycle
+    eth_tx_valid_o         : out   std_logic;                    -- Client presents a byte
+    eth_tx_last_o          : out   std_logic;                    -- Client marks the last byte
+    eth_tx_data_o          : out   std_logic_vector(7 downto 0); -- Byte to transmit
+
     -- Contents of RTC (see user_io.cpp in Main_MiSTer):
     -- Bits  7 -  0 : Seconds    (BCD format, 0x00-0x60)
     -- Bits 15 -  8 : Minutes    (BCD format, 0x00-0x59)
@@ -338,8 +349,9 @@ architecture synthesis of main is
   signal   cia1_pb_out : std_logic_vector(7 downto 0);
 
   -- Bit positions in c64_exp_port_mode_i
-  constant C_SIM_CRT : natural := 0;
-  constant C_SIM_REU : natural := 1;
+  constant C_SIM_CRT   : natural := 0;
+  constant C_SIM_REU   : natural := 1;
+  constant C_SIM_RRNET : natural := 2;
 
   -- signals for RAM
   signal   c64_ram_ce   : std_logic;
@@ -712,6 +724,9 @@ architecture synthesis of main is
   signal   reu_iof       : std_logic;
   signal   reu_oe        : std_logic;
   signal   reu_dout      : unsigned(7 downto 0);
+
+  -- SIM_RRNET
+  signal   rrnet_dout    : std_logic_vector(7 downto 0);
 
   -- Signals from the cartridge.vhd module (software defined cartridges)
   signal   crt_io_rom     : std_logic;
@@ -1406,6 +1421,16 @@ begin
       core_dma_v   := not cart_in_dma_n; -- a hardware cart asserts /DMA (active low) to request a CPU DMA hold
     end if;
 
+    if c64_exp_port_mode_i(C_SIM_RRNET) = '1' then
+      if c64_ram_addr_o >= X"DE02" and c64_ram_addr_o <= X"DE0F" then
+        -- Address range $DE02 to $DE0F is forwarded to SIM_RRNET.
+        -- See issue #234.
+        core_io_rom  <= '0';
+        core_io_ext  <= '1';
+        core_io_data <= unsigned(rrnet_dout);
+      end if;
+    end if;
+
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
       -- Simulate 1750 REU 512KB
       core_dma_v   := core_dma_v or reu_dma_req;
@@ -1420,6 +1445,26 @@ begin
 
     core_dma <= core_dma_v;
   end process handle_cores_expansion_port_signals_proc;
+
+  -- Simulate RRNET
+  rrnet_inst : entity work.rrnet
+    port map (
+      clk_i          => clk_main_i,
+      rst_i          => not reset_core_n,
+      cs_i           => core_ioe,
+      addr_i         => std_logiC_vector(c64_ram_addr_o(7 downto 0)),
+      we_i           => c64_ram_we,
+      wr_data_i      => std_logic_vector(c64_ram_data_o),
+      rd_data_o      => rrnet_dout,
+      eth_rx_valid_i => eth_rx_valid_i,
+      eth_rx_last_i  => eth_rx_last_i,
+      eth_rx_ok_i    => eth_rx_ok_i,
+      eth_rx_data_i  => eth_rx_data_i,
+      eth_tx_ready_i => eth_tx_ready_i,
+      eth_tx_valid_o => eth_tx_valid_o,
+      eth_tx_last_o  => eth_tx_last_o,
+      eth_tx_data_o  => eth_tx_data_o
+    ); -- rrnet_inst
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
   cartridge_heuristics_inst : entity work.cartridge_heuristics
