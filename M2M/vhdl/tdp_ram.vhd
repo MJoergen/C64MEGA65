@@ -68,8 +68,6 @@ architecture synthesis of tdp_ram is
    end;
 
    signal ram           : t_ram := InitRAM(ROM_FILE);
-   signal address_a_reg : std_logic_vector(ADDR_WIDTH-1 downto 0) := (others => '0');
-   signal address_b_reg : std_logic_vector(ADDR_WIDTH-1 downto 0) := (others => '0');
 
 begin
 
@@ -81,7 +79,7 @@ begin
                ram(to_integer(unsigned(address_a))) <= data_a;
             end if;
 
-            address_a_reg <= address_a;
+            q_a <= ram(to_integer(unsigned(address_a)));
          end if;
       end if;
 
@@ -91,13 +89,10 @@ begin
                ram(to_integer(unsigned(address_b))) <= data_b;
             end if;
 
-            address_b_reg <= address_b;
+            q_b <= ram(to_integer(unsigned(address_b)));
          end if;
       end if;
    end process ram_proc;
-
-   q_a <= ram(to_integer(unsigned(address_a_reg)));
-   q_b <= ram(to_integer(unsigned(address_b_reg)));
 
 end architecture synthesis;
 
