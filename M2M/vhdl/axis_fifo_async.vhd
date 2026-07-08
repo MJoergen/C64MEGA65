@@ -28,14 +28,12 @@
 --   * Pointer CDC: 2-FF synchronisers on the Gray-coded pointers; the
 --     constraint file MUST provide a bounded skew constraint so that
 --     the synchroniser can resolve metastability before sampling:
---         set_max_delay -datapath_only \
---             -from [get_cells {*/s_proc*/s_gray_wr_reg*}] \
---             -to   [get_cells {*/cdc_block/async_m_proc*/m_gray_wr_meta_reg*}] \
---             <T_max>
---         set_max_delay -datapath_only \
---             -from [get_cells {*/m_proc*/m_gray_rd_reg*}] \
---             -to   [get_cells {*/cdc_block/async_s_proc*/s_gray_rd_meta_reg*}] \
---             <T_max>
+--       set_max_delay <T_max> -datapath_only \
+--           -from [get_pins -hierarchical "*s_gray_wr_reg*/C"] \
+--           -to   [get_pins -hierarchical "*cdc_block.m_gray_wr_meta_reg*/D"]
+--       set_max_delay <T_max> -datapath_only \
+--           -from [get_pins -hierarchical "*m_gray_rd_reg*/C"] \
+--           -to   [get_pins -hierarchical "*cdc_block.s_gray_rd_meta_reg*/D"]
 --     Choose <T_max> <= min(T_s_clk, T_m_clk) minus the launch/capture
 --     setup margins. We deliberately avoid Xilinx XPM_FIFO_ASYNC,
 --     which applies set_false_path internally; that is too permissive

@@ -589,7 +589,7 @@ constant OPTM_ITEMS        : string :=
    " Back\n"                    &  -- returns to Advanced Settings
 
    "\n"                         &
-   " SIM-RRNET"                 &
+   " SIM-RRNET\n"               &
 
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
