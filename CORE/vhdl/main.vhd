@@ -1450,7 +1450,7 @@ begin
   rrnet_inst : entity work.rrnet
     port map (
       clk_i          => clk_main_i,
-      rst_i          => not reset_core_n,
+      rst_i          => not c64_exp_port_mode_i(C_SIM_RRNET),
       cs_i           => core_ioe,
       addr_i         => std_logiC_vector(c64_ram_addr_o(7 downto 0)),
       we_i           => c64_ram_we,
