@@ -34,12 +34,21 @@ cpu_reset:
 
 :
         ; Send a packet
-        lda #<txbuf
-        ldx #>txbuf
+        lda #<txbuf1
+        ldx #>txbuf1
         sta eth+driver::bufaddr
         stx eth+driver::bufaddr+1
-        lda #<txlen
-        ldx #>txlen
+        lda #<txlen1
+        ldx #>txlen1
+        jsr eth+driver::send
+
+        ; Send abother packet
+        lda #<txbuf2
+        ldx #>txbuf2
+        sta eth+driver::bufaddr
+        stx eth+driver::bufaddr+1
+        lda #<txlen2
+        ldx #>txlen2
         jsr eth+driver::send
 
         ; TBD
@@ -50,11 +59,23 @@ cpu_reset:
 ok:     jmp ok
 
 .segment "RODATA"
-txbuf:  .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
+txbuf1: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
         .byte $11, $22, $33, $44, $55, $66 ; Source MAC address
         .byte $08, $00                     ; Type
+        .repeat 200
+          .byte $55, $AA
+        .endrep
         .asciiz "This is a test packet"
-txlen = * - txbuf
+txlen1 = * - txbuf1
+
+txbuf2: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
+        .byte $99, $88, $77, $66, $55, $44 ; Source MAC address
+        .byte $08, $00                     ; Type
+        .repeat 200
+          .byte $66, $99
+        .endrep
+        .asciiz "Here is another packet with an odd length."
+txlen2 = * - txbuf2
 
 .segment "VECTORS"
 

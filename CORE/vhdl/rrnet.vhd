@@ -144,7 +144,18 @@ architecture rtl of rrnet is
   type     tx_state_type is (IDLE_ST, BUSY_ST);
   signal   tx_state : tx_state_type                                := IDLE_ST;
 
+  -- Live "buffer ready" flag exposed to software as the Rdy4TxNOW bit of
+  -- the CS8900A Bus Status register at PP offset $0138 (bit 8).
+  signal   rdy_4_tx_now : std_logic;
+
+  -- PP word address (12-bit RAM index) corresponding to the CS8900A
+  -- Bus Status register at PP byte offset $0138.
+  constant C_PP_BUS_ST_ADDR : unsigned(11 downto 1)                := to_unsigned(16#138# / 2, 11);
+
 begin
+
+  rdy_4_tx_now <= '1' when tx_state = IDLE_ST else
+                  '0';
 
   tx_proc : process (clk_i)
   begin
@@ -301,7 +312,11 @@ begin
               rd_data_o <= pp_rddat(7 downto 0);
 
             when C_PP_DATA_0 + 1 =>
-              rd_data_o <= pp_rddat(15 downto 8);
+              if pp_ptr(11 downto 1) = C_PP_BUS_ST_ADDR then
+                rd_data_o <= pp_rddat(15 downto 9) & rdy_4_tx_now;
+              else
+                rd_data_o <= pp_rddat(15 downto 8);
+              end if;
               -- Autoincrement fires only on high-byte access (per CS8900A spec).
               -- Drivers using autoincrement must always read low byte then high byte.
               if pp_ptr(15) = '1' then
