@@ -59,7 +59,7 @@ architecture rtl of rrnet is
   signal   tx_cmd     : unsigned(15 downto 0)       := (others => '0');
   signal   tx_length  : unsigned(15 downto 0)       := (others => '0');
 
-  signal   pp_we    : std_logic;
+  signal   pp_we    : std_logic_vector( 1 downto 0);
   signal   pp_wrdat : std_logic_vector(15 downto 0);
   signal   pp_rddat : std_logic_vector(15 downto 0);
 
@@ -73,12 +73,13 @@ architecture rtl of rrnet is
   pure function get_packet_page_init return byte_array_type is
     variable ret_v : byte_array_type(0 to 2047) := (others => (others => '0'));
   begin
+    -- Note: Addresses are divided by two, to convert from byte to word addressing.
     -- EISA registration number for Crystal Semiconductor
-    ret_v(0)        := x"630E";
+    ret_v(16#000# / 2) := x"630E";
     -- Product ID and Revision number
-    ret_v(1)        := x"0700";
+    ret_v(16#002# / 2) := x"0700";
     -- Bus Status (set 'Rdy4TxNOW').
-    ret_v(16#0138#) := x"0118";
+    ret_v(16#138# / 2) := x"0118";
     return ret_v;
   end function get_packet_page_init;
 
@@ -91,26 +92,33 @@ begin
   eth_tx_last_o  <= eth_rx_last_i;
   eth_tx_data_o  <= eth_rx_data_i;
 
+  -- The 'packet_page' signal synthesizes as a Block RAM
   pp_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
-      if pp_we = '1' then
-        report "PP: WRITE " & to_hstring(pp_wrdat) & " TO $" & to_hstring(pp_ptr);
-        packet_page(to_integer(pp_ptr)) <= pp_wrdat;
+      assert pp_ptr(0) = '0'
+        report "pp_ptr(0) should be zero"
+        severity failure;
+      if pp_we(0) = '1' then
+        report "PP: WRITE " & to_hstring(pp_wrdat(7 downto 0)) & " TO $" & to_hstring(pp_ptr);
+        packet_page(to_integer(pp_ptr(11 downto 1)))(7 downto 0) <= pp_wrdat(7 downto 0);
       end if;
-      pp_rddat <= packet_page(to_integer(pp_ptr));
+      if pp_we(1) = '1' then
+        report "PP: WRITE " & to_hstring(pp_wrdat(15 downto 8)) & " TO $" & to_hstring(pp_ptr + 1);
+        packet_page(to_integer(pp_ptr(11 downto 1)))(15 downto 8) <= pp_wrdat(15 downto 8);
+      end if;
+      pp_rddat <= packet_page(to_integer(pp_ptr(11 downto 1)));
     end if;
   end process pp_proc;
 
   fsm_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
-      cs_d <= cs_i;
-      if cs_i = '1' then
+      pp_we <= (others => '0');
+      cs_d  <= cs_i;
+      if cs_d = '0' and cs_i = '1' then
         if we_i = '1' then
-          if cs_d = '0' then
-            report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
-          end if;
+          report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
 
           case unsigned(addr_i) is
 
@@ -128,9 +136,13 @@ begin
 
             when C_RXTX_REG_0 =>
               rxtx_reg_0(7 downto 0) <= unsigned(wr_data_i);
+              pp_wrdat               <= wr_data_i & wr_data_i;
+              pp_we                  <= "01";
 
             when C_RXTX_REG_0 + 1 =>
               rxtx_reg_0(15 downto 8) <= unsigned(wr_data_i);
+              pp_wrdat                <= wr_data_i & wr_data_i;
+              pp_we                   <= "10";
 
             when C_TX_CMD =>
               tx_cmd(7 downto 0) <= unsigned(wr_data_i);
@@ -150,9 +162,7 @@ begin
           end case;
 
         else
-          if cs_d = '0' then
-            report "RRNET: READ FROM $DE" & to_hstring(addr_i);
-          end if;
+          report "RRNET: READ FROM $DE" & to_hstring(addr_i);
 
           rd_data_o <= (others => '0');
 
@@ -197,6 +207,7 @@ begin
       end if;
 
       if rst_i = '1' then
+        pp_we      <= (others => '0');
         pp_ptr     <= (others => '0');
         pp_data_0  <= (others => '0');
         pp_data_1  <= (others => '0');
