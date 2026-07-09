@@ -43,6 +43,9 @@ LD_CFG   = ld.cfg
 
 GENERIC += -gG_ROM_FILE=$(PROG_HEX) -gG_LOG_FILE=$(LOG_FILE)
 
+#DEBUG_CA65 = -l $<.lst
+#DEBUG_LD65 = -m $@.map
+
 sim: $(SRC) $(PROG_HEX)
 	ghdl -i --std=08 --work=work $(SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
@@ -52,10 +55,10 @@ show: $(WAVE)
 	gtkwave $(WAVE) $(SAVE)
 
 %.o: %.asm
-	ca65 $<
+	ca65 $< $(DEBUG_CA65)
 
 $(PROG_BIN): $(PROG_OBJ) $(LD_CFG)
-	ld65 -C $(LD_CFG) $(PROG_OBJ)
+	ld65 -C $(LD_CFG) $(PROG_OBJ) $(DEBUG_LD65)
 
 $(PROG_HEX): $(PROG_BIN)
 	xxd -p -c 1 $(PROG_BIN) $(PROG_HEX)
@@ -71,5 +74,7 @@ clean:
 	rm -rf $(PROG_BIN)
 	rm -rf $(PROG_HEX)
 	rm -rf $(LOG_FILE)
+	rm -rf *.lst
+	rm -rf *.map
 
 
