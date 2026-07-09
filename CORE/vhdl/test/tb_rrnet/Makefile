@@ -4,6 +4,7 @@
 
 DUT ?= rrnet
 SRC += ../../rrnet.vhd
+SRC += ../../rrnet_pp.vhd
 
 TB_SRC += ../../../../M2M/vhdl/tdp_ram.vhd
 TB_SRC += ../../../../../65c02/src/datapath/alu.vhd

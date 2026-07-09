@@ -43,47 +43,58 @@ end entity rrnet;
 
 architecture rtl of rrnet is
 
-  constant C_PP_PTR     : unsigned(7 downto 0)      := x"02";
-  constant C_PP_DATA_0  : unsigned(7 downto 0)      := x"04";
-  constant C_PP_DATA_1  : unsigned(7 downto 0)      := x"06";
-  constant C_RXTX_REG_0 : unsigned(7 downto 0)      := x"08";
-  constant C_RXTX_REG_1 : unsigned(7 downto 0)      := x"0A";
-  constant C_TX_CMD     : unsigned(7 downto 0)      := x"0C";
-  constant C_TX_LENGTH  : unsigned(7 downto 0)      := x"0E";
+  constant C_PP_PTR     : unsigned(7 downto 0)                     := x"02";
+  constant C_PP_DATA_0  : unsigned(7 downto 0)                     := x"04";
+  constant C_PP_DATA_1  : unsigned(7 downto 0)                     := x"06";
+  constant C_RXTX_REG_0 : unsigned(7 downto 0)                     := x"08";
+  constant C_RXTX_REG_1 : unsigned(7 downto 0)                     := x"0A";
+  constant C_TX_CMD     : unsigned(7 downto 0)                     := x"0C";
+  constant C_TX_LENGTH  : unsigned(7 downto 0)                     := x"0E";
 
-  signal   pp_ptr     : unsigned(15 downto 0)       := (others => '0');
-  signal   pp_data_0  : unsigned(15 downto 0)       := (others => '0');
-  signal   pp_data_1  : unsigned(15 downto 0)       := (others => '0');
-  signal   rxtx_reg_0 : unsigned(15 downto 0)       := (others => '0');
-  signal   rxtx_reg_1 : unsigned(15 downto 0)       := (others => '0');
-  signal   tx_cmd     : unsigned(15 downto 0)       := (others => '0');
-  signal   tx_length  : unsigned(15 downto 0)       := (others => '0');
+  signal   pp_ptr     : unsigned(15 downto 0)                      := (others => '0');
+  signal   pp_data_0  : unsigned(15 downto 0)                      := (others => '0');
+  signal   pp_data_1  : unsigned(15 downto 0)                      := (others => '0');
+  signal   rxtx_reg_0 : unsigned(15 downto 0)                      := (others => '0');
+  signal   rxtx_reg_1 : unsigned(15 downto 0)                      := (others => '0');
+  signal   tx_cmd     : unsigned(15 downto 0)                      := (others => '0');
+  signal   tx_length  : unsigned(15 downto 0)                      := (others => '0');
 
   signal   pp_we    : std_logic_vector( 1 downto 0);
   signal   pp_wrdat : std_logic_vector(15 downto 0);
   signal   pp_rddat : std_logic_vector(15 downto 0);
 
-  signal   cs_d : std_logic                         := '0';
+  signal   rxtx_addr  : unsigned(11 downto 0)                      := (others => '0');
+  signal   rxtx_we    : std_logic_vector( 1 downto 0)              := (others => '0');
+  signal   rxtx_wrdat : std_logic_vector(15 downto 0)              := (others => '0');
+  signal   rxtx_rddat : std_logic_vector(15 downto 0)              := (others => '0');
+
+  signal   cs_d : std_logic                                        := '0';
 
   -- This holds the entire 2k words of PacketPage memory.
   type     byte_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
 
   -- This generates the reset-value of the 2k words PacketPage memory.
 
-  pure function get_packet_page_init return byte_array_type is
-    variable ret_v : byte_array_type(0 to 2047) := (others => (others => '0'));
+  pure function get_packet_page_init return std_logic_vector is
+    variable ram_v : byte_array_type(0 to 2047)              := (others => (others => '0'));
+    variable ret_v : std_logic_vector(4096 * 8 - 1 downto 0) := (others => '0');
   begin
     -- Note: Addresses are divided by two, to convert from byte to word addressing.
     -- EISA registration number for Crystal Semiconductor
-    ret_v(16#000# / 2) := x"630E";
+    ram_v(16#000# / 2) := x"630E";
     -- Product ID and Revision number
-    ret_v(16#002# / 2) := x"0700";
+    ram_v(16#002# / 2) := x"0700";
     -- Bus Status (set 'Rdy4TxNOW').
-    ret_v(16#138# / 2) := x"0118";
+    ram_v(16#138# / 2) := x"0118";
+
+    for i in 0 to 2047 loop
+      ret_v(16 * i + 15 downto 16 * i) := ram_v(i);
+    end loop;
     return ret_v;
   end function get_packet_page_init;
 
-  signal   packet_page : byte_array_type(0 to 2047) := get_packet_page_init;
+  -- PacketPage RAM initialization vector
+  constant C_PP_RAM_INIT : std_logic_vector(4096 * 8 - 1 downto 0) := get_packet_page_init;
 
 begin
 
@@ -92,24 +103,22 @@ begin
   eth_tx_last_o  <= eth_rx_last_i;
   eth_tx_data_o  <= eth_rx_data_i;
 
-  -- The 'packet_page' signal synthesizes as a Block RAM
-  pp_proc : process (clk_i)
-  begin
-    if rising_edge(clk_i) then
-      assert pp_ptr(0) = '0'
-        report "pp_ptr(0) should be zero"
-        severity failure;
-      if pp_we(0) = '1' then
-        report "PP: WRITE " & to_hstring(pp_wrdat(7 downto 0)) & " TO $" & to_hstring(pp_ptr);
-        packet_page(to_integer(pp_ptr(11 downto 1)))(7 downto 0) <= pp_wrdat(7 downto 0);
-      end if;
-      if pp_we(1) = '1' then
-        report "PP: WRITE " & to_hstring(pp_wrdat(15 downto 8)) & " TO $" & to_hstring(pp_ptr + 1);
-        packet_page(to_integer(pp_ptr(11 downto 1)))(15 downto 8) <= pp_wrdat(15 downto 8);
-      end if;
-      pp_rddat <= packet_page(to_integer(pp_ptr(11 downto 1)));
-    end if;
-  end process pp_proc;
+  -- Instantiate 4kB Packet Page memory (dual port, single clock)
+  rrnet_pp_inst : entity work.rrnet_pp
+    generic map (
+      G_INIT => C_PP_RAM_INIT
+    )
+    port map (
+      clk_i      => clk_i,
+      a_addr_i   => pp_ptr(11 downto 0),
+      a_wren_i   => pp_we,
+      a_wrdata_i => pp_wrdat,
+      a_rddata_o => pp_rddat,
+      b_addr_i   => rxtx_addr,
+      b_wren_i   => rxtx_we,
+      b_wrdata_i => rxtx_wrdat,
+      b_rddata_o => rxtx_rddat
+    ); -- rrnet_pp_inst
 
   fsm_proc : process (clk_i)
   begin
