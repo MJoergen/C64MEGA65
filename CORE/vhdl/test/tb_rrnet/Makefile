@@ -52,7 +52,7 @@ show: $(WAVE)
 	gtkwave $(WAVE) $(SAVE)
 
 %.o: %.asm
-	ca65 -t c64 $<
+	ca65 $<
 
 $(PROG_BIN): $(PROG_OBJ) $(LD_CFG)
 	ld65 -C $(LD_CFG) $(PROG_OBJ)

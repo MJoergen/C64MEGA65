@@ -93,6 +93,7 @@ begin
   begin
     if rising_edge(clk_i) then
       if pp_we = '1' then
+        report "PP: WRITE " & to_hstring(pp_wrdat) & " TO $" & to_hstring(pp_ptr);
         packet_page(to_integer(pp_ptr)) <= pp_wrdat;
       end if;
       pp_rddat <= packet_page(to_integer(pp_ptr));

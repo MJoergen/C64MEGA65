@@ -5,21 +5,34 @@
 
 .segment "CODE"
 
-jmp_init=$F80E
-jmp_poll=$F811
-jmp_send=$F814
+; Driver is placed at a fixed address (see "HEADER" segment in ld.cfg).
+eth = $f800
+
+.struct driver
+  drvtype .byte 3
+  apiver  .byte
+  mac     .byte 6
+  bufaddr .addr
+  bufsize .word
+  init    .byte 3
+  poll    .byte 3
+  send    .byte 3
+  exit    .byte 3
+.endstruct
+
 
 cpu_reset:
         sei
         ldx #$FF
         txs
-        jsr jmp_init
-        bcc ok
+        jsr eth+driver::init
+        bcc :+
 
         ; Invaild instruction signals a failure
         .byte $02
 
-            ; Infinite loop signals a success
+:
+        ; Infinite loop signals a success
 ok:     jmp ok
 
 .segment "VECTORS"

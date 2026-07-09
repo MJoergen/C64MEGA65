@@ -32,6 +32,17 @@
 ;
 ;---------------------------------------------------------------------
 
+;---------------- Added by MFJ ---------------------------------------
+__CBM__ = 1
+__C64__ = 1
+DYN_DRV = 1; Force driver to be placed at a fixed location, see "HEADER" segment in ld.cfg
+
+        .bss
+        buf_size=4096
+        buffer: .res buf_size
+;---------------------------------------------------------------------
+
+
         .macpack        module
         module_header   _cs8900a
 
@@ -58,8 +69,13 @@ mac:    .byte   $00, $0E, $3A   ; OUI of Cirrus Logic
         .endif
 
         ; Buffer attributes
-bufaddr:.res    2               ; Address
-bufsize:.res    2               ; Size
+;---------------- Changed by MFJ ---------------------------------------
+; These two words are now placed in ROM and are therefore read-only
+;bufaddr:.res    2               ; Address
+;bufsize:.res    2               ; Size
+bufaddr: .word buffer           ; Address
+bufsize: .word buf_size         ; Size
+;---------------------------------------------------------------------
 
         ; Jump table.
         jmp init
