@@ -33,7 +33,7 @@ SAVE = $(TB).gtkw
 
 LOG_FILE = cpulog.txt
 
-STOPTIME = 10us
+STOPTIME = 50us
 
 PROG_SRC = rrnet.asm cs8900a.asm
 PROG_OBJ = $(PROG_SRC:.asm=.o)

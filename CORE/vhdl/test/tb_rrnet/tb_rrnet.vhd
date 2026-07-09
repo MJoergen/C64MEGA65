@@ -117,7 +117,9 @@ begin
       q_b       => open
     ); -- tdp_ram_inst
 
-  -- Instantiate ROM @ F800
+  -- Instantiate writeable ROM @ F800
+  -- The ROM is writeable as a hack to allow writing
+  -- to the variables 'bufaddr' and 'bufsize', see rrnet.asm.
   tdp_rom_inst : entity work.tdp_ram
     generic map (
       ADDR_WIDTH   => 11,
@@ -130,8 +132,8 @@ begin
       clock_a   => clk,
       clen_a    => '1',
       address_a => cpu_addr(10 downto 0),
-      data_a    => (others => '0'),
-      wren_a    => '0',
+      data_a    => cpu_wr_data,
+      wren_a    => cpu_wr_en,
       q_a       => rom_rd_data,
       clock_b   => '0',
       clen_b    => '0',

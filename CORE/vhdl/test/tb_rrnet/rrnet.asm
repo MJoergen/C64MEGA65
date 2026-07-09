@@ -25,15 +25,32 @@ cpu_reset:
         sei
         ldx #$FF
         txs
+        ; Initialize driver
         jsr eth+driver::init
         bcc :+
 
-        ; Invaild instruction signals a failure
+        ; Invalid instruction signals a failure
         .byte $02
 
 :
+        ; Send a packet
+        lda #<txbuf
+        ldx #>txbuf
+        sta eth+driver::bufaddr
+        stx eth+driver::bufaddr+1
+        lda #<txlen
+        ldx #>txlen
+        jsr eth+driver::send
+
         ; Infinite loop signals a success
 ok:     jmp ok
+
+.segment "RODATA"
+txbuf:  .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
+        .byte $11, $22, $33, $44, $55, $66 ; Source MAC address
+        .byte $08, $00                     ; Type
+        .asciiz "This is a test packet"
+txlen = * - txbuf
 
 .segment "VECTORS"
 

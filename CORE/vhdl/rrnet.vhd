@@ -74,9 +74,11 @@ architecture rtl of rrnet is
     variable ret_v : byte_array_type(0 to 2047) := (others => (others => '0'));
   begin
     -- EISA registration number for Crystal Semiconductor
-    ret_v(0) := x"630E";
+    ret_v(0)        := x"630E";
     -- Product ID and Revision number
-    ret_v(1) := x"0700";
+    ret_v(1)        := x"0700";
+    -- Bus Status (set 'Rdy4TxNOW').
+    ret_v(16#0138#) := x"0118";
     return ret_v;
   end function get_packet_page_init;
 
