@@ -21,6 +21,10 @@
 -- 0150 - 015D : Address Filter Registers
 -- 0400        : Receive Frame Location
 -- 0A00        : Transmit Frame Location
+--
+-- Bus Status ($0138), Rdy4TxNOW bit (bit 8): live-overlaid from tx_state
+-- on CPU reads of that PP offset. RAM contents at $0138 are never rewritten;
+-- the RAM value provides the static (non-Rdy4TxNOW) bits.
 -- ----------------------------------------------------------
 
 
@@ -93,11 +97,9 @@ architecture rtl of rrnet is
 
   -- pp_ptr(15) is the AutoIncrement control bit, not an address bit.
   -- Only pp_ptr(11 downto 0) is passed to the RAM
-  signal   pp_ptr    : unsigned(15 downto 0)                       := (others => '0');
-  signal   tx_cmd    : unsigned(15 downto 0)                       := (others => '0');
-  signal   tx_length : unsigned(15 downto 0)                       := (others => '0');
-  signal   tx_ptr    : unsigned(11 downto 0)                       := (others => '0');
-  signal   tx_start  : std_logic                                   := '0';
+  signal   reg_pp_ptr    : unsigned(15 downto 0)                   := (others => '0');
+  signal   reg_tx_cmd    : unsigned(15 downto 0)                   := (others => '0');
+  signal   reg_tx_length : unsigned(15 downto 0)                   := (others => '0');
 
   signal   pp_we    : std_logic_vector( 1 downto 0)                := (others => '0');
   signal   pp_wrdat : std_logic_vector(15 downto 0)                := (others => '0');
@@ -141,6 +143,11 @@ architecture rtl of rrnet is
   -- PacketPage RAM initialization vector
   constant C_PP_RAM_INIT : std_logic_vector(4096 * 8 - 1 downto 0) := get_packet_page_init;
 
+
+  ---------------------------------------------------------
+  -- Transmit path
+  ---------------------------------------------------------
+
   type     tx_state_type is (IDLE_ST, BUSY_ST);
   signal   tx_state : tx_state_type                                := IDLE_ST;
 
@@ -150,9 +157,46 @@ architecture rtl of rrnet is
 
   -- PP word address (12-bit RAM index) corresponding to the CS8900A
   -- Bus Status register at PP byte offset $0138.
-  constant C_PP_BUS_ST_ADDR : unsigned(11 downto 1)                := to_unsigned(16#138# / 2, 11);
+  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)              := to_unsigned(16#138# / 2, 11);
+  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)              := to_unsigned(16#124# / 2, 11);
+
+  signal   tx_ptr   : unsigned(11 downto 0)                        := (others => '0');
+  signal   tx_start : std_logic                                    := '0';
+
+
+  ---------------------------------------------------------
+  -- Receive path
+  ---------------------------------------------------------
+
+  type     rx_state_type is (RX_IDLE_ST, RX_DATA_ST, RX_HEADER_ST, RX_READY_ST);
+  signal   rx_state : rx_state_type                                := RX_IDLE_ST;
+
+  -- Current write address into PacketPage RAM (starts at $0404, skipping
+  -- header words; header is filled in RX_HEADER_ST once the length is known).
+  signal   rx_wr_addr : unsigned(11 downto 0)                      := (others => '0');
+
+  -- Number of payload bytes accepted so far. Wide enough for max Ethernet
+  -- frame (1518 - FCS = 1514). Same width as reg_tx_length for symmetry.
+  signal   rx_byte_cnt : unsigned(15 downto 0)                     := (others => '0');
+
+  -- Latched status of the completed frame.
+  signal   rx_length : unsigned(15 downto 0)                       := (others => '0');
+  signal   rx_ok     : std_logic                                   := '0';
+
+  -- Live "frame available" flag exposed to software as the RxOK bit of
+  -- the CS8900A RxEvent register at PP offset $0124 (bit 8).
+  signal   rx_frame_ready : std_logic;
+
+  -- Rx accepts new bytes only when Tx isn't using port B and there is no
+  -- unread frame occupying the buffer. Any byte that arrives outside this
+  -- window is discarded; if a frame is truncated we drop the whole thing.
+  signal   rx_accept : std_logic;
 
 begin
+
+  ---------------------------------------------------------
+  -- Transmit path
+  ---------------------------------------------------------
 
   rdy_4_tx_now <= '1' when tx_state = IDLE_ST else
                   '0';
@@ -181,7 +225,7 @@ begin
             end if;
             eth_tx_valid_o <= '1';
             rxtx_addr      <= rxtx_addr + 1;
-            if rxtx_addr + 1 >= C_TX_BUF_START + tx_length then
+            if rxtx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
               rxtx_addr     <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
               tx_state      <= IDLE_ST;
@@ -200,6 +244,44 @@ begin
   end process tx_proc;
 
 
+  ---------------------------------------------------------
+  -- Receive path
+  ---------------------------------------------------------
+
+  rx_accept    <= '1' when tx_state = IDLE_ST and rx_state /= RX_READY_ST else
+                  '0';
+
+  rx_proc : process (clk_i)
+  begin
+    if rising_edge(clk_i) then
+
+      case rx_state is
+
+        when RX_IDLE_ST =>
+          null;
+
+        when RX_DATA_ST =>
+          null;
+
+        when RX_HEADER_ST =>
+          null;
+
+        when RX_READY_ST =>
+          null;
+
+      end case;
+
+      if rst_i = '1' then
+        rx_state    <= RX_IDLE_ST;
+        rx_wr_addr  <= C_RX_BUF_START + 4;
+        rx_byte_cnt <= (others => '0');
+        rx_length   <= (others => '0');
+        rx_ok       <= '0';
+      end if;
+    end if;
+  end process rx_proc;
+
+
   -- The 4kB PacketPage memory is abstracted away into a separate
   -- generic Dual-Port Single-Clock RAM.
   -- Addresses are in units of bytes, and are assumed to be word-aligned,
@@ -210,7 +292,7 @@ begin
     )
     port map (
       clk_i      => clk_i,
-      a_addr_i   => pp_ptr(11 downto 0),
+      a_addr_i   => reg_pp_ptr(11 downto 0),
       a_wren_i   => pp_we,
       a_wrdata_i => pp_wrdat,
       a_rddata_o => pp_rddat,
@@ -243,10 +325,10 @@ begin
           case unsigned(addr_i) is
 
             when C_PP_PTR =>
-              pp_ptr(7 downto 0) <= unsigned(wr_data_i);
+              reg_pp_ptr(7 downto 0) <= unsigned(wr_data_i);
 
             when C_PP_PTR + 1 =>
-              pp_ptr(15 downto 8) <= unsigned(wr_data_i);
+              reg_pp_ptr(15 downto 8) <= unsigned(wr_data_i);
 
             when C_PP_DATA_0 =>
               -- Replicate the byte into both halves of the 16-bit word; the pp_we
@@ -257,36 +339,36 @@ begin
             when C_PP_DATA_0 + 1 =>
               pp_wrdat <= wr_data_i & wr_data_i;
               pp_we    <= "10";
-              if pp_ptr(15) = '1' then
-                pp_ptr <= pp_ptr + 2;
+              if reg_pp_ptr(15) = '1' then
+                reg_pp_ptr <= reg_pp_ptr + 2;
               end if;
 
             when C_RXTX_REG_0 =>
-              pp_ptr   <= "0000" & tx_ptr;
-              pp_wrdat <= wr_data_i & wr_data_i;
-              pp_we    <= "01";
+              reg_pp_ptr <= "0000" & tx_ptr;
+              pp_wrdat   <= wr_data_i & wr_data_i;
+              pp_we      <= "01";
 
             when C_RXTX_REG_0 + 1 =>
-              pp_ptr   <= "0000" & tx_ptr;
-              tx_ptr   <= tx_ptr + 2;
-              pp_wrdat <= wr_data_i & wr_data_i;
-              pp_we    <= "10";
-              if tx_ptr + 2 >= C_TX_BUF_START + tx_length then
+              reg_pp_ptr <= "0000" & tx_ptr;
+              tx_ptr     <= tx_ptr + 2;
+              pp_wrdat   <= wr_data_i & wr_data_i;
+              pp_we      <= "10";
+              if tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
                 tx_start <= '1';
               end if;
 
             when C_TX_CMD =>
-              tx_cmd(7 downto 0) <= unsigned(wr_data_i);
-              tx_ptr             <= C_TX_BUF_START;
+              reg_tx_cmd(7 downto 0) <= unsigned(wr_data_i);
+              tx_ptr                 <= C_TX_BUF_START;
 
             when C_TX_CMD + 1 =>
-              tx_cmd(15 downto 8) <= unsigned(wr_data_i);
+              reg_tx_cmd(15 downto 8) <= unsigned(wr_data_i);
 
             when C_TX_LENGTH =>
-              tx_length(7 downto 0) <= unsigned(wr_data_i);
+              reg_tx_length(7 downto 0) <= unsigned(wr_data_i);
 
             when C_TX_LENGTH + 1 =>
-              tx_length(15 downto 8) <= unsigned(wr_data_i);
+              reg_tx_length(15 downto 8) <= unsigned(wr_data_i);
 
             when others =>
               null;
@@ -303,24 +385,27 @@ begin
           case unsigned(addr_i) is
 
             when C_PP_PTR =>
-              rd_data_o <= std_logic_vector(pp_ptr(7 downto 0));
+              rd_data_o <= std_logic_vector(reg_pp_ptr(7 downto 0));
 
             when C_PP_PTR + 1 =>
-              rd_data_o <= std_logic_vector(pp_ptr(15 downto 8));
+              rd_data_o <= std_logic_vector(reg_pp_ptr(15 downto 8));
 
             when C_PP_DATA_0 =>
               rd_data_o <= pp_rddat(7 downto 0);
 
             when C_PP_DATA_0 + 1 =>
-              if pp_ptr(11 downto 1) = C_PP_BUS_ST_ADDR then
+              if reg_pp_ptr(11 downto 1) = C_PP_BUS_ST_ADDR then
                 rd_data_o <= pp_rddat(15 downto 9) & rdy_4_tx_now;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR then
+                -- RxEvent $0124: overlay RxOK (bit 8 = bit 0 of high byte).
+                rd_data_o <= pp_rddat(15 downto 9) & rx_frame_ready;
               else
                 rd_data_o <= pp_rddat(15 downto 8);
               end if;
               -- Autoincrement fires only on high-byte access (per CS8900A spec).
               -- Drivers using autoincrement must always read low byte then high byte.
-              if pp_ptr(15) = '1' then
-                pp_ptr <= pp_ptr + 2;
+              if reg_pp_ptr(15) = '1' then
+                reg_pp_ptr <= reg_pp_ptr + 2;
               end if;
 
             when C_RXTX_REG_0 =>
@@ -330,16 +415,16 @@ begin
               rd_data_o <= X"FF";
 
             when C_TX_CMD =>
-              rd_data_o <= std_logic_vector(tx_cmd(7 downto 0));
+              rd_data_o <= std_logic_vector(reg_tx_cmd(7 downto 0));
 
             when C_TX_CMD + 1 =>
-              rd_data_o <= std_logic_vector(tx_cmd(15 downto 8));
+              rd_data_o <= std_logic_vector(reg_tx_cmd(15 downto 8));
 
             when C_TX_LENGTH =>
-              rd_data_o <= std_logic_vector(tx_length(7 downto 0));
+              rd_data_o <= std_logic_vector(reg_tx_length(7 downto 0));
 
             when C_TX_LENGTH + 1 =>
-              rd_data_o <= std_logic_vector(tx_length(15 downto 8));
+              rd_data_o <= std_logic_vector(reg_tx_length(15 downto 8));
 
             when others =>
               null;
@@ -350,12 +435,12 @@ begin
       end if;
 
       if rst_i = '1' then
-        cs_d      <= '0';
-        pp_we     <= (others => '0');
-        pp_ptr    <= (others => '0');
-        tx_cmd    <= (others => '0');
-        tx_length <= (others => '0');
-        tx_start  <= '0';
+        cs_d          <= '0';
+        pp_we         <= (others => '0');
+        reg_pp_ptr    <= (others => '0');
+        reg_tx_cmd    <= (others => '0');
+        reg_tx_length <= (others => '0');
+        tx_start      <= '0';
       end if;
     end if;
   end process fsm_proc;

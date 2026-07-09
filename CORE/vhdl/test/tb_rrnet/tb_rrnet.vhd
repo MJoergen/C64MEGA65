@@ -19,39 +19,49 @@ end entity tb_rrnet;
 
 architecture tb of tb_rrnet is
 
-  signal clk : std_logic          := '1';
-  signal rst : std_logic          := '1';
-  signal ce  : std_logic          := '1';
+  signal   clk : std_logic          := '1';
+  signal   rst : std_logic          := '1';
+  signal   ce  : std_logic          := '1';
 
-  signal cpu_addr      : std_logic_vector(15 downto 0);
-  signal cpu_wr_en     : std_logic;
-  signal cpu_rd_en     : std_logic;
-  signal cpu_wr_data   : std_logic_vector(7 downto 0);
-  signal cpu_rd_data   : std_logic_vector(7 downto 0);
-  signal rrnet_rd_data : std_logic_vector(7 downto 0);
-  signal rom_rd_data   : std_logic_vector(7 downto 0);
-  signal ram_rd_data   : std_logic_vector(7 downto 0);
+  signal   cpu_addr      : std_logic_vector(15 downto 0);
+  signal   cpu_wr_en     : std_logic;
+  signal   cpu_rd_en     : std_logic;
+  signal   cpu_wr_data   : std_logic_vector(7 downto 0);
+  signal   cpu_rd_data   : std_logic_vector(7 downto 0);
+  signal   rrnet_rd_data : std_logic_vector(7 downto 0);
+  signal   rom_rd_data   : std_logic_vector(7 downto 0);
+  signal   ram_rd_data   : std_logic_vector(7 downto 0);
 
-  signal rrnet_cs : std_logic;
-  signal rom_cs   : std_logic;
-  signal ram_cs   : std_logic;
+  signal   rrnet_cs : std_logic;
+  signal   rom_cs   : std_logic;
+  signal   ram_cs   : std_logic;
 
   -- Ethernet interface
-  signal eth_rx_valid : std_logic;                    -- One-cycle strobe per received byte
-  signal eth_rx_last  : std_logic;                    -- Last byte of frame
-  signal eth_rx_ok    : std_logic;                    -- Only meaningful when rx_last_i = '1'
-  signal eth_rx_data  : std_logic_vector(7 downto 0); -- Received byte
-  signal eth_tx_ready : std_logic := '0';             -- Pulses '1' on the byte-boundary cycle
-  signal eth_tx_valid : std_logic;                    -- Client presents a byte
-  signal eth_tx_last  : std_logic;                    -- Client marks the last byte
-  signal eth_tx_data  : std_logic_vector(7 downto 0); -- Byte to transmit
+  signal   eth_rx_valid : std_logic;                    -- One-cycle strobe per received byte
+  signal   eth_rx_last  : std_logic;                    -- Last byte of frame
+  signal   eth_rx_ok    : std_logic;                    -- Only meaningful when rx_last_i = '1'
+  signal   eth_rx_data  : std_logic_vector(7 downto 0); -- Received byte
+  signal   eth_tx_ready : std_logic;                    -- Pulses '1' on the byte-boundary cycle
+  signal   eth_tx_valid : std_logic;                    -- Client presents a byte
+  signal   eth_tx_last  : std_logic;                    -- Client marks the last byte
+  signal   eth_tx_data  : std_logic_vector(7 downto 0); -- Byte to transmit
+
+  signal   eth_tx_pause : std_logic := '0';             -- Alternates 0 -> 1 -> 0
+
+  subtype  R_DATA is natural range 7 downto 0;
+  constant C_LAST : natural         := 8;
+
+  signal   fifo_ready : std_logic;
+  signal   fifo_valid : std_logic;
+  signal   fifo_last  : std_logic;
+  signal   fifo_data  : std_logic_vector(7 downto 0);
 
 begin
 
   -- Clock, reset, and clock enable
-  clk         <= not clk after 5 ns;
-  rst         <= '1', '0' after 100 ns;
-  ce          <= not ce when rising_edge(clk);
+  clk <= not clk after 5 ns;
+  rst <= '1', '0' after 100 ns;
+  ce  <= not ce when rising_edge(clk);
 
   -- Instantiate DUT
   rrnet_inst : entity work.rrnet
@@ -70,17 +80,36 @@ begin
       eth_rx_last_i  => eth_rx_last,
       eth_rx_ok_i    => eth_rx_ok,
       eth_rx_data_i  => eth_rx_data,
-      eth_tx_ready_i => eth_tx_ready,
+      eth_tx_ready_i => eth_tx_ready and eth_tx_pause,
       eth_tx_valid_o => eth_tx_valid,
       eth_tx_last_o  => eth_tx_last,
       eth_tx_data_o  => eth_tx_data
     ); -- rrnet_inst
 
-  -- TBD
-  eth_rx_valid <= '0';
-  eth_rx_last  <= '0';
-  eth_rx_ok    <= '0';
-  eth_rx_data  <= (others => '0');
+  axi_fifo_small_inst : entity work.axi_fifo_small
+    generic map (
+      G_RAM_WIDTH => 9,
+      G_RAM_DEPTH => 2048
+    )
+    port map (
+      clk_i            => clk,
+      rst_i            => rst,
+      s_ready_o        => eth_tx_ready,
+      s_valid_i        => eth_tx_valid and eth_tx_pause,
+      s_data_i(R_DATA) => eth_tx_data,
+      s_data_i(C_LAST) => eth_tx_last,
+      m_ready_i        => fifo_ready,
+      m_valid_o        => fifo_valid,
+      m_data_o(R_DATA) => fifo_data,
+      m_data_o(C_LAST) => fifo_last
+    ); -- axi_fifo_small_inst
+
+  eth_rx_valid <= fifo_valid;
+  eth_rx_last  <= fifo_last;
+  eth_rx_ok    <= '1';
+  eth_rx_data  <= fifo_data;
+
+  fifo_ready <= '0'; -- TBD
 
   axip_logger_inst : entity work.axip_logger
     generic map (
@@ -92,8 +121,8 @@ begin
     port map (
       clk_i   => clk,
       rst_i   => rst,
-      ready_i => eth_tx_ready,
-      valid_i => eth_tx_valid,
+      ready_i => eth_tx_ready and eth_tx_pause,
+      valid_i => eth_tx_valid and eth_tx_pause,
       data_i  => eth_tx_data,
       last_i  => eth_tx_last,
       bytes_i => 1
@@ -101,19 +130,19 @@ begin
 
   -- eth_tx_ready may only be asserted on every other clock cycle.
   -- This is a baked-in assumption in the rrnet.vhd file.
-  eth_tx_ready <= not eth_tx_ready when rising_edge(clk);
+  eth_tx_pause <= not eth_tx_pause when rising_edge(clk);
 
   -- Simple address decoding
-  rrnet_cs    <= '1' when cpu_addr(15 downto 8) = x"DE" else
-                 '0';
-  rom_cs      <= '1' when cpu_addr >= x"F800" else
-                 '0';
-  ram_cs      <= '1' when cpu_addr < x"0800" else
-                 '0';
+  rrnet_cs     <= '1' when cpu_addr(15 downto 8) = x"DE" else
+                  '0';
+  rom_cs       <= '1' when cpu_addr >= x"F800" else
+                  '0';
+  ram_cs       <= '1' when cpu_addr < x"0800" else
+                  '0';
 
-  cpu_rd_data <= rrnet_rd_data when rrnet_cs = '1' else
-                 rom_rd_data when rom_cs = '1' else
-                 ram_rd_data;
+  cpu_rd_data  <= rrnet_rd_data when rrnet_cs = '1' else
+                  rom_rd_data when rom_cs = '1' else
+                  ram_rd_data;
 
 
   -- Instantiate RAM @ 0000
