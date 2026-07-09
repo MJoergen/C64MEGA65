@@ -4,30 +4,30 @@
 
 DUT ?= rrnet
 SRC += ../../rrnet.vhd
-SRC += ../../../../M2M/vhdl/tdp_ram.vhd
 
-SRC += ../../../../../65c02/src/datapath/alu.vhd
-SRC += ../../../../../65c02/src/datapath/ar.vhd
-SRC += ../../../../../65c02/src/datapath/datapath.vhd
-SRC += ../../../../../65c02/src/datapath/hi.vhd
-SRC += ../../../../../65c02/src/datapath/lo.vhd
-SRC += ../../../../../65c02/src/datapath/mr.vhd
-SRC += ../../../../../65c02/src/datapath/pc.vhd
-SRC += ../../../../../65c02/src/datapath/sp.vhd
-SRC += ../../../../../65c02/src/datapath/sr.vhd
-SRC += ../../../../../65c02/src/datapath/xr.vhd
-SRC += ../../../../../65c02/src/datapath/yr.vhd
-SRC += ../../../../../65c02/src/datapath/zp.vhd
-SRC += ../../../../../65c02/src/control/control.vhd
-SRC += ../../../../../65c02/src/control/microcode_6502.vhd
-SRC += ../../../../../65c02/src/control/microcode_65c02.vhd
-SRC += ../../../../../65c02/src/fmt.vhd
-SRC += ../../../../../65c02/src/debug.vhd
-SRC += ../../../../../65c02/src/cpu_65c02.vhd
-
+TB_SRC += ../../../../M2M/vhdl/tdp_ram.vhd
+TB_SRC += ../../../../../65c02/src/datapath/alu.vhd
+TB_SRC += ../../../../../65c02/src/datapath/ar.vhd
+TB_SRC += ../../../../../65c02/src/datapath/datapath.vhd
+TB_SRC += ../../../../../65c02/src/datapath/hi.vhd
+TB_SRC += ../../../../../65c02/src/datapath/lo.vhd
+TB_SRC += ../../../../../65c02/src/datapath/mr.vhd
+TB_SRC += ../../../../../65c02/src/datapath/pc.vhd
+TB_SRC += ../../../../../65c02/src/datapath/sp.vhd
+TB_SRC += ../../../../../65c02/src/datapath/sr.vhd
+TB_SRC += ../../../../../65c02/src/datapath/xr.vhd
+TB_SRC += ../../../../../65c02/src/datapath/yr.vhd
+TB_SRC += ../../../../../65c02/src/datapath/zp.vhd
+TB_SRC += ../../../../../65c02/src/control/control.vhd
+TB_SRC += ../../../../../65c02/src/control/microcode_6502.vhd
+TB_SRC += ../../../../../65c02/src/control/microcode_65c02.vhd
+TB_SRC += ../../../../../65c02/src/fmt.vhd
+TB_SRC += ../../../../../65c02/src/debug.vhd
+TB_SRC += ../../../../../65c02/src/cpu_65c02.vhd
 
 TB = tb_$(DUT)
-SRC += $(TB).vhd
+TB_SRC += $(TB).vhd
+
 WAVE = $(TB).ghw
 SAVE = $(TB).gtkw
 
@@ -47,7 +47,8 @@ GENERIC += -gG_ROM_FILE=$(PROG_HEX) -gG_LOG_FILE=$(LOG_FILE)
 #DEBUG_LD65 = -m $@.map
 
 sim: $(SRC) $(PROG_HEX)
-	ghdl -i --std=08 --work=work $(SRC)
+sim: $(SRC) $(TB_SRC) $(PROG_HEX)
+	ghdl -i --std=08 --work=work $(SRC) $(TB_SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
 	ghdl -r --std=08 $(TB) $(GENERIC) --ieee-asserts=disable-at-0 --assert-level=error --wave=$(WAVE) --stop-time=$(STOPTIME) | tee output.txt
 
@@ -63,6 +64,11 @@ $(PROG_BIN): $(PROG_OBJ) $(LD_CFG)
 $(PROG_HEX): $(PROG_BIN)
 	xxd -p -c 1 $(PROG_BIN) $(PROG_HEX)
 
+synth: $(SRC)
+	ghdl -i --std=08 --work=$(DUT)_work $^
+	ghdl -m --std=08 --work=$(DUT)_work $(DUT) $(GHDL_GENERICS)
+	yosys -m ghdl -p 'ghdl --std=08 --work=$(DUT)_work $(GHDL_GENERICS) $(DUT); synth_xilinx -top $(DUT) -edif $@' > $(DUT).log
+
 clean:
 	rm -rf *.o
 	rm -rf work-obj08.cf
@@ -76,5 +82,7 @@ clean:
 	rm -rf $(LOG_FILE)
 	rm -rf *.lst
 	rm -rf *.map
-
+	rm -rf rrnet.log
+	rm -rf synth
+	rm -rf rrnet_work-obj08.cf
 
