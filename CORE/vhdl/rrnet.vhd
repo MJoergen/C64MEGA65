@@ -5,7 +5,16 @@
 --
 -- Only I/O Space Operation is supported, see section 4.10 in datasheet.
 --
--- PacketPage Address:
+-- Register map (Little-Endian format):
+-- DE02 - DE03 : PacketPage Pointer (byte address)
+-- DE04 - DE05 : PacketPage Data (bits 15-0)
+-- DE06 - DE07 : PacketPage Data (bits 31-16). NOT USED
+-- DE08 - DE09 : Receive/Transmit Data (bits 15-0)
+-- DE0A - DE0B : Receive/Transmit Data (bits 31-16). NOT USED
+-- DE0C - DE0D : Transmit Command
+-- DE0E - DE0F : Transmit Length
+--
+-- PacketPage Address Map (byte address):
 -- 0000 - 0045 : Bus Interface Registers
 -- 0100 - 013F : Status and Control Registers
 -- 0140 - 014F : Initiate Transmit Registers
@@ -14,22 +23,50 @@
 -- 0A00        : Transmit Frame Location
 -- ----------------------------------------------------------
 
+
 library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
 
 entity rrnet is
+  generic (
+    G_DEBUG : boolean := false
+  );
   port (
-    -- CPU interface
+    -- CPU interface @ 32 MHz.
+    -- It is assumed that CS is deasserted between each single transaction.
     clk_i          : in    std_logic;
     rst_i          : in    std_logic;
-    cs_i           : in    std_logic;                    -- Connect to IO1 ($DExx)
+    cs_i           : in    std_logic;                    -- Chip Select. Connect to IO1 ($DExx)
     addr_i         : in    std_logic_vector(7 downto 0);
     we_i           : in    std_logic;
     wr_data_i      : in    std_logic_vector(7 downto 0);
     rd_data_o      : out   std_logic_vector(7 downto 0);
 
-    -- Ethernet interface
+    -- Ethernet interface (byte streaming, same clock domain as CPU interface)
+    -- Byte-oriented interface to an RMII Ethernet PHY.
+    --
+    -- Rx contract : * eth_rx_valid_i pulses high for 1 clock cycle per byte (byte strobe).
+    --               * eth_rx_last_i marks the last byte of a frame (client-visible payload;
+    --                 the 4-byte FCS is already stripped).
+    --               * eth_rx_ok_i is valid only on the beat with eth_rx_last_i = '1'; it is
+    --                 '1' if the frame passed CRC and had no PHY error, '0' otherwise.
+    --               * There is NO back-pressure on the Rx side (no eth_rx_ready_o). The
+    --                 client must consume every valid beat.
+    --
+    -- Tx contract : * Standard valid/ready handshake, sampled once per byte-time on the
+    --                 cycle eth_tx_ready_i = '1'. The client must present each new byte on
+    --                 that cycle or the frame is aborted.
+    --               * eth_tx_valid_o = '0' on a byte boundary during payload aborts the
+    --                 frame (no Tx buffering); the MAC then holds the required IFG
+    --                 before accepting a new frame.
+    --               * The FCS is automatically computed and appended before sending on
+    --                 the wire.
+    --
+    -- Assumption: eth_tx_ready_i pulses at most once every 2 clock cycles,
+    -- which allows the 2-cycle port B RAM read latency to be absorbed
+    -- without stalling. With a 32 MHz clock speed, tx_ready_i pulses every
+    -- 2 - 3 clock cycles, so this is safe with margi
     eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
     eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
     eth_rx_ok_i    : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
@@ -45,47 +82,55 @@ architecture rtl of rrnet is
 
   constant C_PP_PTR     : unsigned(7 downto 0)                     := x"02";
   constant C_PP_DATA_0  : unsigned(7 downto 0)                     := x"04";
-  constant C_PP_DATA_1  : unsigned(7 downto 0)                     := x"06";
+  constant C_PP_DATA_1  : unsigned(7 downto 0)                     := x"06"; -- Not used
   constant C_RXTX_REG_0 : unsigned(7 downto 0)                     := x"08";
-  constant C_RXTX_REG_1 : unsigned(7 downto 0)                     := x"0A";
+  constant C_RXTX_REG_1 : unsigned(7 downto 0)                     := x"0A"; -- Not used
   constant C_TX_CMD     : unsigned(7 downto 0)                     := x"0C";
   constant C_TX_LENGTH  : unsigned(7 downto 0)                     := x"0E";
 
-  signal   pp_ptr     : unsigned(15 downto 0)                      := (others => '0');
-  signal   pp_data_0  : unsigned(15 downto 0)                      := (others => '0');
-  signal   pp_data_1  : unsigned(15 downto 0)                      := (others => '0');
-  signal   rxtx_reg_0 : unsigned(15 downto 0)                      := (others => '0');
-  signal   rxtx_reg_1 : unsigned(15 downto 0)                      := (others => '0');
-  signal   tx_cmd     : unsigned(15 downto 0)                      := (others => '0');
-  signal   tx_length  : unsigned(15 downto 0)                      := (others => '0');
+  constant C_RX_BUF_START : unsigned(11 downto 0)                  := X"400";
+  constant C_TX_BUF_START : unsigned(11 downto 0)                  := X"A00";
 
-  signal   pp_we    : std_logic_vector( 1 downto 0);
-  signal   pp_wrdat : std_logic_vector(15 downto 0);
-  signal   pp_rddat : std_logic_vector(15 downto 0);
+  -- pp_ptr(15) is the AutoIncrement control bit, not an address bit.
+  -- Only pp_ptr(11 downto 0) is passed to the RAM
+  signal   pp_ptr    : unsigned(15 downto 0)                       := (others => '0');
+  signal   tx_cmd    : unsigned(15 downto 0)                       := (others => '0');
+  signal   tx_length : unsigned(15 downto 0)                       := (others => '0');
+  signal   tx_ptr    : unsigned(11 downto 0)                       := (others => '0');
+  signal   tx_start  : std_logic                                   := '0';
+
+  signal   pp_we    : std_logic_vector( 1 downto 0)                := (others => '0');
+  signal   pp_wrdat : std_logic_vector(15 downto 0)                := (others => '0');
+  signal   pp_rddat : std_logic_vector(15 downto 0)                := (others => '0');
 
   signal   rxtx_addr  : unsigned(11 downto 0)                      := (others => '0');
   signal   rxtx_we    : std_logic_vector( 1 downto 0)              := (others => '0');
   signal   rxtx_wrdat : std_logic_vector(15 downto 0)              := (others => '0');
   signal   rxtx_rddat : std_logic_vector(15 downto 0)              := (others => '0');
 
+  -- cs_d is used to detect rising edge of the Chip Select
   signal   cs_d : std_logic                                        := '0';
 
   -- This holds the entire 2k words of PacketPage memory.
-  type     byte_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
+  type     word_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
 
   -- This generates the reset-value of the 2k words PacketPage memory.
 
   pure function get_packet_page_init return std_logic_vector is
-    variable ram_v : byte_array_type(0 to 2047)              := (others => (others => '0'));
-    variable ret_v : std_logic_vector(4096 * 8 - 1 downto 0) := (others => '0');
+    variable ram_v        : word_array_type(0 to 2047)              := (others => (others => '0'));
+    variable ret_v        : std_logic_vector(4096 * 8 - 1 downto 0) := (others => '0');
+    -- PacketPage memory map
+    constant C_PP_ISA_ID  : natural                                 := 16#000#;
+    constant C_PP_PROD_ID : natural                                 := 16#002#;
+    constant C_PP_BUS_ST  : natural                                 := 16#138#;
   begin
     -- Note: Addresses are divided by two, to convert from byte to word addressing.
     -- EISA registration number for Crystal Semiconductor
-    ram_v(16#000# / 2) := x"630E";
+    ram_v(C_PP_ISA_ID / 2)  := x"630E";
     -- Product ID and Revision number
-    ram_v(16#002# / 2) := x"0700";
+    ram_v(C_PP_PROD_ID / 2) := x"0700";
     -- Bus Status (set 'Rdy4TxNOW').
-    ram_v(16#138# / 2) := x"0118";
+    ram_v(C_PP_BUS_ST / 2)  := x"0118";
 
     for i in 0 to 2047 loop
       ret_v(16 * i + 15 downto 16 * i) := ram_v(i);
@@ -96,14 +141,58 @@ architecture rtl of rrnet is
   -- PacketPage RAM initialization vector
   constant C_PP_RAM_INIT : std_logic_vector(4096 * 8 - 1 downto 0) := get_packet_page_init;
 
+  type     tx_state_type is (IDLE_ST, BUSY_ST);
+  signal   tx_state : tx_state_type                                := IDLE_ST;
+
 begin
 
-  -- TBD!!!
-  eth_tx_valid_o <= eth_rx_valid_i;
-  eth_tx_last_o  <= eth_rx_last_i;
-  eth_tx_data_o  <= eth_rx_data_i;
+  tx_proc : process (clk_i)
+  begin
+    if rising_edge(clk_i) then
+      if eth_tx_ready_i = '1' then
+        eth_tx_valid_o <= '0';
+        eth_tx_last_o  <= '0';
+      end if;
 
-  -- Instantiate 4kB Packet Page memory (dual port, single clock)
+      case tx_state is
+
+        when IDLE_ST =>
+          if tx_start = '1' then
+            tx_state <= BUSY_ST;
+          end if;
+
+        when BUSY_ST =>
+          if eth_tx_ready_i = '1' then
+            if rxtx_addr(0) = '0' then
+              eth_tx_data_o <= rxtx_rddat(7 downto 0);
+            else
+              eth_tx_data_o <= rxtx_rddat(15 downto 8);
+            end if;
+            eth_tx_valid_o <= '1';
+            rxtx_addr      <= rxtx_addr + 1;
+            if rxtx_addr + 1 >= C_TX_BUF_START + tx_length then
+              rxtx_addr     <= C_TX_BUF_START;
+              eth_tx_last_o <= '1';
+              tx_state      <= IDLE_ST;
+            end if;
+          end if;
+
+      end case;
+
+      if rst_i = '1' then
+        rxtx_addr      <= C_TX_BUF_START;
+        eth_tx_valid_o <= '0';
+        eth_tx_last_o  <= '0';
+        tx_state       <= IDLE_ST;
+      end if;
+    end if;
+  end process tx_proc;
+
+
+  -- The 4kB PacketPage memory is abstracted away into a separate
+  -- generic Dual-Port Single-Clock RAM.
+  -- Addresses are in units of bytes, and are assumed to be word-aligned,
+  -- i.e. bit 0 of the address must always be zero.
   rrnet_pp_inst : entity work.rrnet_pp
     generic map (
       G_INIT => C_PP_RAM_INIT
@@ -114,20 +203,31 @@ begin
       a_wren_i   => pp_we,
       a_wrdata_i => pp_wrdat,
       a_rddata_o => pp_rddat,
-      b_addr_i   => rxtx_addr,
+      b_addr_i   => rxtx_addr and X"FFE",
       b_wren_i   => rxtx_we,
       b_wrdata_i => rxtx_wrdat,
       b_rddata_o => rxtx_rddat
     ); -- rrnet_pp_inst
 
+  -- Main state machine
   fsm_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
-      pp_we <= (others => '0');
-      cs_d  <= cs_i;
+      assert not (tx_state = BUSY_ST and cs_d = '0' and cs_i = '1' and we_i = '1'
+                  and (unsigned(addr_i) = C_RXTX_REG_0 or unsigned(addr_i) = C_RXTX_REG_0 + 1))
+        report "rrnet: CPU write to Tx buffer while Tx is in progress"
+        severity failure;
+
+      tx_start <= '0';
+      pp_we    <= (others => '0');
+      cs_d     <= cs_i;
+      -- Since Chip Select may be asserted for several consecutive clock cycles,
+      -- we only react on the first beat with CS asserted.
       if cs_d = '0' and cs_i = '1' then
         if we_i = '1' then
-          report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
+          if G_DEBUG then
+            report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
+          end if;
 
           case unsigned(addr_i) is
 
@@ -138,23 +238,35 @@ begin
               pp_ptr(15 downto 8) <= unsigned(wr_data_i);
 
             when C_PP_DATA_0 =>
-              pp_data_0(7 downto 0) <= unsigned(wr_data_i);
+              -- Replicate the byte into both halves of the 16-bit word; the pp_we
+              -- byte-enable pattern selects which half actually gets written.
+              pp_wrdat <= wr_data_i & wr_data_i;
+              pp_we    <= "01";
 
             when C_PP_DATA_0 + 1 =>
-              pp_data_0(15 downto 8) <= unsigned(wr_data_i);
+              pp_wrdat <= wr_data_i & wr_data_i;
+              pp_we    <= "10";
+              if pp_ptr(15) = '1' then
+                pp_ptr <= pp_ptr + 2;
+              end if;
 
             when C_RXTX_REG_0 =>
-              rxtx_reg_0(7 downto 0) <= unsigned(wr_data_i);
-              pp_wrdat               <= wr_data_i & wr_data_i;
-              pp_we                  <= "01";
+              pp_ptr   <= "0000" & tx_ptr;
+              pp_wrdat <= wr_data_i & wr_data_i;
+              pp_we    <= "01";
 
             when C_RXTX_REG_0 + 1 =>
-              rxtx_reg_0(15 downto 8) <= unsigned(wr_data_i);
-              pp_wrdat                <= wr_data_i & wr_data_i;
-              pp_we                   <= "10";
+              pp_ptr   <= "0000" & tx_ptr;
+              tx_ptr   <= tx_ptr + 2;
+              pp_wrdat <= wr_data_i & wr_data_i;
+              pp_we    <= "10";
+              if tx_ptr + 2 >= C_TX_BUF_START + tx_length then
+                tx_start <= '1';
+              end if;
 
             when C_TX_CMD =>
               tx_cmd(7 downto 0) <= unsigned(wr_data_i);
+              tx_ptr             <= C_TX_BUF_START;
 
             when C_TX_CMD + 1 =>
               tx_cmd(15 downto 8) <= unsigned(wr_data_i);
@@ -171,7 +283,9 @@ begin
           end case;
 
         else
-          report "RRNET: READ FROM $DE" & to_hstring(addr_i);
+          if G_DEBUG then
+            report "RRNET: READ FROM $DE" & to_hstring(addr_i);
+          end if;
 
           rd_data_o <= (others => '0');
 
@@ -184,16 +298,21 @@ begin
               rd_data_o <= std_logic_vector(pp_ptr(15 downto 8));
 
             when C_PP_DATA_0 =>
-              rd_data_o <= std_logic_vector(pp_rddat(7 downto 0));
+              rd_data_o <= pp_rddat(7 downto 0);
 
             when C_PP_DATA_0 + 1 =>
-              rd_data_o <= std_logic_vector(pp_rddat(15 downto 8));
+              rd_data_o <= pp_rddat(15 downto 8);
+              -- Autoincrement fires only on high-byte access (per CS8900A spec).
+              -- Drivers using autoincrement must always read low byte then high byte.
+              if pp_ptr(15) = '1' then
+                pp_ptr <= pp_ptr + 2;
+              end if;
 
             when C_RXTX_REG_0 =>
-              rd_data_o <= std_logic_vector(rxtx_reg_0(7 downto 0));
+              rd_data_o <= X"FF";
 
             when C_RXTX_REG_0 + 1 =>
-              rd_data_o <= std_logic_vector(rxtx_reg_0(15 downto 8));
+              rd_data_o <= X"FF";
 
             when C_TX_CMD =>
               rd_data_o <= std_logic_vector(tx_cmd(7 downto 0));
@@ -216,14 +335,12 @@ begin
       end if;
 
       if rst_i = '1' then
-        pp_we      <= (others => '0');
-        pp_ptr     <= (others => '0');
-        pp_data_0  <= (others => '0');
-        pp_data_1  <= (others => '0');
-        rxtx_reg_0 <= (others => '0');
-        rxtx_reg_1 <= (others => '0');
-        tx_cmd     <= (others => '0');
-        tx_length  <= (others => '0');
+        cs_d      <= '0';
+        pp_we     <= (others => '0');
+        pp_ptr    <= (others => '0');
+        tx_cmd    <= (others => '0');
+        tx_length <= (others => '0');
+        tx_start  <= '0';
       end if;
     end if;
   end process fsm_proc;

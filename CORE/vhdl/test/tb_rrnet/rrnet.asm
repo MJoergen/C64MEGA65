@@ -42,6 +42,10 @@ cpu_reset:
         ldx #>txlen
         jsr eth+driver::send
 
+        ; TBD
+:       nop
+        jmp :-
+
         ; Infinite loop signals a success
 ok:     jmp ok
 

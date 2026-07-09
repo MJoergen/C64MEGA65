@@ -41,7 +41,7 @@ architecture tb of tb_rrnet is
   signal eth_rx_last  : std_logic;                    -- Last byte of frame
   signal eth_rx_ok    : std_logic;                    -- Only meaningful when rx_last_i = '1'
   signal eth_rx_data  : std_logic_vector(7 downto 0); -- Received byte
-  signal eth_tx_ready : std_logic;                    -- Pulses '1' on the byte-boundary cycle
+  signal eth_tx_ready : std_logic := '0';             -- Pulses '1' on the byte-boundary cycle
   signal eth_tx_valid : std_logic;                    -- Client presents a byte
   signal eth_tx_last  : std_logic;                    -- Client marks the last byte
   signal eth_tx_data  : std_logic_vector(7 downto 0); -- Byte to transmit
@@ -55,6 +55,9 @@ begin
 
   -- Instantiate DUT
   rrnet_inst : entity work.rrnet
+    generic map (
+      G_DEBUG => true
+    )
     port map (
       clk_i          => clk,
       rst_i          => rst,
@@ -73,12 +76,32 @@ begin
       eth_tx_data_o  => eth_tx_data
     ); -- rrnet_inst
 
-  -- Simple loopback
-  eth_rx_valid <= eth_tx_valid;
-  eth_rx_last  <= eth_tx_last;
-  eth_rx_ok    <= '1';
-  eth_rx_data  <= eth_tx_data;
-  eth_tx_ready <= not rst;
+  -- TBD
+  eth_rx_valid <= '0';
+  eth_rx_last  <= '0';
+  eth_rx_ok    <= '0';
+  eth_rx_data  <= (others => '0');
+
+  axip_logger_inst : entity work.axip_logger
+    generic map (
+      G_ENABLE        => true,
+      G_LOG_NAME      => "   ",
+      G_BYTES_PER_ROW => 1,
+      G_DATA_BYTES    => 1
+    )
+    port map (
+      clk_i   => clk,
+      rst_i   => rst,
+      ready_i => eth_tx_ready,
+      valid_i => eth_tx_valid,
+      data_i  => eth_tx_data,
+      last_i  => eth_tx_last,
+      bytes_i => 1
+    ); -- axip_logger_inst
+
+  -- eth_tx_ready may only be asserted on every other clock cycle.
+  -- This is a baked-in assumption in the rrnet.vhd file.
+  eth_tx_ready <= not eth_tx_ready when rising_edge(clk);
 
   -- Simple address decoding
   rrnet_cs    <= '1' when cpu_addr(15 downto 8) = x"DE" else

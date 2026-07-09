@@ -25,6 +25,7 @@ TB_SRC += ../../../../../65c02/src/control/microcode_65c02.vhd
 TB_SRC += ../../../../../65c02/src/fmt.vhd
 TB_SRC += ../../../../../65c02/src/debug.vhd
 TB_SRC += ../../../../../65c02/src/cpu_65c02.vhd
+TB_SRC += axip_logger.vhd
 
 TB = tb_$(DUT)
 TB_SRC += $(TB).vhd
