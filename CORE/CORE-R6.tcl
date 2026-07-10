@@ -117,8 +117,8 @@ read_vhdl -vhdl2008 { \
       vhdl/main.vhd \
       vhdl/mega65.vhd \
       vhdl/prg_loader.vhd \
-      vhdl/reu_mapper.vhd \      vhdl/mount_buf_wrapper.vhd \
-
+      vhdl/reu_mapper.vhd \
+      vhdl/mount_buf_wrapper.vhd \
       vhdl/sw_cartridge_csr.vhd \
       vhdl/sw_cartridge_wrapper.vhd }
 
