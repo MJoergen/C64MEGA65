@@ -11,7 +11,8 @@ entity tdp_ram is
       DATA_WIDTH   : positive;
       ROM_PRELOAD  : boolean := false;
       ROM_FILE     : string  := "";
-      ROM_FILE_HEX : boolean := false
+      ROM_FILE_HEX : boolean := false;
+      INIT_VAL     : std_logic_vector((2**ADDR_WIDTH) * DATA_WIDTH - 1 downto 0) := (others => '0')
    );
    port (
       clock_a   : in  std_logic;
@@ -59,11 +60,15 @@ architecture synthesis of tdp_ram is
 
    -- Vivado 2019.2 crashes, if we are not using this indirection
    impure function InitRAM(ramfile: string) return t_ram is
+     variable ret_v : t_ram := (others => (others => '0'));
    begin
       if ROM_PRELOAD then
          return InitRamFromFile(ramfile);
       else
-         return (others => (others => '0'));
+         for i in 0 to 2**ADDR_WIDTH-1 loop
+            ret_v(i) := INIT_VAL(DATA_WIDTH * i + DATA_WIDTH - 1 downto DATA_WIDTH * i);
+         end loop;
+         return ret_v;
       end if;
    end;
 

@@ -119,24 +119,24 @@ architecture rtl of rrnet is
   ----------------------------------------------------------
   -- CPU-side I/O register offsets (relative to $DE00)
   ----------------------------------------------------------
-  constant C_PP_PTR     : unsigned(7 downto 0)                     := x"02";
-  constant C_PP_DATA_0  : unsigned(7 downto 0)                     := x"04";
-  constant C_PP_DATA_1  : unsigned(7 downto 0)                     := x"06"; -- Not used
-  constant C_RXTX_REG_0 : unsigned(7 downto 0)                     := x"08";
-  constant C_RXTX_REG_1 : unsigned(7 downto 0)                     := x"0A"; -- Not used
-  constant C_TX_CMD     : unsigned(7 downto 0)                     := x"0C";
-  constant C_TX_LENGTH  : unsigned(7 downto 0)                     := x"0E";
+  constant C_PP_PTR     : unsigned(7 downto 0)                         := x"02";
+  constant C_PP_DATA_0  : unsigned(7 downto 0)                         := x"04";
+  constant C_PP_DATA_1  : unsigned(7 downto 0)                         := x"06"; -- Not used
+  constant C_RXTX_REG_0 : unsigned(7 downto 0)                         := x"08";
+  constant C_RXTX_REG_1 : unsigned(7 downto 0)                         := x"0A"; -- Not used
+  constant C_TX_CMD     : unsigned(7 downto 0)                         := x"0C";
+  constant C_TX_LENGTH  : unsigned(7 downto 0)                         := x"0E";
 
   ----------------------------------------------------------
   -- PacketPage buffer locations (byte addresses in RAM)
   ----------------------------------------------------------
-  constant C_RX_BUF_START : unsigned(11 downto 0)                  := X"400";
-  constant C_TX_BUF_START : unsigned(11 downto 0)                  := X"A00";
+  constant C_RX_BUF_START : unsigned(11 downto 0)                      := X"400";
+  constant C_TX_BUF_START : unsigned(11 downto 0)                      := X"A00";
 
   -- PP word addresses (12-bit RAM index, i.e. byte offset / 2) for the
   -- registers whose live-status bits we overlay on CPU reads.
-  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)              := to_unsigned(16#138# / 2, 11);
-  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)              := to_unsigned(16#124# / 2, 11);
+  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#138# / 2, 11);
+  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#124# / 2, 11);
 
   ----------------------------------------------------------
   -- CPU-visible registers
@@ -144,44 +144,44 @@ architecture rtl of rrnet is
 
   -- reg_pp_ptr(15) is the AutoIncrement control bit, not an address bit.
   -- Only reg_pp_ptr(11 downto 0) is passed to the RAM.
-  signal   reg_pp_ptr    : unsigned(15 downto 0)                   := (others => '0');
-  signal   reg_tx_cmd    : unsigned(15 downto 0)                   := (others => '0');
-  signal   reg_tx_length : unsigned(15 downto 0)                   := (others => '0');
-  signal   reg_tx_ptr    : unsigned(11 downto 0)                   := (others => '0');
-  signal   reg_tx_start  : std_logic                               := '0';
+  signal   reg_pp_ptr    : unsigned(15 downto 0)                       := (others => '0');
+  signal   reg_tx_cmd    : unsigned(15 downto 0)                       := (others => '0');
+  signal   reg_tx_length : unsigned(15 downto 0)                       := (others => '0');
+  signal   reg_tx_ptr    : unsigned(11 downto 0)                       := (others => '0');
+  signal   reg_tx_start  : std_logic                                   := '0';
 
   -- Independent internal Rx read pointer used by the $DE08/09 window.
   -- Starts at $0400 (RxStatus low byte) at the beginning of each frame,
   -- advances by 2 on each $DE09 (high byte) read. Separate from
   -- reg_pp_ptr so drivers can interleave PP-window and RxTx-window
   -- accesses without interference.
-  signal   reg_rx_ptr : unsigned(11 downto 0)                      := (others => '0');
+  signal   reg_rx_ptr : unsigned(11 downto 0)                          := (others => '0');
 
   ----------------------------------------------------------
   -- Port A (CPU-side) RAM signals
   ----------------------------------------------------------
-  signal   pp_we    : std_logic_vector( 1 downto 0)                := (others => '0');
-  signal   pp_wrdat : std_logic_vector(15 downto 0)                := (others => '0');
-  signal   pp_rddat : std_logic_vector(15 downto 0)                := (others => '0');
+  signal   pp_we    : std_logic_vector( 1 downto 0)                    := (others => '0');
+  signal   pp_wrdat : std_logic_vector(15 downto 0)                    := (others => '0');
+  signal   pp_rddat : std_logic_vector(15 downto 0)                    := (others => '0');
 
   ----------------------------------------------------------
   -- Port B (packet-side) RAM signals. Muxed between Tx-read
   -- (driven by tx_proc), Rx-write (driven by rx_proc), and
   -- Rx-window-read (driven by fsm_proc for $DE08/09 accesses).
   ----------------------------------------------------------
-  signal   rxtx_addr  : unsigned(11 downto 0)                      := (others => '0');
-  signal   rxtx_we    : std_logic_vector( 1 downto 0)              := (others => '0');
-  signal   rxtx_wrdat : std_logic_vector(15 downto 0)              := (others => '0');
-  signal   rxtx_rddat : std_logic_vector(15 downto 0)              := (others => '0');
+  signal   rxtx_addr  : unsigned(11 downto 0)                          := (others => '0');
+  signal   rxtx_we    : std_logic_vector( 1 downto 0)                  := (others => '0');
+  signal   rxtx_wrdat : std_logic_vector(15 downto 0)                  := (others => '0');
+  signal   rxtx_rddat : std_logic_vector(15 downto 0)                  := (others => '0');
 
   -- Per-process port-B drivers; multiplexed to rxtx_* below.
-  signal   tx_rxtx_addr  : unsigned(11 downto 0)                   := (others => '0');
-  signal   rx_rxtx_addr  : unsigned(11 downto 0)                   := (others => '0');
-  signal   rx_rxtx_we    : std_logic_vector( 1 downto 0)           := (others => '0');
-  signal   rx_rxtx_wrdat : std_logic_vector(15 downto 0)           := (others => '0');
+  signal   tx_rxtx_addr  : unsigned(11 downto 0)                       := (others => '0');
+  signal   rx_rxtx_addr  : unsigned(11 downto 0)                       := (others => '0');
+  signal   rx_rxtx_we    : std_logic_vector( 1 downto 0)               := (others => '0');
+  signal   rx_rxtx_wrdat : std_logic_vector(15 downto 0)               := (others => '0');
 
   -- cs_d is used to detect rising edge of the Chip Select.
-  signal   cs_d : std_logic                                        := '0';
+  signal   cs_d : std_logic                                            := '0';
 
   ----------------------------------------------------------
   -- PacketPage RAM initialisation
@@ -207,19 +207,21 @@ architecture rtl of rrnet is
     ram_v(C_PP_BUS_ST / 2)  := x"0118";
 
     for i in 0 to 2047 loop
-      ret_v(16 * i + 15 downto 16 * i) := ram_v(i);
+      ret_v(8 * i + 7 downto 8 * i)                        := ram_v(i)(7 downto 0);
+      ret_v(8 * i + 7 + 2048 * 8 downto 8 * i + 2048 * 8 ) := ram_v(i)(15 downto 8);
     end loop;
     return ret_v;
   end function get_packet_page_init;
 
-  -- PacketPage RAM initialisation vector
-  constant C_PP_RAM_INIT : std_logic_vector(4096 * 8 - 1 downto 0) := get_packet_page_init;
+  -- PacketPage RAM initialisation vector, split into MSB and LSB
+  constant C_PP_RAM_INIT_LSB : std_logic_vector(2048 * 8 - 1 downto 0) := get_packet_page_init(2048 * 8 - 1 downto 0);
+  constant C_PP_RAM_INIT_MSB : std_logic_vector(2048 * 8 - 1 downto 0) := get_packet_page_init(4096 * 8 - 1 downto 2048 * 8);
 
   ----------------------------------------------------------
   -- Tx path state
   ----------------------------------------------------------
   type     tx_state_type is (IDLE_ST, BUSY_ST);
-  signal   tx_state : tx_state_type                                := IDLE_ST;
+  signal   tx_state : tx_state_type                                    := IDLE_ST;
 
   -- Live "buffer ready" flag exposed to software as the Rdy4TxNOW bit of
   -- the CS8900A Bus Status register at PP offset $0138 (bit 8).
@@ -238,18 +240,18 @@ architecture rtl of rrnet is
   --   RX_READY_ST   : frame available; RxOK visible via RxEvent overlay.
   --                   Waits until rx_frame_consumed pulses.
   type     rx_state_type is (RX_IDLE_ST, RX_DATA_ST, RX_HEADER_ST, RX_READY_ST);
-  signal   rx_state : rx_state_type                                := RX_IDLE_ST;
+  signal   rx_state : rx_state_type                                    := RX_IDLE_ST;
 
   -- Byte-granular write pointer into the RAM.
-  signal   rx_wr_addr : unsigned(11 downto 0)                      := (others => '0');
+  signal   rx_wr_addr : unsigned(11 downto 0)                          := (others => '0');
 
   -- Payload bytes captured so far (also reused as a 1-bit sub-state in
   -- RX_HEADER_ST via its LSB).
-  signal   rx_byte_cnt : unsigned(15 downto 0)                     := (others => '0');
+  signal   rx_byte_cnt : unsigned(15 downto 0)                         := (others => '0');
 
   -- Frame length (payload bytes, no FCS) and OK flag, latched at end-of-frame.
-  signal   rx_length : unsigned(15 downto 0)                       := (others => '0');
-  signal   rx_ok     : std_logic                                   := '0';
+  signal   rx_length : unsigned(15 downto 0)                           := (others => '0');
+  signal   rx_ok     : std_logic                                       := '0';
 
   -- Live "frame available" flag exposed to software as the RxOK bit of
   -- the CS8900A RxEvent register at PP offset $0124 (bit 8).
@@ -261,7 +263,7 @@ architecture rtl of rrnet is
 
   -- One-cycle strobe that returns the Rx FSM from RX_READY_ST to RX_IDLE_ST.
   -- Asserted by fsm_proc on any of the three consumption paths.
-  signal   rx_frame_consumed : std_logic                           := '0';
+  signal   rx_frame_consumed : std_logic                               := '0';
 
 begin
 
@@ -467,22 +469,45 @@ begin
   -- PacketPage RAM (4 kB, dual-port, single-clock)
   ----------------------------------------------------------
   -- Addresses are in units of bytes, and are assumed to be word-aligned,
-  -- i.e. bit 0 of the address must always be zero.
-  rrnet_pp_inst : entity work.rrnet_pp
+  -- i.e. bit 0 of the address must always be zero, and is ignored here.
+  -- Two separate instances of tdp_ram, to account for LSB and MSB of each word.
+  tdp_ram_lsb_inst : entity work.tdp_ram
     generic map (
-      G_INIT => C_PP_RAM_INIT
+      INIT_VAL   => C_PP_RAM_INIT_LSB,
+      ADDR_WIDTH => 11,
+      DATA_WIDTH => 8
     )
     port map (
-      clk_i      => clk_i,
-      a_addr_i   => reg_pp_ptr(11 downto 0),
-      a_wren_i   => pp_we,
-      a_wrdata_i => pp_wrdat,
-      a_rddata_o => pp_rddat,
-      b_addr_i   => rxtx_addr and X"FFE",
-      b_wren_i   => rxtx_we,
-      b_wrdata_i => rxtx_wrdat,
-      b_rddata_o => rxtx_rddat
-    ); -- rrnet_pp_inst
+      clock_a   => clk_i,
+      address_a => std_logic_vector(reg_pp_ptr(11 downto 1)),
+      data_a    => pp_wrdat(7 downto 0),
+      wren_a    => pp_we(0),
+      q_a       => pp_rddat(7 downto 0),
+      clock_b   => clk_i,
+      address_b => std_logic_vector(rxtx_addr(11 downto 1)),
+      data_b    => rxtx_wrdat(7 downto 0),
+      wren_b    => rxtx_we(0),
+      q_b       => rxtx_rddat(7 downto 0)
+    ); -- tdp_ram_lsb_inst : entity work.tdp_ram
+
+  tdp_ram_msb_inst : entity work.tdp_ram
+    generic map (
+      INIT_VAL   => C_PP_RAM_INIT_MSB,
+      ADDR_WIDTH => 11,
+      DATA_WIDTH => 8
+    )
+    port map (
+      clock_a   => clk_i,
+      address_a => std_logic_vector(reg_pp_ptr(11 downto 1)),
+      data_a    => pp_wrdat(15 downto 8),
+      wren_a    => pp_we(1),
+      q_a       => pp_rddat(15 downto 8),
+      clock_b   => clk_i,
+      address_b => std_logic_vector(rxtx_addr(11 downto 1)),
+      data_b    => rxtx_wrdat(15 downto 8),
+      wren_b    => rxtx_we(1),
+      q_b       => rxtx_rddat(15 downto 8)
+    ); -- tdp_ram_msb_inst : entity work.tdp_ram
 
 
   ----------------------------------------------------------
