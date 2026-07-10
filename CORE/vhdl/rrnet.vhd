@@ -1,5 +1,5 @@
 -- ----------------------------------------------------------
--- Description: Simulates an CS8900A ethernet chip
+-- Description: Simulates a CS8900A ethernet chip
 --
 -- Datasheet: https://www.mi.fu-berlin.de/inf/groups/ag-tech/projects/ScatterWeb/moduleComponents/EWS_CS8900.pdf
 --
@@ -20,11 +20,41 @@
 -- 0140 - 014F : Initiate Transmit Registers
 -- 0150 - 015D : Address Filter Registers
 -- 0400        : Receive Frame Location
+--                 $0400-$0401 : RxStatus  (bit 8 = RxOK, live-overlaid)
+--                 $0402-$0403 : RxLength  (bytes, no FCS)
+--                 $0404+      : Payload
 -- 0A00        : Transmit Frame Location
 --
 -- Bus Status ($0138), Rdy4TxNOW bit (bit 8): live-overlaid from tx_state
 -- on CPU reads of that PP offset. RAM contents at $0138 are never rewritten;
 -- the RAM value provides the static (non-Rdy4TxNOW) bits.
+--
+-- RxEvent ($0124), RxOK bit (bit 8): live-overlaid from rx_state on CPU
+-- reads of that PP offset. Same convention as Rdy4TxNOW.
+--
+-- Rx frame consumption: the receiver is re-armed when ANY of
+--   * the CPU auto-increments reg_pp_ptr past the end of the frame via
+--     the PP data window ($DE04/05), OR
+--   * the CPU reads past the end of the frame via the RxTx data window
+--     ($DE08/09), OR
+--   * the CPU explicitly writes to RxEvent ($0124) to clear it.
+--
+-- RxTx data window ($DE08/09) read path: uses port B of the PacketPage
+-- RAM, addressed by an independent internal pointer reg_rx_ptr (starting
+-- at $0400 for each frame). $DE08 returns the low byte of the current
+-- word, $DE09 returns the high byte AND advances reg_rx_ptr by 2 (per
+-- CS8900A word-oriented I/O). The internal pointer is reset to $0400
+-- automatically after frame consumption.
+--
+-- Port-B arbitration: The Rx-write, Tx-read, and Rx-window-read paths
+-- all share port B of the PacketPage RAM. They are naturally mutually
+-- exclusive under normal driver flow:
+--   * Rx-write is only active while rx_state = RX_DATA_ST/RX_HEADER_ST.
+--   * Tx-read is only active while tx_state = BUSY_ST.
+--   * Rx-window-read is only meaningful while rx_state = RX_READY_ST.
+-- Drivers must not initiate a Tx transaction while draining an Rx frame
+-- via $DE08/09, or the Rx read will observe Tx-buffer data. The FSM
+-- warns on this via a runtime assertion.
 -- ----------------------------------------------------------
 
 
@@ -48,15 +78,17 @@ entity rrnet is
     rd_data_o      : out   std_logic_vector(7 downto 0);
 
     -- Ethernet interface (byte streaming, same clock domain as CPU interface)
+    -- Bytes arrive at the frequency of 100 / 8 = 12.5 Mbytes per second.
     -- Byte-oriented interface to an RMII Ethernet PHY.
     --
     -- Rx contract : * eth_rx_valid_i pulses high for 1 clock cycle per byte (byte strobe).
     --               * eth_rx_last_i marks the last byte of a frame (client-visible payload;
     --                 the 4-byte FCS is already stripped).
-    --               * eth_rx_ok_i is valid only on the beat with eth_rx_last_i = '1'; it is
+    --               * eth_rx_ok_i is valid only on the beat with rx_last_i = '1'; it is
     --                 '1' if the frame passed CRC and had no PHY error, '0' otherwise.
     --               * There is NO back-pressure on the Rx side (no eth_rx_ready_o). The
-    --                 client must consume every valid beat.
+    --                 client must consume every valid beat; frames arriving while the
+    --                 emulator's single Rx buffer is unavailable are silently dropped.
     --
     -- Tx contract : * Standard valid/ready handshake, sampled once per byte-time on the
     --                 cycle eth_tx_ready_i = '1'. The client must present each new byte on
@@ -70,7 +102,7 @@ entity rrnet is
     -- Assumption: eth_tx_ready_i pulses at most once every 2 clock cycles,
     -- which allows the 2-cycle port B RAM read latency to be absorbed
     -- without stalling. With a 32 MHz clock speed, tx_ready_i pulses every
-    -- 2 - 3 clock cycles, so this is safe with margi
+    -- 32 / 12.5 = 2.56 clock cycles, so this is safe with margin.
     eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
     eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
     eth_rx_ok_i    : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
@@ -84,6 +116,9 @@ end entity rrnet;
 
 architecture rtl of rrnet is
 
+  ----------------------------------------------------------
+  -- CPU-side I/O register offsets (relative to $DE00)
+  ----------------------------------------------------------
   constant C_PP_PTR     : unsigned(7 downto 0)                     := x"02";
   constant C_PP_DATA_0  : unsigned(7 downto 0)                     := x"04";
   constant C_PP_DATA_1  : unsigned(7 downto 0)                     := x"06"; -- Not used
@@ -92,31 +127,68 @@ architecture rtl of rrnet is
   constant C_TX_CMD     : unsigned(7 downto 0)                     := x"0C";
   constant C_TX_LENGTH  : unsigned(7 downto 0)                     := x"0E";
 
+  ----------------------------------------------------------
+  -- PacketPage buffer locations (byte addresses in RAM)
+  ----------------------------------------------------------
   constant C_RX_BUF_START : unsigned(11 downto 0)                  := X"400";
   constant C_TX_BUF_START : unsigned(11 downto 0)                  := X"A00";
 
-  -- pp_ptr(15) is the AutoIncrement control bit, not an address bit.
-  -- Only pp_ptr(11 downto 0) is passed to the RAM
+  -- PP word addresses (12-bit RAM index, i.e. byte offset / 2) for the
+  -- registers whose live-status bits we overlay on CPU reads.
+  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)              := to_unsigned(16#138# / 2, 11);
+  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)              := to_unsigned(16#124# / 2, 11);
+
+  ----------------------------------------------------------
+  -- CPU-visible registers
+  ----------------------------------------------------------
+
+  -- reg_pp_ptr(15) is the AutoIncrement control bit, not an address bit.
+  -- Only reg_pp_ptr(11 downto 0) is passed to the RAM.
   signal   reg_pp_ptr    : unsigned(15 downto 0)                   := (others => '0');
   signal   reg_tx_cmd    : unsigned(15 downto 0)                   := (others => '0');
   signal   reg_tx_length : unsigned(15 downto 0)                   := (others => '0');
+  signal   reg_tx_ptr    : unsigned(11 downto 0)                   := (others => '0');
+  signal   reg_tx_start  : std_logic                               := '0';
 
+  -- Independent internal Rx read pointer used by the $DE08/09 window.
+  -- Starts at $0400 (RxStatus low byte) at the beginning of each frame,
+  -- advances by 2 on each $DE09 (high byte) read. Separate from
+  -- reg_pp_ptr so drivers can interleave PP-window and RxTx-window
+  -- accesses without interference.
+  signal   reg_rx_ptr : unsigned(11 downto 0)                      := (others => '0');
+
+  ----------------------------------------------------------
+  -- Port A (CPU-side) RAM signals
+  ----------------------------------------------------------
   signal   pp_we    : std_logic_vector( 1 downto 0)                := (others => '0');
   signal   pp_wrdat : std_logic_vector(15 downto 0)                := (others => '0');
   signal   pp_rddat : std_logic_vector(15 downto 0)                := (others => '0');
 
+  ----------------------------------------------------------
+  -- Port B (packet-side) RAM signals. Muxed between Tx-read
+  -- (driven by tx_proc), Rx-write (driven by rx_proc), and
+  -- Rx-window-read (driven by fsm_proc for $DE08/09 accesses).
+  ----------------------------------------------------------
   signal   rxtx_addr  : unsigned(11 downto 0)                      := (others => '0');
   signal   rxtx_we    : std_logic_vector( 1 downto 0)              := (others => '0');
   signal   rxtx_wrdat : std_logic_vector(15 downto 0)              := (others => '0');
   signal   rxtx_rddat : std_logic_vector(15 downto 0)              := (others => '0');
 
-  -- cs_d is used to detect rising edge of the Chip Select
+  -- Per-process port-B drivers; multiplexed to rxtx_* below.
+  signal   tx_rxtx_addr  : unsigned(11 downto 0)                   := (others => '0');
+  signal   rx_rxtx_addr  : unsigned(11 downto 0)                   := (others => '0');
+  signal   rx_rxtx_we    : std_logic_vector( 1 downto 0)           := (others => '0');
+  signal   rx_rxtx_wrdat : std_logic_vector(15 downto 0)           := (others => '0');
+
+  -- cs_d is used to detect rising edge of the Chip Select.
   signal   cs_d : std_logic                                        := '0';
+
+  ----------------------------------------------------------
+  -- PacketPage RAM initialisation
+  ----------------------------------------------------------
 
   -- This holds the entire 2k words of PacketPage memory.
   type     word_array_type is array (natural range <>) of std_logic_vector(15 downto 0);
-
-  -- This generates the reset-value of the 2k words PacketPage memory.
 
   pure function get_packet_page_init return std_logic_vector is
     variable ram_v        : word_array_type(0 to 2047)              := (others => (others => '0'));
@@ -140,14 +212,12 @@ architecture rtl of rrnet is
     return ret_v;
   end function get_packet_page_init;
 
-  -- PacketPage RAM initialization vector
+  -- PacketPage RAM initialisation vector
   constant C_PP_RAM_INIT : std_logic_vector(4096 * 8 - 1 downto 0) := get_packet_page_init;
 
-
-  ---------------------------------------------------------
-  -- Transmit path
-  ---------------------------------------------------------
-
+  ----------------------------------------------------------
+  -- Tx path state
+  ----------------------------------------------------------
   type     tx_state_type is (IDLE_ST, BUSY_ST);
   signal   tx_state : tx_state_type                                := IDLE_ST;
 
@@ -155,31 +225,29 @@ architecture rtl of rrnet is
   -- the CS8900A Bus Status register at PP offset $0138 (bit 8).
   signal   rdy_4_tx_now : std_logic;
 
-  -- PP word address (12-bit RAM index) corresponding to the CS8900A
-  -- Bus Status register at PP byte offset $0138.
-  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)              := to_unsigned(16#138# / 2, 11);
-  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)              := to_unsigned(16#124# / 2, 11);
+  ----------------------------------------------------------
+  -- Rx path state
+  ----------------------------------------------------------
 
-  signal   tx_ptr   : unsigned(11 downto 0)                        := (others => '0');
-  signal   tx_start : std_logic                                    := '0';
-
-
-  ---------------------------------------------------------
-  -- Receive path
-  ---------------------------------------------------------
-
+  -- Rx FSM:
+  --   RX_IDLE_ST    : waiting for a frame; incoming bytes accepted only
+  --                   if rx_accept = '1'.
+  --   RX_DATA_ST    : streaming payload bytes into $0404+.
+  --   RX_HEADER_ST  : writing RxStatus at $0400 and RxLength at $0402.
+  --                   Two clock cycles (one word per cycle).
+  --   RX_READY_ST   : frame available; RxOK visible via RxEvent overlay.
+  --                   Waits until rx_frame_consumed pulses.
   type     rx_state_type is (RX_IDLE_ST, RX_DATA_ST, RX_HEADER_ST, RX_READY_ST);
   signal   rx_state : rx_state_type                                := RX_IDLE_ST;
 
-  -- Current write address into PacketPage RAM (starts at $0404, skipping
-  -- header words; header is filled in RX_HEADER_ST once the length is known).
+  -- Byte-granular write pointer into the RAM.
   signal   rx_wr_addr : unsigned(11 downto 0)                      := (others => '0');
 
-  -- Number of payload bytes accepted so far. Wide enough for max Ethernet
-  -- frame (1518 - FCS = 1514). Same width as reg_tx_length for symmetry.
+  -- Payload bytes captured so far (also reused as a 1-bit sub-state in
+  -- RX_HEADER_ST via its LSB).
   signal   rx_byte_cnt : unsigned(15 downto 0)                     := (others => '0');
 
-  -- Latched status of the completed frame.
+  -- Frame length (payload bytes, no FCS) and OK flag, latched at end-of-frame.
   signal   rx_length : unsigned(15 downto 0)                       := (others => '0');
   signal   rx_ok     : std_logic                                   := '0';
 
@@ -187,19 +255,64 @@ architecture rtl of rrnet is
   -- the CS8900A RxEvent register at PP offset $0124 (bit 8).
   signal   rx_frame_ready : std_logic;
 
-  -- Rx accepts new bytes only when Tx isn't using port B and there is no
-  -- unread frame occupying the buffer. Any byte that arrives outside this
-  -- window is discarded; if a frame is truncated we drop the whole thing.
+  -- Rx acceptance gate: '1' when the receiver may write a new byte into
+  -- the RAM (Tx not using port B, and no unread frame occupying the buffer).
   signal   rx_accept : std_logic;
+
+  -- One-cycle strobe that returns the Rx FSM from RX_READY_ST to RX_IDLE_ST.
+  -- Asserted by fsm_proc on any of the three consumption paths.
+  signal   rx_frame_consumed : std_logic                           := '0';
 
 begin
 
-  ---------------------------------------------------------
-  -- Transmit path
-  ---------------------------------------------------------
+  ----------------------------------------------------------
+  -- Live status flags (concurrent)
+  ----------------------------------------------------------
 
-  rdy_4_tx_now <= '1' when tx_state = IDLE_ST else
-                  '0';
+  rdy_4_tx_now   <= '1' when tx_state = IDLE_ST else
+                    '0';
+  rx_frame_ready <= '1' when rx_state = RX_READY_ST else
+                    '0';
+
+  -- Rx accepts new bytes only when the Tx path is idle AND the previous
+  -- frame has been consumed. Note that RX_DATA_ST and RX_HEADER_ST are
+  -- also considered "accepting" states; the gate exists mainly to arbitrate
+  -- port B and to enforce the single-buffer contract from RX_IDLE_ST.
+  rx_accept      <= '1' when tx_state = IDLE_ST and
+                             rx_state /= RX_READY_ST else
+                    '0';
+
+  ----------------------------------------------------------
+  -- Port-B arbitration
+  --
+  -- Three users, mutually exclusive under normal driver flow:
+  --   * Tx-read : driven by tx_proc (tx_rxtx_addr); active when
+  --               tx_state = BUSY_ST or reg_tx_start = '1'.
+  --   * Rx-write: driven by rx_proc (rx_rxtx_addr / _wrdat / _we);
+  --               active when tx_state = IDLE_ST (and Rx has a frame
+  --               in progress).
+  --   * Rx-read : driven by fsm_proc via reg_rx_ptr; active while a
+  --               CPU access to $DE08/09 is being processed and
+  --               rx_state = RX_READY_ST.
+  --
+  -- The mux below prioritises Tx-read whenever Tx is either running
+  -- or about to start (reg_tx_start), then Rx-read when the CPU is
+  -- accessing the RxTx window on a ready frame, and otherwise gives
+  -- port B to the Rx-write path.
+  ----------------------------------------------------------
+
+  rxtx_addr      <= tx_rxtx_addr when tx_state = BUSY_ST or reg_tx_start = '1' else
+                    reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
+                                                 (unsigned(addr_i) = C_RXTX_REG_0 or
+                      unsigned(addr_i) = C_RXTX_REG_0 + 1) else
+                    rx_rxtx_addr;
+  rxtx_we        <= rx_rxtx_we when tx_state = IDLE_ST else
+                    (others => '0');
+  rxtx_wrdat     <= rx_rxtx_wrdat;
+
+  ----------------------------------------------------------
+  -- Tx process
+  ----------------------------------------------------------
 
   tx_proc : process (clk_i)
   begin
@@ -212,21 +325,21 @@ begin
       case tx_state is
 
         when IDLE_ST =>
-          if tx_start = '1' then
+          if reg_tx_start = '1' then
             tx_state <= BUSY_ST;
           end if;
 
         when BUSY_ST =>
           if eth_tx_ready_i = '1' then
-            if rxtx_addr(0) = '0' then
+            if tx_rxtx_addr(0) = '0' then
               eth_tx_data_o <= rxtx_rddat(7 downto 0);
             else
               eth_tx_data_o <= rxtx_rddat(15 downto 8);
             end if;
             eth_tx_valid_o <= '1';
-            rxtx_addr      <= rxtx_addr + 1;
-            if rxtx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
-              rxtx_addr     <= C_TX_BUF_START;
+            tx_rxtx_addr   <= tx_rxtx_addr + 1;
+            if tx_rxtx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
+              tx_rxtx_addr  <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
               tx_state      <= IDLE_ST;
             end if;
@@ -235,39 +348,106 @@ begin
       end case;
 
       if rst_i = '1' then
-        rxtx_addr      <= C_TX_BUF_START;
+        tx_rxtx_addr   <= C_TX_BUF_START;
         eth_tx_valid_o <= '0';
         eth_tx_last_o  <= '0';
+        eth_tx_data_o  <= (others => '0');
         tx_state       <= IDLE_ST;
       end if;
     end if;
   end process tx_proc;
 
 
-  ---------------------------------------------------------
-  -- Receive path
-  ---------------------------------------------------------
-
-  rx_accept    <= '1' when tx_state = IDLE_ST and rx_state /= RX_READY_ST else
-                  '0';
+  ----------------------------------------------------------
+  -- Rx process
+  --
+  -- Streams incoming bytes into the RAM starting at $0404 (leaving room
+  -- for the 4-byte RxStatus/RxLength header at $0400..$0403). Once the
+  -- last byte has been captured, writes the header in two cycles and
+  -- transitions to RX_READY_ST. Held there until rx_frame_consumed
+  -- pulses, at which point the receiver re-arms.
+  ----------------------------------------------------------
 
   rx_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
+      -- Default: no port-B write this cycle.
+      rx_rxtx_we <= (others => '0');
 
       case rx_state is
 
         when RX_IDLE_ST =>
-          null;
+          -- Point at the first payload word ($0404) for the next arrival.
+          rx_wr_addr   <= C_RX_BUF_START + 4;
+          rx_byte_cnt  <= (others => '0');
+          rx_rxtx_addr <= C_RX_BUF_START + 4;
+
+          if eth_rx_valid_i = '1' and rx_accept = '1' then
+            -- First byte of a new frame lands in the low half of the word
+            -- at $0404 (byte address bit 0 = '0').
+            rx_rxtx_addr  <= C_RX_BUF_START + 4;
+            rx_rxtx_wrdat <= eth_rx_data_i & eth_rx_data_i;
+            rx_rxtx_we    <= "01";
+            rx_wr_addr    <= C_RX_BUF_START + 5;
+            rx_byte_cnt   <= to_unsigned(1, rx_byte_cnt'length);
+            rx_state      <= RX_DATA_ST;
+
+            -- Pathological single-byte frame: end-of-frame on the very
+            -- first byte. Latch length and fall through to header write.
+            if eth_rx_last_i = '1' then
+              rx_length   <= to_unsigned(1, rx_length'length);
+              rx_ok       <= eth_rx_ok_i;
+              rx_state    <= RX_HEADER_ST;
+              rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+            end if;
+          end if;
 
         when RX_DATA_ST =>
-          null;
+          if eth_rx_valid_i = '1' then
+            -- Byte-lane selection follows the LSB of the write address,
+            -- same convention used on the Tx read side.
+            rx_rxtx_addr  <= rx_wr_addr;
+            rx_rxtx_wrdat <= eth_rx_data_i & eth_rx_data_i;
+            if rx_wr_addr(0) = '0' then
+              rx_rxtx_we <= "01";
+            else
+              rx_rxtx_we <= "10";
+            end if;
+
+            rx_wr_addr  <= rx_wr_addr + 1;
+            rx_byte_cnt <= rx_byte_cnt + 1;
+
+            if eth_rx_last_i = '1' then
+              rx_length   <= rx_byte_cnt + 1;
+              rx_ok       <= eth_rx_ok_i;
+              rx_state    <= RX_HEADER_ST;
+              rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+            end if;
+          end if;
 
         when RX_HEADER_ST =>
-          null;
+          -- Two clocks: first write RxStatus at $0400, then RxLength at $0402.
+          -- rx_byte_cnt(0) is used as a 1-bit sub-state.
+          if rx_byte_cnt(0) = '0' then
+            rx_rxtx_addr   <= C_RX_BUF_START;                       -- $0400
+            -- RxStatus: bit 8 = RxOK. All other bits zero for now
+            -- (extend here to expose more per-frame status bits).
+            rx_rxtx_wrdat  <= "0000000" & rx_ok & x"00";
+            rx_rxtx_we     <= "11";
+            rx_byte_cnt(0) <= '1';
+          else
+            rx_rxtx_addr  <= C_RX_BUF_START + 2;                    -- $0402
+            rx_rxtx_wrdat <= std_logic_vector(rx_length);
+            rx_rxtx_we    <= "11";
+            rx_state      <= RX_READY_ST;
+          end if;
 
         when RX_READY_ST =>
-          null;
+          -- Held here until the CPU consumes the frame (via autoincrement
+          -- PP-window reads, RxTx-window reads, or explicit RxEvent write).
+          if rx_frame_consumed = '1' then
+            rx_state <= RX_IDLE_ST;
+          end if;
 
       end case;
 
@@ -277,13 +457,15 @@ begin
         rx_byte_cnt <= (others => '0');
         rx_length   <= (others => '0');
         rx_ok       <= '0';
+        rx_rxtx_we  <= (others => '0');
       end if;
     end if;
   end process rx_proc;
 
 
-  -- The 4kB PacketPage memory is abstracted away into a separate
-  -- generic Dual-Port Single-Clock RAM.
+  ----------------------------------------------------------
+  -- PacketPage RAM (4 kB, dual-port, single-clock)
+  ----------------------------------------------------------
   -- Addresses are in units of bytes, and are assumed to be word-aligned,
   -- i.e. bit 0 of the address must always be zero.
   rrnet_pp_inst : entity work.rrnet_pp
@@ -302,20 +484,58 @@ begin
       b_rddata_o => rxtx_rddat
     ); -- rrnet_pp_inst
 
-  -- Main state machine
+
+  ----------------------------------------------------------
+  -- CPU-side FSM: handles $DExx reads and writes, decodes
+  -- autoincrement, drives the RxTx-window read pointer, and
+  -- signals frame consumption.
+  ----------------------------------------------------------
+
   fsm_proc : process (clk_i)
+    variable rx_end_ptr_v : unsigned(11 downto 0);
   begin
     if rising_edge(clk_i) then
+      -- Sanity assertion: catch drivers that write to the Tx buffer while
+      -- transmission is still in progress (they should have polled Rdy4TxNOW
+      -- first). This is a driver bug, not a hardware one.
       assert not (tx_state = BUSY_ST and cs_d = '0' and cs_i = '1' and we_i = '1'
                   and (unsigned(addr_i) = C_RXTX_REG_0 or unsigned(addr_i) = C_RXTX_REG_0 + 1))
         report "rrnet: CPU write to Tx buffer while Tx is in progress"
         severity failure;
 
-      tx_start <= '0';
-      pp_we    <= (others => '0');
-      cs_d     <= cs_i;
-      -- Since Chip Select may be asserted for several consecutive clock cycles,
-      -- we only react on the first beat with CS asserted.
+      -- Sanity assertion: warn if the CPU tries to read the RxTx window
+      -- for Rx purposes while a Tx is in progress. This would return
+      -- Tx-buffer data instead of Rx-buffer data because port B is
+      -- arbitrated to Tx-read.
+      assert not (tx_state = BUSY_ST and rx_state = RX_READY_ST and
+                  cs_d = '0' and cs_i = '1' and we_i = '0' and
+                  (unsigned(addr_i) = C_RXTX_REG_0 or unsigned(addr_i) = C_RXTX_REG_0 + 1))
+        report "rrnet: CPU read from Rx window while Tx is in progress"
+        severity warning;
+
+      -- Defaults each cycle: clear one-cycle strobes.
+      reg_tx_start      <= '0';
+      pp_we             <= (others => '0');
+      rx_frame_consumed <= '0';
+      cs_d              <= cs_i;
+
+      -- End-of-frame byte address for autoincrement detection: header
+      -- occupies $0400..$0403, payload starts at $0404, ends at
+      -- $0404 + rx_length - 1. When the pointer has advanced to or past
+      -- $0404 + rx_length, the frame is considered consumed.
+      rx_end_ptr_v      := C_RX_BUF_START + 4 + rx_length(11 downto 0);
+
+      -- On entering RX_READY_ST, reset the RxTx-window read pointer so
+      -- $DE08/09 reads start at $0400 (RxStatus low byte). We spot the
+      -- transition by looking at rx_state's registered value; on the
+      -- cycle rx_state has just become RX_READY_ST, rx_frame_consumed
+      -- is guaranteed to be '0'.
+      if rx_state = RX_READY_ST and reg_rx_ptr = 0 then
+        reg_rx_ptr <= C_RX_BUF_START;
+      end if;
+
+      -- Since Chip Select may be asserted for several consecutive clock
+      -- cycles, we only react on the first beat with CS asserted.
       if cs_d = '0' and cs_i = '1' then
         if we_i = '1' then
           if G_DEBUG then
@@ -336,6 +556,15 @@ begin
               pp_wrdat <= wr_data_i & wr_data_i;
               pp_we    <= "01";
 
+              -- Explicit RxEvent acknowledgement: a CPU write to $0124/25
+              -- clears RxOK and re-arms the receiver. Matches drivers that
+              -- clear-by-write rather than clear-by-read.
+              if reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR and
+                 rx_state = RX_READY_ST then
+                rx_frame_consumed <= '1';
+                reg_rx_ptr        <= (others => '0');
+              end if;
+
             when C_PP_DATA_0 + 1 =>
               pp_wrdat <= wr_data_i & wr_data_i;
               pp_we    <= "10";
@@ -343,23 +572,29 @@ begin
                 reg_pp_ptr <= reg_pp_ptr + 2;
               end if;
 
+              if reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR and
+                 rx_state = RX_READY_ST then
+                rx_frame_consumed <= '1';
+                reg_rx_ptr        <= (others => '0');
+              end if;
+
             when C_RXTX_REG_0 =>
-              reg_pp_ptr <= "0000" & tx_ptr;
+              reg_pp_ptr <= "0000" & reg_tx_ptr;
               pp_wrdat   <= wr_data_i & wr_data_i;
               pp_we      <= "01";
 
             when C_RXTX_REG_0 + 1 =>
-              reg_pp_ptr <= "0000" & tx_ptr;
-              tx_ptr     <= tx_ptr + 2;
+              reg_pp_ptr <= "0000" & reg_tx_ptr;
+              reg_tx_ptr <= reg_tx_ptr + 2;
               pp_wrdat   <= wr_data_i & wr_data_i;
               pp_we      <= "10";
-              if tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
-                tx_start <= '1';
+              if reg_tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
+                reg_tx_start <= '1';
               end if;
 
             when C_TX_CMD =>
               reg_tx_cmd(7 downto 0) <= unsigned(wr_data_i);
-              tx_ptr                 <= C_TX_BUF_START;
+              reg_tx_ptr             <= C_TX_BUF_START;
 
             when C_TX_CMD + 1 =>
               reg_tx_cmd(15 downto 8) <= unsigned(wr_data_i);
@@ -394,25 +629,62 @@ begin
               rd_data_o <= pp_rddat(7 downto 0);
 
             when C_PP_DATA_0 + 1 =>
+              -- High-byte read: apply live-status overlays before returning.
               if reg_pp_ptr(11 downto 1) = C_PP_BUS_ST_ADDR then
+                -- Bus Status $0138: overlay Rdy4TxNOW at bit 8 (bit 0 of the high byte).
                 rd_data_o <= pp_rddat(15 downto 9) & rdy_4_tx_now;
               elsif reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR then
-                -- RxEvent $0124: overlay RxOK (bit 8 = bit 0 of high byte).
+                -- RxEvent $0124: overlay RxOK at bit 8 (bit 0 of the high byte).
                 rd_data_o <= pp_rddat(15 downto 9) & rx_frame_ready;
               else
                 rd_data_o <= pp_rddat(15 downto 8);
               end if;
+
               -- Autoincrement fires only on high-byte access (per CS8900A spec).
               -- Drivers using autoincrement must always read low byte then high byte.
               if reg_pp_ptr(15) = '1' then
                 reg_pp_ptr <= reg_pp_ptr + 2;
+
+                -- Frame-consumed detection: the CPU has just auto-incremented
+                -- reg_pp_ptr past the end of the current Rx frame. Re-arm the
+                -- receiver. Compare against the address that WILL be in
+                -- reg_pp_ptr on the next cycle (reg_pp_ptr + 2).
+                if rx_state = RX_READY_ST and
+                   (reg_pp_ptr(11 downto 0) + 2) >= rx_end_ptr_v then
+                  rx_frame_consumed <= '1';
+                  reg_rx_ptr        <= (others => '0');
+                end if;
               end if;
 
             when C_RXTX_REG_0 =>
-              rd_data_o <= X"FF";
+              -- RxTx window low-byte read.
+              -- Returns the low byte of the current Rx word (addressed via
+              -- port B by the arbitration mux above). Does NOT advance
+              -- reg_rx_ptr; that fires on the high-byte access only.
+              if rx_state = RX_READY_ST then
+                rd_data_o <= rxtx_rddat(7 downto 0);
+              else
+                -- No frame available: return all-ones (idle bus behaviour).
+                rd_data_o <= X"FF";
+              end if;
 
             when C_RXTX_REG_0 + 1 =>
-              rd_data_o <= X"FF";
+              -- RxTx window high-byte read.
+              -- Returns the high byte and advances reg_rx_ptr by 2 (word).
+              -- Frame-consumed detection is identical to the PP-window path:
+              -- when the pointer has advanced past $0404 + rx_length, the
+              -- receiver is re-armed.
+              if rx_state = RX_READY_ST then
+                rd_data_o  <= rxtx_rddat(15 downto 8);
+                reg_rx_ptr <= reg_rx_ptr + 2;
+
+                if (reg_rx_ptr + 2) >= rx_end_ptr_v then
+                  rx_frame_consumed <= '1';
+                  reg_rx_ptr        <= (others => '0');
+                end if;
+              else
+                rd_data_o <= X"FF";
+              end if;
 
             when C_TX_CMD =>
               rd_data_o <= std_logic_vector(reg_tx_cmd(7 downto 0));
@@ -434,13 +706,17 @@ begin
         end if;
       end if;
 
+      -- Synchronous reset overrides above logic.
       if rst_i = '1' then
-        cs_d          <= '0';
-        pp_we         <= (others => '0');
-        reg_pp_ptr    <= (others => '0');
-        reg_tx_cmd    <= (others => '0');
-        reg_tx_length <= (others => '0');
-        tx_start      <= '0';
+        cs_d              <= '0';
+        pp_we             <= (others => '0');
+        reg_pp_ptr        <= (others => '0');
+        reg_tx_cmd        <= (others => '0');
+        reg_tx_length     <= (others => '0');
+        reg_tx_ptr        <= C_TX_BUF_START;
+        reg_tx_start      <= '0';
+        reg_rx_ptr        <= (others => '0');
+        rx_frame_consumed <= '0';
       end if;
     end if;
   end process fsm_proc;

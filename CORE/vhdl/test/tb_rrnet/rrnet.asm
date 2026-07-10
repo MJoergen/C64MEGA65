@@ -42,18 +42,28 @@ cpu_reset:
         ldx #>txlen1
         jsr eth+driver::send
 
-        ; Send abother packet
-        lda #<txbuf2
-        ldx #>txbuf2
+;        ; Send abother packet
+;        lda #<txbuf2
+;        ldx #>txbuf2
+;        sta eth+driver::bufaddr
+;        stx eth+driver::bufaddr+1
+;        lda #<txlen2
+;        ldx #>txlen2
+;        jsr eth+driver::send
+
+        lda #<rxbuf1
+        ldx #>rxbuf1
         sta eth+driver::bufaddr
         stx eth+driver::bufaddr+1
-        lda #<txlen2
-        ldx #>txlen2
-        jsr eth+driver::send
+        lda #<rxlen1
+        ldx #>rxlen1
+        sta eth+driver::bufsize
+        stx eth+driver::bufsize+1
+:       jsr eth+driver::poll
+        bcs :-
 
-        ; TBD
-:       nop
-        jmp :-
+        ; Finished
+:       jmp :-
 
         ; Infinite loop signals a success
 ok:     jmp ok
@@ -76,6 +86,10 @@ txbuf2: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
         .endrep
         .asciiz "Here is another packet with an odd length."
 txlen2 = * - txbuf2
+
+.segment "BSS"
+rxlen1 = 2000
+rxbuf1: .res rxlen1
 
 .segment "VECTORS"
 

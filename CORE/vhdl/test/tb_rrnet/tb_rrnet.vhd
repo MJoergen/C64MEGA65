@@ -37,10 +37,6 @@ architecture tb of tb_rrnet is
   signal   ram_cs   : std_logic;
 
   -- Ethernet interface
-  signal   eth_rx_valid : std_logic;                    -- One-cycle strobe per received byte
-  signal   eth_rx_last  : std_logic;                    -- Last byte of frame
-  signal   eth_rx_ok    : std_logic;                    -- Only meaningful when rx_last_i = '1'
-  signal   eth_rx_data  : std_logic_vector(7 downto 0); -- Received byte
   signal   eth_tx_ready : std_logic;                    -- Pulses '1' on the byte-boundary cycle
   signal   eth_tx_valid : std_logic;                    -- Client presents a byte
   signal   eth_tx_last  : std_logic;                    -- Client marks the last byte
@@ -76,10 +72,10 @@ begin
       we_i           => cpu_wr_en,
       wr_data_i      => cpu_wr_data,
       rd_data_o      => rrnet_rd_data,
-      eth_rx_valid_i => eth_rx_valid,
-      eth_rx_last_i  => eth_rx_last,
-      eth_rx_ok_i    => eth_rx_ok,
-      eth_rx_data_i  => eth_rx_data,
+      eth_rx_valid_i => fifo_valid and fifo_ready,
+      eth_rx_last_i  => fifo_last,
+      eth_rx_ok_i    => '1',
+      eth_rx_data_i  => fifo_data,
       eth_tx_ready_i => eth_tx_ready and eth_tx_pause,
       eth_tx_valid_o => eth_tx_valid,
       eth_tx_last_o  => eth_tx_last,
@@ -104,12 +100,8 @@ begin
       m_data_o(C_LAST) => fifo_last
     ); -- axi_fifo_small_inst
 
-  eth_rx_valid <= fifo_valid;
-  eth_rx_last  <= fifo_last;
-  eth_rx_ok    <= '1';
-  eth_rx_data  <= fifo_data;
 
-  fifo_ready <= '0'; -- TBD
+  fifo_ready <= '0', '1' after 199.995 us;
 
   axip_logger_inst : entity work.axip_logger
     generic map (
