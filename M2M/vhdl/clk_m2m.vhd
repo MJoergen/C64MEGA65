@@ -95,7 +95,7 @@ begin
          CLKOUT4_DIVIDE       => 6,          -- SDRAM @ 166 MHz
          CLKOUT4_DUTY_CYCLE   => 0.500,
          CLKOUT4_PHASE        => 0.000,
-         CLKOUT5_DIVIDE       => 20,         -- QNICE @ 50 MHz
+         CLKOUT5_DIVIDE       => 20,         -- Ethernet @ 50 MHz
          CLKOUT5_DUTY_CYCLE   => 0.500,
          CLKOUT5_PHASE        => 0.000,
          DIVCLK_DIVIDE        => 1,
