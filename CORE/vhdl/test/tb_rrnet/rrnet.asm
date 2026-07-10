@@ -33,7 +33,11 @@ cpu_reset:
         .byte $02
 
 :
-        ; Send a packet
+        ; Testbench: Block loopback fifo
+        lda #$00
+        sta $DF00
+
+        ; Send first packet
         lda #<txbuf1
         ldx #>txbuf1
         sta eth+driver::bufaddr
@@ -42,14 +46,49 @@ cpu_reset:
         ldx #>txlen1
         jsr eth+driver::send
 
-;        ; Send abother packet
-;        lda #<txbuf2
-;        ldx #>txbuf2
-;        sta eth+driver::bufaddr
-;        stx eth+driver::bufaddr+1
-;        lda #<txlen2
-;        ldx #>txlen2
-;        jsr eth+driver::send
+        ; Wait until frame is transmitted
+        ldx #$00
+:       dex
+        bne :-
+        ; Testbench: Enable loopback fifo
+        lda #$01
+        sta $DF00
+
+        lda #<rxbuf1
+        ldx #>rxbuf1
+        sta eth+driver::bufaddr
+        stx eth+driver::bufaddr+1
+        lda #<rxlen1
+        ldx #>rxlen1
+        sta eth+driver::bufsize
+        stx eth+driver::bufsize+1
+:       jsr eth+driver::poll
+        bcs :-
+
+        ; Testbench: Block loopback fifo
+        lda #$00
+        sta $DF00
+
+        ; Send second packet
+        lda #<txbuf2
+        ldx #>txbuf2
+        sta eth+driver::bufaddr
+        stx eth+driver::bufaddr+1
+        lda #<txlen2
+        ldx #>txlen2
+        jsr eth+driver::send
+
+        ; Wait until frame is transmitted
+        ldx #$00
+:       dex
+        bne :-
+        ; Testbench: Enable loopback fifo
+        lda #$01
+        sta $DF00
+        ; Wait until frame is received
+        ldx #$00
+:       dex
+        bne :-
 
         lda #<rxbuf1
         ldx #>rxbuf1

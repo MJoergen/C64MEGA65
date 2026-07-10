@@ -59,6 +59,19 @@ begin
   rst <= '1', '0' after 100 ns;
   ce  <= not ce when rising_edge(clk);
 
+  fifo_ready_proc : process (clk)
+  begin
+    if rising_edge(clk) then
+      if cpu_addr = X"DF00" and cpu_wr_en = '1' then
+        fifo_ready <= cpu_wr_data(0);
+      end if;
+      if rst = '1' then
+        fifo_ready <= '0';
+      end if;
+    end if;
+  end process fifo_ready_proc;
+
+
   -- Instantiate DUT
   rrnet_inst : entity work.rrnet
     generic map (
@@ -100,8 +113,6 @@ begin
       m_data_o(C_LAST) => fifo_last
     ); -- axi_fifo_small_inst
 
-
-  fifo_ready <= '0', '1' after 199.995 us;
 
   axip_logger_inst : entity work.axip_logger
     generic map (
