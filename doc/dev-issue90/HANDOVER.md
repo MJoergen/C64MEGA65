@@ -20,9 +20,10 @@ LOAD). Writing and formatting are a **separate later milestone** (not started).
 Everything is gated by `G_PHYS1581_CAPABLE` (true on all boards) and a runtime
 "Use internal 1581" menu item (default Off = disk image).
 
-Phases R1–R5 + docs + a (one-directional) idle-gate are done. The one open
-**decision the maintainer just made: the idle-gate must be made symmetric**
-(section 8.1) — because the image drive can write.
+Phases R1–R5 + docs + the idle-gate are done. Session 2 (2026-07-12) additionally:
+**applied the timing-closure constraints (8.0), fixed the "enable internal 1581
+without a mounted D81 = dead drive" bug set (8.4), and made the idle-gate
+symmetric (8.1)**. Next step: rebuild R3 in Vivado and re-test on hardware.
 
 ---
 
@@ -85,13 +86,13 @@ Kept faithfully: WD1772 command/status/DRQ/IRQ model, DD-MFM codec + CRC-16
 power-up disk-change latch (§13.4/16.3), and **image mode byte-identical when the
 feature is off** (adversarially verified).
 
-### 2.3 SYMMETRIC IDLE-GATE — maintainer decision (2026-07-12), NOT yet implemented
+### 2.3 SYMMETRIC IDLE-GATE — maintainer decision (2026-07-12), IMPLEMENTED (session 2)
 
-The current idle-gate (in `m2m-rom.asm`) only blocks **Internal→Image while the
-physical drive is busy**. The maintainer decided it must be **symmetric** and
-also block **Image→Internal**, because the **simulated (image) drive can WRITE**
-(SD write-back) — switching away while it is busy or has unsaved data would lose
-data. This is the top item in section 8.1.
+The idle-gate blocks the drive-8 source toggle in **both** directions: the
+physical-busy word gates Internal→Image, and a new image-busy diag word (drive
+LED OR dirty write-back cache) gates Image→Internal, because the **simulated
+(image) drive can WRITE** — switching away while it is busy or has unsaved data
+would lose data. Details in section 8.1.
 
 ---
 
@@ -191,7 +192,63 @@ Full GHDL suite was re-run green after all edits (no regressions).
 
 ## 8. Next steps & milestones
 
-### 8.1 IMMEDIATE — make the idle-gate symmetric (maintainer-decided; small)
+### 8.0 R3 timing closure — FIX APPLIED (session 2, 2026-07-12); verify with the next build
+
+The first R3 build (`CORE/CORE-R3.runs/impl_1/mega65_r3_timing_summary_routed.rpt`)
+did **not** close timing: setup **WNS = −5.051 ns**, 83 failing endpoints (hold and
+pulse-width are fine). Diagnosis (from that report's Inter/Intra-Clock tables +
+violated-path endpoints):
+
+- **71 endpoints = the physical_1581 CDC**, cross-clock between `qnice_clk` (50 MHz,
+  the new controller / read-FIFO / diag) and `main_clk` (~31.5 MHz, the WD1772 +
+  drive). Confirmed cells: `i_physical_1581_controller/{motor_m, op_r, sec_r}` (2FF +
+  handshake captures), `i_physical_1581_rdfifo/rq1_wgray` (Gray pointer),
+  `.../c1581_drv/fdc/phys_rddone_sync/s1_reg` (`fdc1772` phys toggle sync). **Root
+  cause: we never added CDC timing exceptions for these crossings** (the repo cuts
+  drive CDC with granular false-paths in `CORE/CORE.xdc:12-41`; `M2M/common.xdc:106`
+  documents the two system clocks as asynchronous).
+- **12 endpoints = pre-existing framework**: an intra-`qnice_clk` half-cycle path
+  `QNICE_SOC/ramrom_dev_o_reg → cpu/SP_reg/CE` at **−0.281 ns**. This is downstream
+  of our diag read-mux (our mux does not lengthen it); it is almost certainly
+  congested by the 71 failing CDC routes and should recover once they are cut.
+
+**Applied fix (in `CORE/CORE.xdc`, right after the `sd_lba` block; APPLIED in
+session 2):** two clock-to-clock false-paths, both directions, between `qnice_clk`
+and `main_clk` (same idiom as `common.xdc:122`'s `qnice_clk→hdmi_clk`). This is safe
+(clock-to-clock cannot exempt a same-clock path, so it does NOT hit the `fdc1772
+busy` hazard the repo warns about), correct (the clocks are documented-async and
+every crossing is synchronized), and complete (cannot miss a synchronizer). It
+subsumes the granular drive-CDC cuts above. Additionally, `CORE-R{3,4,5,6}.tcl`
+`read_xdc` was reordered to `MEGA65-Rx → common → CORE` because `CORE.xdc` now
+references `qnice_clk`, which `common.xdc` creates (the `.xpr` fileset already
+used that order, so project builds were always fine).
+
+- **Alternative (maintainer's granular style), if preferred over the clock-pair cut:**
+  replace the two lines with per-synchronizer `set_false_path -to` on:
+  controller `i_physical_1581_controller/{active_m,motor_m,side_m,stq_m,rdq_m,cnq_m}_reg/D`
+  + the handshake-captured `{op_r,trk_r,sec_r}_reg[*]/D` + the `i_inputs` 2FF flops;
+  the `fdc1772` `phys_*_sync/s1_reg[*]/D` + phys result/state capture regs; and the
+  `physical_1581_rdfifo` Gray-pointer syncs + a `-datapath_only` on its RAM read. (More
+  lines, easy to miss one → another failed multi-hour build; that risk is why the
+  clock-pair cut was chosen.)
+
+**Verify before declaring closed:** re-run R3 implementation; confirm `WNS ≥ 0` in the
+routed timing summary and `report_cdc` shows no Critical (an expected new
+"asynchronous clock groups"/false-path note is fine). If the −0.281 ns framework path
+persists after the CDC cut, it is congestion — reduce the qnice-domain footprint
+(e.g. narrow the diag device's ten 32-bit counters, or add a scoped multicycle on that
+QNICE half-cycle path) and re-run. **No functional RTL change is needed for closure —
+this is purely a constraints issue.**
+
+### 8.1 Symmetric idle-gate — DONE (session 2, 2026-07-12)
+
+Implemented as: `main.vhd` `img_drive_busy <= c64_drive_led or prevent_reset`
+(covers live activity of both image engines + dirty caches), 2-FF-synced into
+the diag domain; new diag word `RM_IMG_DRIVE = 0x28` bit 0 (map version `0x02`,
+capability `0x0F`); `m2m-rom.asm` `_OSM_PRE_1581` reads both busy words and
+reverts the toggle via `M2M$FORCE_MENU` if either is set — one code path gates
+both directions, since each side reads idle while the other is the active
+source. Shell ROM: 27515/28672 words. Original plan below for reference:
 
 Goal: block the drive-8 source toggle in **both** directions while the relevant
 drive is busy. Reason: the image drive writes; switching away with unsaved data
@@ -211,6 +268,46 @@ Vivado is not mid-build**):
 
 Accepted minor points: "busy" includes the brief motor spin-down tail (fine);
 revert is silent (matches "just ignore").
+
+### 8.4 "Internal 1581 without a mounted D81" bug set — FIXED (session 2, 2026-07-12)
+
+User-reported: enabling "Use internal 1581" with no D81 mounted left the drive
+dead (held in reset, no 1581 active anywhere); with a D81 mounted and the first
+(non-timing-closed) bitstream, `LOAD"$",8` from a real disk also failed. Five
+root causes were found and fixed:
+
+1. **`main.vhd` reset hold** — `iec_drives_reset(0)` required `vdrives_mounted(0)`;
+   now excepted while `phys_1581_en_i='1'` (there is no image to mount).
+2. **CIA PA7 `/DSKCHG` stuck asserted** — it was the image-mode `disk_chng_n`,
+   which only `floppy_step` clears, and `floppy_step` never pulses in phys mode
+   (steps go over the toggle ABI). The 1581 DOS therefore never saw valid media.
+   Now muxed in `c1581_drv.sv` to the controller's sticky change latch
+   (2-FF-synced, inverted); PB6 `/WPRT` likewise now senses the real WP pin.
+3. **WD Type-I deadlock** — `fdc1772.v` rejected Type-I with RNF while media was
+   not ready, but media-ready needs the change latch cleared, only a step clears
+   it, and steps ARE Type-I commands. Type-I now runs unconditionally in phys
+   mode (the real WD1772 has no READY input; Type-II/III still fast-fail).
+4. **Silent media swap on source switch** — the controller now re-arms
+   `change_latched` whenever it is disabled (not only on reset), and
+   `c1581_drv.sv` asserts the image-side disk change on any `phys_mode` edge, so
+   BOTH switch directions present as a disk change and the DOS revalidates.
+5. **Zero-step verify wedge** — controller `head_settled` now initializes to
+   `'1'` (head at rest = settled); the old `'0'` could hang a Restore-with-Verify
+   that needs no steps, because only a step ever set it.
+
+A 43-agent adversarial review (7 dimensions × independent refuters) of all the
+session-2 diffs then confirmed and led to fixing **eight more defects** — most
+notably: the read-FIFO's one-sided reset (permanent Gray-pointer desync → silent
+CRC-clean data corruption after any core reset mid-read; both sides now reset
+from the same QNICE-reset event and fdc1772 drains residue while idle), the WD
+popping the next byte at the *start* of the drive CPU's data-register access
+while the T65 latches at the *end* (deterministic one-byte stream shift, proven
+by the upgraded `tb_fdc1772_physical.sv` with a realistic 16-clkcpu bus cycle),
+an unbounded physical RESTORE (now real-WD1772 255-step bound → Seek Error), a
+CDC skew window on the rd-done handshake that could leave the WD busy forever
+(done now consumed 2 cycles delayed), a missing RD_STREAM watchdog, a stale
+settle-timer window, and the image-busy diag bit conflating the physical LED.
+Full list + fixes: `PLAN.md` ("ADVERSARIAL REVIEW ROUND" entry).
 
 ### 8.2 Hardware bring-up (read)
 
@@ -244,7 +341,6 @@ media), so it needs the safety machinery we deferred:
 
 ## 9. Known gotchas / open items
 
-- **Symmetric idle-gate** — decided, not yet built (8.1).
 - **Pin polarity assumptions** to confirm on hardware (5.5 / 8.2).
 - `head_valid`/`restore_required` is diagnostic-only, non-blocking (2.2).
 - **GHDL `--elab-run` drops executables (`tb_*`, `e~tb_*.o`) in the repo root** —

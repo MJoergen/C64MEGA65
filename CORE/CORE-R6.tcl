@@ -164,10 +164,12 @@ read_verilog -sv {
       ../M2M/vhdl/controllers/MiSTer/video_freezer.sv \
       ../M2M/vhdl/controllers/MiSTer/video_mixer.sv }
 
+# XDC order matters and must match the .xpr constraints fileset: CORE.xdc references
+# qnice_clk, which is created in common.xdc, so CORE.xdc has to be read LAST.
 read_xdc { \
-      CORE.xdc \
+      ../M2M/MEGA65-R6.xdc \
       ../M2M/common.xdc \
-      ../M2M/MEGA65-R6.xdc }
+      CORE.xdc }
 
 cd m2m-rom
 exec ./make_rom.sh <@stdin >@stdout 2>@stderr

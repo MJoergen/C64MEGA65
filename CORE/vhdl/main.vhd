@@ -380,6 +380,29 @@ architecture synthesis of main is
   signal   vdrives_mounted  : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   cache_dirty      : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   prevent_reset    : std_logic;
+
+  -- Image-drive busy/dirty flag for the symmetric source-toggle idle-gate (issue #90):
+  -- drive LED (activity of the 1541 and 1581 image engines, incl. WD1772 command-busy)
+  -- OR any dirty write-back cache. Generated in the main clock domain, 2-FF-synced into
+  -- the 50 MHz diag domain (c64_clk_sd_i) where the QNICE Shell reads it as a level.
+  signal   img_drive_busy   : std_logic;
+  signal   img_busy_sd_m    : std_logic;
+  signal   img_busy_sd_s    : std_logic;
+
+  -- Read-side reset for the physical-1581 read FIFO: the SAME reset event as the
+  -- write side (c64_rst_sd_i = QNICE/framework reset), 2-FF-synchronized into the
+  -- read clock domain (clk_main_i). Both Gray-pointer pairs of an async FIFO must
+  -- reset from ONE common event or the pointers desynchronize permanently; a
+  -- core-only reset (reset_core_n) must NOT reset either side -- residual bytes
+  -- after an aborted operation are drained by the WD front end (fdc1772) instead.
+  signal   p1581_fiforst_m  : std_logic := '1';
+  signal   p1581_fiforst_s  : std_logic := '1';
+
+  attribute async_reg : string;
+  attribute async_reg of img_busy_sd_m : signal is "true";
+  attribute async_reg of img_busy_sd_s : signal is "true";
+  attribute async_reg of p1581_fiforst_m : signal is "true";
+  attribute async_reg of p1581_fiforst_s : signal is "true";
   signal   cart_soft_reset  : std_logic;
 
   signal   iec_sd_lba          : vd_vec_array(G_VDNUM - 1 downto 0)(31 downto 0);
@@ -721,6 +744,34 @@ begin
   -- or if the dirty cache is dirty and/or currently being flushed to the SD card
   drive_led_o     <= c64_drive_led when unsigned(cache_dirty) = 0 else
                      '1';
+
+  -- "Image drive 8 is busy or holds unsaved data" for the symmetric idle-gate (issue #90):
+  -- consulted by the QNICE Shell (via the phys-1581 diag device) before it allows switching
+  -- drive 8 from disk image to the internal 1581. The LED covers live drive activity of both
+  -- image engines; prevent_reset covers dirty write caches awaiting SD flush. While the
+  -- INTERNAL drive is the active source the LED reflects PHYSICAL activity (the 1581 DOS
+  -- drives it, e.g. the blinking error indicator), which the physical busy word already
+  -- covers -- so mask the LED with the mode bit, otherwise an Internal->Image switch would
+  -- be spuriously blocked whenever the toggle lands in a blink-ON phase. It is a slow,
+  -- quasi-static level, so a plain 2-FF sync into the diag clock domain is sufficient.
+  img_drive_busy <= (c64_drive_led and not phys_1581_en_i) or prevent_reset;
+
+  img_busy_sync_proc : process (c64_clk_sd_i)
+  begin
+    if rising_edge(c64_clk_sd_i) then
+      img_busy_sd_m <= img_drive_busy;
+      img_busy_sd_s <= img_busy_sd_m;
+    end if;
+  end process img_busy_sync_proc;
+
+  -- common-event FIFO read-side reset (see the signal declaration comment)
+  p1581_fiforst_sync_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      p1581_fiforst_m <= c64_rst_sd_i;
+      p1581_fiforst_s <= p1581_fiforst_m;
+    end if;
+  end process p1581_fiforst_sync_proc;
 
   --------------------------------------------------------------------------------------------------
   -- Hard reset
@@ -1663,13 +1714,20 @@ begin
   iec_par_stb_in  <= '0';
   iec_par_data_in <= (others => '0');
 
-  -- Drive is held to reset if the core is held to reset or if the drive is not mounted, yet
+  -- Drive is held to reset if the core is held to reset or if the drive is not mounted, yet.
+  -- Exception (issue #90): while "Use internal 1581" is active, drive 8 is backed by the REAL
+  -- internal mechanism, so there is no disk image to mount -- the drive must run unmounted.
+  -- Without this exception the whole drive (and with it the forced-active 1581 engine inside
+  -- iec_drive.sv) would stay in reset until a D81 image is mounted, making the physical drive
+  -- dead unless the user mounts an unrelated image first. phys_1581_en_i is in the main clock
+  -- domain (CDC-d OSM bit), like everything else in this equation.
   -- @TODO: MiSTer also allows these options when it comes to drive-enable:
   --        "P2oPQ,Enable Drive #8,If Mounted,Always,Never;"
   --        "P2oNO,Enable Drive #9,If Mounted,Always,Never;"
   --        This code currently only implements the "If Mounted" option
 
-  iec_drv_reset_gen : for i in 0 to G_VDNUM - 1 generate
+  iec_drives_reset(0) <= (not reset_core_n) or ((not vdrives_mounted(0)) and (not phys_1581_en_i));
+  iec_drv_reset_gen : for i in 1 to G_VDNUM - 1 generate
     iec_drives_reset(i) <= (not reset_core_n) or (not vdrives_mounted(i));
   end generate iec_drv_reset_gen;
 
@@ -1873,9 +1931,14 @@ begin
       wr_en_i    => p1581_fifo_wr_en,
       wr_data_i  => p1581_fifo_wr_data,
       wr_full_o  => p1581_fifo_wr_full,
-      -- read side: drive clock, clk_main_i (fdc1772 drains at its DRQ cadence)
+      -- read side: drive clock, clk_main_i (fdc1772 drains at its DRQ cadence).
+      -- Reset by the SAME event as the write side (QNICE reset, synced into this
+      -- domain) -- never by reset_core_n alone: a one-sided reset would zero the
+      -- read Gray pointer against a live write pointer and permanently
+      -- desynchronize the FIFO (stale/shifted CRC-clean sector data). Leftover
+      -- bytes after a core reset are drained by fdc1772 while no op is delivering.
       rd_clk_i   => clk_main_i,
-      rd_rst_i   => not reset_core_n,
+      rd_rst_i   => p1581_fiforst_s,
       rd_en_i    => p1581_byte_rd_en,
       rd_data_o  => p1581_byte_data,
       rd_empty_o => p1581_byte_empty
@@ -1935,6 +1998,9 @@ begin
       diag_step_phase_i   => p1581_diag_step_phase,
       diag_head_valid_i   => p1581_diag_head_valid,
       diag_head_dir_out_i => p1581_diag_head_dir,
+
+      -- image-drive busy/dirty (main clock domain, 2-FF-synced above; issue #90 idle-gate)
+      img_drive_busy_i    => img_busy_sd_s,
 
       -- QNICE read interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,

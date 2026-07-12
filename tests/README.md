@@ -21,6 +21,15 @@ must all build (R3/R4/R5/R6; functional read testing is on R3):
   drive (motor spins up, drive responds); switch it off again and confirm
   drive 8 is served from the mounted disk image once more (the previously
   mounted image is preserved across the switch)
+* Source select WITHOUT a mounted image: from a fresh boot with no disk image
+  mounted at all, switch on "Use internal 1581" and confirm drive 8 comes
+  alive and reads the physical disk (the drive must NOT stay in the
+  held-in-reset state that unmounted image drives normally have); switching it
+  off again with nothing mounted returns drive 8 to "device not present"
+* Media revalidation on source switch: with a D81 mounted, load the directory
+  from the image, switch to the internal drive and `LOAD"$",8` again - the
+  REAL disk's directory must appear (not a stale copy of the image's); switch
+  back and confirm the image's directory returns likewise
 * Read directory: `LOAD"$",8` then `LIST` returns the real disk's directory
 * Load a program: `LOAD"<name>",8` (and `,8,1`) loads and runs a program off
   the physical disk
@@ -41,8 +50,11 @@ must all build (R3/R4/R5/R6; functional read testing is on R3):
   existing `*.d64` (1541) and `*.d81` (1581) disk-image mount / directory / load
   / write / flush / power-cycle behaviour is exactly as before - the physical
   path must be completely transparent when it is not selected
-* Idle-gate: toggling "Use internal 1581" is ignored while a drive access is in
-  progress (no glitch or corruption from switching the source mid-access)
+* Idle-gate (symmetric): toggling "Use internal 1581" is ignored in BOTH
+  directions while drive 8 is busy - switching to image mode is blocked while
+  the physical drive reads/steps/spins, and switching to the internal drive is
+  blocked while the image drive is active or its write cache is still being
+  flushed (yellow drive led); once the drive is quiet the toggle works again
 * Not expected to work yet (this is the read-only milestone): writing, saving,
   scratch/rename and formatting to the internal drive - these are the next
   milestone

@@ -15,7 +15,9 @@ move the head, spin the motor or change any mechanism output, and it has no writ
 
 The whole bank runs on the QNICE 50 MHz clock (`c64_clk_sd_i`), which is the *same*
 clock as the `physical_1581_controller`, so every value below is a coherent snapshot with
-no clock-domain-crossing artifacts.
+no clock-domain-crossing artifacts. (The one exception is the single-bit `IMG_DRIVE`
+word, which originates in the core clock domain and is 2-FF-synchronized on its way in —
+being one bit, it cannot tear.)
 
 ---
 
@@ -41,13 +43,13 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-40 words, offsets `0x00`–`0x27`. Any offset not listed (including `0x28` and above) reads
+41 words, offsets `0x00`–`0x28`. Any offset not listed (`0x29` and above) reads
 `0x0000`. All multi-bit fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x0107` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x020F` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -76,9 +78,18 @@ core name from the config device the same way).
 | `0x22` / `0x23` | `CNT_CHANGE`    | counter: disk-change latch events                          |
 | `0x24` / `0x25` | `CNT_IDDEC`     | counter: decoded ID fields (any CRC)                       |
 | `0x26` / `0x27` | `CNT_GAPERR`    | counter: out-of-spec flux gaps (loss of lock)              |
+| `0x28` | `IMG_DRIVE`     | bit0 = the simulated (disk image) drive 8 is busy or holds unsaved data |
 
 All ten counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
 low word first, then the high word (`0x0000` in the high word while values stay small).
+
+`IMG_DRIVE` bit 0 is the mirror image of the `CTRL_STATE` busy bits for the *other* media
+source: it is set while the image-backed drive 8 shows activity (drive LED, covering both
+the 1541 and the 1581 image engines including WD1772 command-busy) or while a dirty
+write-back cache has not been flushed to the SD card yet. The Shell consults it before it
+allows switching drive 8 from disk image to the internal 1581 (the image drive can write,
+so switching away mid-access or with unsaved data would lose data); `CTRL_STATE` gates the
+opposite direction. Capability bit 3 in `VERSION` announces that this word exists.
 
 ### Bit layouts
 
@@ -187,10 +198,10 @@ ME            (Memory/Examine) -> prompt "EXAMINE ADDRESS="
 ```text
 MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 7000          start
-7027          -> prompt " END ADDRESS=" ; end (0x7000 + 0x27 = last counter word)
+7028          -> prompt " END ADDRESS=" ; end (0x7000 + 0x28 = last word, IMG_DRIVE)
 ```
 
-This prints all 40 diagnostic words in one block. To watch a value live, re-issue the
+This prints all 41 diagnostic words in one block. To watch a value live, re-issue the
 `MD 7000 7027` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 

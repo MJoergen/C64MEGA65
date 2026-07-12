@@ -742,9 +742,22 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; when it is not in physical mode). So P1581_BUSY_MASK is a clean physical-drive
 ; busy flag that is meaningful without any extra RTL and naturally reads idle in
 ; disk-image mode. Read via the standard M2M$RAMROM_DEV / _4KWIN / _DATA window.
+;
+; Word offset RM_IMG_DRIVE = 0x28 is the mirror image for the OTHER direction:
+; bit 0 is set while the SIMULATED (disk image) drive 8 is active (drive LED,
+; covering both the 1541 and the 1581 image engines) or still holds unsaved
+; data in a dirty write-back cache. While the INTERNAL drive is the active
+; source, main.vhd masks the LED out of this bit (the LED then shows PHYSICAL
+; activity, which RM_CTRL_STATE already gates), so apart from a not-yet-flushed
+; cache it reads idle in physical mode. It is the gate for switching
+; Image -> Internal, because the image drive can WRITE and a switch mid-write
+; or with a dirty cache would lose data (maintainer decision 2026-07-12: the
+; idle-gate must be symmetric).
 P1581_DIAG_DEV  .EQU    0x0108                  ; C_DEV_C64_PHYS1581
 P1581_RM_CTRL   .EQU    0x0004                  ; RM_CTRL_STATE word offset
 P1581_BUSY_MASK .EQU    0xFC08                  ; read-phase | step-phase | motor
+P1581_RM_IMGBSY .EQU    0x0028                  ; RM_IMG_DRIVE word offset
+P1581_IMGBSY_MSK .EQU   0x0001                  ; bit 0: image drive busy or dirty
 
 ; OSM_SEL_PRE callback function:
 ;
@@ -753,10 +766,11 @@ P1581_BUSY_MASK .EQU    0xFC08                  ; read-phase | step-phase | moto
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
 
-                ; Idle-gate for "Use internal 1581" (issue #90): ignore an
-                ; attempt to switch drive 8 between disk image and the physical
-                ; internal 1581 while that physical drive is mid-access. The
-                ; handler is _OSM_PRE_1581, at the end of this callback.
+                ; Symmetric idle-gate for "Use internal 1581" (issue #90):
+                ; ignore an attempt to switch drive 8 between disk image and
+                ; the physical internal 1581 while EITHER side is mid-access
+                ; (or the image drive still holds unsaved data). The handler
+                ; is _OSM_PRE_1581, at the end of this callback.
                 CMP     C64_OPTM_G_INT1581, R8
                 RBRA    _OSM_PRE_1581, Z
 
@@ -788,15 +802,20 @@ OSM_SEL_PRE     INCRB
                 ; M2M$CFM_DATA copy in OPTM_CB_SEL). So a revert done here is
                 ; still in time to keep the hardware bit unchanged.
                 ;
-                ; Read the physical-1581 control-state word: if the drive is
-                ; idle (mask = 0) let the framework apply the change; if it is
-                ; busy, force the item back to its previous value. M2M$FORCE_MENU
-                ; both repaints the marker and rewrites M2M$CFM_DATA, and the
-                ; framework then re-copies the (reverted) OPTM_IR_STDSEL over the
-                ; same bit, so neither the menu nor the core ever sees the flip.
-                ; Note this only ever fires when switching AWAY from a spinning
-                ; internal 1581 (turning it OFF): in disk-image mode the physical
-                ; drive is idle by construction, so turning it ON is never gated.
+                ; Symmetric idle-gate: the toggle is only allowed while BOTH
+                ; sides of the switch are quiet. Read the physical-1581
+                ; control-state word (busy while the internal drive reads,
+                ; steps or spins) and the image-drive word (busy while the
+                ; simulated drive is active or a dirty write-back cache is not
+                ; yet flushed -- the image drive can WRITE, so switching away
+                ; from it mid-access would lose data). Each side naturally
+                ; reads idle while the other one is the active source, so
+                ; checking both words gates both directions with one code
+                ; path. If either is busy, force the item back to its previous
+                ; value. M2M$FORCE_MENU both repaints the marker and rewrites
+                ; M2M$CFM_DATA, and the framework then re-copies the (reverted)
+                ; OPTM_IR_STDSEL over the same bit, so neither the menu nor the
+                ; core ever sees the flip.
 _OSM_PRE_1581   MOVE    R9, R0                  ; R0: the requested new value
                 MOVE    M2M$RAMROM_DEV, R1
                 MOVE    P1581_DIAG_DEV, @R1     ; select the diag device
@@ -806,9 +825,14 @@ _OSM_PRE_1581   MOVE    R9, R0                  ; R0: the requested new value
                 ADD     P1581_RM_CTRL, R1        ; -> RM_CTRL_STATE
                 MOVE    @R1, R1                  ; R1: control-state word
                 AND     P1581_BUSY_MASK, R1      ; read / step / motor active?
-                RBRA    _OSM_SEL_PRE_R, Z        ; idle: allow the change
+                RBRA    _OSM_PRE_1581B, !Z       ; physical drive busy: revert
+                MOVE    M2M$RAMROM_DATA, R1
+                ADD     P1581_RM_IMGBSY, R1      ; -> RM_IMG_DRIVE
+                MOVE    @R1, R1                  ; R1: image-drive word
+                AND     P1581_IMGBSY_MSK, R1     ; image drive busy or dirty?
+                RBRA    _OSM_SEL_PRE_R, Z        ; both idle: allow the change
 
-                MOVE    C64_OSM_INTERNAL_1581, R8 ; busy: revert to old value
+_OSM_PRE_1581B  MOVE    C64_OSM_INTERNAL_1581, R8 ; busy: revert to old value
                 MOVE    1, R9                     ; single-select toggle, so the
                 SUB     R0, R9                    ; previous value is 1 - new
                 RSUB    M2M$FORCE_MENU, 1

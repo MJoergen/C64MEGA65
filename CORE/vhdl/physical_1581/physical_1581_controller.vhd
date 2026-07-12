@@ -210,7 +210,7 @@ architecture rtl of physical_1581_controller is
   signal step_dir_pulse : std_logic := '1';   -- STEP output level (active-low pulse)
   signal step_rev   : std_logic := '0';
   signal settle_cnt : unsigned(31 downto 0) := (others => '0');
-  signal head_settled : std_logic := '0';
+  signal head_settled : std_logic := '1';   -- at rest = settled; cleared on step acceptance
 
   -- read engine
   type rd_st_t is (RD_IDLE, RD_WAIT, RD_SEARCH, RD_DAM, RD_STREAM, RD_ADDR);
@@ -370,11 +370,22 @@ begin
         idx_motor_cnt <= 0;
         media_ready   <= '0';
         motor_on_act  <= '0';
-        head_settled  <= '0';
+        -- The head is at rest while we are inactive, so it IS settled: the settle
+        -- timer only guards reads against a just-finished step. Starting at '0'
+        -- would wedge the WD front end after (re-)enable whenever a Type-I verify
+        -- needs zero steps (e.g. Restore with the head already on track 0), because
+        -- only a step ever sets head_settled.
+        head_settled  <= '1';
         settle_cnt    <= (others => '0');
         side_settle   <= (others => '0');
+        -- Re-arm the conservative disk-change latch on reset AND on plain disable:
+        -- while the controller is disabled, drive 8 is served from a disk image, so
+        -- the medium after a re-enable is never proven to be the one seen before.
+        -- The 1581 DOS then revalidates (a step with media present clears the latch),
+        -- exactly as after power-up. This makes an image->internal source switch
+        -- present as a disk change instead of a silent media swap.
+        change_latched <= '1';
         if rst_i = '1' then
-          change_latched <= '1';   -- conservatively "changed" until proven present
           head_valid     <= '0';
           last_dir_vld   <= '0';
           head_cyl       <= 0;
@@ -451,6 +462,11 @@ begin
               step_dir_o   <= step_outward_i;
               step_rev     <= '1' when (last_dir_vld = '1' and step_outward_i /= last_dir_out) else '0';
               head_settled <= '0';           -- clear on acceptance so no read races DIR/setup
+              -- also kill a still-running settle timer from the PREVIOUS step: if it
+              -- expired mid-flight it would re-assert head_settled while this step is
+              -- still in DIR-setup/pulse, silently skipping the 18 ms settle guard
+              -- (the trailing edge only reloads the counter, it does not re-clear the flag)
+              settle_cnt   <= (others => '0');
               step_cnt     <= to_unsigned(G_DIR_SETUP_CYC, 32);
               step_st      <= SI_SETUP;
             end if;
@@ -615,6 +631,18 @@ begin
               end if;
 
             when RD_STREAM =>
+              -- keep the absolute op watchdog running: a flux dropout can stall the
+              -- decoder mid-data-field (no data_end, no disk change) and without this
+              -- bound the FSM would park here forever with the WD stuck busy. Report
+              -- it as a data CRC error; rnf is ALSO set because the byte stream is
+              -- incomplete and the WD front end releases busy on rnf without waiting
+              -- for the remaining (never-coming) bytes.
+              if wd_cnt /= 0 then wd_cnt <= wd_cnt - 1; end if;
+              if wd_cnt = 0 then
+                rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_st <= RD_IDLE;
+              end if;
               if data_byte_v = '1' then
                 byte_data_o <= data_byte;
                 byte_wr_o   <= '1';

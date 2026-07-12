@@ -40,3 +40,15 @@ set_false_path -to [get_pins CORE/i_main/iec_drive_inst/c1581/drives[*].c1581_dr
 ## (clkcpu) track/sector geometry, which is stable long before the request fires.
 set_false_path -to [get_pins CORE/i_main/iec_drive_inst/c1581/drives[*].c1581_drv/fdc/sd_lba_reg[*]/D]
 
+## CDC between the two asynchronous system clocks (physical internal 1581, issue #90).
+## The physical_1581 controller / read-FIFO / diag device run on qnice_clk (50 MHz) while
+## the WD1772 + drive logic run on main_clk (~31.5 MHz). Every crossing is explicitly
+## synchronized in the source: iecdrv_sync 2-FF chains, toggle handshakes whose payload is
+## stable before the toggle flips, Gray-coded FIFO pointers (physical_1581_rdfifo), and
+## async_reg-tagged 2-FF pairs. Cut the clock pair in both directions -- the same idiom
+## M2M/common.xdc uses for qnice_clk -> hdmi_clk. This subsumes the granular drive-CDC
+## exceptions above. NOTE: a clock-to-clock false path can never exempt a SAME-clock path,
+## so the fdc1772 same-clock 'busy' hazard documented at the top of this file is unaffected.
+set_false_path -from [get_clocks qnice_clk] -to [get_clocks main_clk]
+set_false_path -from [get_clocks main_clk]  -to [get_clocks qnice_clk]
+

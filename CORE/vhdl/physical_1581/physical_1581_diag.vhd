@@ -22,7 +22,10 @@
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
--- needed anywhere in this file.
+-- needed anywhere in this file. The single exception is img_drive_busy_i (the
+-- "image drive 8 busy or dirty" level for the symmetric source-toggle idle-gate,
+-- issue #90): it originates in the main clock domain and is 2-FF-synchronized
+-- BEFORE it enters this file (in main.vhd), so it arrives here as a clean level.
 --
 -- It is STRICTLY observational: it drives nothing back into the controller and it
 -- has NO write side (qnice writes, if any, are simply ignored). Register reads are
@@ -92,6 +95,13 @@ entity physical_1581_diag is
     diag_head_dir_out_i : in  std_logic;
 
     -----------------------------------------------------------------------------
+    -- image (simulated D64/D81) drive-8 busy-or-dirty level for the symmetric
+    -- source-toggle idle-gate (issue #90). Already synchronized into clk_i by
+    -- the instantiating main.vhd; defaulted so older testbenches keep building.
+    -----------------------------------------------------------------------------
+    img_drive_busy_i    : in  std_logic := '0';
+
+    -----------------------------------------------------------------------------
     -- QNICE read interface (device C_DEV_C64_PHYS1581); read-only, no wait-state
     -----------------------------------------------------------------------------
     qnice_ce_i          : in  std_logic;                     -- chip enable (accepted, unused for reads)
@@ -145,10 +155,12 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_IDDEC_HI   : integer := 16#25#;
   constant RM_CNT_GAPERR_LO  : integer := 16#26#;   -- counter: out-of-spec gap events
   constant RM_CNT_GAPERR_HI  : integer := 16#27#;
+  constant RM_IMG_DRIVE      : integer := 16#28#;   -- bit0: image drive 8 busy or dirty
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"01";
-  -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present
-  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"07";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"02";
+  -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
+  --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present
+  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"0F";
 
   constant C_ONES32 : unsigned(31 downto 0) := (others => '1');
 
@@ -383,6 +395,8 @@ begin
       when RM_CNT_IDDEC_HI    => qnice_data_o <= hi16(cnt_iddec);
       when RM_CNT_GAPERR_LO   => qnice_data_o <= lo16(cnt_gaperr);
       when RM_CNT_GAPERR_HI   => qnice_data_o <= hi16(cnt_gaperr);
+
+      when RM_IMG_DRIVE       => qnice_data_o <= x"000" & "000" & img_drive_busy_i;
 
       when others             => qnice_data_o <= x"0000";
     end case;

@@ -213,6 +213,78 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   the Image->Internal direction on that bit. See HANDOVER.md sec 8.1. (2) busy includes motor spin-down
   tail = accepted; (3) silent revert = accepted.
 
+- 2026-07-12 (session 2): **TIMING FIX APPLIED.** CORE/CORE.xdc now cuts qnice_clk<->main_clk in
+  both directions (clock-to-clock set_false_path, same idiom as common.xdc qnice->hdmi; cannot
+  exempt same-clock paths, so the fdc1772 busy hazard is unaffected). CORE-R{3,4,5,6}.tcl read_xdc
+  reordered to MEGA65-Rx -> common -> CORE (CORE.xdc references qnice_clk, created in common.xdc;
+  the .xpr fileset already had that order). Verify after the next impl run: WNS >= 0 + report_cdc.
+- 2026-07-12 (session 2): **NO-D81 BUG SET FIXED (user report: enabling "Use internal 1581"
+  without a mounted D81 left the drive dead; also failed WITH a mounted D81).** Root causes, all
+  fixed: (1) main.vhd:~1673 held drive 0 in reset while unmounted -> exception when phys_1581_en_i
+  is on; (2) c1581_drv.sv CIA PA7 /DSKCHG was the image-mode disk_chng_n, which in phys mode can
+  NEVER clear (floppy_step only pulses in image mode) -> PA7 now muxed to ~synced(phys_change)
+  (controller sticky latch, cleared by a real step with media present), PB6 /WPRT muxed to
+  ~synced(phys_wprot); (3) fdc1772.v Type-I commands were rejected with RNF while media not ready
+  -> DEADLOCK (media-ready needs the change latch cleared, only a step clears it, steps are
+  Type-I; the real WD1772 has no READY input) -> Type-I now runs unconditionally in phys mode;
+  (4) controller change_latched now re-arms while DISABLED too (not only on rst) so every
+  image->internal switch presents as a disk change (no silent media swap; internal->image is
+  covered by a new phys_mode-edge clear of disk_chng_n in c1581_drv.sv); (5) controller
+  head_settled now initializes '1' (at rest = settled) -- the old '0' could wedge a zero-step
+  Restore-with-Verify forever (only a step ever set it).
+- 2026-07-12 (session 2): **SYMMETRIC IDLE-GATE DONE (HANDOVER 8.1).** main.vhd: img_drive_busy =
+  c64_drive_led or prevent_reset, 2FF-synced (async_reg) into c64_clk_sd_i; physical_1581_diag.vhd:
+  new word RM_IMG_DRIVE=0x28 bit0, map version 0x02, capability 0x0F; m2m-rom.asm _OSM_PRE_1581
+  now checks BOTH words (phys busy 0x04&0xFC08, image busy 0x28&0x0001) and reverts via
+  M2M$FORCE_MENU -> both switch directions gated with one code path (each side reads idle while
+  the other is the active source). Shell ROM rebuilt: 27515/28672 words. Diag tb extended
+  (version word + IMG_DRIVE) and PASSES (39 checks). doc/1581_dd_debug_device.md updated (41 words).
+- 2026-07-12 (session 2): verification: ghdl analyze of all physical_1581 units clean;
+  DIFFERENTIAL ghdl analyze of main.vhd vs HEAD -> identical error sets (zero new diagnostics) and
+  with physical_1581 units seeded, zero errors mentioning the new instantiations; iverilog
+  c1581_drv->fdc1772 junction elaborates with 0 errors (VHDL submodules stubbed); crc/decoder/
+  inputs/rdfifo/mech/diag tbs all rc=0. Controller closed-loop tb is LONG (>10 min) -- re-run
+  in background; adversarial multi-agent review of all diffs in flight.
+
+- 2026-07-12 (session 2): **ADVERSARIAL REVIEW ROUND (43-agent workflow: 7 dimension finders,
+  3 independent refuters per finding; 12 raw -> 8 confirmed -> ALL 8 FIXED):**
+  (1) CRITICAL rdfifo one-sided reset (rd side on reset_core_n vs wr side on qnice rst ->
+  permanent Gray-pointer desync after any core reset mid-read -> CRC-clean shifted sectors).
+  Fix: rd side now resets from the SAME event (c64_rst_sd_i 2FF-synced into clk_main_i,
+  p1581_fiforst_s); core resets no longer reset either side. (2) MAJOR residual FIFO bytes
+  after cancel/disk-change/core-reset aborts shifted every later sector. Fix: fdc1772 now
+  pop-and-discards whenever phys_mode and no op is delivering (drain can never eat live data:
+  controller pushes only inside an op). (3) MAJOR fdc1772 popped the next FIFO byte at the
+  START of the CPU data-register access, but the T65 latches at the CLOSING enable tick ->
+  byte k+1 delivered whenever a byte was already buffered (DETERMINISTIC +1 shift for the
+  6-byte Read Address reply; proven: with the old code and a realistic 16-clkcpu cpu_read the
+  iverilog tb fails every byte shifted-by-one; with the fix it passes byte-exact). Fix:
+  phys_drq_wait now clears at END of access (cpu_data_access_end); tb_fdc1772_physical.sv
+  cpu_read now models the real multi-clkcpu cycle. (4) MAJOR unbounded phys RESTORE (broken
+  TR00/absent mechanism -> busy stuck forever). Fix: real-WD1772 255-step bound -> Seek
+  Error (RNF) + INTRQ (phys_step_tally). (5) MAJOR multi-signal CDC skew on the rd-done
+  handshake could latch stale flags (worst case rnf=0 on a 0-byte result -> finalize never
+  fires -> WD busy forever). Fix: consume done via a 2-clkcpu-delayed copy
+  (phys_rd_done_c_d2) so all independently-synced flags are stable. (6) MINOR
+  img_drive_busy included the LED in phys mode (1581 DOS blink -> spurious Internal->Image
+  revert). Fix: LED masked with not phys_1581_en_i (prevent_reset kept). (7) MINOR stale
+  settle timer could re-assert head_settled during a new step (18ms guard skipped). Fix:
+  settle_cnt cleared at step acceptance. (8) MINOR RD_STREAM had no watchdog (decoder stall
+  mid-data-field -> FSM parked forever). Fix: wd_cnt keeps counting in RD_STREAM ->
+  RES_DATA_CRC_ERROR with crc=1 AND rnf=1 (rnf releases the WD finalize). 4 other findings
+  refuted 0/3 (asm check-then-act race, xdc insufficiency, busy-cone CDC, byte_ovf unused).
+  RE-VERIFIED after fixes: diag tb PASS, differential main.vhd identical, junction elab 0
+  errors, fdc tb PASS byte-exact with realistic CPU timing, Shell ROM 27515/28672;
+  closed-loop controller tb re-run in background (first run after the no-D81 fixes PASSED).
+
+- 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
+  Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
+  with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,
+  -0.281 ns, congestion). FIX (documented, NOT applied — maintainer will apply their way): 2 clock-to-clock
+  false_paths qnice_clk<->main_clk in CORE/CORE.xdc (or granular per-sync). CORE.xdc left UNCHANGED. This is
+  a constraints-only issue; no functional RTL change needed. Report:
+  CORE/CORE-R3.runs/impl_1/mega65_r3_timing_summary_routed.rpt. Do FIRST, before any milestone.
+
 ## ===== IMPLEMENTATION COMPLETE (read-only milestone) — 2026-07-12 =====
 R1(read path) R2(WD branch) R3(threading+integration) R4(menu) R5(diag) + docs + idle-gate ALL DONE.
 Core is BUILDABLE (all 4 boards, VHDL2008-registered) + sim-verified (GHDL suite green, iverilog fdc PASS,

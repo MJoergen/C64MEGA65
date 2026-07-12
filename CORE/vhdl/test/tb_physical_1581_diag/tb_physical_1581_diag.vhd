@@ -55,6 +55,9 @@ architecture sim of tb_physical_1581_diag is
   signal diag_step_phase : std_logic_vector(1 downto 0) := (others => '0');
   signal diag_head_valid, diag_head_dir_out : std_logic := '0';
 
+  -- image-drive busy/dirty level (issue #90 symmetric idle-gate)
+  signal img_drive_busy : std_logic := '0';
+
   -- QNICE read interface
   signal q_ce   : std_logic := '0';
   signal q_addr : std_logic_vector(7 downto 0) := (others => '0');
@@ -84,6 +87,7 @@ begin
       diag_gap_error_i => diag_gap_error,
       diag_rd_phase_i => diag_rd_phase, diag_step_phase_i => diag_step_phase,
       diag_head_valid_i => diag_head_valid, diag_head_dir_out_i => diag_head_dir_out,
+      img_drive_busy_i => img_drive_busy,
       qnice_ce_i => q_ce, qnice_addr_i => q_addr, qnice_data_o => q_data
     );
 
@@ -153,7 +157,7 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"0107", "VERSION/CAP");
+    expect(16#01#, x"020F", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#30#, x"0000", "RESERVED");
 
@@ -261,6 +265,15 @@ begin
     pulse1(diag_gap_error);
     pulse1(diag_gap_error);
     expect(16#26#, x"0002", "CNT_GAPERR_LO=2");
+
+    -- ---- image-drive busy word (issue #90 symmetric idle-gate) ----------
+    expect(16#28#, x"0000", "IMG_DRIVE idle");
+    img_drive_busy <= '1';
+    wait until rising_edge(clk);
+    expect(16#28#, x"0001", "IMG_DRIVE busy");
+    img_drive_busy <= '0';
+    wait until rising_edge(clk);
+    expect(16#28#, x"0000", "IMG_DRIVE idle again");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then
