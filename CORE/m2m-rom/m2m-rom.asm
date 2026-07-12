@@ -732,12 +732,33 @@ _OSM_SEL_POST_R XOR     R8, R8
                 DECRB
                 RET
 
+; Physical internal 1581 read-only diagnostic device (issue #90). Its device id
+; is C_DEV_C64_PHYS1581 = 0x0108 (globals.vhd) and physical_1581_diag.vhd exposes
+; the live controller state at word offset RM_CTRL_STATE = 0x04. That word is
+; nonzero in the read-FSM phase (bits 15..12), the step-FSM phase (bits 11..10)
+; or the motor-on bit (bit 3) while, and only while, the physical drive is
+; actually accessing the medium: all three are held at 0 whenever drive 8 is
+; backed by a disk image (the controller resets its FSMs and clears motor-on
+; when it is not in physical mode). So P1581_BUSY_MASK is a clean physical-drive
+; busy flag that is meaningful without any extra RTL and naturally reads idle in
+; disk-image mode. Read via the standard M2M$RAMROM_DEV / _4KWIN / _DATA window.
+P1581_DIAG_DEV  .EQU    0x0108                  ; C_DEV_C64_PHYS1581
+P1581_RM_CTRL   .EQU    0x0004                  ; RM_CTRL_STATE word offset
+P1581_BUSY_MASK .EQU    0xFC08                  ; read-phase | step-phase | motor
+
 ; OSM_SEL_PRE callback function:
 ;
 ; Identical to the OSM_SEL_POST callback function (see above) but it is being
 ; called before the functionality and semantics associated with a certain
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
+
+                ; Idle-gate for "Use internal 1581" (issue #90): ignore an
+                ; attempt to switch drive 8 between disk image and the physical
+                ; internal 1581 while that physical drive is mid-access. The
+                ; handler is _OSM_PRE_1581, at the end of this callback.
+                CMP     C64_OPTM_G_INT1581, R8
+                RBRA    _OSM_PRE_1581, Z
 
                 ; Automatically switch to "Simulate cartridge" if the user
                 ; chooses to load a software cartridge. When the previous
@@ -756,6 +777,42 @@ OSM_SEL_PRE     INCRB
                 RSUB    M2M$FORCE_MENU, 1
                 RSUB    RESET_CORE, 1           ; HW slot just decoupled;
                                                 ; park the C64 in clean reset
+                RBRA    _OSM_SEL_PRE_R, 1       ; do not fall into _OSM_PRE_1581
+
+                ; Idle-gate handler for OPTM_G_INT1581. On entry R9 holds the
+                ; requested new single-select value (1 = internal 1581,
+                ; 0 = disk image). menu.asm has already flipped the on-screen
+                ; marker and the OPTM_IR_STDSEL heap, but the OSM bit that
+                ; main.vhd turns into phys_1581_en is only written by the
+                ; framework AFTER this callback returns (the OPTM_IR_STDSEL ->
+                ; M2M$CFM_DATA copy in OPTM_CB_SEL). So a revert done here is
+                ; still in time to keep the hardware bit unchanged.
+                ;
+                ; Read the physical-1581 control-state word: if the drive is
+                ; idle (mask = 0) let the framework apply the change; if it is
+                ; busy, force the item back to its previous value. M2M$FORCE_MENU
+                ; both repaints the marker and rewrites M2M$CFM_DATA, and the
+                ; framework then re-copies the (reverted) OPTM_IR_STDSEL over the
+                ; same bit, so neither the menu nor the core ever sees the flip.
+                ; Note this only ever fires when switching AWAY from a spinning
+                ; internal 1581 (turning it OFF): in disk-image mode the physical
+                ; drive is idle by construction, so turning it ON is never gated.
+_OSM_PRE_1581   MOVE    R9, R0                  ; R0: the requested new value
+                MOVE    M2M$RAMROM_DEV, R1
+                MOVE    P1581_DIAG_DEV, @R1     ; select the diag device
+                MOVE    M2M$RAMROM_4KWIN, R1
+                MOVE    0, @R1                   ; register-bank window 0
+                MOVE    M2M$RAMROM_DATA, R1
+                ADD     P1581_RM_CTRL, R1        ; -> RM_CTRL_STATE
+                MOVE    @R1, R1                  ; R1: control-state word
+                AND     P1581_BUSY_MASK, R1      ; read / step / motor active?
+                RBRA    _OSM_SEL_PRE_R, Z        ; idle: allow the change
+
+                MOVE    C64_OSM_INTERNAL_1581, R8 ; busy: revert to old value
+                MOVE    1, R9                     ; single-select toggle, so the
+                SUB     R0, R9                    ; previous value is 1 - new
+                RSUB    M2M$FORCE_MENU, 1
+                RBRA    _OSM_SEL_PRE_R, 1
 
 _OSM_SEL_PRE_R  XOR     R8, R8
                 XOR     R9, R9

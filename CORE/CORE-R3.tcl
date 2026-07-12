@@ -115,6 +115,17 @@ read_vhdl -vhdl2008 { \
       vhdl/globals.vhd \
       vhdl/keyboard.vhd \
       vhdl/main.vhd \
+      vhdl/physical_1581/physical_1581_pkg.vhd \
+      vhdl/physical_1581/physical_1581_crc.vhd \
+      vhdl/physical_1581/physical_1581_mfm_gaps.vhd \
+      vhdl/physical_1581/physical_1581_mfm_quantise.vhd \
+      vhdl/physical_1581/physical_1581_mfm_gaps_to_bits.vhd \
+      vhdl/physical_1581/physical_1581_mfm_bits_to_bytes.vhd \
+      vhdl/physical_1581/physical_1581_inputs.vhd \
+      vhdl/physical_1581/physical_1581_mfm_decoder.vhd \
+      vhdl/physical_1581/physical_1581_controller.vhd \
+      vhdl/physical_1581/physical_1581_rdfifo.vhd \
+      vhdl/physical_1581/physical_1581_diag.vhd \
       vhdl/mega65.vhd \
       vhdl/prg_loader.vhd \
       vhdl/reu_mapper.vhd \      vhdl/mount_buf_wrapper.vhd \

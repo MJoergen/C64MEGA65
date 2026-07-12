@@ -90,6 +90,7 @@ constant C_DEV_C64_PRG           : std_logic_vector(15 downto 0) := x"0104";    
 constant C_DEV_C64_KERNAL_C64    : std_logic_vector(15 downto 0) := x"0105";     -- Custom Kernal: C64
 constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";     -- Custom Kernal: (simulated) C1541
 constant C_DEV_C64_KERNAL_C1581  : std_logic_vector(15 downto 0) := x"0107";     -- Custom Kernal: (simulated) C1581 (D81 enable)
+constant C_DEV_C64_PHYS1581      : std_logic_vector(15 downto 0) := x"0108";     -- Physical internal 1581: read-only diag register bank (issue #90)
 
 ----------------------------------------------------------------------------------------------------------
 -- HyperRAM memory map (in units of 4 kW = 8 kB)

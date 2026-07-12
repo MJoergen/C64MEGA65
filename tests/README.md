@@ -5,6 +5,48 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A18X1 - TBD
+--------------------------
+
+@TODO: Test the experimental read-only internal-1581 read path (#90). This is
+the first hardware bring-up of the MEGA65's internal 3.5" drive as a physical
+Commodore 1581 behind drive 8; so far it has only been verified in simulation
+(the GHDL closed-loop controller test plus the codec/controller/inputs
+testbenches), so ALL of the following must be exercised on real hardware, on a
+genuine double-density (DD) 1581-formatted disk, and the four board bitstreams
+must all build (R3/R4/R5/R6; functional read testing is on R3):
+
+* Source select: with a DD disk in the internal drive, switch on "Use internal
+  1581" in the disk-mount menu and confirm drive 8 now talks to the physical
+  drive (motor spins up, drive responds); switch it off again and confirm
+  drive 8 is served from the mounted disk image once more (the previously
+  mounted image is preserved across the switch)
+* Read directory: `LOAD"$",8` then `LIST` returns the real disk's directory
+* Load a program: `LOAD"<name>",8` (and `,8,1`) loads and runs a program off
+  the physical disk
+* Record-not-found: reading a file or sector that is not present, or a track
+  the head cannot find, fails cleanly with a DOS error instead of hanging, and
+  the drive recovers for the next access
+* Disk-change and write-protect sensing: ejecting and re-inserting a disk is
+  noticed (the next access reads the new disk, not a stale one) and a
+  write-protected disk is reported as protected; confirm the assumed pin
+  polarities on R3 (see the change_o / write-protect NOTEs in
+  physical_1581_inputs.vhd)
+* QNICE `0x0108` diagnostic device: follow doc/1581_dd_debug_device.md to read
+  the register bank from the QNICE monitor - SIGNATURE reads `0x1581`, the index
+  period settles near one revolution while the motor is on, CNT_READOP climbs on
+  each load and LAST_RESULT is `0x0000` after a clean read; use CNT_RNF,
+  CNT_CRCERR, GAP_MIN and GAP_MAX to triage any read trouble
+* Image-mode regression, MUST be unaffected: with "Use internal 1581" OFF, the
+  existing `*.d64` (1541) and `*.d81` (1581) disk-image mount / directory / load
+  / write / flush / power-cycle behaviour is exactly as before - the physical
+  path must be completely transparent when it is not selected
+* Idle-gate: toggling "Use internal 1581" is ignored while a drive access is in
+  progress (no glitch or corruption from switching the source mid-access)
+* Not expected to work yet (this is the read-only milestone): writing, saving,
+  scratch/rename and formatting to the internal drive - these are the next
+  milestone
+
 Version 6.0 - TBD
 -----------------
 

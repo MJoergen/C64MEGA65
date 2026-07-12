@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A18";
+constant CORE_VERSION : string := "WIP-V6-A18X1";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 159; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 160; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -401,7 +401,7 @@ constant OPTM_SIZE         : natural := 159; -- amount of items including empty 
 -- count one line per item that is visible at that level, including one line per submenu label, excluding the contents
 -- of submenus. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_DX           : natural := 25;
-constant OPTM_DY           : natural := 27;
+constant OPTM_DY           : natural := 28;
 
 -- !!! DO NOT TOUCH THE TYPE DEFINITION IN THE NEXT LINE AND CONTINUE YOUR CONFIGURATION ONE LINE LATER
 type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC - 1;
@@ -412,6 +412,7 @@ constant OPTM_ITEMS        : string :=
    " C64 for MEGA65\n"          &
    "\n"                         &
    " 8:%s\n"                    &  -- %s will be replaced by OPTM_S_MOUNT when not mounted and by the filename when mounted
+   " Use internal 1581\n"       &  -- back C64 drive 8 with the internal MEGA65 3.5" drive (issue #90); default Off = disk image
    " PRG:%s\n"                  &
    "\n"                         &
    " Expansion Port\n"          &
@@ -615,6 +616,7 @@ constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- not yet wired
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
+constant OPTM_G_INT1581       : integer := 31;  -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITION IN THE NEXT FOUR LINES
 function OPTM_DEP(mother : natural; item : natural) return natural is
@@ -626,6 +628,7 @@ end function OPTM_DEP;
 constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                        -- C64 for MEGA65
                                              OPTM_G_LINE,
                                              OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START,
+                                             OPTM_G_INT1581       + OPTM_G_SINGLESEL,  -- Use internal 1581 (default Off = disk image)
                                              OPTM_G_LOAD_PRG      + OPTM_G_LOAD_ROM,
                                              OPTM_G_LINE,
                                              OPTM_G_HEADLINE,                         -- Expansion Port
