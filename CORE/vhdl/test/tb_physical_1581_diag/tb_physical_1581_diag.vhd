@@ -58,6 +58,13 @@ architecture sim of tb_physical_1581_diag is
   -- image-drive busy/dirty level (issue #90 symmetric idle-gate)
   signal img_drive_busy : std_logic := '0';
 
+  -- WD-dialogue trace taps
+  signal rd_req_evt    : std_logic := '0';
+  signal rd_req_op     : std_logic_vector(2 downto 0) := (others => '0');
+  signal rd_req_track  : unsigned(7 downto 0) := (others => '0');
+  signal rd_req_sector : unsigned(7 downto 0) := (others => '0');
+  signal rd_req_side   : std_logic := '0';
+
   -- QNICE read interface
   signal q_ce   : std_logic := '0';
   signal q_addr : std_logic_vector(7 downto 0) := (others => '0');
@@ -88,6 +95,9 @@ begin
       diag_rd_phase_i => diag_rd_phase, diag_step_phase_i => diag_step_phase,
       diag_head_valid_i => diag_head_valid, diag_head_dir_out_i => diag_head_dir_out,
       img_drive_busy_i => img_drive_busy,
+      rd_req_evt_i => rd_req_evt, rd_req_op_i => rd_req_op,
+      rd_req_track_i => rd_req_track, rd_req_sector_i => rd_req_sector,
+      rd_req_side_i => rd_req_side,
       qnice_ce_i => q_ce, qnice_addr_i => q_addr, qnice_data_o => q_data
     );
 
@@ -157,8 +167,9 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"020F", "VERSION/CAP");
+    expect(16#01#, x"031F", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
+    expect(16#29#, x"0000", "TRC_CNT(reset)");
     expect(16#30#, x"0000", "RESERVED");
 
     -- ---- packed live input / output words ------------------------------
@@ -274,6 +285,28 @@ begin
     img_drive_busy <= '0';
     wait until rising_edge(clk);
     expect(16#28#, x"0000", "IMG_DRIVE idle again");
+
+    -- ---- WD-dialogue trace ring -----------------------------------------
+    -- The 4 step-acks and 4 rd-dones above produced trace entries 0..7:
+    -- steps first (dir=1, cyl=0x2A from the CTRL_STATE test), then the reads
+    -- (entry 4 = the deleted-flag RES_OK read with C=0x11/R=0x33, entry 7 =
+    -- the cancelled read, result 0x0D). Add one REQ event and verify layout.
+    expect(16#29#, x"0008", "TRC_CNT=8");
+    expect(16#40#, x"112A", "TRC[0].w0 (STEP dir=1 cyl=2A)");
+    expect(16#41#, x"0000", "TRC[0].w1");
+    expect(16#48#, x"3211", "TRC[4].w0 (DONE deleted C=11)");
+    expect(16#49#, x"3300", "TRC[4].w1 (R=33 result=OK)");
+    expect(16#4E#, x"3000", "TRC[7].w0 (DONE cancelled)");
+    expect(16#4F#, x"000D", "TRC[7].w1 (result=CANCELLED)");
+
+    rd_req_op     <= "000";           -- RDOP_READ_SECTOR
+    rd_req_track  <= x"27";           -- cylinder 39
+    rd_req_sector <= x"05";
+    rd_req_side   <= '1';
+    pulse1(rd_req_evt);
+    expect(16#29#, x"0009", "TRC_CNT=9 after REQ");
+    expect(16#50#, x"2127", "TRC[8].w0 (REQ op=0 side=1 track=27)");
+    expect(16#51#, x"0500", "TRC[8].w1 (sector=05)");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

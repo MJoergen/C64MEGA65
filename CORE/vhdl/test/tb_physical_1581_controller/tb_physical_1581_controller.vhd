@@ -145,7 +145,7 @@ begin
       rd_op     <= op;
       rd_track  <= to_unsigned(trk, 8);
       rd_sector <= to_unsigned(secn, 8);
-      rd_side   <= '0';
+      rd_side   <= '1';       -- fdc1772 convention: '1' = logical side 0 (~PA0)
       wait until rising_edge(clk);
       wait until rising_edge(clk);
       prev_done := rd_done;
@@ -179,7 +179,10 @@ begin
     end procedure;
   begin
     rst <= '1'; wait for 500 ns; rst <= '0'; wait for 500 ns;
-    phys_active <= '1'; cia_motor_on <= '1'; cia_side <= '0';
+    -- cia_side='1' is what fdc1772 really sends for the DOS logical side 0
+    -- (floppy_side = ~PA0); the controller maps it to f_side1='1' = the
+    -- mechanism head the mech model calls side 0.
+    phys_active <= '1'; cia_motor_on <= '1'; cia_side <= '1';
     wait for 50 us;                                 -- let active/motor synchronize
 
     -- Restore: one outward STEP clears the conservative power-up disk-change latch

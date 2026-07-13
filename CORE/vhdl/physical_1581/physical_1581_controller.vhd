@@ -62,7 +62,7 @@ entity physical_1581_controller is
     -- mode + maintained mechanics requests (from drive domain; synced here)
     phys_active_i    : in  std_logic;
     cia_motor_on_i   : in  std_logic;            -- PA2 positive: '1' = motor on requested
-    cia_side_i       : in  std_logic;            -- PA0: '0'=side0, '1'=side1
+    cia_side_i       : in  std_logic;            -- ~PA0 (fdc1772 floppy_side): '1' = logical side 0 (D81 first half), '0' = logical side 1
 
     -- Type-I step request (toggle handshake)
     step_req_tgl_i   : in  std_logic;
@@ -130,6 +130,14 @@ entity physical_1581_controller is
     diag_step_phase_o   : out std_logic_vector(1 downto 0) := (others => '0');  -- step FSM state code
     diag_head_valid_o   : out std_logic := '0';   -- head cylinder estimate anchored (saw track0)
     diag_head_dir_out_o : out std_logic := '1';   -- last step direction (1 = outward / toward track0)
+    -- WD-dialogue trace taps (issue #90 bring-up): a 1-cycle strobe when a read
+    -- request is accepted plus the latched request parameters, so the diag bank
+    -- can record the exact operation sequence the 1581 DOS issues.
+    diag_rd_req_o        : out std_logic := '0';
+    diag_rd_req_op_o     : out std_logic_vector(2 downto 0) := (others => '0');
+    diag_rd_req_track_o  : out unsigned(7 downto 0) := (others => '0');
+    diag_rd_req_sector_o : out unsigned(7 downto 0) := (others => '0');
+    diag_rd_req_side_o   : out std_logic := '0';
     -- packed live pin levels: raw async inputs + conditioned inputs (layout in physical_1581_diag.vhd)
     diag_in_bits_o      : out std_logic_vector(15 downto 0) := (others => '0');
     -- packed driven mechanism outputs + enable (layout in physical_1581_diag.vhd)
@@ -191,6 +199,7 @@ architecture rtl of physical_1581_controller is
   signal side_settle   : unsigned(31 downto 0) := (others => '0');
   signal ready_cnt     : unsigned(31 downto 0) := (others => '0');
   signal idx_motor_cnt : integer range 0 to 7 := 0;
+  signal idx_gap_cnt   : unsigned(31 downto 0) := (others => '0');  -- cycles since the last index edge (motor on)
   signal period_ok     : std_logic := '0';
   signal media_ready   : std_logic := '0';
   signal change_latched: std_logic := '0';
@@ -226,6 +235,7 @@ architecture rtl of physical_1581_controller is
   signal m_c, m_h, m_r, m_n : unsigned(7 downto 0) := (others => '0');
   signal addr_idx   : integer range 0 to 5 := 0;
   signal deleted_l  : std_logic := '0';
+  signal rd_req_evt : std_logic := '0';   -- 1-cycle diag strobe: read request accepted
 
 begin
 
@@ -263,7 +273,16 @@ begin
   ---------------------------------------------------------------------------
   f_selecta_o <= '0' when en = '1' else '1';
   f_motora_o  <= '0' when (en = '1' and motor_s = '1') else '1';
-  f_side1_o   <= (not side_s) when en = '1' else '1';   -- side0->'1', side1->'0'
+  -- SIDE mapping (issue #90 bring-up, verified against mega65-core sdcardio):
+  -- side_s arrives as ~PA0 from the drive (fdc1772 floppy_side), and ~PA0='1'
+  -- means the 1581 DOS wants its LOGICAL SIDE 0 = the first half of every
+  -- cylinder (D81 logical sectors 0-19). The F011 writes exactly that half
+  -- with f_side1 driven HIGH (sdcardio: f_side1 <= not side; offset math puts
+  -- side 0 at the first 10 physical sectors) -- so logical side 0 = pin HIGH.
+  -- Passing side_s through STRAIGHT gives PA0=0 -> f_side1='1', matching
+  -- MEGA65-written and (by C65/1581 interoperability) real-1581 disks. The
+  -- previous inversion made every read return the opposite side, CRC-clean.
+  f_side1_o   <= side_s when en = '1' else '1';
   f_density_o <= '1';                                    -- DD-safe level
   f_step_o    <= step_dir_pulse when en = '1' else '1';  -- driven by step FSM (see process)
   f_stepdir_o <= step_dir_o when en = '1' else '1';
@@ -296,6 +315,15 @@ begin
   diag_gap_error_o    <= dec_gap_err;
   diag_head_valid_o   <= head_valid;
   diag_head_dir_out_o <= last_dir_out;
+
+  -- WD-dialogue trace taps: op_r/trk_r/sec_r latch on the same clock edge that
+  -- sets the (registered) rd_req_evt strobe, so they are stable in the cycle
+  -- the diag bank sees the pulse.
+  diag_rd_req_o        <= rd_req_evt;
+  diag_rd_req_op_o     <= op_r;
+  diag_rd_req_track_o  <= trk_r;
+  diag_rd_req_sector_o <= sec_r;
+  diag_rd_req_side_o   <= side_s;
 
   -- read FSM state -> 4-bit phase code (see physical_1581_diag.vhd register map)
   with rd_st select diag_rd_phase_o <=
@@ -354,6 +382,7 @@ begin
       -- default strobes
       dec_rst  <= '0';
       byte_wr_o <= '0';
+      rd_req_evt <= '0';
 
       step_req_edge := (stq_s /= stq_d);
       rd_req_edge   := (rdq_s /= rdq_d);
@@ -368,6 +397,7 @@ begin
         rd_st         <= RD_IDLE;
         ready_cnt     <= (others => '0');
         idx_motor_cnt <= 0;
+        idx_gap_cnt   <= (others => '0');
         media_ready   <= '0';
         motor_on_act  <= '0';
         -- The head is at rest while we are inactive, so it IS settled: the settle
@@ -410,20 +440,27 @@ begin
 
         ------------------------------------------------------------------
         -- motor / readiness
+        --
+        -- media_ready models the REAL Chinon FB-354 RDY line of an original
+        -- 1581: it asserts when the motor has been on long enough AND real
+        -- index pulses prove a disk is turning at a plausible speed. It is
+        -- deliberately INDEPENDENT of the disk-change latch: on the original
+        -- mechanism RDY and /DSKCHG are separate signals, and the stock 1581
+        -- ROM waits for RDY (CIA PA1) BEFORE it runs the disk job whose seek
+        -- steps would clear the change latch. Gating RDY on the change latch
+        -- therefore deadlocks the ROM (head already at track 0 -> Restore
+        -- steps zero times -> latch never clears -> RDY never -> the DOS
+        -- times out without ever touching the WD). The change latch guards
+        -- data validity through CIA PA7 and the read-engine abort instead;
+        -- disk removal is caught here by the loss of index pulses.
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
-        if motor_s = '0' then
-          ready_cnt     <= (others => '0');
-          idx_motor_cnt <= 0;
-          media_ready   <= '0';
-          period_ok     <= '0';
-        else
-          if ready_cnt < to_unsigned(G_MOTOR_READY_CYC, 32) then
-            ready_cnt <= ready_cnt + 1;
-          end if;
-          if index_edge = '1' and idx_motor_cnt < 7 then
-            idx_motor_cnt <= idx_motor_cnt + 1;
-          end if;
+
+        if motor_s = '1'
+           and ready_cnt >= to_unsigned(G_MOTOR_READY_CYC, 32)
+           and idx_motor_cnt >= 2
+           and period_ok = '1' then
+          media_ready <= '1';
         end if;
 
         -- period plausibility (updated on each measured period)
@@ -432,14 +469,35 @@ begin
           period_ok <= '1';
         end if;
 
-        if motor_s = '1'
-           and ready_cnt >= to_unsigned(G_MOTOR_READY_CYC, 32)
-           and idx_motor_cnt >= 2
-           and period_ok = '1'
-           and change_latched = '0' then
-          media_ready <= '1';
-        elsif change_latched = '1' or motor_s = '0' then
-          media_ready <= '0';
+        -- qualification counters + index-staleness eject detection. These come
+        -- AFTER the assert above so their deasserts win within the same cycle.
+        if motor_s = '0' then
+          ready_cnt     <= (others => '0');
+          idx_motor_cnt <= 0;
+          media_ready   <= '0';
+          period_ok     <= '0';
+          idx_gap_cnt   <= (others => '0');
+        else
+          if ready_cnt < to_unsigned(G_MOTOR_READY_CYC, 32) then
+            ready_cnt <= ready_cnt + 1;
+          end if;
+          if index_edge = '1' then
+            idx_gap_cnt <= (others => '0');
+            if idx_motor_cnt < 7 then
+              idx_motor_cnt <= idx_motor_cnt + 1;
+            end if;
+          elsif idx_gap_cnt < to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then
+            idx_gap_cnt <= idx_gap_cnt + 1;
+          else
+            -- no index edge for two maximum periods while the motor is on:
+            -- the disk was removed or stopped -- drop readiness and
+            -- re-qualify from scratch (spin-up itself is unaffected:
+            -- media_ready is still 0 then and the counters restart cleanly)
+            media_ready   <= '0';
+            idx_motor_cnt <= 0;
+            period_ok     <= '0';
+            idx_gap_cnt   <= (others => '0');
+          end if;
         end if;
 
         ------------------------------------------------------------------
@@ -542,6 +600,7 @@ begin
                 saw_bad_crc <= '0';
                 edge_cnt <= 0;
                 rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
+                rd_req_evt <= '1';
                 rd_st  <= RD_WAIT;
               end if;
 

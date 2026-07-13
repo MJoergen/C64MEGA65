@@ -487,6 +487,11 @@ architecture synthesis of main is
   signal   p1581_diag_step_phase : std_logic_vector(1 downto 0);
   signal   p1581_diag_head_valid : std_logic;
   signal   p1581_diag_head_dir   : std_logic;
+  signal   p1581_diag_rd_req     : std_logic;
+  signal   p1581_diag_rd_req_op  : std_logic_vector(2 downto 0);
+  signal   p1581_diag_rd_req_trk : unsigned(7 downto 0);
+  signal   p1581_diag_rd_req_sec : unsigned(7 downto 0);
+  signal   p1581_diag_rd_req_side: std_logic;
 
   -- unprocessed video output of the C64 core
   signal   vga_hs    : std_logic;
@@ -1916,6 +1921,11 @@ begin
       diag_step_phase_o   => p1581_diag_step_phase,
       diag_head_valid_o   => p1581_diag_head_valid,
       diag_head_dir_out_o => p1581_diag_head_dir,
+      diag_rd_req_o        => p1581_diag_rd_req,
+      diag_rd_req_op_o     => p1581_diag_rd_req_op,
+      diag_rd_req_track_o  => p1581_diag_rd_req_trk,
+      diag_rd_req_sector_o => p1581_diag_rd_req_sec,
+      diag_rd_req_side_o   => p1581_diag_rd_req_side,
       diag_in_bits_o      => p1581_diag_in_bits,
       diag_out_bits_o     => p1581_diag_out_bits
     ); -- i_physical_1581_controller
@@ -2001,6 +2011,13 @@ begin
 
       -- image-drive busy/dirty (main clock domain, 2-FF-synced above; issue #90 idle-gate)
       img_drive_busy_i    => img_busy_sd_s,
+
+      -- WD-dialogue trace taps (issue #90 bring-up)
+      rd_req_evt_i        => p1581_diag_rd_req,
+      rd_req_op_i         => p1581_diag_rd_req_op,
+      rd_req_track_i      => p1581_diag_rd_req_trk,
+      rd_req_sector_i     => p1581_diag_rd_req_sec,
+      rd_req_side_i       => p1581_diag_rd_req_side,
 
       -- QNICE read interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,

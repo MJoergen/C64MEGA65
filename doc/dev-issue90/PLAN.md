@@ -277,6 +277,96 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   errors, fdc tb PASS byte-exact with realistic CPU timing, Shell ROM 27515/28672;
   closed-loop controller tb re-run in background (first run after the no-D81 fixes PASSED).
 
+- 2026-07-13 (session 2, hardware bring-up round 1): **R3 build CLOSED TIMING (WNS +0.366 /
+  WHS +0.050, all constraints met)** -- the CORE.xdc clock-pair cut worked; the framework
+  half-cycle path recovered as predicted. First on-hardware test (maintainer): error channel
+  returns 73 (CPU/IEC alive), but LOAD"$",8 fails with FILE NOT FOUND after motor sounds and
+  WITHOUT the MEGA65 drive LED ever lighting => the 1581 DOS never issued a WD command; it
+  gives up on CIA-visible state before any job. ROOT CAUSE (high confidence): media_ready
+  (-> CIA PA1 /RDY) was gated on change_latched='0'; the latch only clears via a STEP, the
+  mechanism DSKCHG latch likewise (mega65-core: "You can only clear the DISKCHANGE and
+  re-assert RDY by stepping"); the head parks at track 0 so even a Restore steps zero times;
+  and the stock 1581 ROM waits for RDY BEFORE running the job whose seeks would step =>
+  deadlock, DOS timeout, no WD traffic (matches the dark LED). On a real 1581 the FB-354
+  RDY line is independent of DSKCHG. FIX: media_ready now models the real RDY (motor >=505ms
+  + >=2 index edges + plausible period), the change latch drives ONLY PA7 + the read-engine
+  abort + diag; disk removal is detected by index-pulse loss (new idx_gap_cnt staleness
+  reset, threshold 2x G_PERIOD_MAX_CYC). Companion fdc1772 fix: fd_index_eff (real index in
+  phys mode) now feeds the WD index housekeeping (spin-up countdown -> status bit 5,
+  Force-Interrupt-on-index, motor idle timeout) which was dead in phys mode (fd_index never
+  pulses without an image). Pin polarities re-verified against mega65-core: stepdir '1' =
+  toward track 0 (their $10 "step out" case), motor/select active-low, dskchg/index/track0
+  active-low -- all match our RTL. REMAINING SUSPECT if the fix is not enough: DSKCHG pin
+  polarity/wiring (change_c stuck 1 would still abort every read with RES_DISK_CHANGED,
+  0x0A) -- discriminate on hardware via diag LIVE_IN bit 9 across an eject/insert, and the
+  index health via CNT_IDX_QUAL/IDX_PERIOD. Re-verified: diag tb PASS, fdc tb PASS,
+  controller tb re-run in background.
+
+- 2026-07-13 (session 2, hardware bring-up round 2): retest with the ready-fix bitstream STILL
+  fails LOAD"$",8 (FILE NOT FOUND, fast), but the diag dump after the failure shows the FULL
+  HARDWARE STACK WORKING: index 199.65 ms (perfect 300 RPM, 3.05 ms pulse, 72 qualified revs),
+  ~10.9 decoded IDs/rev (a genuine 10-sector 1581-format disk), change latch CLEARED by DOS
+  steps, DSKCHG polarity PROVEN by the eject test (raw pin low + change_c=1 when ejected),
+  6/6 read ops RES_OK (zero RNF, zero CRC err), last op found C=3 R=1 H=0 N=2. ANOMALIES:
+  only 10 steps total since power-on (the DOS NEVER seeks toward cylinder 39 where the
+  directory lives), head_valid=0 (no completed outward step ever ended on track 0 => the DOS
+  apparently never restores; 1541-style, it likely locates itself via READ ADDRESS and steps
+  relatively), and the FNF answer arrives while mechanics still run (answered from a stale
+  DOS state). => The remaining divergence is in the DOS<->WD dialogue, not in the hardware
+  path. ACTIONS: (1) added a READ ADDRESS test to tb_fdc1772_physical.sv (6 bytes DRQ-paced,
+  byte-exact, sector-register update) -- PASSES, so the one uncovered delivery path is clean;
+  (2) built a WD-DIALOGUE TRACE RING into the diag device (32 entries x 32 bit, offsets
+  0x40-0x7F + TRC_CNT at 0x29, map version 0x03/cap 0x1F): records every STEP (dir + head
+  estimate), READ REQUEST (op/track/sector/side) and RESULT (code/flags/C/R) -- the next
+  failed LOAD hands us the exact command sequence the 1581 ROM issues. Controller got purely
+  additive rd_req trace taps. Diag tb extended (50 checks PASS); main.vhd bind-check clean;
+  controller tb re-run green. OPEN QUESTION to maintainer: what disk is being tested and how
+  was it written (real-1581-formatted? MEGA65-written? PC-written D81 copy?).
+
+- 2026-07-13 (session 2, bring-up round 2b): **SIDE INVERSION FOUND AND FIXED — the probable
+  root cause of the round-2 failure.** Trigger: maintainer disclosed the test disk was
+  formatted + written BY THE MEGA65 itself (C65 DOS BACKUP of a mounted D81 via the F011 real
+  floppy path). Verified in mega65-core sdcardio.vhdl: (a) $D080 handler drives
+  `f_side1 <= not side_bit`, so F011 SIDE 0 = pin HIGH = head 0; (b) the D81 offset math
+  (`physical_sector = sector-1` for side 0, `sector+9` for side 1; offset = track*20 +
+  physical_sector) proves F011 side 0 = the FIRST half of each cylinder (D81 logical sectors
+  0-19). Our chain resolved to f_side1_o = PA0 (double negation: side=pa_out[0],
+  floppy_side=~side, f_side1_o = not side_s), i.e. logical side 0 (PA0=0) selected pin LOW =
+  head 1 — INVERTED vs the disk. Since the controller matches C+R and IGNORES H, every read
+  succeeded CRC-clean but returned the OTHER side\'s data — matching the round-2 dump exactly
+  (6/6 RES_OK, garbage content for the DOS, low-cylinder wandering, fast FILE NOT FOUND, and
+  H=0 found while the DOS had its side 1 selected). FIX: physical_1581_controller.vhd
+  `f_side1_o <= side_s` (inversion removed; PA0=0 -> pin HIGH -> head 0), cia_side_i port
+  comment corrected (it receives ~PA0: \'1\' = logical side 0), closed-loop tb now drives
+  cia_side/rd_side = \'1\' (the value fdc1772 really sends for logical side 0 — the old tb
+  masked the bug by driving \'0\'). The mech model was already PC-convention (pin \'1\' =
+  side 0) and needed no change. Closed-loop tb re-run in background (expect PASS).
+  NOTE the interoperability argument: C65/F011 and the real 1581 read each other\'s disks,
+  so pin-HIGH-for-logical-side-0 is also the real-1581 convention; the round-2 dump\'s
+  successful reads with swapped sides were only possible because H is ignored.
+
+- 2026-07-13 (session 2, bring-up round 3): **WD DATA-REGISTER READBACK BUG FOUND VIA ROM
+  DISASSEMBLY + TRACE RING, PROVEN IN SIM, FIXED.** The round-3 trace (side fix + trace ring
+  bitstream) showed: 5 step wiggle pairs, then LOAD"$" = SIX successful READ ADDRESS ops at
+  the resting cylinder (C=3, R ascending 3..8), WD TRACK REGISTER = 0xFF on every request, no
+  seek ever, instant FILE NOT FOUND. Disassembled the actual 318045-02 ROM
+  (c1581_rom.mif.hex): the DOS power-up controller init at $C343 writes $FF..$01 to the WD
+  track/sector/data registers and verifies EVERY readback ($C349-$C365); any mismatch ->
+  error $0D, init aborted (leaving track=$FF -- the traces fingerprint). fdc1772.v mirrored
+  writes into the readback register as `data_out <= data_in` while `data_in <= cpu_din`
+  happens in the same clock edge -> DATA reads back ONE WRITE BEHIND. Reproduced in a new
+  sim bench (scratchpad tb_regtest.sv replicating the ROM test: "wrote FF got xx, wrote FE
+  got FF"). FIX: `data_out <= cpu_din` (real WD1772: one data register, readback returns the
+  written value). Re-verified: register test PASSES, tb_fdc1772_physical PASSES (incl. Read
+  Address + byte-exact sector), junction elab 0 errors. WHY IMAGE D81 SEEMED FINE: image-mode
+  Read Address returns the virtual track that follows the WD registers, so the ROM position
+  checks cannot disagree there even with init degraded; only the real mechanism exposes it.
+  Also disassembled for reference: job read entry $C900 (RA, then found-C vs wanted-track
+  check -> error path), seek stage $CE78 ($88 wanted vs $27 believed -> WD SEEK), sector spin
+  loop $CAE4 (RA until wanted R passes, budget 60), ready check $CDBC (PA1 low, 30 stable
+  samples). RECOMMENDED CONTROL TEST on the current bitstream: image-mode D81 LOAD"$",8
+  (no reflash needed) to see whether the init failure degraded image mode too.
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

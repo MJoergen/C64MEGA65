@@ -43,13 +43,14 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-41 words, offsets `0x00`–`0x28`. Any offset not listed (`0x29` and above) reads
-`0x0000`. All multi-bit fields are right-aligned unless a bit layout is given.
+42 words at offsets `0x00`–`0x29`, plus the 64-word WD-dialogue trace ring at
+`0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
+fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x020F` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x031F` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -79,9 +80,37 @@ core name from the config device the same way).
 | `0x24` / `0x25` | `CNT_IDDEC`     | counter: decoded ID fields (any CRC)                       |
 | `0x26` / `0x27` | `CNT_GAPERR`    | counter: out-of-spec flux gaps (loss of lock)              |
 | `0x28` | `IMG_DRIVE`     | bit0 = the simulated (disk image) drive 8 is busy or holds unsaved data |
+| `0x29` | `TRC_CNT`       | total WD-dialogue trace events since reset (ring holds the last 32) |
+| `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 
 All ten counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
 low word first, then the high word (`0x0000` in the high word while values stay small).
+
+### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
+
+The ring records the last 32 operations the WD front end sent to the physical
+controller — the exact "dialogue" the 1581 DOS conducts. `TRC_CNT` (`0x29`) counts
+all events since reset; entry `k` (0–31) lives at `0x40 + 2k` (word `w0`) and
+`0x41 + 2k` (word `w1`), and the newest entry is `(TRC_CNT - 1) mod 32`. Once more
+than 32 events happened, the ring wraps and the oldest entries are overwritten.
+
+Entry types (by `w0` bits 15:12):
+
+| Type | `w0` | `w1` |
+| ---- | ---- | ---- |
+| `1` = STEP completed | `0x1000` \| dir`<<8` (`1` = toward track 0) \| head-cylinder estimate | bit0 = track0 after the step |
+| `2` = read op REQUESTED | `0x2000` \| op`<<9` (`0` sector, `1` address, `2` verify) \| side`<<8` \| requested track | requested sector `<<8` |
+| `3` = read op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found C | found R `<<8` \| result code |
+
+To capture a failure: reset/power-on, reproduce the failing access once, then dump
+`MD 7000 7029` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
+entry; STEP entries in between show the seek pattern (direction + the controller's
+head-position estimate at each step). This reconstructs where the DOS was heading,
+what it asked to read, and what it got — without any scope.
+
+The rare coincidence of two events in the same 50 MHz cycle records only the
+higher-priority one (RESULT over REQUEST over STEP); `TRC_CNT` then undercounts by
+one. Irrelevant in practice, noted for completeness.
 
 `IMG_DRIVE` bit 0 is the mirror image of the `CTRL_STATE` busy bits for the *other* media
 source: it is set while the image-backed drive 8 shows activity (drive LED, covering both
@@ -218,9 +247,12 @@ the C64 accesses drive 8.
 - **Head never finds the track?** A climbing `CNT_RNF` (`0x1C`) with `HEAD` (`0x05`) not
   matching the wanted cylinder, or `CTRL_STATE` (`0x04`) stuck in read phase `2` (ID search),
   means the ID field was never matched.
-- **Drive never becomes ready?** `CTRL_STATE` bit0 stays `0`: check the motor bit (bit3), the
-  disk-change latch (bit4, needs a Type-I step to clear), and that `CNT_IDX_QUAL` (`0x16`) is
-  counting (index edges are only counted toward spin-up while the motor is on).
+- **Drive never becomes ready?** `CTRL_STATE` bit0 stays `0`: check the motor bit (bit3), that
+  `CNT_IDX_QUAL` (`0x16`) is counting (index edges only count toward readiness while the motor
+  is on), and that `IDX_PERIOD` (`0x0D`/`0x0E`) is plausible (one revolution, about `0x00989680`
+  cycles at 300 RPM). Readiness models the real mechanism RDY line: motor at speed plus live
+  index pulses. The disk-change latch (bit4) does NOT gate readiness -- it drives the DOS-visible
+  /DSKCHG (CIA PA7) and aborts in-flight reads; the DOS clears it by stepping.
 
 ---
 

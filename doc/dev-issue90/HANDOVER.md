@@ -309,7 +309,20 @@ CDC skew window on the rd-done handshake that could leave the WD busy forever
 settle-timer window, and the image-busy diag bit conflating the physical LED.
 Full list + fixes: `PLAN.md` ("ADVERSARIAL REVIEW ROUND" entry).
 
-### 8.2 Hardware bring-up (read)
+### 8.2 Hardware bring-up (read) — round 1 done (2026-07-13)
+
+First R3 hardware test: timing closed (WNS +0.366), error channel returns 73,
+but `LOAD"$",8` failed with FILE NOT FOUND and the drive LED never lit (the DOS
+never issued a WD command). Root cause found and fixed: `media_ready` (CIA PA1
+/RDY) was gated on the disk-change latch, which only a step clears — but the
+stock 1581 ROM waits for RDY *before* running the job whose seeks would step
+(and a Restore with the head already on track 0 steps zero times). RDY now
+models the real FB-354 line (motor + live index only); the change latch drives
+only PA7/read-abort; ejects are caught by index-pulse loss. Companion WD fix:
+real index feeds the WD spin-up/IRQ-at-index/motor-timeout housekeeping in phys
+mode. Needs a REBUILD + retest; if reads then abort with result `0x0A`
+(disk changed), suspect the DSKCHG pin polarity (flip `change_o` in
+`physical_1581_inputs.vhd`) — see PLAN.md 2026-07-13 entry.
 
 Build all four, test on R3 per section 6. Confirm pin polarities on real
 hardware (`change_o`, `f_side1_o` inversion, index/RDATA). Use the `0x0108` diag

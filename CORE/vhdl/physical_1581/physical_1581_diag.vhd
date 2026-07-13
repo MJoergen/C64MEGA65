@@ -102,6 +102,18 @@ entity physical_1581_diag is
     img_drive_busy_i    : in  std_logic := '0';
 
     -----------------------------------------------------------------------------
+    -- WD-dialogue trace taps (issue #90 bring-up): read-request accept strobe +
+    -- latched request parameters from the controller. Together with the existing
+    -- step-ack and rd-done taps these feed a 32-entry trace ring that records
+    -- the exact operation sequence the 1581 DOS issues. Defaulted for older tbs.
+    -----------------------------------------------------------------------------
+    rd_req_evt_i        : in  std_logic := '0';
+    rd_req_op_i         : in  std_logic_vector(2 downto 0) := (others => '0');
+    rd_req_track_i      : in  unsigned(7 downto 0) := (others => '0');
+    rd_req_sector_i     : in  unsigned(7 downto 0) := (others => '0');
+    rd_req_side_i       : in  std_logic := '0';
+
+    -----------------------------------------------------------------------------
     -- QNICE read interface (device C_DEV_C64_PHYS1581); read-only, no wait-state
     -----------------------------------------------------------------------------
     qnice_ce_i          : in  std_logic;                     -- chip enable (accepted, unused for reads)
@@ -156,11 +168,15 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_GAPERR_LO  : integer := 16#26#;   -- counter: out-of-spec gap events
   constant RM_CNT_GAPERR_HI  : integer := 16#27#;
   constant RM_IMG_DRIVE      : integer := 16#28#;   -- bit0: image drive 8 busy or dirty
+  constant RM_TRC_CNT        : integer := 16#29#;   -- total trace events since reset (ring wraps at 32)
+  constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)
+  constant RM_TRC_END        : integer := 16#7F#;
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"02";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"03";
   -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
-  --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present
-  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"0F";
+  --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
+  --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present
+  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"1F";
 
   constant C_ONES32 : unsigned(31 downto 0) := (others => '1');
 
@@ -202,6 +218,22 @@ architecture rtl of physical_1581_diag is
   signal prev_rd_done  : std_logic := '0';
   signal prev_step_ack : std_logic := '0';
   signal prev_change   : std_logic := '0';
+
+  ---------------------------------------------------------------------------
+  -- WD-dialogue trace ring: 32 entries x 32 bits (one write per event). Entry
+  -- layout, split into two QNICE words w0 = bits 31:16 / w1 = bits 15:0:
+  --   STEP    w0 = 0x1000 | dir_out<<8 | head_cyl_estimate
+  --           w1 = track0 (bit 0)
+  --   RD REQ  w0 = 0x2000 | op<<9 | side<<8 | requested track
+  --           w1 = requested sector << 8
+  --   RD DONE w0 = 0x3000 | rnf<<11 | crc<<10 | deleted<<9 | found C
+  --           w1 = found R << 8 | result code
+  -- On the rare coincidence of two events in one clock, priority is
+  -- DONE > REQ > STEP and the lower-priority event of that cycle is dropped.
+  ---------------------------------------------------------------------------
+  type trc_ram_t is array (0 to 31) of std_logic_vector(31 downto 0);
+  signal trc_ram : trc_ram_t := (others => (others => '0'));
+  signal trc_cnt : unsigned(15 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- saturating +1 helper (increments only on 'ev')
@@ -265,6 +297,7 @@ begin
         prev_rd_done  <= rd_done_tgl_i;
         prev_step_ack <= step_ack_tgl_i;
         prev_change   <= st_change_i;
+        trc_cnt       <= (others => '0');
       else
         -- derived event pulses
         rddone_evt := rd_done_tgl_i  xor prev_rd_done;
@@ -273,6 +306,24 @@ begin
         prev_rd_done  <= rd_done_tgl_i;
         prev_step_ack <= step_ack_tgl_i;
         prev_change   <= st_change_i;
+
+        -- WD-dialogue trace ring (see layout comment at the declaration)
+        if rddone_evt = '1' then
+          trc_ram(to_integer(trc_cnt(4 downto 0))) <=
+            "0011" & rd_rnf_i & rd_crc_err_i & rd_deleted_i & '0' & std_logic_vector(rd_c_i) &
+            std_logic_vector(rd_r_i) & "000" & rd_result_i;
+          trc_cnt <= trc_cnt + 1;
+        elsif rd_req_evt_i = '1' then
+          trc_ram(to_integer(trc_cnt(4 downto 0))) <=
+            "0010" & rd_req_op_i & rd_req_side_i & std_logic_vector(rd_req_track_i) &
+            std_logic_vector(rd_req_sector_i) & x"00";
+          trc_cnt <= trc_cnt + 1;
+        elsif step_evt = '1' then
+          trc_ram(to_integer(trc_cnt(4 downto 0))) <=
+            "0001" & "000" & diag_head_dir_out_i & std_logic_vector(st_head_cyl_i) &
+            x"00" & "0000000" & st_track0_i;
+          trc_cnt <= trc_cnt + 1;
+        end if;
 
         -- saturating counters
         cnt_idx_raw  <= sat_inc(cnt_idx_raw,  diag_index_edge_i);
@@ -397,8 +448,19 @@ begin
       when RM_CNT_GAPERR_HI   => qnice_data_o <= hi16(cnt_gaperr);
 
       when RM_IMG_DRIVE       => qnice_data_o <= x"000" & "000" & img_drive_busy_i;
+      when RM_TRC_CNT         => qnice_data_o <= std_logic_vector(trc_cnt);
 
-      when others             => qnice_data_o <= x"0000";
+      when others             =>
+        if a >= RM_TRC_BASE and a <= RM_TRC_END then
+          -- trace ring: even offset = w0 (bits 31:16), odd offset = w1 (bits 15:0)
+          if (a mod 2) = 0 then
+            qnice_data_o <= trc_ram((a - RM_TRC_BASE) / 2)(31 downto 16);
+          else
+            qnice_data_o <= trc_ram((a - RM_TRC_BASE) / 2)(15 downto 0);
+          end if;
+        else
+          qnice_data_o <= x"0000";
+        end if;
     end case;
   end process read_p;
 
