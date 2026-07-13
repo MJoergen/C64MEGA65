@@ -309,7 +309,20 @@ CDC skew window on the rd-done handshake that could leave the WD busy forever
 settle-timer window, and the image-busy diag bit conflating the physical LED.
 Full list + fixes: `PLAN.md` ("ADVERSARIAL REVIEW ROUND" entry).
 
-### 8.2 Hardware bring-up (read) — round 1 done (2026-07-13)
+### 8.2 Hardware bring-up (read) — COMPLETE (2026-07-13): READ MILESTONE REACHED
+
+After eight bring-up rounds (full log in `PLAN.md`, 2026-07-13 entries):
+`LOAD"$",8` is reliable and programs load and RUN from a genuine DD disk,
+including files whose chains span side 1 (verified against the mother D81:
+SHADES, 20 of 35 blocks on side 1, loaded and played). Fixed along the way:
+media-ready semantics, side-select mapping (empirical, from on-disk H bytes —
+see the controller comment), the WD data-register readback (1581 ROM self-test),
+busy-until-consumed byte delivery (ROM software-CRCs the Read Address reply),
+and the silent read-FIFO overflow (depth 512 + honest error reporting). Known
+non-blocking imperfections and the queued diagnostic fix are listed in the
+PLAN.md round-8 entry. The next milestone is WRITE + FORMAT (8.3).
+
+Original round-1 notes below for reference:
 
 First R3 hardware test: timing closed (WNS +0.366), error channel returns 73,
 but `LOAD"$",8` failed with FILE NOT FOUND and the drive LED never lit (the DOS

@@ -424,6 +424,48 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   With every layer now hardware-proven (self-test, RDY, steps/seek, RA pipeline, sector
   delivery) plus the correct surface, the login should complete on the next build.
 
+- 2026-07-13 (session 2, bring-up round 7): **MILESTONE: LOAD"$",8 WORKS RELIABLY on hardware
+  (side-reverted bitstream). Remaining defect: intermittent SILENT BYTE LOSS in file loads —
+  diagnosed as READ-FIFO OVERFLOW, fixed two ways.** Symptoms: directory names with
+  neighboring bytes pulled in ("SHADESKD" = name+shift = DROPPED bytes, not flipped),
+  programs that load without error but do not run, occasional DOS hangs; the hang-time trace
+  shows a functionally CLEAN WD dialogue in which the DOS wanders to absurd cylinders (~47)
+  following corrupted track/sector chain links, re-caches the directory repeatedly, then goes
+  silent. Mechanism: the controller streams sector bytes at disk pace (32 us/byte) into the
+  32-deep rdfifo; when the drive CPU is stolen mid-sector (IEC ATN service / job IRQ — exactly
+  what real file loads do between logical blocks, and what no prompt-draining testbench ever
+  did), the FIFO fills and further controller writes were DROPPED SILENTLY (byte_ovf_i was
+  wired but unread — the early review flagged it and the refuters dismissed it because "a
+  real WD also loses data"; but the real WD sets LOST DATA and the DOS re-reads. Silence was
+  the bug.) FIX 1: rdfifo depth 32 -> 512 (G_AW 9, one full physical sector — reads can no
+  longer overflow even with a stalled CPU). FIX 2: controller latches write-while-full
+  (ovf_l) per op and completes with RES_DATA_CRC_ERROR + crc + rnf (DOS re-reads; rnf
+  releases the WD finalize) — a drop can never be silent again. New regression test
+  tb_physical_1581_ovf.vhd (4-deep FIFO, consumer never drains): PASSES (error reported).
+  main.vhd bind-check clean; closed-loop tb re-run in background. Diag notes from the hang
+  dump: CNT_CHANGE=2 (one mid-session disk-change latch event — watch), head_valid never
+  anchors (cosmetic only, nothing gates on it — possible TR00-assert-vs-SI_REC latency,
+  investigate at leisure). NEXT: rebuild; then LOAD"$" + program loads incl. RUN.
+
+- 2026-07-13 (session 2, bring-up round 8): **READ MILESTONE REACHED AND GROUND-TRUTH-VERIFIED.**
+  On the overflow-fixed bitstream: LOAD"$",8 reliable; LOAD"SHADES",8,1 loads fully and RUNS
+  (SID music plays = end-to-end byte-exact delivery proven). The mother D81 (~/Downloads/
+  C64.D81, "MEGA65 C64 SIDE", 45 files, only 67 blocks free) confirms every observation:
+  SHADES = 35 blocks at logical tracks 62-63 (cyls 61-62) with 20 of 35 blocks ON SIDE 1 --
+  so the traced seek 39->62 and track-62/63 caching were a HEALTHY load (the perceived
+  "stall" = normal stock-serial speed for a far-end file), and SIDE-1 READS ARE HARDWARE-
+  PROVEN (last open coverage item). The earlier "wandering to cyl 47" = SHADOW SWITCHER
+  territory (cyls 45-49) -- legitimate. KNOWN REMAINING IMPERFECTIONS (non-blocking):
+  (1) intermittent ID-miss: a requested sector occasionally not found within the 5-index-edge
+  search budget (caught live: trk62 s1 RNF after reading fine before/after; ~3 per 450 revs;
+  self-heals via the DOS retry at ~2 s cost) -- suspected digital-decoder re-lock margin near
+  the format splice; tune later with GAP/CNT_GAPERR statistics. (2) head_valid never anchors
+  reliably (diagnostic only; fix queued: anchor on the TR00 LEVEL continuously). (3) Instant
+  FILE NOT FOUND when loading while a program with custom IRQ (SID player) runs = C64-side
+  IEC timing interference, NOT this core (trace shows zero drive activity for that command);
+  same behavior expected in image mode. NEXT session: bundle (2) + investigate (1), then the
+  write/format milestone (HANDOVER 8.3).
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

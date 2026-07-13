@@ -1932,7 +1932,13 @@ begin
 
   i_physical_1581_rdfifo : entity work.physical_1581_rdfifo
     generic map (
-      G_AW => 5   -- depth = 32 bytes
+      -- Depth = 512 = one full physical sector, so a streamed read can NEVER
+      -- overflow, no matter how long the drive CPU is away servicing IEC/IRQ
+      -- work mid-sector (observed on hardware with the earlier 32-byte depth:
+      -- silently dropped bytes -> shifted directory names, programs that load
+      -- but do not run). The controller additionally reports any write-while-
+      -- full as a data error so a drop can never again be silent.
+      G_AW => 9
     )
     port map (
       -- write side: controller, 50 MHz (c64_clk_sd_i)

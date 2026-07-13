@@ -89,7 +89,7 @@ entity physical_1581_controller is
     -- read-byte stream to the external dual-clock FIFO (50 MHz write side)
     byte_data_o      : out unsigned(7 downto 0) := (others => '0');
     byte_wr_o        : out std_logic := '0';
-    byte_ovf_i       : in  std_logic := '0';     -- FIFO full == codec overrun
+    byte_ovf_i       : in  std_logic := '0';     -- FIFO full: a write this cycle is DROPPED
 
     -- live normalized state to the drive domain
     st_media_ready_o : out std_logic := '0';
@@ -235,6 +235,7 @@ architecture rtl of physical_1581_controller is
   signal m_c, m_h, m_r, m_n : unsigned(7 downto 0) := (others => '0');
   signal addr_idx   : integer range 0 to 5 := 0;
   signal deleted_l  : std_logic := '0';
+  signal ovf_l      : std_logic := '0';   -- a FIFO write was dropped during this op
   signal rd_req_evt : std_logic := '0';   -- 1-cycle diag strobe: read request accepted
 
 begin
@@ -392,6 +393,13 @@ begin
       cancel_edge   := (cnq_s /= cnq_d);
       side_changed  := (side_s /= side_prev);
       side_prev     <= side_s;
+
+      -- a write strobe while the FIFO reports full means that byte was DROPPED:
+      -- remember it so the operation cannot complete "successfully" with a
+      -- silently truncated stream (real WD1772: LOST DATA -> the DOS re-reads)
+      if byte_wr_o = '1' and byte_ovf_i = '1' then
+        ovf_l <= '1';
+      end if;
 
       if rst_i = '1' or en = '0' then
         -- inactive / reset: mechanics safe, state cleared (media presence pending)
@@ -607,6 +615,7 @@ begin
                 trk_r  <= rd_track_i;
                 sec_r  <= rd_sector_i;
                 saw_bad_crc <= '0';
+                ovf_l  <= '0';
                 edge_cnt <= 0;
                 rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
                 rd_req_evt <= '1';
@@ -718,7 +727,12 @@ begin
               if data_end = '1' then
                 rd_c_o <= m_c; rd_h_o <= m_h; rd_r_o <= m_r; rd_n_o <= m_n;
                 rd_deleted_o <= deleted_l;
-                if data_crc_ok = '1' then
+                if ovf_l = '1' or (byte_wr_o = '1' and byte_ovf_i = '1') then
+                  -- one or more payload bytes never made it into the FIFO: the
+                  -- stream is truncated, so fail the op (rnf releases the WD
+                  -- front end without waiting for bytes that will never come)
+                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                elsif data_crc_ok = '1' then
                   rd_result_o <= RES_OK; rd_crc_err_o <= '0'; rd_rnf_o <= '0';
                 else
                   rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
@@ -739,6 +753,11 @@ begin
                 when others => byte_data_o <= id_crc_stored(7 downto 0);
               end case;
               if addr_idx = 5 then
+                if ovf_l = '1' or byte_ovf_i = '1' then
+                  -- reply bytes were dropped (cannot happen with the 512-deep
+                  -- FIFO after the op-start drain, but never complete silently)
+                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                end if;
                 rd_done_tgl_o <= not rd_done_tgl_o;
                 rd_st <= RD_IDLE;
               else
