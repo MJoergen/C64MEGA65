@@ -47,7 +47,7 @@ architecture sim of tb_mech_model_1581 is
   -- controller-driven mechanism inputs (this TB stands in for the controller)
   signal f_motora   : std_logic := '0';   -- motor on   (active-low)
   signal f_selecta  : std_logic := '0';   -- selected   (active-low)
-  signal f_side1    : std_logic := '1';   -- side 0
+  signal f_side1    : std_logic := '0';   -- side 0 (pin LOW = D81 first half, empirical)
   signal f_stepdir  : std_logic := '0';   -- toward higher cyl
   signal f_step     : std_logic := '1';   -- idle high  (active-low pulse)
   signal f_density  : std_logic := '1';

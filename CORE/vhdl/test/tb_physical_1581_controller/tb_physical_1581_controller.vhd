@@ -180,8 +180,8 @@ begin
   begin
     rst <= '1'; wait for 500 ns; rst <= '0'; wait for 500 ns;
     -- cia_side='1' is what fdc1772 really sends for the DOS logical side 0
-    -- (floppy_side = ~PA0); the controller maps it to f_side1='1' = the
-    -- mechanism head the mech model calls side 0.
+    -- (floppy_side = ~PA0); the controller maps it to f_side1='0', the pin
+    -- level whose surface carries the D81 first half (mech model side 0).
     phys_active <= '1'; cia_motor_on <= '1'; cia_side <= '1';
     wait for 50 us;                                 -- let active/motor synchronize
 

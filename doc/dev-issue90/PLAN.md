@@ -367,6 +367,63 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   samples). RECOMMENDED CONTROL TEST on the current bitstream: image-mode D81 LOAD"$",8
   (no reflash needed) to see whether the init failure degraded image mode too.
 
+- 2026-07-13 (session 2, bring-up round 4): **RDY LATENCY — the register-test fix unmasked the
+  next gate.** Round-4 trace (data-register fix in): 12 events = ONLY step wiggles, ZERO read
+  ops (previously 6 read-addresses!), change latch cleared, disk spinning perfectly, fast
+  FILE NOT FOUND after ~1 s of motor. ROM analysis: with init now PASSING its self test, the
+  DOS runs a clean job flow: spin-up allowance of 80 dispatcher ticks (LDA #$50 -> $01D9 at
+  $B095, ~0.7 s), ONE disk-change wiggle, then the INSTANT 30-sample PA1 check at $CDBC (no
+  waiting loop!) -> error 3. Our media_ready needed an at-speed period measurement
+  (~0.5-0.7 s after motor-on) plus the 505 ms floor -> lost the deadline. (Pre-fix, the
+  broken init caused many more retry rounds, which is the only reason ready was eventually
+  seen and the RAs ran.) FIX: media_ready = motor + >=2 index edges (rotation detection,
+  like the real FB-354; ~200-450 ms). The at-speed protection is redundant: an off-speed
+  disk does not decode -> RNF -> the DOS read-retry (budget 60) absorbs it; the eject
+  detection (index staleness) and the change-latch read-abort stay. period_ok remains for
+  diag. Closed-loop tb re-run in background. NEXT: rebuild + retest; if CNT_READOP is still
+  0 afterwards, plan C = pre-spin qualification (assert ready during the wiggle phase).
+
+- 2026-07-13 (session 2, bring-up round 5): **ROOT CAUSE PROVEN AGAINST THE REAL ROM AND
+  FIXED: busy dropped at PRESENTATION instead of CONSUMPTION of the last streamed byte.**
+  Round-5 hardware trace (rdy-fix bitstream): RDY gate PASSED (RAs back, init clean:
+  track reg $01), six OK read-addresses (C=3, R ascending incl. the R=11 MEGA65
+  track-info-block ID), still no seek -> FNF. Built a ROM-in-the-loop emulator
+  (doc/dev-issue90/rom_emu/: python 6502 + device models mirroring our RTL) and BOOTED THE
+  GENUINE 318045-02 ROM: reproduced ERROR $09 exactly (six RAs, no seek) with
+  presentation-busy semantics; with consumption-busy semantics the same ROM restores,
+  read-addresses, SEEKS to cyl 39 and reads the directory. Mechanism: the ROM transfer
+  loops poll BUSY FIRST, DRQ second ($CD17: AND #$03/LSR/BCC done) -> busy=0 with the last
+  byte still presented makes it exit one byte early; the ROM then SOFTWARE-CRC-checks the
+  6-byte Read Address reply ($DA63, CCITT preset $B230 over C,H,R,N,CRC,CRC, residue must
+  be 0) -> truncated reply -> error $09 per attempt -> FILE NOT FOUND. FIX (fdc1772.v
+  finalize): busy holds until the drive CPU consumed the final byte
+  (phys_bytes >= expected AND !phys_drq_wait). Same fix covers the last byte of sector
+  reads (same ROM polling idiom). VERIFIED: tb_fdc1772_physical extended with the
+  ROM-faithful busy-first drain -- catches the old RTL (loses byte 6, revert-proof) and
+  passes the fixed RTL; register test still clean; junction elab 0 errors; ROM emulator
+  boot login SUCCEEDS with the fix. Controller VHDL untouched this round. NEXT: rebuild +
+  hardware retest -- with self-test, RDY, side mapping and byte pipeline all proven, the
+  login has no remaining unverified gate.
+
+- 2026-07-13 (session 2, bring-up round 6): **PHYSICAL STACK FULLY WORKING ON HARDWARE; the
+  round-2b SIDE FIX was WRONG and is REVERTED (empirical proof from the medium).** Round-6
+  trace (busy-consumption fix in): the ROM logs in end to end -- restore, 39-cyl seek (steps
+  traced), verify RAs, then the 1581 track-cache fill: READ SECTOR x48, sectors cycling in
+  physical order, C=39, ZERO RNF, ZERO CRC errors... and still FILE NOT FOUND, because the
+  DOS rejects the CONTENT: CHRN_HN shows found H=1. Cross-round evidence on the SAME disk:
+  original mapping (pin '0', rounds 1-2) read H=0 IDs; the round-2b mapping (pin '1',
+  rounds 5-6) reads H=1 IDs. So the D81 first half (header/BAM/dir, H=0) lives on the
+  f_side1='0' surface -- the DOS logical side 0 (PA0=0) must drive the pin LOW, exactly the
+  ORIGINAL f_side1_o <= not side_s (= PA0, the real 1581 wiring). The round-2b re-derivation
+  from mega65-core sdcardio was invalid: the C65 DOS sets the F011 side REGISTER and the
+  side PIN bit independently during format, so the register model does not pin the pairing;
+  the on-disk H bytes do. Under the wrong mapping the DOS track-cached 10 CRC-clean ZERO
+  sectors (the empty second half) -> invalid header -> FNF. REVERTED controller mapping
+  (comment now records the empirical truth + a warning against re-deriving from mega65-core);
+  mech model + both tbs aligned (pin '0' = side 0); mech tb PASS; closed-loop tb re-running.
+  With every layer now hardware-proven (self-test, RDY, steps/seek, RA pipeline, sector
+  delivery) plus the correct surface, the login should complete on the next build.
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

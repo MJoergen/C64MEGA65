@@ -273,16 +273,19 @@ begin
   ---------------------------------------------------------------------------
   f_selecta_o <= '0' when en = '1' else '1';
   f_motora_o  <= '0' when (en = '1' and motor_s = '1') else '1';
-  -- SIDE mapping (issue #90 bring-up, verified against mega65-core sdcardio):
-  -- side_s arrives as ~PA0 from the drive (fdc1772 floppy_side), and ~PA0='1'
-  -- means the 1581 DOS wants its LOGICAL SIDE 0 = the first half of every
-  -- cylinder (D81 logical sectors 0-19). The F011 writes exactly that half
-  -- with f_side1 driven HIGH (sdcardio: f_side1 <= not side; offset math puts
-  -- side 0 at the first 10 physical sectors) -- so logical side 0 = pin HIGH.
-  -- Passing side_s through STRAIGHT gives PA0=0 -> f_side1='1', matching
-  -- MEGA65-written and (by C65/1581 interoperability) real-1581 disks. The
-  -- previous inversion made every read return the opposite side, CRC-clean.
-  f_side1_o   <= side_s when en = '1' else '1';
+  -- SIDE mapping (issue #90 bring-up, determined EMPIRICALLY from the medium):
+  -- on a MEGA65-written 1581 disk the surface selected by f_side1='0' carries
+  -- the sector IDs with H=0 -- the D81 first half (header/BAM/directory,
+  -- logical sectors 0-19) -- and the f_side1='1' surface carries H=1 (observed
+  -- directly via the diag CHRN taps across bring-up rounds: pin '0' -> H=0,
+  -- pin '1' -> H=1, same disk). The 1581 DOS requests its logical side 0 with
+  -- PA0=0, which arrives here as side_s='1' (fdc1772 floppy_side = ~PA0), so
+  -- logical side 0 must drive the pin LOW: f_side1_o = not side_s = PA0. This
+  -- mirrors the original 1581, which wires PA0 straight to the mechanism SIDE
+  -- line. (Do NOT re-derive this from the F011 register model in mega65-core:
+  -- the C65 DOS sets the side REGISTER and the side PIN bit independently
+  -- during format, which misleads -- it did once already.)
+  f_side1_o   <= (not side_s) when en = '1' else '1';
   f_density_o <= '1';                                    -- DD-safe level
   f_step_o    <= step_dir_pulse when en = '1' else '1';  -- driven by step FSM (see process)
   f_stepdir_o <= step_dir_o when en = '1' else '1';
@@ -456,10 +459,16 @@ begin
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
 
-        if motor_s = '1'
-           and ready_cnt >= to_unsigned(G_MOTOR_READY_CYC, 32)
-           and idx_motor_cnt >= 2
-           and period_ok = '1' then
+        -- RDY asserts on ROTATION DETECTION: motor commanded + two index edges
+        -- seen. This mirrors the FB-354 and matches the stock 1581 ROM, whose
+        -- spin-up allowance is only 80 dispatcher ticks (LDA #$50 -> $01D9,
+        -- ~0.7 s) followed by an INSTANT PA1 check -- waiting for a full
+        -- at-speed period measurement (~0.5-0.7 s) failed that deadline on
+        -- hardware. Speed correctness needs no gate here: an off-speed disk
+        -- does not MFM-decode, the read returns RNF, and the DOS retries.
+        -- period_ok remains maintained for the diagnostics and the eject
+        -- (index-staleness) detection below stays the disk-removed guard.
+        if motor_s = '1' and idx_motor_cnt >= 2 then
           media_ready <= '1';
         end if;
 

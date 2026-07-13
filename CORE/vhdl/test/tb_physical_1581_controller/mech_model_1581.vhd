@@ -12,7 +12,9 @@
 -- sec 6 / DESIGN.md sec 9):
 --   * f_motora_i / f_selecta_i / f_step_i : active-low  ('0' = on / selected / step)
 --   * f_stepdir_i : '1' = toward track 0 (decrement cyl); '0' = toward higher cyl
---   * f_side1_i   : '1' = side 0 ; '0' = side 1
+--   * f_side1_i   : '0' = side 0 ; '1' = side 1  (empirical, from real media:
+--     the pin-LOW surface carries the H=0 IDs = the D81 first half; the 1581
+--     wires PA0 straight to this line and PA0=0 selects logical side 0)
 --   * f_index_o / f_track0_o / f_writeprotect_o / f_diskchanged_o : active-low
 --   * f_rdata_o   : active-low flux (one low pulse per MFM channel-bit "1")
 --
@@ -152,7 +154,7 @@ begin
     if spinning(f_motora_i, f_selecta_i, cfg_present_i) then
       -- sample geometry once per revolution
       c := cyl_r;
-      if f_side1_i = '1' then
+      if f_side1_i = '0' then
         s := 0;
       else
         s := 1;
