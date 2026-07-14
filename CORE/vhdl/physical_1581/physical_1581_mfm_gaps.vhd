@@ -7,16 +7,19 @@
 --   accumulated gap length and pulses gap_valid_o, then restarts the counter.
 --   f_rdata_i is assumed already 2-FF synchronized into this clock domain.
 --
--- Runt filter (issue #90 round 10): a measured gap shorter than C_GAP_GLITCH
---   (120 cycles = 2.4 us) is an electrical glitch or write-splice runt, never a
---   legitimate DD flux interval (the shortest valid gap window starts at 160
---   cycles). Such a gap is NOT emitted; the runt edge is dropped and its length
---   accumulates into the following gap (a runt double-edge collapses into one
---   edge), so downstream stages and the gap statistics see only clean,
---   full-length gaps. Each merged runt pulses runt_o for one cycle (counted by
---   the diagnostics). Hardware evidence for the need: diag GAP_MIN = 0x0001,
---   i.e. two RDATA edges 40 ns apart reached the decoder and killed fields
---   silently near the index write splice.
+-- Runt filter (issue #90 round 10; threshold retuned in round 11): a measured
+--   gap shorter than C_GAP_GLITCH (16 cycles = 320 ns) is an electrical
+--   glitch, never a legitimate DD flux interval (the shortest valid gap window
+--   starts at 160 cycles). Such a gap is NOT emitted; the runt edge is dropped
+--   and its length accumulates into the following gap (a runt double-edge
+--   collapses into one edge), so downstream stages and the gap statistics see
+--   only clean, full-length gaps. Each merged runt pulses runt_o for one cycle
+--   (counted by the diagnostics). Hardware evidence for the need: diag
+--   GAP_MIN = 0x0001, i.e. two RDATA edges 40 ns apart reached the decoder and
+--   killed fields silently near the index write splice. The threshold must
+--   stay FAR below the shortest valid window: a larger value (round 10 used
+--   120) turns late-in-gap noise into a merge of the FOLLOWING REAL edge,
+--   silently corrupting the gap stream -- see C_GAP_GLITCH in the pkg.
 --
 -- First-edge rule: a gap is the interval between TWO flux edges, so the first
 --   edge after reset only STARTS the first gap -- it emits nothing (neither a

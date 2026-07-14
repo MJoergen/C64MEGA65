@@ -612,6 +612,51 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   (CNT_LOST/LAST_PRESENT/FIFO_LEVEL discriminate every delivery anomaly in one dump). Then the
   write/format milestone (HANDOVER 8.3) inherits the time-paced discipline.
 
+- 2026-07-14 (session 3, round 11): **FIRST DELIVERY-V2 HARDWARE TEST FROZE — ROOT CAUSE FOUND
+  (latent day-one zero-step Type-I busy-visibility bug, exposed by a persistent RNF that the
+  round-10 runt filter made more likely) — BOTH FIXED.** Hardware: LOAD"\$" -> eternal "searching",
+  motor frozen ON ~2 min (542 revs), LED OFF, WD idle, dumps static. Trace decode (map v4 works;
+  GAP_MIN now 126 = filter active): healthy wiggle/RA/steps to cyl 39, RS s3 OK, RA-spin saw R=6,
+  RS s7 -> RNF after the full 5-edge search (last ID R=6)... then total silence: no retry command,
+  no FI (CNT_CANCEL=0), no error blink. DIAGNOSIS CHAIN: (1) act_led = pa_out(6) OR fdc_busy and
+  fdc_busy = busy, so LED OFF proves busy=0 -> the round-10 B2 while-busy ignore is EXONERATED (a
+  swallowed write needs busy=1; an accepted write sets busy -> LED on). (2) rom_emu with the genuine
+  ROM: dispatcher handles the s7-RNF cleanly (job error 02, busycmd=0) -> the wedge is above the
+  dispatcher. (3) Motor frozen ON + LED frozen OFF = housekeeping dead = the CPU loops with I SET
+  in dispatcher context, in a loop that never touches the WD. (4) Disassembly: the IP retry
+  machinery (`\$94F8`/`\$9564`, budget \$30=2) interposes recovery job `\$C0` after persistent
+  errors; its exec at `\$CB0F` does LDA `\$01DA` / JSR `\$CBF4` = write a RE-POSITIONING SEEK to
+  the track the DOS already believes -> ZERO steps -> our phys Type-I completed in ~3 clk8m ticks
+  (~380 ns busy: seek_state 0->2->3, spin-up gate bypassed by the round-3 phys fix) -> the ROM's
+  `\$CBFA` wait-busy-SET poll (3.5 us/iteration) can NEVER see it -> spins forever with I set.
+  The real WD1772 microcode keeps busy ~ms even for zero steps; rom_emu never hung because its
+  model does max(1,n)*1.5 ms — the exact faithfulness gap. Never seen before because the recovery
+  job only runs after PERSISTENT errors: rounds 8/9 misses healed in the budget-2 retries.
+  FIX A (fdc1772.v): PHYS_T1_MIN_TICKS = 12000 clk8m (~1.5 ms) minimum Type-I busy in phys mode —
+  armed at Type-I acceptance, gates seek_state-3 finish and the verify-branch finalize; FI stays
+  immediate; image mode untouched (!phys_mode passthrough).
+  WHY THE RNF WAS PERSISTENT (round-10 regression, mine): the runt filter merged on gap<120, so a
+  noise edge landing LATE in a real gap (>120 after the previous edge, <120 before the next REAL
+  edge) made the NEXT REAL EDGE merge away -> ONE wrong-length gap that can land in a VALID window
+  (60+200=260=MED) -> silent decode corruption instead of the loud class-11 re-sync of round 9;
+  CNT_GAPERR jumped ~42/rev -> ~204/rev on the same disk (decoder now stays locked through splice
+  junk it previously idled past) and s7 became unreadable for 5 straight revs.
+  FIX B: C_GAP_GLITCH 120 -> 16 cycles (only true electrical runts merge — the GAP_MIN=0x0001
+  evidence class; everything longer is loud again); flux-gen runt vectors retuned to 8-cycle runts.
+  VERIFICATION COMPLETE, ALL GREEN: new bench test 11 in tb_fdc1772_physical.sv — (11a) zero-step
+  SEEK and (11b) zero-step RESTORE-at-track0, ROM-faithful `\$CBFA` poll cadence (~3.5 us/poll,
+  bounded at 200 polls) — busy observed on the FIRST poll and held 1.44 ms in both variants;
+  NEGATIVE CONTROL (fix A programmatically reverted in a scratch copy) fails exactly test 11
+  ("busy never observed SET after 200 polls") while tests 1-10 still pass = the regression test
+  provably catches the hardware freeze. Full bench 1-11 PASS (95 ok / 0 FAIL), junction elab 0
+  errors, GHDL analyze clean, decoder tb with the retuned 8-cycle runt vectors PASS (2 runts
+  merged, 0 gap errors, fields byte-exact), crc + inputs smoke PASS, and the ~22 min closed-loop
+  controller tb PASS (rc=0, media_ready ~398 ms, payload matches, RNF, pending-latch/abort/
+  recovery). Image-mode neutrality of fix A proven by inspection (all four hunks phys-gated or
+  passthrough). READY FOR HARDWARE: rebuild R3 + retest. NOTE for future dumps: use MD 7000 7035
+  (the round-10 words 0x2A-0x35 — FIFO_LEVEL/LAST_PRESENT/CNT_LOST/CNT_DRAIN/CNT_STALEDONE/
+  CNT_BUSYCMD/CNT_RUNT — were missing from the 2026-07-14 morning dumps).
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

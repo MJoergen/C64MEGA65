@@ -49,7 +49,17 @@ package physical_1581_pkg is
   constant C_GAP_MED_HI   : natural := 342;    -- 6.84 us
   constant C_GAP_LONG_LO  : natural := 355;    -- 7.1 us
   constant C_GAP_LONG_HI  : natural := 445;    -- 8.9 us
-  constant C_GAP_GLITCH   : natural := 120;    -- below: electrical glitch/noise
+  -- Runt-merge threshold for the gaps stage. Round 11: reduced from 120 to 16
+  -- cycles (320 ns). At 120, a noise edge landing LATE in a real gap (more
+  -- than 120 cycles after the previous edge but less than 120 before the next
+  -- REAL edge) made the gaps stage misclassify the REAL edge as the runt and
+  -- merge it away, emitting one wrong-length gap that can land in a VALID
+  -- window (e.g. 60+200 = 260 = MED) -- silent decode corruption instead of a
+  -- loud class-11 re-sync; observed on hardware as a persistently unreadable
+  -- sector (t39 s7 RNF, 2026-07-14). At 16, only true electrical runts (the
+  -- GAP_MIN = 0x0001 evidence: edges 20-40 ns apart) merge; everything longer
+  -- stays a loud out-of-window gap, exactly as before round 10.
+  constant C_GAP_GLITCH   : natural := 16;     -- below: electrical glitch/noise
 
   -----------------------------------------------------------------------------
   -- Backend result codes (spec 9.6, 5-bit) -- read-path subset
