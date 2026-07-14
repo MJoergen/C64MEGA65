@@ -37,11 +37,14 @@ entity physical_1581_mfm_decoder is
     -- G_SYNC_GATE false + G_QUANT_HUNT_ADAPT_ALL true restores the exact
     -- round-12 behavior. G_SYNC_PREAMBLE_GATE true plus
     -- G_QUANT_HUNT_ADAPT_ALL false selects the superseded round-13 rule for
-    -- the permanent A/B regression column. G_QUANT_TOL_ACQ_SHR = 2 selects
+    -- the permanent A/B regression column. G_SYNC_SPAN_GATE false preserves
+    -- commit-3803152 spacing-only acquisition as another control column.
+    -- G_QUANT_TOL_ACQ_SHR = 2 selects
     -- the refuted tight-
     -- acquisition variant (see the quantiser entity header).
     G_SYNC_GATE          : boolean := true;
     G_SYNC_PREAMBLE_GATE : boolean := false;
+    G_SYNC_SPAN_GATE     : boolean := true;
     G_QUANT_TOL_ACQ_SHR  : natural := C_QUANT_TOL_SHR;
     G_QUANT_HUNT_ADAPT_ALL : boolean := true
   );
@@ -71,6 +74,9 @@ entity physical_1581_mfm_decoder is
     locked_o          : out std_logic := '0';             -- separator locked
     gap_error_o       : out std_logic := '0';             -- pulse on invalid gap class
     runt_o            : out std_logic := '0';             -- pulse per merged RDATA runt gap
+    a1_candidate_o    : out std_logic := '0';             -- pulse per coarse L,M,L,M candidate
+    a1_span_reject_o  : out std_logic := '0';             -- pulse when candidate fails full-word span
+    a1_train_o        : out std_logic := '0';             -- pulse when a complete 3xA1 train qualifies
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
@@ -90,6 +96,7 @@ architecture rtl of physical_1581_mfm_decoder is
   signal gap_len     : unsigned(15 downto 0);
   signal q_valid     : std_logic;
   signal q_class     : unsigned(1 downto 0);
+  signal q_est       : unsigned(11 downto 0);
   signal bit_valid   : std_logic;
   signal bit_d       : std_logic;
   signal gtb_sync    : std_logic;
@@ -127,6 +134,11 @@ architecture rtl of physical_1581_mfm_decoder is
   -- Quantised gaps since the previous A1 candidate, saturating above the
   -- exact spacing. Reset value means "no preceding candidate".
   signal sync_gap_age : integer range 0 to 15 := 15;
+  -- Four accepted/rejected quantiser input gaps ending at the current A1
+  -- candidate. The class detector alone loses their aggregate timing; retain
+  -- it here so acquisition can verify the complete raw-word span.
+  signal a1_gap_0, a1_gap_1, a1_gap_2, a1_gap_3 : integer range 0 to 65535 := 0;
+  signal a1_span_ok : std_logic := '0';
 
   -- N -> payload length in bytes
   function data_len(n : unsigned(7 downto 0)) return integer is
@@ -157,7 +169,27 @@ begin
     port map (clk_i => clk_i, rst_i => rst_i, field_i => field_active,
               gap_valid_i => gap_valid, gap_len_i => gap_len,
               gap_valid_o => q_valid, gap_class_o => q_class,
-              est_o => est_o);
+              est_o => q_est);
+
+  est_o <= q_est;
+
+  -- A raw A1 candidate spans 14 half-cells from its first to last flux edge.
+  -- q_est is Q8.4; round to cycles before comparing. A broad whole-word
+  -- tolerance preserves endpoint jitter/peak shift while rejecting class-
+  -- valid junk whose four errors all lean in the same direction.
+  process (all)
+    variable actual_v, expected_v, tol_v : integer;
+  begin
+    actual_v   := a1_gap_0 + a1_gap_1 + a1_gap_2 + a1_gap_3;
+    expected_v := (to_integer(q_est) * C_QUANT_A1_CELLS + 8) / 16;
+    tol_v      := (to_integer(q_est) + (16 * (2**C_QUANT_A1_SPAN_TOL_SHR)) - 1)
+                  / (16 * (2**C_QUANT_A1_SPAN_TOL_SHR));
+    if abs(actual_v - expected_v) <= tol_v then
+      a1_span_ok <= '1';
+    else
+      a1_span_ok <= '0';
+    end if;
+  end process;
 
   i_g2b : entity work.physical_1581_mfm_gaps_to_bits
     port map (clk_i => clk_i, rst_i => rst_i,
@@ -198,6 +230,9 @@ begin
       data_byte_valid_o <= '0';
       data_end_o        <= '0';
       gap_error_o       <= '0';
+      a1_candidate_o    <= '0';
+      a1_span_reject_o  <= '0';
+      a1_train_o        <= '0';
 
       if rst_i = '1' then
         state     <= S_IDLE;
@@ -208,11 +243,16 @@ begin
         short_run <= 0;
         run_age   <= 15;                -- gate closed until a preamble run
         sync_gap_age <= 15;
+        a1_gap_0 <= 0; a1_gap_1 <= 0; a1_gap_2 <= 0; a1_gap_3 <= 0;
       else
         -- diagnostics + loss of lock on an out-of-spec gap; also the
         -- preamble-run bookkeeping for the write-splice sync gate
         if q_valid = '1' then
           last_gap_o <= gap_len;
+          a1_gap_3 <= a1_gap_2;
+          a1_gap_2 <= a1_gap_1;
+          a1_gap_1 <= a1_gap_0;
+          a1_gap_0 <= to_integer(gap_len);
           if sync_gap_age < 15 then
             sync_gap_age <= sync_gap_age + 1;
           end if;
@@ -242,10 +282,12 @@ begin
         end if;
 
         -- Feed exactly three A1 bytes into the CRC. Production qualifies the
-        -- train by candidate spacing; a wrong-spacing candidate becomes a
-        -- new provisional first A1. The two generic branches retain rounds
-        -- 12 and 13 exactly for the regression matrix.
+        -- train by complete-candidate span and candidate spacing; a valid
+        -- wrong-spacing candidate becomes a new provisional first A1. The
+        -- two generic branches retain rounds 12 and 13 exactly for the
+        -- regression matrix.
         if gtb_sync = '1' then
+          a1_candidate_o <= '1';
           if not G_SYNC_GATE then
             locked_o <= '1';
             if sync_cnt = 0 then
@@ -265,28 +307,42 @@ begin
               end if;
             end if;
           else
-            if sync_cnt = 0 then
+            if G_SYNC_SPAN_GATE and a1_span_ok = '0' then
+              -- The coarse L,M,L,M pattern was present, but not the complete
+              -- timing of raw 0x4489. Do not let it become the first member of
+              -- a train or preserve an earlier provisional candidate.
+              sync_cnt <= 0;
+              locked_o <= '0';
+              sync_gap_age <= 15;
+              a1_span_reject_o <= '1';
+            elsif sync_cnt = 0 then
               -- First candidate is provisional: prime the CRC, but do not
               -- claim separator lock until the complete train is proven.
               crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
               sync_cnt <= 1;
               locked_o <= '0';
+              sync_gap_age <= 0;
             elsif sync_gap_age = C_QUANT_A1_SPACING then
               if sync_cnt < 3 then
                 crc_feed <= '1'; crc_byte <= MARK_A1;
                 sync_cnt <= sync_cnt + 1;
                 if sync_cnt = 2 then
                   locked_o <= '1';
+                  a1_train_o <= '1';
                 end if;
               end if;
+              sync_gap_age <= 0;
             else
               -- Overlap or wrong spacing: restart at this candidate.
               crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
               sync_cnt <= 1;
               locked_o <= '0';
+              sync_gap_age <= 0;
             end if;
           end if;
-          sync_gap_age <= 0;
+          if not G_SYNC_GATE or G_SYNC_PREAMBLE_GATE then
+            sync_gap_age <= 0;
+          end if;
         end if;
 
         -- decoded byte events

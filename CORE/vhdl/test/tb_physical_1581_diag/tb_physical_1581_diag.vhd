@@ -77,6 +77,7 @@ architecture sim of tb_physical_1581_diag is
   signal dbg_pres_cnt  : unsigned(10 downto 0) := (others => '0');
   signal fifo_level    : unsigned(9 downto 0) := (others => '0');
   signal runt          : std_logic := '0';
+  signal a1_candidate, a1_span_reject, a1_train : std_logic := '0';
 
   -- QNICE read interface
   signal q_ce   : std_logic := '0';
@@ -116,6 +117,9 @@ begin
       dbg_staledone_i => dbg_staledone, dbg_busycmd_i => dbg_busycmd,
       dbg_fin_i => dbg_fin, dbg_pres_cnt_i => dbg_pres_cnt,
       fifo_level_i => fifo_level, runt_i => runt,
+      a1_candidate_i => a1_candidate,
+      a1_span_reject_i => a1_span_reject,
+      a1_train_i => a1_train,
       qnice_ce_i => q_ce, qnice_addr_i => q_addr, qnice_data_o => q_data
     );
 
@@ -185,12 +189,14 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"053F", "VERSION/CAP");
+    expect(16#01#, x"067F", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
     expect(16#36#, x"0000", "EST(reset input)");
     expect(16#37#, x"0000", "RNF_CTX(reset)");
-    expect(16#38#, x"0000", "RESERVED");
+    expect(16#38#, x"0000", "CNT_A1_CAND(reset)");
+    expect(16#39#, x"0000", "CNT_A1_REJECT(reset)");
+    expect(16#3A#, x"0000", "CNT_A1_TRAIN(reset)");
 
     -- ---- packed live input / output words ------------------------------
     diag_in_bits  <= x"02AA";
@@ -404,6 +410,14 @@ begin
     wait until rising_edge(clk);
     do_read(RES_OK, '0', '0', '0', 16#3E#, 0, 1, 2);
     expect(16#37#, x"2705", "RNF_CTX held across later OK read");
+
+    -- ---- map v6: complete-A1 qualifier counters -------------------------
+    for i in 1 to 5 loop pulse1(a1_candidate); end loop;
+    for i in 1 to 2 loop pulse1(a1_span_reject); end loop;
+    for i in 1 to 3 loop pulse1(a1_train); end loop;
+    expect(16#38#, x"0005", "CNT_A1_CAND=5");
+    expect(16#39#, x"0002", "CNT_A1_REJECT=2");
+    expect(16#3A#, x"0003", "CNT_A1_TRAIN=3");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

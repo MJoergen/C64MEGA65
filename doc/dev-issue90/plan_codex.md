@@ -43,6 +43,22 @@ separate from Fable's `PLAN.md`.
 7. **DONE — final documentation.** Record exact RTL, test matrix, results,
    remaining hardware boundary, and expected QNICE signatures here and in
    `handover_codex.md`.
+8. **DONE — analyze `3803152` hardware failure.** Three dumps prove healthy
+   global decoding but deterministic RNF at track 39 sector 1 immediately
+   after the index splice. IDs, estimate, and all other sectors remain healthy.
+9. **DONE — reproduce the remaining acquisition hole.** A new profile emits
+   three coarse-class-valid false A1 candidates at the correct five-gap
+   spacing with real short separators, followed by a fake FB tail. Unmodified
+   `3803152` production locks and opens a bogus data field.
+10. **DONE — qualify the complete raw A1 span.** Require each L-M-L-M candidate
+    to total 14 estimated half-cells within a whole-word tolerance of `est/2`.
+    Keep adaptive classification and candidate spacing unchanged.
+11. **DONE — add targeted diagnostics.** Map v6 (`VERSION=0x067F`) exposes
+    16-bit candidate, span-reject, and qualified-train counters at `0x38`–`0x3A`.
+12. **DONE — final verification and R3 handoff.** The 52-row six-way matrix,
+    canonical decoder, diagnostic bank, overflow guard, and full closed-loop
+    controller pass. Remaining work is maintainer R3 synthesis/timing and
+    physical-media qualification.
 
 ## 2026-07-14 checkpoint 1
 
@@ -95,3 +111,31 @@ separate from Fable's `PLAN.md`.
 - Final-RTL closed-loop controller passes through byte-exact cylinder 0/1
   reads, Read Address, Verify, expected RNF, pending-request delivery, abort
   sequencing, and post-abort recovery.
+
+## 2026-07-14 checkpoint 4
+
+- Maintainer committed the prior repair as `3803152` and tested it on R3.
+- Three hardware reproductions all show `RNF_CTX=0x2701`, zero CRC errors,
+  roughly ten decoded IDs per revolution, and successful reads of sectors
+  2–10 followed by deterministic sector-1 RNF. This supersedes the old
+  round-13 zero-ID diagnosis.
+- A first hypothesis about a non-short inter-A1 separator was explicitly
+  disproved: the bit pipeline emits a byte and clears provisional sync before
+  such a candidate can continue the train.
+- The accepted hypothesis is complete-word timing. The original coherent
+  splice candidate totals 1,580 cycles versus about 1,400 for a real 14-cell
+  A1. A permanent correctly-spaced false-train vector reproduced production
+  lock and bogus-data-field consumption before the RTL change.
+- Production now checks aggregate A1 span within `est/2`. This is independent
+  of stock-versus-F011 preamble policy and does not narrow individual gap
+  windows.
+- The expanded 52-row six-way matrix passes with all prior wins. The new row
+  reports `old=PASS, r12=fail, r13=PASS, prod=PASS, tacq=PASS`, while the exact
+  `3803152` spacing-only control also fails with the required bogus-data-field
+  signature.
+- Diagnostic map v6 adds `CNT_A1_CAND`, `CNT_A1_REJECT`, and `CNT_A1_TRAIN` at
+  `0x38`–`0x3A`; its unit bench passes.
+- Final closed-loop controller passes byte-exact cylinder-0/1 sector reads,
+  Read Address, Verify, expected RNF, pending-request tags, abort spacing, and
+  post-abort recovery. The overflow bench also passes with CRC-only reporting
+  and no silent corruption.

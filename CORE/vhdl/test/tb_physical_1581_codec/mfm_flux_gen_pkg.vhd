@@ -63,7 +63,7 @@ package mfm_flux_gen_pkg is
   -- Models the garbage flux a write splice leaves on the medium (write-gate
   -- turn-off transient + partially erased residue of earlier writes + AGC/
   -- read-channel settling): a burst of gaps with junk lengths, including
-  -- fluxless stretches. Two profiles, both driven by a deterministic 16-bit
+  -- fluxless stretches. Three profiles, driven by a deterministic 16-bit
   -- LFSR (no real randomness):
   --
   --   * junk_splice_rand: 28..36 pseudo-random gaps spanning [130..480]
@@ -86,6 +86,12 @@ package mfm_flux_gen_pkg is
   --     dead-band), which is precisely why round 11 read the post-splice
   --     sector fine and round 12 deterministically lost it.
   --
+  --   * junk_splice_spaced: three non-overlapping false A1 candidates with
+  --     the correct short separators and a fake FB tail. Candidate spacing
+  --     alone accepts it. Each L,M,L,M candidate totals 1580 cycles rather
+  --     than the 14*est complete-word span of raw A1, so production rejects
+  --     it without narrowing individual adaptive gap windows.
+  --
   -- The last entry of a profile is the boundary gap to the first real flux
   -- transition that follows the junk (the caller emits it as the final wait).
   -----------------------------------------------------------------------------
@@ -101,6 +107,7 @@ package mfm_flux_gen_pkg is
 
   function junk_splice_rand (seed : natural) return junk_arr_t;
   function junk_splice_chain(seed : natural) return junk_arr_t;
+  function junk_splice_spaced(seed : natural) return junk_arr_t;
 
   -- Emit a junk burst on RDATA in the time domain (one low pulse per entry,
   -- then the entry's gap). The caller's next flux transition closes the final
@@ -293,6 +300,49 @@ package body mfm_flux_gen_pkg is
     r.g(i) := 224;  i := i + 1;
     -- boundary gap to the first real flux transition after the splice
     r.g(i) := 300;  i := i + 1;
+    r.cnt := i;
+    return r;
+  end function;
+
+  function junk_splice_spaced(seed : natural) return junk_arr_t is
+    variable s  : natural := (seed mod 65535) + 1;  -- LFSR state, never 0
+    variable r  : junk_arr_t := (cnt => 0, g => (others => 300));
+    variable i  : natural := 0;
+    variable np : natural;
+  begin
+    -- This adversarial profile closes the hole left by checking only coarse
+    -- classes and candidate spacing. It places three L,M,L,M candidates
+    -- exactly five gaps apart, with the real SHORT inter-A1 separators. Each
+    -- candidate is class-valid, but its four gaps total 1580 cycles instead
+    -- of the approximately 14*est = 1400-cycle span of a real raw A1 word.
+    s := lfsr16_step(s);
+    np := 8 + (s mod 5);
+    for k in 1 to np loop
+      s      := lfsr16_step(s);
+      r.g(i) := 130 + (s mod 351);
+      i      := i + 1;
+    end loop;
+    s := lfsr16_step(s);
+    r.g(i) := 1100 + (s mod 500);  i := i + 1;
+    for k in 1 to 14 loop
+      r.g(i) := 205;  i := i + 1;
+    end loop;
+    for k in 1 to 3 loop
+      r.g(i) := 446;  i := i + 1; -- L
+      r.g(i) := 344;  i := i + 1; -- M
+      r.g(i) := 446;  i := i + 1; -- L
+      r.g(i) := 344;  i := i + 1; -- M
+      if k < 3 then
+        r.g(i) := 224; i := i + 1; -- real inter-A1 separator class
+      end if;
+    end loop;
+    -- Tail spelling FB after the third false candidate.
+    for k in 1 to 5 loop
+      r.g(i) := 224;  i := i + 1;
+    end loop;
+    r.g(i) := 446;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 300;  i := i + 1; -- boundary gap
     r.cnt := i;
     return r;
   end function;

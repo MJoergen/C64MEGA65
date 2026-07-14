@@ -27,6 +27,8 @@
 --   * (map v5, issue #90 round 12) the adaptive quantiser's live half-cell
 --     estimate (word 0x36, Q8.4) and the last-RNF context word 0x37 (requested
 --     track / requested sector, latched whenever a read op completes with rnf).
+--   * (map v6) 16-bit saturating counters for coarse A1 candidates, candidates
+--     rejected by the complete-word span check, and qualified 3xA1 trains.
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -144,6 +146,9 @@ entity physical_1581_diag is
     dbg_pres_cnt_i      : in  unsigned(10 downto 0) := (others => '0');
     fifo_level_i        : in  unsigned(9 downto 0) := (others => '0');
     runt_i              : in  std_logic := '0';
+    a1_candidate_i      : in  std_logic := '0';
+    a1_span_reject_i    : in  std_logic := '0';
+    a1_train_i          : in  std_logic := '0';
 
     -----------------------------------------------------------------------------
     -- QNICE read interface (device C_DEV_C64_PHYS1581); read-only, no wait-state
@@ -217,15 +222,20 @@ architecture rtl of physical_1581_diag is
   -- map v5 (adaptive quantiser, issue #90 round 12)
   constant RM_EST            : integer := 16#36#;   -- live half-cell estimate (Q8.4)
   constant RM_RNF_CTX        : integer := 16#37#;   -- last-RNF context: req track (hi) / req sector (lo)
+  -- map v6 (complete-A1 timing qualifier)
+  constant RM_CNT_A1_CAND    : integer := 16#38#;   -- 16-bit saturating coarse candidates
+  constant RM_CNT_A1_REJECT  : integer := 16#39#;   -- 16-bit saturating span rejects
+  constant RM_CNT_A1_TRAIN   : integer := 16#3A#;   -- 16-bit saturating qualified trains
   constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)
   constant RM_TRC_END        : integer := 16#7F#;
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"05";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"06";
   -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
   --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present,
-  --                   bit5 = delivery-v2 observability words (0x2A-0x35) present
-  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"3F";
+  --                   bit5 = delivery-v2 observability words (0x2A-0x35) present,
+  --                   bit6 = complete-A1 qualifier counters (0x38-0x3A) present
+  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"7F";
 
   constant C_ONES32 : unsigned(31 downto 0) := (others => '1');
 
@@ -248,6 +258,7 @@ architecture rtl of physical_1581_diag is
   signal cnt_staledone : unsigned(31 downto 0) := (others => '0');
   signal cnt_busycmd   : unsigned(31 downto 0) := (others => '0');
   signal cnt_runt      : unsigned(31 downto 0) := (others => '0');
+  signal cnt_a1_cand, cnt_a1_reject, cnt_a1_train : unsigned(15 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- latched "last" values + edge-detect history
@@ -326,6 +337,11 @@ architecture rtl of physical_1581_diag is
     return std_logic_vector(v(31 downto 16));
   end function;
 
+  function sat_inc16(v : unsigned(15 downto 0); ev : std_logic) return unsigned is
+  begin
+    if ev = '1' and v /= x"FFFF" then return v + 1; else return v; end if;
+  end function;
+
 begin
 
   ---------------------------------------------------------------------------
@@ -377,6 +393,9 @@ begin
         cnt_staledone  <= (others => '0');
         cnt_busycmd    <= (others => '0');
         cnt_runt       <= (others => '0');
+        cnt_a1_cand    <= (others => '0');
+        cnt_a1_reject  <= (others => '0');
+        cnt_a1_train   <= (others => '0');
         last_present   <= (others => '0');
         rnf_ctx        <= (others => '0');
         prev_lost      <= dbg_lost_i;
@@ -441,6 +460,9 @@ begin
         cnt_staledone <= sat_inc(cnt_staledone, staledone_evt);
         cnt_busycmd   <= sat_inc(cnt_busycmd,   busycmd_evt);
         cnt_runt      <= sat_inc(cnt_runt,      runt_i);
+        cnt_a1_cand   <= sat_inc16(cnt_a1_cand,   a1_candidate_i);
+        cnt_a1_reject <= sat_inc16(cnt_a1_reject, a1_span_reject_i);
+        cnt_a1_train  <= sat_inc16(cnt_a1_train,  a1_train_i);
         if fin_evt = '1' then
           last_present <= dbg_pres_cnt_i;
         end if;
@@ -576,6 +598,9 @@ begin
 
       when RM_EST             => qnice_data_o <= "0000" & std_logic_vector(diag_est_i);
       when RM_RNF_CTX         => qnice_data_o <= rnf_ctx;
+      when RM_CNT_A1_CAND     => qnice_data_o <= std_logic_vector(cnt_a1_cand);
+      when RM_CNT_A1_REJECT   => qnice_data_o <= std_logic_vector(cnt_a1_reject);
+      when RM_CNT_A1_TRAIN    => qnice_data_o <= std_logic_vector(cnt_a1_train);
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

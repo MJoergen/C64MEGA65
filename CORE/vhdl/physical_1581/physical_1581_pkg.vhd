@@ -138,17 +138,21 @@ package physical_1581_pkg is
   --
   -- Production now qualifies structure that both formatters must share: the
   -- three missing-clock A1 bytes themselves. One raw A1 (0x4489) ends in the
-  -- four-gap pattern long,medium,long,medium; consecutive A1 candidates are
-  -- exactly C_QUANT_A1_SPACING quantised gaps apart. Three candidates at that
-  -- non-overlapping spacing arm the field decoder. The reproduced splice junk
-  -- alternates long/medium and therefore makes overlapping candidates every
-  -- two gaps, which continually restart rather than complete the train. This
-  -- keeps the adaptive, no-dead-band field classifier while making address-
-  -- mark acquisition independent of formatter preamble policy.
+  -- four-gap pattern long,medium,long,medium, spans 14 half-cells in total,
+  -- and consecutive candidates are exactly C_QUANT_A1_SPACING gaps apart.
+  -- Production requires all three invariants. The aggregate-span tolerance is
+  -- deliberately broad (est/2 across the COMPLETE word): legitimate peak
+  -- shift can move individual transitions substantially, but its internal
+  -- movements cancel in the end-to-end span. Coherent splice residue such as
+  -- 446/344/446/344 passes every coarse per-gap window yet totals 1580 cycles
+  -- against a nominal 1400-cycle A1, so it is rejected structurally without
+  -- tightening the field classifier or depending on formatter preambles.
   -----------------------------------------------------------------------------
   constant C_QUANT_SYNC_RUN  : natural := 16;  -- shorts run that banks the gate (2 x 00)
   constant C_QUANT_SYNC_LAT  : natural := 6;   -- gaps allowed between run end and sync
   constant C_QUANT_A1_SPACING : natural := 5;  -- gap events between consecutive A1 candidates
+  constant C_QUANT_A1_CELLS   : natural := 14; -- end-to-end half-cells in raw 0x4489
+  constant C_QUANT_A1_SPAN_TOL_SHR : natural := 1; -- complete-word tolerance = est/2
   constant C_QUANT_EST_NOM_Q : natural := C_HALF_CELL_CYC * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MIN_Q : natural := C_QUANT_EST_MIN * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MAX_Q : natural := C_QUANT_EST_MAX * 2**C_QUANT_FRAC;

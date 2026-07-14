@@ -1,6 +1,7 @@
 # Issue #90 — Codex handover
 
-This is the Codex-owned handover for work after commit `2e2c852`. It is kept
+This is the Codex-owned handover for work after commits `2e2c852` and
+`3803152`. It is kept
 separate from Fable's `HANDOVER.md` and must be updated with each material
 finding or implementation step.
 
@@ -107,13 +108,74 @@ Verify, expected RNF, pending-request sequencing, abort sequencing, and recovery
 
 ## Hardware boundary
 
-Simulation now covers the two real formatter layouts and both known decoder
-regressions. The next bitstream must still be qualified on physical R3 media:
+Commit `3803152` passed the 51-row matrix above but failed on physical R3 media.
+This was not the previous zero-ID regression. Three independent attempts
+(`LOAD"SHADES",8,1`, `LOAD"$",8` after soft reset, and
+`LOAD"C64ANABALT",8,1`) produced the same localized signature:
+
+- decoded IDs remained abundant: 1,442 / 2,483 / 4,369;
+- estimates stayed healthy at `0x636`, `0x640`, `0x636` (99.375–100 cycles);
+- CRC-error count remained zero;
+- RNF accumulated 10/101, 15/151, and 30/304 read operations;
+- every last-RNF context was `0x2701` (track 39, sector 1);
+- each trace read sectors 2–10 successfully, then failed sector 1; a following
+  Read Address could return sector 1 on the next pass.
+
+This proves a deterministic index/splice-adjacent acquisition failure, not
+global formatter incompatibility, DOS stale state, or a marginal cylinder.
+The reference image `/Users/mirko/Downloads/C64.D81` has SHA-256
+`16668c7eeb63d4307d7bd17d88625e0b7dc28e51289f99c256b17cf2aea0981e`.
+Its track-40 reserved region begins at byte `0x61800`; the directory chain
+containing both C64ANABALT and SHADES follows there. This corroborates why one
+unreadable reserved-track record makes all filename searches fail, but the
+sector image cannot reveal physical splice flux.
+
+## Complete-A1 span repair after `3803152`
+
+Review found that exact candidate spacing was necessary but insufficient. The
+adaptive classifier accepts each `446/344/446/344` splice candidate because
+every gap lies within the broad nearest-class tolerance. Yet those four gaps
+sum to 1,580 cycles, whereas raw A1 `0x4489` spans 14 half-cells, approximately
+1,400 cycles at the measured estimate. Real peak shift moves internal
+transitions in opposite directions and largely cancels over the complete raw
+word; the splice errors all lean long.
+
+Production now retains the last four physical gap lengths and accepts a coarse
+L-M-L-M candidate only when its complete span is within `est/2` of
+`14 * est`. This is an aggregate tolerance over the whole A1, not the refuted
+tight per-gap acquisition tolerance. Candidate spacing and the adaptive
+no-dead-band field classifier remain unchanged.
+
+A new correctly-spaced splice profile supplies three false L-M-L-M candidates
+with genuine short inter-A1 separators and a fake FB tail. Before the span
+check, current production locks, opens a bogus data field, and consumes the
+following record. After the check, the row is:
+
+`junk spaced A1: old=PASS | r12=fail | r13=PASS | prod=PASS | tacq=PASS`
+
+The expanded 52-row six-way matrix adds an exact `3803152` spacing-only control
+and passes completely. That control must reproduce the bogus-data-field failure
+on the new spaced-A1 row. All stock and F011
+source-derived layouts, F011 peak-S20 at +/-3% speed, round-12 adaptive wins,
+CRC/byte-exact guards, and both splice-junk mechanisms remain green.
+
+Final GHDL verification also passes the canonical decoder, diagnostic map,
+overflow guard (CRC-only, never silent), and the complete closed-loop
+controller: byte-exact cylinders 0/1, Read Address, Verify, expected RNF,
+pending request sequencing, abort spacing, and post-abort recovery.
+
+Diagnostic map v6 adds three 16-bit saturating counters without feedback into
+the read path: `CNT_A1_CAND` at `0x38`, `CNT_A1_REJECT` at `0x39`, and
+`CNT_A1_TRAIN` at `0x3A`. `VERSION` is now `0x067F`. The diagnostic unit bench
+checks all three counters and passes.
+
+The next bitstream must still be qualified on physical R3 media:
 
 - cold power-on, enable physical 1581, then `LOAD"$",8`;
 - load SHADES and C64ANABALT repeatedly;
-- verify `CNT_IDDEC` is nonzero/normal and `RNF_CTX` does not remain at the
-  round-13 zero-ID signature;
+- dump through `0x703A`; verify `CNT_IDDEC` and `CNT_A1_TRAIN` grow normally,
+  `CNT_A1_REJECT` shows rejected splice candidates, and `RNF_CTX` no longer
+  remains `0x2701`;
 - verify far cylinders remain reliable and `EST` remains bounded near nominal;
 - confirm splice-adjacent sector 1 remains readable.
 

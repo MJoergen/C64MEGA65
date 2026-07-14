@@ -530,6 +530,9 @@ architecture synthesis of main is
   signal   p1581_diag_rd_req_side: std_logic;
   signal   p1581_diag_runt       : std_logic;             -- controller diag_runt_o -> diag runt_i (both 50 MHz)
   signal   p1581_diag_est        : unsigned(11 downto 0); -- adaptive quantiser half-cell estimate, Q8.4 (round 12)
+  signal   p1581_diag_a1_candidate : std_logic;
+  signal   p1581_diag_a1_reject    : std_logic;
+  signal   p1581_diag_a1_train     : std_logic;
   signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- unprocessed video output of the C64 core
@@ -1989,6 +1992,9 @@ begin
       diag_data_crc_ok_o  => p1581_diag_data_crc_ok,
       diag_gap_error_o    => p1581_diag_gap_error,
       diag_runt_o         => p1581_diag_runt,
+      diag_a1_candidate_o => p1581_diag_a1_candidate,
+      diag_a1_reject_o    => p1581_diag_a1_reject,
+      diag_a1_train_o     => p1581_diag_a1_train,
       diag_est_o          => p1581_diag_est,
       diag_rd_phase_o     => p1581_diag_rd_phase,
       diag_step_phase_o   => p1581_diag_step_phase,
@@ -2112,6 +2118,9 @@ begin
       dbg_pres_cnt_i      => unsigned(p1581_dbg_pres_cnt),
       fifo_level_i        => p1581_fifo_level,
       runt_i              => p1581_diag_runt,
+      a1_candidate_i      => p1581_diag_a1_candidate,
+      a1_span_reject_i    => p1581_diag_a1_reject,
+      a1_train_i          => p1581_diag_a1_train,
 
       -- QNICE read interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,
@@ -2285,4 +2294,3 @@ begin
   cass_rtc <= not (rtcf83_sda and cass_motor);
 
 end architecture synthesis;
-

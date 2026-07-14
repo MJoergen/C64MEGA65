@@ -1,9 +1,9 @@
 -------------------------------------------------------------------------------
 -- tb_physical_1581_quantise_ab.vhd   (issue #90 rounds 12 through 14)
 --
--- A/B margin harness: FIVE complete decoders run in parallel on
+-- A/B margin harness: SIX complete decoders run in parallel on
 -- identical stress flux, so every trial reports one row of
---   old | r12 | r13 | prod | tacq
+--   old | r12 | r13 | prod | tacq | spanoff
 --
 --   * old  = the pre-round-12 FIXED-WINDOW classifier (library q_old = the
 --            production sources with the test-only ref_mfm_quantise_fixed.vhd
@@ -15,13 +15,17 @@
 --            accepted gap)
 --   * r13  = superseded round-13 00-preamble gate, retained to prove both
 --            its splice fix and its F011 zero-ID regression
---   * prod = production adaptive quantiser + exact three-A1 train spacing
+--   * prod = production adaptive quantiser + complete-A1 span and exact
+--            three-A1 train spacing
 --   * tacq = the REFUTED round-13 fix candidate (two-tier tolerance, tight
 --            est/4 acquisition: G_QUANT_TOL_ACQ_SHR => 2, no gate). Kept as
 --            live evidence of WHY the shipped fix is the preamble-run sync
 --            gate instead: ISI deviates every gap of the A1 train itself by
 --            2*S, so est/4 rejects the sync train of any record with peak
 --            shift S >= 13 and loses the peak/combo win rows below.
+--   * spanoff = exact commit-3803152 production semantics: adaptive hunting
+--               plus candidate spacing, but no complete-A1 span check. Kept
+--               to hard-prove the new spaced-junk failure mechanism.
 --
 -- Build (three libraries, SEPARATE workdirs -- the per-library object files
 -- share basenames and would overwrite each other in a shared directory):
@@ -69,6 +73,11 @@
 --                                      old=PASS, r12=FAIL, r13=PASS, prod=PASS
 --                                      on the stock layout; production also
 --                                      passes the F011 layout and junk chain.
+--                                      The "junk spaced A1" profile adds three
+--                                      false candidates at correct spacing and
+--                                      with short separators, but with a 1580-
+--                                      cycle rather than ~1400-cycle raw-word
+--                                      span.
 --
 -- ACCEPTANCE (all machine-checked at the end):
 --   * canonical decodes byte-exact on old, r12, r13 and production;
@@ -116,7 +125,7 @@ architecture sim of tb_physical_1581_quantise_ab is
 
   constant NAME_LEN : integer := 26;
   constant MAXT     : integer := 6144;   -- max flux transitions per record
-  constant NDUT     : integer := 5;      -- 0=old 1=r12 2=r13 3=prod 4=tacq
+  constant NDUT     : integer := 6;      -- 0=old 1=r12 2=r13 3=prod 4=tacq 5=spanoff
 
   type int_arr  is array (natural range <>) of integer;
   type real_arr is array (natural range <>) of real;
@@ -183,7 +192,7 @@ architecture sim of tb_physical_1581_quantise_ab is
     name    : string(1 to NAME_LEN);
     fam     : integer;   -- 0 can / 1 speed / 2 drift / 3 jit / 4 peak+combo
                          -- / 6 art / 7 splice / 8 junk
-    ok      : boolean_vector(0 to NDUT - 1);   -- old / r12 / r13 / prod / tacq
+    ok      : boolean_vector(0 to NDUT - 1);   -- old/r12/r13/prod/tacq/spanoff
     must_n  : boolean;
     emin    : integer;   -- production-side est excursion (integer cycles)
     emax    : integer;
@@ -209,7 +218,8 @@ architecture sim of tb_physical_1581_quantise_ab is
       when 1      => return "r12 ";
       when 2      => return "r13 ";
       when 3      => return "prod";
-      when others => return "tacq";
+      when 4      => return "tacq";
+      when others => return "spanoff";
     end case;
   end function;
 
@@ -284,6 +294,19 @@ begin
       data_byte_valid_o => d_bytev(4), data_end_o => d_data_end(4),
       data_crc_ok_o => d_data_crc_ok(4),
       locked_o => d_lock(4), gap_error_o => d_gerr(4)
+    );
+
+  -- 5: exact commit-3803152 spacing-only production behavior
+  dut_spanoff : entity q_new.physical_1581_mfm_decoder
+    generic map (G_SYNC_SPAN_GATE => false)
+    port map (
+      clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
+      id_valid_o => d_id_valid(5), id_c_o => d_idc(5), id_h_o => d_idh(5),
+      id_r_o => d_idr(5), id_n_o => d_idn(5), id_crc_ok_o => d_id_crc_ok(5),
+      data_start_o => d_data_start(5), data_byte_o => d_byte(5),
+      data_byte_valid_o => d_bytev(5), data_end_o => d_data_end(5),
+      data_crc_ok_o => d_data_crc_ok(5),
+      locked_o => d_lock(5), gap_error_o => d_gerr(5)
     );
 
   ---------------------------------------------------------------------------
@@ -494,7 +517,7 @@ begin
       artifact     : boolean;
       must_new     : boolean;
       seed         : integer;
-      junk         : integer := -1;      -- <0 none; 100+s rand; 200+s chain
+      junk         : integer := -1;      -- <0 none; 100+s rand; 200+s chain; 300+s spaced
       exp_r12_fail : boolean := false    -- junk-chain: r12 MUST fail (regression proof)
     ) is
       variable t   : real_arr(0 to MAXT - 1);
@@ -575,7 +598,9 @@ begin
       -- 5b) write-splice junk (round 13): emitted RAW in the cycle domain
       --     before the record; the profile's last entry is the boundary gap,
       --     closed by the record's first transition
-      if junk >= 200 then
+      if junk >= 300 then
+        jarr := junk_splice_spaced(junk - 300);
+      elsif junk >= 200 then
         jarr := junk_splice_chain(junk - 200);
       elsif junk >= 100 then
         jarr := junk_splice_rand(junk - 100);
@@ -673,6 +698,21 @@ begin
             end if;
           end if;
         end if;
+        if junk >= 300 then
+          if okv(5) then
+            report "FAIL: SPACING-ONLY CONTROL TOO STRONG in " & name
+                 & " -- commit-3803152 behavior did not fail" severity error;
+            fails := fails + 1;
+          elsif m_ds_cnt(5) = 0 or m_ds_t(5) > rec_t0 + 1 ms then
+            report "FAIL: spacing-only control failed " & name
+                 & " without the bogus-data-field signature" severity error;
+            fails := fails + 1;
+          else
+            report "CONFIRMED (" & pad(name) & "): commit-3803152 spacing-only"
+                 & " qualification opened a bogus data field at "
+                 & time'image(m_ds_t(5));
+          end if;
+        end if;
       end if;
 
       res(nres) := (name => pad(name), fam => fam, ok => okv,
@@ -684,6 +724,7 @@ begin
       end if;
       report "TRIAL " & pad(name) & " old=" & pf(okv(0)) & " r12=" & pf(okv(1))
            & " r13=" & pf(okv(2)) & " prod=" & pf(okv(3)) & " tacq=" & pf(okv(4))
+           & " spanoff=" & pf(okv(5))
            & "  est=[" & integer'image(n_est_min / 16) & ".." & integer'image((n_est_max + 15) / 16) & "]";
     end procedure;
 
@@ -813,7 +854,8 @@ begin
     -- PHASE 1b: write-splice junk trials (round 13). The rand profile is
     -- the naive model (too tame -- everyone survives, kept as evidence of
     -- the iteration); the chain profile reproduces the round-12 hardware
-    -- regression: old=PASS r12=FAIL r13=PASS, checked hard.
+    -- regression. The spaced-A1 profile defeats spacing alone and is rejected
+    -- by the complete-word span qualifier.
     ---------------------------------------------------------------------
     report "==== PHASE 1b: write-splice junk trials ====";
     run_trial("junk rand s1",       8, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 40, junk => 101);
@@ -822,15 +864,16 @@ begin
     run_trial("junk chain s1",      8, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 43, junk => 201, exp_r12_fail => true);
     run_trial("junk chain s2",      8, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 44, junk => 202, exp_r12_fail => true);
     run_trial("junk chain s3",      8, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 45, junk => 203, exp_r12_fail => true);
+    run_trial("junk spaced A1",     8, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 52, junk => 301, exp_r12_fail => true);
 
     ---------------------------------------------------------------------
     -- PHASE 2: table + acceptance
     ---------------------------------------------------------------------
-    report "==== A/B RESULT TABLE (old | r12 | r13 preamble | production A1 train | tacq) ====";
+    report "==== A/B RESULT TABLE (old | r12 | r13 | production full A1 | tacq | spanoff) ====";
     for k in 0 to nres - 1 loop
       report res(k).name & " | old=" & pf(res(k).ok(0)) & " | r12=" & pf(res(k).ok(1))
            & " | r13=" & pf(res(k).ok(2)) & " | prod=" & pf(res(k).ok(3))
-           & " | tacq=" & pf(res(k).ok(4))
+           & " | tacq=" & pf(res(k).ok(4)) & " | spanoff=" & pf(res(k).ok(5))
            & " | est " & integer'image(res(k).emin) & ".." & integer'image(res(k).emax);
     end loop;
 
@@ -894,7 +937,7 @@ begin
     finish;
   end process;
 
-  -- global guard: 51 trials x ~20 ms + probes
+  -- global guard: 52 trials x ~20 ms + probes
   guard : process
   begin
     wait for 2000 ms;

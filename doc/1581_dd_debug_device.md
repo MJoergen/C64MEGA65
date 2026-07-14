@@ -43,14 +43,14 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-56 words at offsets `0x00`–`0x37`, plus the 64-word WD-dialogue trace ring at
+59 words at offsets `0x00`–`0x3A`, plus the 64-word WD-dialogue trace ring at
 `0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
 fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x053F` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x067F` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -90,10 +90,15 @@ fields are right-aligned unless a bit layout is given.
 | `0x34` / `0x35` | `CNT_RUNT`      | counter: merged RDATA runt gaps (flux glitches absorbed by the decoder input filter) |
 | `0x36` | `EST`           | live half-cell estimate of the adaptive gap quantiser, Q8.4 fixed point: bits 11:4 = integer 50 MHz cycles (nominal `0x64` = 100), bits 3:0 = sixteenths |
 | `0x37` | `RNF_CTX`       | last-RNF context: requested track (high byte) / requested sector (low byte), latched whenever a read operation completes with RNF set |
+| `0x38` | `CNT_A1_CAND`   | 16-bit saturating counter: coarse L-M-L-M A1 candidates |
+| `0x39` | `CNT_A1_REJECT` | 16-bit saturating counter: candidates rejected because the complete raw-word span is inconsistent with 14 estimated half-cells |
+| `0x3A` | `CNT_A1_TRAIN`  | 16-bit saturating counter: complete qualified three-A1 trains |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 
-All fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
-low word first, then the high word (`0x0000` in the high word while values stay small).
+The original fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never
+wrap). Read the low word first, then the high word (`0x0000` in the high word while
+values stay small). The three A1 counters at `0x38`–`0x3A` are single-word 16-bit
+saturating counters.
 
 ### Delivery v2 (map v4, words `0x2A`–`0x35`)
 
@@ -142,6 +147,22 @@ How to read the two words:
   track/sector pair, one specific sector is persistently unreadable; if
   `RNF_CTX` wanders, the misses are scattered (speed/media problem, not a
   single bad sector).
+
+### Complete-A1 timing qualification (map v6, words `0x38`–`0x3A`)
+
+The adaptive field classifier deliberately retains wide, no-dead-band gap windows.
+Sync acquisition adds a format-independent invariant: each coarse L-M-L-M candidate
+must span 14 estimated half-cells end to end, within half an estimated half-cell over
+the complete word. This preserves peak-shifted stock-1581 and F011 address marks while
+rejecting coherent splice residue whose individual gaps are class-valid but whose
+errors all lean in the same direction.
+
+`CNT_A1_CAND` counts every coarse candidate, `CNT_A1_REJECT` counts candidates rejected
+by the aggregate span check, and `CNT_A1_TRAIN` counts completed three-A1 trains. On a
+healthy ten-sector track, train count should track the real ID/data address-mark rate;
+a large reject count concentrated around the index is expected evidence that splice
+junk is being rejected rather than allowed to consume sector 1. Capability bit 6 in
+`VERSION` announces that these words exist.
 
 ### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
 
@@ -284,11 +305,11 @@ ME            (Memory/Examine) -> prompt "EXAMINE ADDRESS="
 ```text
 MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 7000          start
-7037          -> prompt " END ADDRESS=" ; end (0x7000 + 0x37 = last word, RNF_CTX)
+703A          -> prompt " END ADDRESS=" ; end (0x7000 + 0x3A = last scalar diagnostic word)
 ```
 
-This prints all 56 diagnostic words in one block. To watch a value live, re-issue the
-`MD 7000 7037` (or `ME 70xx`) command repeatedly — the registers update continuously while
+This prints all 59 scalar diagnostic words in one block. To watch a value live, re-issue the
+`MD 7000 703A` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 
 ### 3.4 Typical checks

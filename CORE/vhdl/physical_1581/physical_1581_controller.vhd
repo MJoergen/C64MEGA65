@@ -132,6 +132,9 @@ entity physical_1581_controller is
     diag_data_crc_ok_o  : out std_logic := '0';   -- valid at diag_data_end_o
     diag_gap_error_o    : out std_logic := '0';   -- 1-cycle pulse: out-of-spec flux gap
     diag_runt_o         : out std_logic := '0';   -- 1-cycle pulse: merged RDATA runt gap
+    diag_a1_candidate_o : out std_logic := '0';   -- 1-cycle pulse: coarse A1 candidate
+    diag_a1_reject_o    : out std_logic := '0';   -- 1-cycle pulse: bad complete-word span
+    diag_a1_train_o     : out std_logic := '0';   -- 1-cycle pulse: qualified 3xA1 train
     -- adaptive quantiser half-cell estimate (Q8.4; issue #90 round 12)
     diag_est_o          : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12);
     -- FSM phases + head estimate
@@ -283,6 +286,7 @@ architecture rtl of physical_1581_controller is
   signal deleted_l  : std_logic := '0';
   signal ovf_l      : std_logic := '0';   -- a FIFO write was dropped during this op
   signal rd_req_evt : std_logic := '0';   -- 1-cycle diag strobe: read request accepted
+  signal dec_a1_candidate, dec_a1_reject, dec_a1_train : std_logic;
 
 begin
 
@@ -312,6 +316,9 @@ begin
       data_byte_o => data_byte, data_byte_valid_o => data_byte_v,
       data_end_o => data_end, data_crc_ok_o => data_crc_ok,
       locked_o => dec_locked, gap_error_o => dec_gap_err, runt_o => dec_runt,
+      a1_candidate_o => dec_a1_candidate,
+      a1_span_reject_o => dec_a1_reject,
+      a1_train_o => dec_a1_train,
       last_gap_o => dec_last_gap,
       crc_value_o => dec_crc_value,
       est_o => dec_est
@@ -372,6 +379,9 @@ begin
   diag_data_crc_ok_o  <= data_crc_ok;
   diag_gap_error_o    <= dec_gap_err;
   diag_runt_o         <= dec_runt;
+  diag_a1_candidate_o <= dec_a1_candidate;
+  diag_a1_reject_o    <= dec_a1_reject;
+  diag_a1_train_o     <= dec_a1_train;
   diag_est_o          <= dec_est;
   diag_head_valid_o   <= head_valid;
   diag_head_dir_out_o <= last_dir_out;
