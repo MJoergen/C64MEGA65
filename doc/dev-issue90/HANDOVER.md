@@ -23,7 +23,18 @@ Everything is gated by `G_PHYS1581_CAPABLE` (true on all boards) and a runtime
 Phases R1–R5 + docs + the idle-gate are done. Session 2 (2026-07-12) additionally:
 **applied the timing-closure constraints (8.0), fixed the "enable internal 1581
 without a mounted D81 = dead drive" bug set (8.4), and made the idle-gate
-symmetric (8.1)**. Next step: rebuild R3 in Vivado and re-test on hardware.
+symmetric (8.1)**.
+
+Session 3 (2026-07-13/14) reached the read milestone on hardware (8.2), then —
+after intermittent silent-corruption failures on the round-9 bitstream — replaced
+the WD byte-delivery architecture entirely with the real-WD1772-faithful
+**disk-paced "delivery v2"** (8.5): the round-9 pop cap and 0.5 s watchdog are
+**deleted**, error statuses are CRC-only (a genuine-ROM `$CD5A` table hole maps
+CRC+RNF to job SUCCESS), the request/done handshake carries sequence tags, and
+the diag device grew map v4 with full delivery observability. All simulation
+suites, genuine-ROM proofs and four adversarial reviews are green. Next step:
+rebuild R3 and re-test on hardware — pre-round-10 bitstreams can corrupt data
+silently and should be treated as diagnostic-only.
 
 ---
 
@@ -342,10 +353,64 @@ hardware (`change_o`, `f_side1_o` inversion, index/RDATA). Use the `0x0108` diag
 device as the primary observability. Fill in a board/mechanism qualification note
 in `doc/models.md`.
 
+### 8.5 Round 10 — "delivery v2" rework (2026-07-14): DONE, needs rebuild + hardware retest
+
+Trigger: on the round-9 bitstream, `LOAD"$"` worked but file loads failed
+intermittently with *silent* corruption (FILE NOT FOUND from a freshly-re-read
+directory; a dead-stop after two CRC-clean sector reads with the WD idle and
+motor timed out). Forensics (six-agent audit + `~/Downloads/C64.D81` ground
+truth + genuine-ROM analysis, full record in `PLAN.md` round-10 entries) proved
+the DOS was being handed corrupt bytes with clean statuses, and that the round
+5→7→9 fix chain (busy-until-consumed → 512-FIFO → pop cap + 0.5 s watchdog) was
+patching one architectural inversion: coupling WD busy release to drive-CPU
+consumption, which real silicon never does.
+
+Round 10 replaced the delivery path with the real chip's model and deleted the
+patches (they are gone, not disabled):
+
+- **Disk-paced presentation** — one FIFO byte per DD byte-time (32 µs); a slow
+  drive CPU gets **loud LOST DATA** (status bit 2) and the byte is overwritten;
+  completion = sequence-tag-matched controller done + FIFO empty + a one-byte-
+  time busy tail. No consumption coupling, no wall-clock watchdog anywhere.
+- **`$CD5A` fix** — the genuine 318045-02 ROM maps a WD status with CRC and RNF
+  *both* set to job SUCCESS (table hole, proven with the ROM in the emulator).
+  All error completions are now CRC-only; the fdc suppresses RNF when CRC is
+  set. This made the round-7/8 "honest error" statuses actually honest.
+- **Lossless handshake** — 2-bit sequence tags on request/done, a pending-
+  request latch in the controller, unilateral fdc completions deleted,
+  non-Force-Interrupt commands ignored while busy (real WD semantics).
+- **RDATA runt filter** (`C_GAP_GLITCH`), DRQ cleared at command start, dead
+  code removed (`ready_cnt`, `period_ok` + their generics).
+- **Diag map v4** (`0x043F`): `FIFO_LEVEL`, `LAST_PRESENT`, `CNT_LOST`,
+  `CNT_DRAIN`, `CNT_STALEDONE`, `CNT_BUSYCMD`, `CNT_RUNT`, found-H in trace
+  RESULT entries — every abnormal delivery event is now countable from QNICE.
+- Five reviewer hardenings (reissue-vs-FI gate, drain-gate simplification,
+  presentation deferral during open CPU data-register reads, registered done
+  tag, minimum done spacing) applied and adversarially rechecked clean.
+- Housekeeping: `rom_emu` moved out of the submodule to `doc/dev-issue90/rom_emu/`
+  (with new `run_proofs.py` genuine-ROM proofs); `iecdrv_sync` got ASYNC_REG.
+
+Verified: full GHDL suite (incl. the ~28 min closed-loop bench), the iverilog
+delivery-v2 bench (with a negative-control run against the unfixed RTL),
+junction elaboration, genuine-ROM boot/login/error-path proofs, differential
+`main.vhd` analysis, and four adversarial reviews (image-mode byte-identity
+among them) — all green. Menu/config untouched (`c64mega65-WIP-V6-A18X1`
+still valid). **All four boards need a rebuild; test on R3.**
+
 ### 8.3 NEXT MILESTONE — WRITE + FORMAT (large)
 
 This is the big remaining feature and is genuinely more dangerous (can damage
 media), so it needs the safety machinery we deferred:
+
+- **Inherit the delivery-v2 discipline (8.5), non-negotiable:** flux is
+  unpausable, so the write engine is time-paced by physics — never clone a
+  consumption-coupled completion or a force-complete watchdog; underrun pads
+  zeros to the sector end + LOST DATA (never tear WGATE mid-sector); the only
+  backstop is the outer safety island force-ABORT (WGATE kill), and every
+  backstop firing bumps a diag counter. Never emit CRC and RNF together (the
+  ROM's `$CD5A` hole maps that to job SUCCESS). Write Sector and Write Track
+  must move onto the sequence-tagged controller done handshake (in the
+  read-only milestone they still fake-finish WD-side).
 
 - **MFM write encoder** (adapt `mega65-core` `mfm_bits_to_gaps.vhdl`, staged in
   `upstream/`), WDATA pulse generation + **write precompensation** (§14.9).

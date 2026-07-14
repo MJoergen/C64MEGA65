@@ -466,6 +466,152 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   same behavior expected in image mode. NEXT session: bundle (2) + investigate (1), then the
   write/format milestone (HANDOVER 8.3).
 
+- 2026-07-13 (session 2, bring-up round 9): **HARD WEDGE AFTER SOFT RESET DIAGNOSED AND
+  CLOSED (WD busy stuck forever).** Reproduced by the maintainer: C64 soft reset then
+  LOAD"$",8 loads forever; two QNICE dumps 3+ min apart prove it: TRC_CNT FROZEN at 0x242
+  while CNT_IDX climbed ~1000 revs (motor spinning under an idle controller) -- the 1581 DOS
+  wedged in its wait-not-busy loop after a SUCCESSFUL Read Address. Mechanism: the
+  busy-until-consumed finalize (round 5 fix) has a RACE when the FIFO holds one byte more
+  than the operation expects (residue): the pop of the surplus byte and the finalize
+  evaluation race at clock-phase granularity; losing it leaves the last byte presented-but-
+  never-consumed -> phys_drq_wait stuck -> busy stuck -> DOS spins forever with the motor on
+  (the bench originally missed it because it won the race; the revert-proof confirmed the
+  non-determinism). Residue can slip in around reset/abort windows; a drain pop colliding
+  with the phys_rd_start counter reset could also skew the count (same wedge). FIXES
+  (fdc1772.v): (1) delivery pops CAPPED at phys_expected per op -- a surplus byte is never
+  presented, the op terminates (with a shifted reply the DOS rejects via its own CRC and
+  retries), and the between-ops drain eats the leftover -> at most ONE errored op, then
+  clean; (2) drain pops no longer counted (phys_deliver_pop) -- no count skew; (3) 0.5 s
+  finalize watchdog (phys_done_age) force-completes with RNF as the last-resort backstop.
+  VERIFIED: new stray-byte wedge regression in tb_fdc1772_physical.sv (stray-poisoned RA
+  must terminate shifted, follow-up RA must be byte-exact) PASSES; full bench + register
+  test + junction elab green. Needs REBUILD.
+
+- 2026-07-13 (session 3, round 10): **INVESTIGATION ONLY (maintainer request, no code changes): round-9
+  bitstream fails intermittently — six-agent audit + hardware-dump forensics.** Evidence: LOAD"\$" ok then
+  LOAD"SHADES" FNF (dump 1); retry: seek 39->62, 2 RA ok, RS t62 s5+s6 ok, then DOS silent forever, LED off
+  (act_led includes fdc_busy, so the WD was IDLE), motor timed out, two dumps bit-identical; after a C64
+  soft reset the larger C64ANABALT loads clean. Findings (full agent reports in the session scratchpad,
+  `report_*.md`; D81 tooling `d81_analyze.py`; genuine-ROM experiments `dos_audit/job_test.py` T1-T5):
+  (1) **GROUND TRUTH (proven from ~/Downloads/C64.D81):** SHADES starts at 62/8 = cyl 61 side 0 R5; the
+  observed reads (cyl 62 side 0 s5/s6 = logical 63/8..11) are DREAMCARS 64 mid-chain blocks; no file starts
+  there. The DOS was steered by a corrupted dir-entry start-track byte `0x3E -> 0x3F` (single LSB bit) with
+  the name and sector byte intact. SHADES entry = dir sector 40/6 slot 2 = cyl 39 side 0 R4 half 0 byte 67.
+  (2) **ROM-PROVEN `\$CD5A` HOLE (genuine 318045-02 ROM in the rom_emu):** a WD status with CRC(b3) and
+  RNF(b4) BOTH set maps to job result 00 = SUCCESS (`\$CD3F` computes X=(status>>3) AND 0x0B, indexes
+  `\$CD5A` = 00 05 02 00 ...; X=3 hits the hole). The round-7 ovf completion, the round-8 RD_STREAM
+  watchdog, and the ID-CRC search-expiry ALL emit crc=1 AND rnf=1 on the false premise "the DOS re-reads":
+  the ROM instead ACCEPTS the bad sector and (emu test T5) can terminate a track-cache fill early while
+  marking the half-stale cache VALID. FIX NEXT ROUND: never emit crc and rnf together; CRC-only gives job
+  error 5 (DOS 23, retried) as intended. Did not fire tonight (CNT_CRCERR=0) — it is a landmine, not the cause.
+  (3) **DOS fingerprints (disassembly-proven), for reading future traces:** busy-wedge hangs keep the MOTOR
+  ON (the unbounded waits `\$CBEC`/`\$CBFA` run in the IRQ/BRK job context with I set, which blocks the
+  Timer-B motor timeout — the round-9 signature). Tonight's LED-off + motor-timeout + no-blink end state is
+  reachable only via the all-channels-free idle path `\$B128`: the DOS believed the LOAD completed. Best
+  reconstruction: corrupt entry -> wrong seek -> fill ended early-as-success -> cache mostly stale but
+  marked valid -> chain walk served from cache (zero WD commands) -> stale link track byte 0 -> premature
+  clean EOF -> the C64 loaded garbage at a garbage address (",8,1") and died (explains Run/Stop+Restore
+  being dead and the reset button being needed).
+  (4) **Controller EXONERATED:** push contract exact (512/6/0 bytes; CRC bytes never pushed; verify pushes
+  none); every residue-capable abort completes loudly (rnf/crc/cancel/change flags + counters); tonight's
+  counters (0 cancel, 0 crcerr, 3 zero-push search-expiry RNFs) rule out ALL controller residue sources.
+  FIFO Gray pointers stay coherent across a core reset (both reset ports on the QNICE reset only);
+  CNT_CHANGE=1 after the soft reset is the designed disable re-arm.
+  (5) **fdc-side latent defects found (fix next round):** (a) DRQ is never cleared at command start (the
+  real WD1772 clears it): an op ending with a presented-but-unconsumed byte (watchdog fire; RNF finalize
+  bypasses drq_wait via the phys_rnf_l term) leaves a stale DRQ, the next read takes a phantom first byte,
+  and the ROM (which exits on busy, not a count) stores 513 bytes — buffer shifted AND one byte overrun
+  into adjacent drive RAM, silently; (b) unilateral not-ready completions (Type-II after a 6 ms ready dip,
+  fdc1772.v ~833-841; Type-III instantly, ~971-974) end the WD command WITHOUT cancelling the controller;
+  a retry rd_req toggled while the controller is busy is LOST (the controller samples req only in RD_IDLE,
+  no pending latch) and the OLD op done/bytes pair with the NEW command — wrong-sector delivery with clean
+  status, invisible to trace and counters; (c) the 0.5 s finalize watchdog fires with ZERO observability
+  (no diag counter/trace: all taps are controller-side), and a fire during a multi-sector read (m=1) takes
+  the REISSUE branch (checks the latched rnf/crc flags, both 0) -> busy stuck forever (latent; stock DOS
+  never sets m); (d) a QNICE-only reset mid-op idles the controller without a done toggle while the WD
+  stays busy forever (the watchdog only arms after done latches). The micro-mechanism of the observed
+  single-bit `0x3E->0x3F` flip is NOT yet pinned (candidates: (a) overrun, (b), a silent watchdog fire);
+  it needs the new observability below.
+  (6) **DEFENSE-INVENTORY VERDICT (the maintainer's watchdog question):** ~20 mechanisms inventoried; 16
+  are class A (faithful models of real, physically-bounded WD1772/FB-354 behavior: 5-index RNF budget,
+  43-byte DAM window, 255-step restore bound, 6-rev spin-up, 10-rev motor idle, settle, RDY, DSKCHG latch)
+  or class B (textbook CDC/FIFO necessities of our two-clock architecture). Exactly TWO are invariant-
+  patches: the round-9 pop cap and the 0.5 s finalize watchdog — the only wall-clock-denominated bound in
+  the design; both can mask errors silently. Root cause of the whole complex = the round-5 inversion (busy
+  release coupled to drive-CPU CONSUMPTION instead of disk pace); rounds 5 -> 7 -> 9 are one causal patch
+  chain. TARGET ARCHITECTURE (do before the write milestone — mandatory there, since flux is unpausable and
+  a force-complete watchdog on writes corrupts media): disk-paced delivery reusing the proven image-path
+  fd_dclk_en byte pacer fed from the FIFO head; overrun -> overwrite + LOST DATA reported as CRC-only (see
+  (2)); busy release = controller done (data_end already trails the last payload byte by the two CRC
+  byte-times, i.e. the real chip's tail). This deletes phys_drq_wait, the bytes-vs-expected finalize, the
+  pop cap and phys_done_age structurally. Cost is small: the ROM runs its transfer loops with I set (no
+  mid-loop CPU steals); the FIFO still absorbs loop-entry latency.
+  (7) **Cleanup/observability queue:** RDATA minimum-low-width filter using the defined-but-UNUSED
+  C_GAP_GLITCH=120 (GAP_MIN=0x0001 proves 40 ns runts reach the decoder; the s1-after-splice RNFs are the
+  PLL-less fixed-window re-lock margin at the index write splice — self-healing but a 2 s hiccup each);
+  dead code ready_cnt/G_MOTOR_READY_CYC and period_ok (write-only since the round-4 RDY redesign); diag
+  additions: fdc-side event counters (watchdog fires, unilateral completions, cap/drain engagements), FIFO
+  occupancy tap, per-op delivered-byte count (+ simple checksum) on the WD side, found-H in RESULT trace
+  entries; latch-or-cancel semantics for rd_req while the controller is busy (or op sequence tags on the
+  req/done handshake); ASYNC_REG on the fdc iecdrv_sync instances (methodology TIMING-10). HOUSEKEEPING:
+  the rom_emu accidentally lives INSIDE the submodule (`CORE/C64_MiSTerMEGA65/rtl/iec_drive/doc/dev-issue90/
+  rom_emu/`) — move to `doc/dev-issue90/rom_emu/` before any commit.
+  (8) **Vivado logs (19:40 build): CLEAN.** Zero new-code warnings, no latches or trimmed registers, both
+  controller FSMs encoded, rdfifo/trace-ring in distributed RAM (0 BRAM), WNS +0.292 on the pre-existing
+  QNICE half-cycle path. Nothing in the build explains the failures — this is logic, not synthesis.
+
+- 2026-07-14 (session 3, round 10 IMPLEMENTATION): **DELIVERY V2 IMPLEMENTED, VERIFIED, HARDENED
+  (maintainer: "implement it all"; no commits).** The consumption-coupled WD delivery is replaced by
+  the real-WD1772-faithful disk-paced model; the round-9 mechanisms are DELETED, not patched.
+  AS BUILT: (1) fdc1772.v phys engine — presentation of one FIFO byte per DD byte-time
+  (PHYS_PACE_TICKS=252 clk8m ticks ~32 us), never waiting for consumption; an unconsumed byte is
+  overwritten with LOUD LOST DATA (status bit 2 + CNT_LOST); completion = tag-matched controller
+  done AND FIFO empty AND one-byte-time tail (busy outlives the last DRQ >= 1 byte-time, like real
+  silicon; bench-measured ~0.96 byte-time). DELETED: phys_drq_wait, phys_bytes/phys_expected
+  counting, the round-9 pop cap and phys_done_age 0.5 s watchdog (zero wall-clock bounds remain in
+  the delivery path; every bound is disk-time-denominated). (2) Unilateral not-ready completions
+  (Type-II 6 ms / Type-III instant) deleted — the controller is the single completion source
+  (RD_WAIT 1.1 s -> RES_NOT_READY, search 5 index edges / 1.3 s -> RNF). (3) Non-Force-Interrupt
+  command writes while busy are IGNORED in phys mode (real WD semantics) + counted. (4) Request/done
+  handshake carries a 2-bit sequence tag; the controller latches request edges arriving while busy
+  (pending latch, cancel clears) — lost-edge/stale-done pairing structurally closed. (5) `\$CD5A`
+  fix: RES_DATA_CRC_ERROR and RES_ID_CRC_ERROR completions are now CRC-only (rnf=0) + fdc status
+  belt (RNF bit suppressed when CRC set) — proven LOAD-BEARING against the genuine ROM (emu proof:
+  CRC-only -> job error 5 -> retry heals; legacy crc+rnf demo still reproduces the silent-success
+  hole). (6) DRQ + LOST cleared at command start (real chip semantics). (7) RDATA runt filter in
+  mfm_gaps: gaps < C_GAP_GLITCH(120) merge into the successor + runt_o counted; GAP stats are
+  post-filter. (8) Dead code removed: ready_cnt/G_MOTOR_READY_CYC, period_ok/G_PERIOD_MIN_CYC
+  (G_PERIOD_MAX_CYC stays for the eject bound). (9) Diag map v4 (VERSION 0x043F): 0x2A FIFO_LEVEL,
+  0x2B LAST_PRESENT, 0x2C-0x35 CNT_LOST/CNT_DRAIN/CNT_STALEDONE/CNT_BUSYCMD/CNT_RUNT, trace RESULT
+  w0 bit 8 = found-H; six fdc dbg signals threaded fdc1772 -> c1581_drv -> c1581_multi -> iec_drive
+  -> main.vhd (2FF + async_reg) -> diag; rdfifo grew wr_level_o. (10) ASYNC_REG on iecdrv_sync
+  (attribute only). (11) rom_emu MOVED out of the submodule to doc/dev-issue90/rom_emu/ (git rm
+  staged submodule-side), updated to mirror v2, new run_proofs.py.
+  VERIFIED (all green): 8 GHDL tbs incl. the ~28 min closed-loop controller run (with new
+  pending-latch, done-tag and runt tests); iverilog 8-scenario delivery-v2 bench + junction elab 0
+  errors; rom_emu ALL PROOFS PASS (`\$C343` self-test, paced directory login byte-exact with zero
+  LOST, transfer-loop margin 33/64 cycles); differential ghdl of main.vhd vs HEAD identical.
+  ADVERSARIAL REVIEWS (4 lenses): zero critical/major; all 8 round-10 audit defects closed (4 by
+  structural deletion); image mode proven byte-identical hunk by hunk.
+  ROUND-10b HARDENING (5 review fixes, applied + re-verified + adversarially rechecked CLEAN):
+  F1 deferred reissue gated on !cmd_rx (FI-collision phantom op); F2 drain gate drops
+  !phys_done_latched (verify-window wedge structurally removed); F3 presentation deferred while the
+  drive CPU has an open data-register READ access (~<=0.5 us, bus-bounded — closes mid-read
+  overwrite, same-cycle DRQ swallow and false LOST DATA with one mechanism); F4 rd_done_seq_o
+  registered at the nine done-toggle sites (tag quasi-static by construction); F5 minimum done
+  spacing C_DONE_GAP=8 (min 200 ns, live edges latched as pending). Bench extended (79 checks) with
+  a NEGATIVE CONTROL run proving the new tests catch the unfixed RTL; closed-loop tb extended with
+  the abort-with-pending spacing test + run-wide tag monitor. Recheck notes became code comments
+  (fdc two-tick cmd_rx dependency; controller tag-attribution note).
+  ACCEPTED/DOCUMENTED: QNICE-only-reset-mid-op hole (never fires without a core reset in M2M);
+  Write Sector / Read+Write Track still WD-side fake-finish (read-only milestone; MUST move onto
+  the done handshake at the write milestone); two razor-edge unreachable corners documented in
+  comments. Menu/config untouched (config file stays c64mega65-WIP-V6-A18X1, 160 bytes).
+  NEXT: maintainer REBUILDS R3 (bitstreams from before round 10 corrupt silently — treat as
+  diagnostic-only), hardware-tests LOAD"\$" + SHADES + C64ANABALT + RUN, watches diag v4
+  (CNT_LOST/LAST_PRESENT/FIFO_LEVEL discriminate every delivery anomaly in one dump). Then the
+  write/format milestone (HANDOVER 8.3) inherits the time-paced discipline.
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

@@ -43,14 +43,14 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-42 words at offsets `0x00`–`0x29`, plus the 64-word WD-dialogue trace ring at
+54 words at offsets `0x00`–`0x35`, plus the 64-word WD-dialogue trace ring at
 `0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
 fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x031F` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x043F` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -81,10 +81,34 @@ fields are right-aligned unless a bit layout is given.
 | `0x26` / `0x27` | `CNT_GAPERR`    | counter: out-of-spec flux gaps (loss of lock)              |
 | `0x28` | `IMG_DRIVE`     | bit0 = the simulated (disk image) drive 8 is busy or holds unsaved data |
 | `0x29` | `TRC_CNT`       | total WD-dialogue trace events since reset (ring holds the last 32) |
+| `0x2A` | `FIFO_LEVEL`    | live read-FIFO occupancy in bytes (write-side view, 0–512)      |
+| `0x2B` | `LAST_PRESENT`  | bytes the WD presented during the last finalized operation (512 for a clean sector read, 6 for Read Address, 0 for Verify) |
+| `0x2C` / `0x2D` | `CNT_LOST`      | counter: LOST DATA events (a paced byte overwrote an unconsumed one) |
+| `0x2E` / `0x2F` | `CNT_DRAIN`     | counter: between-ops FIFO drain episodes (residue discarded)  |
+| `0x30` / `0x31` | `CNT_STALEDONE` | counter: completion edges ignored — sequence-tag mismatch, or the completion of an already-cancelled operation (one benign event per Force Interrupt that lands mid-operation) |
+| `0x32` / `0x33` | `CNT_BUSYCMD`   | counter: WD command writes ignored because the WD was busy executing a command |
+| `0x34` / `0x35` | `CNT_RUNT`      | counter: merged RDATA runt gaps (flux glitches absorbed by the decoder input filter) |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 
-All ten counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
+All fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
 low word first, then the high word (`0x0000` in the high word while values stay small).
+
+### Delivery v2 (map v4, words `0x2A`–`0x35`)
+
+Since map v4 the WD front end delivers read data **disk-paced**, like the real WD1772:
+every DD byte-time (32 us) the next byte from the read FIFO is presented on the data
+register and DRQ is raised, whether or not the drive CPU consumed the previous byte. If
+it did not, the byte is overwritten, the WD status shows LOST DATA (bit 2) and `CNT_LOST`
+increments — the transfer never stalls waiting for the CPU, and busy is released one full
+byte-time after the last presentation, once the controller has signaled completion.
+CRC-flagged error completions **never also set RNF**: the genuine 1581 DOS
+ROM (318045-02) job epilogue at `$CD3F` indexes the table at `$CD5A` with
+`(status >> 3) AND 0x0B`, and the CRC+RNF combination hits a `0x00` hole in that table —
+the DOS would treat the corrupt sector as job SUCCESS and silently accept it. CRC-only
+maps to job error 5 (DOS error 23, "read error"), which the DOS retries as intended.
+`LAST_PRESENT`, `FIFO_LEVEL` and the five counters make every abnormal delivery event
+(lost byte, discarded residue, stale completion, ignored command write, flux runt)
+visible from QNICE. Capability bit 5 in `VERSION` announces that these words exist.
 
 ### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
 
@@ -100,10 +124,10 @@ Entry types (by `w0` bits 15:12):
 | ---- | ---- | ---- |
 | `1` = STEP completed | `0x1000` \| dir`<<8` (`1` = toward track 0) \| head-cylinder estimate | bit0 = track0 after the step |
 | `2` = read op REQUESTED | `0x2000` \| op`<<9` (`0` sector, `1` address, `2` verify) \| side`<<8` \| requested track | requested sector `<<8` |
-| `3` = read op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found C | found R `<<8` \| result code |
+| `3` = read op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found-H LSB`<<8` \| found C | found R `<<8` \| result code |
 
 To capture a failure: reset/power-on, reproduce the failing access once, then dump
-`MD 7000 7029` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
+`MD 7000 7035` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
 entry; STEP entries in between show the seek pattern (direction + the controller's
 head-position estimate at each step). This reconstructs where the DOS was heading,
 what it asked to read, and what it got — without any scope.
@@ -227,11 +251,11 @@ ME            (Memory/Examine) -> prompt "EXAMINE ADDRESS="
 ```text
 MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 7000          start
-7028          -> prompt " END ADDRESS=" ; end (0x7000 + 0x28 = last word, IMG_DRIVE)
+7035          -> prompt " END ADDRESS=" ; end (0x7000 + 0x35 = last word, CNT_RUNT high)
 ```
 
-This prints all 41 diagnostic words in one block. To watch a value live, re-issue the
-`MD 7000 7027` (or `ME 70xx`) command repeatedly — the registers update continuously while
+This prints all 54 diagnostic words in one block. To watch a value live, re-issue the
+`MD 7000 7035` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 
 ### 3.4 Typical checks
@@ -253,6 +277,15 @@ the C64 accesses drive 8.
   cycles at 300 RPM). Readiness models the real mechanism RDY line: motor at speed plus live
   index pulses. The disk-change latch (bit4) does NOT gate readiness -- it drives the DOS-visible
   /DSKCHG (CIA PA7) and aborts in-flight reads; the DOS clears it by stepping.
+- **Loads work but data looks shifted or truncated?** Check `LAST_PRESENT` (`0x2B`) after a
+  sector read — anything other than `0x0200` (512) means the operation did not present a full
+  sector. A climbing `CNT_LOST` (`0x2C`) means the drive CPU was too slow to fetch paced bytes
+  (each event also sets LOST DATA in the WD status the DOS saw); `CNT_STALEDONE` (`0x30`) and
+  `CNT_BUSYCMD` (`0x32`) flag protocol races that would previously have been invisible. Note that
+  `CNT_STALEDONE` also increments once per Force-Interrupt-cancelled in-flight operation (the
+  cancelled operation completes on its own and that completion is consumed and ignored) — a small
+  count after aborts is normal and correlates with `CNT_CANCEL`; only a count that grows during
+  error-free operation indicates a real race.
 
 ---
 

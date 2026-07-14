@@ -37,6 +37,12 @@ entity physical_1581_rdfifo is
     wr_en_i    : in  std_logic;
     wr_data_i  : in  unsigned(7 downto 0);
     wr_full_o  : out std_logic;
+    -- Write-side occupancy for the diagnostics (issue #90 round 10): binary
+    -- write pointer minus the Gray-synced (decoded) read pointer, in the
+    -- wr_clk_i domain. Conservative-high: reads show up only after their Gray
+    -- pointer crosses the 2-FF sync. Zero-extended to 10 bits (holds the
+    -- 0..512 range of the production G_AW=9 instance).
+    wr_level_o : out unsigned(9 downto 0);
     rd_clk_i   : in  std_logic;
     rd_rst_i   : in  std_logic;
     rd_en_i    : in  std_logic;
@@ -51,6 +57,17 @@ architecture rtl of physical_1581_rdfifo is
   function bin2gray(b : unsigned) return unsigned is
   begin
     return shift_right(b, 1) xor b;
+  end function;
+
+  -- Gray -> binary (b(i) = xor of g(high downto i)).
+  function gray2bin(g : unsigned) return unsigned is
+    variable b : unsigned(g'range);
+  begin
+    b(g'high) := g(g'high);
+    for i in g'high - 1 downto g'low loop
+      b(i) := b(i + 1) xor g(i);
+    end loop;
+    return b;
   end function;
 
   type mem_t is array (0 to 2**G_AW - 1) of unsigned(7 downto 0);
@@ -92,6 +109,10 @@ begin
   wgray_next <= bin2gray(wbin_next);
 
   wr_full_o <= full_q;
+
+  -- Write-side occupancy tap (see the port comment). The pointer difference is
+  -- taken modulo 2**(G_AW+1), which is exact for any fill level 0..2**G_AW.
+  wr_level_o <= resize(wbin - gray2bin(wq2_rgray), 10);
 
   wr_domain : process (wr_clk_i)
   begin

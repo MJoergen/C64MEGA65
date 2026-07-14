@@ -12,6 +12,17 @@
 --   * Verify (cyl0) returns RES_OK
 --   * a Type-I Step In moves the head to cyl1; Read Sector (cyl1,sec1) matches
 --   * Read Sector for a non-existent sector returns RNF
+--   * every completion carries the sequence tag of ITS OWN request on
+--     rd_done_seq_o (delivery v2 C3; do_read bumps the tag per request)
+--   * a request toggled while the engine is BUSY is latched (pending-request
+--     latch, delivery v2 C2) and served afterwards: two back-to-back requests
+--     produce two completions with their respective tags and payloads
+--   * an abort (persistent disk change) with a pending request latched: both
+--     ops complete with their own tags, the two done toggles are spaced by at
+--     least 8 controller cycles (round 10 F5, so the fdc-side two-sample
+--     synchronizer cannot swallow them), and the engine recovers afterwards
+--   * rd_done_seq_o only ever changes on the same cycle as a rd_done toggle
+--     (round 10 F4, continuous monitor over the whole run)
 --
 -- Controller timing generics are scaled so only INDEX-paced behavior costs real
 -- sim time (flux is emitted at true 2 us MFM timing and cannot be sped up).
@@ -47,8 +58,10 @@ architecture sim of tb_physical_1581_controller is
   signal rd_track      : unsigned(7 downto 0) := (others => '0');
   signal rd_side       : std_logic := '0';
   signal rd_sector     : unsigned(7 downto 0) := (others => '0');
+  signal rd_seq        : std_logic_vector(1 downto 0) := "00";
   signal rd_cancel     : std_logic := '0';
   signal rd_done       : std_logic;
+  signal rd_done_seq   : std_logic_vector(1 downto 0);
   signal rd_result     : std_logic_vector(4 downto 0);
   signal rd_crc_err, rd_rnf, rd_deleted : std_logic;
   signal rd_c, rd_h, rd_r, rd_n : unsigned(7 downto 0);
@@ -67,6 +80,9 @@ architecture sim of tb_physical_1581_controller is
 
   signal cur_cyl : integer;
 
+  -- tb-driven disk-change line into the mech model (F5 abort test)
+  signal cfg_change : std_logic := '0';
+
   -- capture
   type arr_t is array (0 to 4095) of unsigned(7 downto 0);
   signal cap     : arr_t := (others => (others => '0'));
@@ -82,10 +98,8 @@ begin
   dut : entity work.physical_1581_controller
     generic map (
       G_CAPABLE => true,
-      G_MOTOR_READY_CYC => 5_000,          -- 100 us (index-edge gate dominates)
       G_READY_WD_CYC    => 150_000_000,    -- 3 s
       G_SEARCH_EDGES    => 3,              -- keep RNF bounded (~ up to 3 index periods)
-      G_PERIOD_MIN_CYC  => 7_500_000,      -- 150 ms
       G_PERIOD_MAX_CYC  => 12_500_000      -- 250 ms
     )
     port map (
@@ -97,7 +111,8 @@ begin
       phys_active_i => phys_active, cia_motor_on_i => cia_motor_on, cia_side_i => cia_side,
       step_req_tgl_i => step_req, step_outward_i => step_outward, step_ack_tgl_o => step_ack,
       rd_req_tgl_i => rd_req, rd_op_i => rd_op, rd_track_i => rd_track, rd_side_i => rd_side,
-      rd_sector_i => rd_sector, rd_cancel_tgl_i => rd_cancel, rd_done_tgl_o => rd_done,
+      rd_sector_i => rd_sector, rd_seq_i => rd_seq, rd_cancel_tgl_i => rd_cancel,
+      rd_done_tgl_o => rd_done, rd_done_seq_o => rd_done_seq,
       rd_result_o => rd_result, rd_crc_err_o => rd_crc_err, rd_rnf_o => rd_rnf,
       rd_deleted_o => rd_deleted, rd_c_o => rd_c, rd_h_o => rd_h, rd_r_o => rd_r, rd_n_o => rd_n,
       byte_data_o => byte_data, byte_wr_o => byte_wr, byte_ovf_i => fifo_full,
@@ -118,10 +133,26 @@ begin
     port map (
       f_motora_i => f_motora, f_selecta_i => f_selecta, f_side1_i => f_side1,
       f_stepdir_i => f_stepdir, f_step_i => f_step, f_density_i => f_density,
-      cfg_present_i => '1', cfg_wprot_i => '0', cfg_change_i => '0',
+      cfg_present_i => '1', cfg_wprot_i => '0', cfg_change_i => cfg_change,
       f_index_o => f_index, f_track0_o => f_track0, f_writeprotect_o => f_wprot,
       f_diskchanged_o => f_change, f_rdata_o => f_rdata, cur_cyl_o => cur_cyl
     );
+
+  -- F4 monitor: the done tag must be stable for the whole inter-done interval;
+  -- it may only change on a clock edge where rd_done toggles as well. (Before
+  -- the round 10 fix it mirrored the internal seq register, which reloads at
+  -- op ACCEPTANCE -- this monitor fails on every accepted request then.)
+  tag_mon : process (clk)
+    variable prev_tag  : std_logic_vector(1 downto 0) := "00";
+    variable prev_done : std_logic := '0';
+  begin
+    if rising_edge(clk) then
+      assert (rd_done_seq = prev_tag) or (rd_done /= prev_done)
+        report "FAIL: rd_done_seq changed without a rd_done toggle" severity error;
+      prev_tag  := rd_done_seq;
+      prev_done := rd_done;
+    end if;
+  end process;
 
   -- greedily drain the read FIFO into cap[]
   rd_en <= not rd_empty;
@@ -139,6 +170,8 @@ begin
     variable prev_done : std_logic;
     variable prev_ack  : std_logic;
     variable base      : integer;
+    variable seq_cnt   : unsigned(1 downto 0) := "00";   -- mirrors fdc1772 phys_rd_seq
+    variable t1, t2    : time;                           -- done-toggle spacing (F5)
 
     procedure do_read(op : std_logic_vector(2 downto 0); trk, secn : integer) is
     begin
@@ -146,12 +179,17 @@ begin
       rd_track  <= to_unsigned(trk, 8);
       rd_sector <= to_unsigned(secn, 8);
       rd_side   <= '1';       -- fdc1772 convention: '1' = logical side 0 (~PA0)
+      seq_cnt   := seq_cnt + 1;                    -- a new op bumps the tag (C1)
+      rd_seq    <= std_logic_vector(seq_cnt);
       wait until rising_edge(clk);
       wait until rising_edge(clk);
       prev_done := rd_done;
       rd_req <= not rd_req;                        -- fire request
       wait until rd_done /= prev_done for 2 sec;
       assert rd_done /= prev_done report "TIMEOUT waiting for rd_done" severity failure;
+      assert rd_done_seq = std_logic_vector(seq_cnt)
+        report "FAIL: rd_done_seq=" & to_hstring("00" & unsigned(rd_done_seq))
+             & " expected " & to_hstring("00" & seq_cnt) severity error;
     end procedure;
 
     procedure do_step(outward : std_logic) is
@@ -239,13 +277,124 @@ begin
     assert rd_rnf = '1' report "FAIL: bad-sector rnf not set" severity error;
     report "Read Sector cyl1 sec11 (absent): RNF as expected";
 
+    -- === Pending-request latch (delivery v2 C2) + per-op done tags ==========
+    -- Fire request A (cyl1 sec2); WHILE it is busy, fire request B (cyl1 sec3).
+    -- B must be latched (not lost), served after A completes, and each
+    -- completion must carry its own sequence tag and deliver its own payload.
+    base := cap_idx;
+    rd_op     <= RDOP_READ_SECTOR;
+    rd_track  <= to_unsigned(1, 8);
+    rd_sector <= to_unsigned(2, 8);
+    rd_side   <= '1';
+    seq_cnt   := seq_cnt + 1;
+    rd_seq    <= std_logic_vector(seq_cnt);
+    wait until rising_edge(clk);
+    wait until rising_edge(clk);
+    prev_done := rd_done;
+    rd_req <= not rd_req;                          -- request A
+    wait for 100 us;                               -- A is now busy (RD_WAIT/RD_SEARCH)
+    rd_sector <= to_unsigned(3, 8);
+    seq_cnt   := seq_cnt + 1;
+    rd_seq    <= std_logic_vector(seq_cnt);
+    wait until rising_edge(clk);
+    wait until rising_edge(clk);
+    rd_req <= not rd_req;                          -- request B while A is busy
+    -- completion of A (tag = seq_cnt - 1)
+    wait until rd_done /= prev_done for 2 sec;
+    assert rd_done /= prev_done report "TIMEOUT waiting for done(A)" severity failure;
+    assert rd_result = RES_OK
+      report "FAIL: pending-test op A result=" & hs("000" & unsigned(rd_result)) severity error;
+    assert rd_done_seq = std_logic_vector(seq_cnt - 1)
+      report "FAIL: op A done tag=" & to_hstring("00" & unsigned(rd_done_seq)) severity error;
+    prev_done := rd_done;
+    check_payload(1, 0, 2);                        -- A's 512 bytes
+    base := cap_idx;
+    -- completion of B (the latched pending request, tag = seq_cnt)
+    wait until rd_done /= prev_done for 2 sec;
+    assert rd_done /= prev_done report "TIMEOUT waiting for done(B) -- pending request LOST" severity failure;
+    assert rd_result = RES_OK
+      report "FAIL: pending-test op B result=" & hs("000" & unsigned(rd_result)) severity error;
+    assert rd_done_seq = std_logic_vector(seq_cnt)
+      report "FAIL: op B done tag=" & to_hstring("00" & unsigned(rd_done_seq)) severity error;
+    check_payload(1, 0, 3);                        -- B's 512 bytes
+    report "Pending-request latch: B latched while A busy, both completed with own tags";
+
+    -- === Abort with a pending request: own tags + spaced dones (F4/F5) =====
+    -- Fire request A; while it is busy, fire request B (latched). Then assert
+    -- a PERSISTENT disk change: A aborts with RES_DISK_CHANGED and its own
+    -- tag; the controller must wait at least 8 clk cycles before serving B,
+    -- which then aborts too (change still asserted) with B's tag -- so the
+    -- two done toggles are spaced widely enough for the fdc-side two-sample
+    -- agreement synchronizer and neither edge can be swallowed.
+    rd_op     <= RDOP_READ_SECTOR;
+    rd_track  <= to_unsigned(1, 8);
+    rd_sector <= to_unsigned(2, 8);
+    rd_side   <= '1';
+    seq_cnt   := seq_cnt + 1;
+    rd_seq    <= std_logic_vector(seq_cnt);
+    wait until rising_edge(clk);
+    wait until rising_edge(clk);
+    prev_done := rd_done;
+    rd_req <= not rd_req;                          -- request A
+    wait for 100 us;                               -- A is busy (a sector read
+                                                   -- needs >= 16 ms to complete)
+    rd_sector <= to_unsigned(3, 8);
+    seq_cnt   := seq_cnt + 1;
+    rd_seq    <= std_logic_vector(seq_cnt);
+    wait until rising_edge(clk);
+    wait until rising_edge(clk);
+    rd_req <= not rd_req;                          -- request B: latched while A busy
+    wait for 50 us;
+    cfg_change <= '1';                             -- persistent disk change -> abort
+    wait until rd_done /= prev_done for 100 ms;
+    assert rd_done /= prev_done report "TIMEOUT waiting for abort done(A)" severity failure;
+    t1 := now;
+    assert rd_result = RES_DISK_CHANGED
+      report "FAIL: abort A result=" & hs("000" & unsigned(rd_result)) severity error;
+    assert rd_done_seq = std_logic_vector(seq_cnt - 1)
+      report "FAIL: abort A done tag=" & to_hstring("00" & unsigned(rd_done_seq)) severity error;
+    prev_done := rd_done;
+    -- B is served only after the spacing counter expires, then aborts at once
+    wait until rd_done /= prev_done for 100 ms;
+    assert rd_done /= prev_done report "TIMEOUT waiting for abort done(B) -- pending request LOST after abort" severity failure;
+    t2 := now;
+    assert rd_result = RES_DISK_CHANGED
+      report "FAIL: abort B result=" & hs("000" & unsigned(rd_result)) severity error;
+    assert rd_done_seq = std_logic_vector(seq_cnt)
+      report "FAIL: abort B done tag=" & to_hstring("00" & unsigned(rd_done_seq)) severity error;
+    assert (t2 - t1) >= 160 ns
+      report "FAIL: done toggles only " & time'image(t2 - t1) & " apart (< 8 clk cycles)" severity error;
+    report "Abort with pending: A+B aborted with own tags, dones spaced " & time'image(t2 - t1);
+
+    -- recovery: remove the change condition, revalidate like the DOS does (a
+    -- step with media present clears the latch), then a quick Read Address.
+    -- NOTE: no assertion on the returned C -- the mech model samples its flux
+    -- geometry only at the top of each 200 ms revolution, so an RA issued
+    -- shortly after the step can still (correctly, per the model) decode IDs
+    -- of the pre-step cylinder. The point here is that the engine completes
+    -- cleanly (OK result, 6 reply bytes, own tag) after the abort sequence.
+    cfg_change <= '0';
+    wait for 20 us;
+    do_step('1');                                  -- clears the change latch
+    wait for 1 us;
+    assert st_change = '0' report "FAIL: change latch not cleared by the step" severity error;
+    wait until st_head_settled = '1' for 100 ms;
+    base := cap_idx;
+    do_read(RDOP_READ_ADDRESS, 0, 0);
+    assert rd_result = RES_OK
+      report "FAIL: post-abort read-address result=" & hs("000" & unsigned(rd_result)) severity error;
+    wait for 50 us;
+    assert (cap_idx - base) = 6
+      report "FAIL: post-abort read-address produced " & integer'image(cap_idx-base) & " bytes, expected 6" severity error;
+    report "Recovery after change-abort: Read Address OK (6 bytes, result OK)";
+
     report "physical_1581_controller: ALL TESTS PASSED";
     finish;
   end process;
 
   guard : process
   begin
-    wait for 6 sec;
+    wait for 8 sec;
     report "FAIL: global timeout" severity failure;
   end process;
 

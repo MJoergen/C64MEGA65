@@ -65,6 +65,16 @@ architecture sim of tb_physical_1581_diag is
   signal rd_req_sector : unsigned(7 downto 0) := (others => '0');
   signal rd_req_side   : std_logic := '0';
 
+  -- map v4 delivery-v2 observability inputs
+  signal dbg_lost      : std_logic := '0';
+  signal dbg_drain     : std_logic := '0';
+  signal dbg_staledone : std_logic := '0';
+  signal dbg_busycmd   : std_logic := '0';
+  signal dbg_fin       : std_logic := '0';
+  signal dbg_pres_cnt  : unsigned(10 downto 0) := (others => '0');
+  signal fifo_level    : unsigned(9 downto 0) := (others => '0');
+  signal runt          : std_logic := '0';
+
   -- QNICE read interface
   signal q_ce   : std_logic := '0';
   signal q_addr : std_logic_vector(7 downto 0) := (others => '0');
@@ -98,6 +108,10 @@ begin
       rd_req_evt_i => rd_req_evt, rd_req_op_i => rd_req_op,
       rd_req_track_i => rd_req_track, rd_req_sector_i => rd_req_sector,
       rd_req_side_i => rd_req_side,
+      dbg_lost_i => dbg_lost, dbg_drain_i => dbg_drain,
+      dbg_staledone_i => dbg_staledone, dbg_busycmd_i => dbg_busycmd,
+      dbg_fin_i => dbg_fin, dbg_pres_cnt_i => dbg_pres_cnt,
+      fifo_level_i => fifo_level, runt_i => runt,
       qnice_ce_i => q_ce, qnice_addr_i => q_addr, qnice_data_o => q_data
     );
 
@@ -167,10 +181,10 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"031F", "VERSION/CAP");
+    expect(16#01#, x"043F", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
-    expect(16#30#, x"0000", "RESERVED");
+    expect(16#36#, x"0000", "RESERVED");
 
     -- ---- packed live input / output words ------------------------------
     diag_in_bits  <= x"02AA";
@@ -232,6 +246,12 @@ begin
     expect(16#20#, x"0001", "CNT_CANCEL_LO=1");
     expect(16#06#, x"000D", "LAST_RESULT (cancelled)");
 
+    -- a read with an ODD found H: its trace entry must carry the H LSB in
+    -- w0 bit 8 (map v4; checked in the trace-ring section below as entry 8)
+    do_read(RES_OK, '0', '0', '0', 16#40#, 16#31#, 16#07#, 16#02#);
+    expect(16#1A#, x"0005", "CNT_READOP_LO=5");
+    expect(16#08#, x"3102", "CHRN_HN (odd H)");
+
     -- ---- disk-change latch events --------------------------------------
     st_change <= '1'; wait until rising_edge(clk); wait until rising_edge(clk);
     st_change <= '0'; wait until rising_edge(clk); wait until rising_edge(clk);
@@ -287,26 +307,74 @@ begin
     expect(16#28#, x"0000", "IMG_DRIVE idle again");
 
     -- ---- WD-dialogue trace ring -----------------------------------------
-    -- The 4 step-acks and 4 rd-dones above produced trace entries 0..7:
+    -- The 4 step-acks and 5 rd-dones above produced trace entries 0..8:
     -- steps first (dir=1, cyl=0x2A from the CTRL_STATE test), then the reads
     -- (entry 4 = the deleted-flag RES_OK read with C=0x11/R=0x33, entry 7 =
-    -- the cancelled read, result 0x0D). Add one REQ event and verify layout.
-    expect(16#29#, x"0008", "TRC_CNT=8");
+    -- the cancelled read, result 0x0D, entry 8 = the odd-H read whose w0 must
+    -- carry the H LSB in bit 8). Add one REQ event and verify layout.
+    expect(16#29#, x"0009", "TRC_CNT=9");
     expect(16#40#, x"112A", "TRC[0].w0 (STEP dir=1 cyl=2A)");
     expect(16#41#, x"0000", "TRC[0].w1");
     expect(16#48#, x"3211", "TRC[4].w0 (DONE deleted C=11)");
     expect(16#49#, x"3300", "TRC[4].w1 (R=33 result=OK)");
     expect(16#4E#, x"3000", "TRC[7].w0 (DONE cancelled)");
     expect(16#4F#, x"000D", "TRC[7].w1 (result=CANCELLED)");
+    expect(16#50#, x"3140", "TRC[8].w0 (DONE H-lsb=1 C=40)");
+    expect(16#51#, x"0700", "TRC[8].w1 (R=07 result=OK)");
 
     rd_req_op     <= "000";           -- RDOP_READ_SECTOR
     rd_req_track  <= x"27";           -- cylinder 39
     rd_req_sector <= x"05";
     rd_req_side   <= '1';
     pulse1(rd_req_evt);
-    expect(16#29#, x"0009", "TRC_CNT=9 after REQ");
-    expect(16#50#, x"2127", "TRC[8].w0 (REQ op=0 side=1 track=27)");
-    expect(16#51#, x"0500", "TRC[8].w1 (sector=05)");
+    expect(16#29#, x"000A", "TRC_CNT=10 after REQ");
+    expect(16#52#, x"2127", "TRC[9].w0 (REQ op=0 side=1 track=27)");
+    expect(16#53#, x"0500", "TRC[9].w1 (sector=05)");
+
+    -- ---- map v4: FIFO level (live) ---------------------------------------
+    expect(16#2A#, x"0000", "FIFO_LEVEL=0");
+    fifo_level <= to_unsigned(37, 10);
+    wait until rising_edge(clk);
+    expect(16#2A#, x"0025", "FIFO_LEVEL=37 (live)");
+    fifo_level <= to_unsigned(512, 10);
+    wait until rising_edge(clk);
+    expect(16#2A#, x"0200", "FIFO_LEVEL=512 (full sector)");
+    fifo_level <= (others => '0');
+    wait until rising_edge(clk);
+
+    -- ---- map v4: LAST_PRESENT captured on the fin toggle edge ------------
+    expect(16#2B#, x"0000", "LAST_PRESENT(reset)");
+    dbg_pres_cnt <= to_unsigned(512, 11);
+    wait until rising_edge(clk);
+    toggle(dbg_fin);
+    expect(16#2B#, x"0200", "LAST_PRESENT=512 after fin");
+    dbg_pres_cnt <= to_unsigned(6, 11);
+    wait until rising_edge(clk);
+    expect(16#2B#, x"0200", "LAST_PRESENT held without fin");
+    toggle(dbg_fin);
+    expect(16#2B#, x"0006", "LAST_PRESENT=6 after 2nd fin");
+
+    -- ---- map v4: delivery-v2 event counters (toggle-coded) ---------------
+    toggle(dbg_lost);
+    toggle(dbg_lost);
+    expect(16#2C#, x"0002", "CNT_LOST_LO=2");
+    expect(16#2D#, x"0000", "CNT_LOST_HI=0");
+    toggle(dbg_drain);
+    expect(16#2E#, x"0001", "CNT_DRAIN_LO=1");
+    toggle(dbg_staledone);
+    toggle(dbg_staledone);
+    toggle(dbg_staledone);
+    expect(16#30#, x"0003", "CNT_STALEDONE_LO=3");
+    toggle(dbg_busycmd);
+    expect(16#32#, x"0001", "CNT_BUSYCMD_LO=1");
+    expect(16#2C#, x"0002", "CNT_LOST unchanged by other events");
+
+    -- ---- map v4: runt counter (pulse-coded) ------------------------------
+    pulse1(runt);
+    pulse1(runt);
+    pulse1(runt);
+    expect(16#34#, x"0003", "CNT_RUNT_LO=3");
+    expect(16#35#, x"0000", "CNT_RUNT_HI=0");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

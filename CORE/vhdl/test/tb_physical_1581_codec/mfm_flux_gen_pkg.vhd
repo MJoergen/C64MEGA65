@@ -35,6 +35,17 @@ package mfm_flux_gen_pkg is
   -- Emit a missing-clock A1 sync byte; leaves prev_data = '1'.
   procedure mfm_a1(signal rdata : out std_logic; prev_data : inout std_logic);
 
+  -- Emit one data byte like mfm_byte, but inject a RUNT double edge right
+  -- after the byte's first flux transition: legit pulse, 600 ns idle, then a
+  -- 200 ns spurious low pulse. Leading-edge distance legit->runt = 1000 ns =
+  -- 50 controller cycles, far below C_GAP_GLITCH (120), so the gaps stage must
+  -- merge it into the following gap (which it shortens by the same 1000 ns --
+  -- WITHOUT the runt filter that remainder falls below the shortest valid
+  -- window and kills the field via a class-11 gap error).
+  procedure mfm_byte_runt(signal rdata : out std_logic;
+                          b            : in  unsigned(7 downto 0);
+                          prev_data    : inout std_logic);
+
   -- Emit N copies of a byte (e.g. gap 0x4E or 0x00 preamble).
   procedure mfm_bytes(signal rdata : out std_logic;
                       b            : in  unsigned(7 downto 0);
@@ -83,6 +94,44 @@ package body mfm_flux_gen_pkg is
       mfm_halfcell(rdata, MFM_A1_RAW(i));
     end loop;
     prev_data := '1';              -- A1 data = 0xA1, last data bit = 1
+  end procedure;
+
+  procedure mfm_byte_runt(signal rdata : out std_logic;
+                          b            : in  unsigned(7 downto 0);
+                          prev_data    : inout std_logic) is
+    variable d        : std_logic;
+    variable c        : std_logic;
+    variable injected : boolean := false;
+
+    -- like mfm_halfcell, but appends the runt double edge after the pulse
+    procedure runt_halfcell(signal rd : out std_logic) is
+    begin
+      rd <= '0';                                 -- the legitimate transition
+      wait for MFM_LOW_WIDTH;                    -- 400 ns low
+      rd <= '1';
+      wait for 600 ns;                           -- runt leading-edge distance: 1000 ns
+      rd <= '0';                                 -- the RUNT (spurious) transition
+      wait for 200 ns;
+      rd <= '1';
+      wait for MFM_HALF_CELL - MFM_LOW_WIDTH - 600 ns - 200 ns;
+    end procedure;
+  begin
+    for i in 7 downto 0 loop
+      d := b(i);
+      c := not (prev_data or d);   -- MFM clock rule
+      if c = '1' and not injected then
+        runt_halfcell(rdata); injected := true;
+      else
+        mfm_halfcell(rdata, c);    -- clock half-cell
+      end if;
+      if d = '1' and not injected then
+        runt_halfcell(rdata); injected := true;
+      else
+        mfm_halfcell(rdata, d);    -- data half-cell
+      end if;
+      prev_data := d;
+    end loop;
+    assert injected report "mfm_byte_runt: byte had no flux transition" severity failure;
   end procedure;
 
   procedure mfm_bytes(signal rdata : out std_logic;

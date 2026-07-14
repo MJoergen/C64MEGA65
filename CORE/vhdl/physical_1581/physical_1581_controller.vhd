@@ -28,7 +28,6 @@ entity physical_1581_controller is
   generic (
     G_CAPABLE         : boolean := true;
     -- mechanism/magnetic timing in 50 MHz cycles (production defaults)
-    G_MOTOR_READY_CYC : natural := 25_250_000;  -- 505 ms
     G_READY_WD_CYC    : natural := 55_000_000;  -- 1.10 s
     G_DIR_SETUP_CYC   : natural := 1_200;       -- 24 us
     G_STEP_LOW_CYC    : natural := 200;         -- 4 us
@@ -39,8 +38,7 @@ entity physical_1581_controller is
     G_DAM_TIMEOUT_CYC : natural := 68_800;      -- 43 decoded byte-times
     G_SEARCH_WD_CYC   : natural := 65_000_000;  -- 1.300 s absolute search watchdog
     G_SEARCH_EDGES    : natural := 5;           -- index-edge search budget
-    G_PERIOD_MIN_CYC  : natural := 7_500_000;   -- 150 ms
-    G_PERIOD_MAX_CYC  : natural := 12_500_000   -- 250 ms
+    G_PERIOD_MAX_CYC  : natural := 12_500_000   -- 250 ms (index-staleness eject bound)
   );
   port (
     clk_i            : in  std_logic;            -- 50 MHz (c64_clk_sd_i)
@@ -69,14 +67,22 @@ entity physical_1581_controller is
     step_outward_i   : in  std_logic;            -- '1' = toward track 0
     step_ack_tgl_o   : out std_logic := '0';
 
-    -- read operation request (toggle handshake)
+    -- read operation request (toggle handshake). rd_seq_i is the request
+    -- sequence tag (fdc1772 phys_rd_seq): quasi-static alongside op/track/
+    -- sector/side from before the rd_req toggle until the next toggle. The
+    -- accepted tag is registered onto rd_done_seq_o on the same cycle as each
+    -- rd_done toggle and held until the next one, so it is stable for the
+    -- whole inter-done interval; the WD front end ignores a done whose tag
+    -- does not match its current operation.
     rd_req_tgl_i     : in  std_logic;
     rd_op_i          : in  std_logic_vector(2 downto 0);  -- RDOP_*
     rd_track_i       : in  unsigned(7 downto 0);
     rd_side_i        : in  std_logic;
     rd_sector_i      : in  unsigned(7 downto 0);
+    rd_seq_i         : in  std_logic_vector(1 downto 0) := "00";
     rd_cancel_tgl_i  : in  std_logic;
     rd_done_tgl_o    : out std_logic := '0';
+    rd_done_seq_o    : out std_logic_vector(1 downto 0) := "00";
     rd_result_o      : out std_logic_vector(4 downto 0) := RES_OK;
     rd_crc_err_o     : out std_logic := '0';
     rd_rnf_o         : out std_logic := '0';
@@ -125,6 +131,7 @@ entity physical_1581_controller is
     diag_data_end_o     : out std_logic := '0';   -- 1-cycle pulse: a data field CRC was checked
     diag_data_crc_ok_o  : out std_logic := '0';   -- valid at diag_data_end_o
     diag_gap_error_o    : out std_logic := '0';   -- 1-cycle pulse: out-of-spec flux gap
+    diag_runt_o         : out std_logic := '0';   -- 1-cycle pulse: merged RDATA runt gap
     -- FSM phases + head estimate
     diag_rd_phase_o     : out std_logic_vector(3 downto 0) := (others => '0');  -- read FSM state code
     diag_step_phase_o   : out std_logic_vector(1 downto 0) := (others => '0');  -- step FSM state code
@@ -171,6 +178,7 @@ architecture rtl of physical_1581_controller is
   signal data_crc_ok    : std_logic;
   signal dec_locked     : std_logic;
   signal dec_gap_err    : std_logic;
+  signal dec_runt       : std_logic;
   signal dec_last_gap   : unsigned(15 downto 0);
   signal dec_crc_value  : unsigned(15 downto 0);   -- diag tap: live CRC residue
 
@@ -197,10 +205,8 @@ architecture rtl of physical_1581_controller is
   -- maintained state
   signal side_prev     : std_logic := '0';
   signal side_settle   : unsigned(31 downto 0) := (others => '0');
-  signal ready_cnt     : unsigned(31 downto 0) := (others => '0');
   signal idx_motor_cnt : integer range 0 to 7 := 0;
   signal idx_gap_cnt   : unsigned(31 downto 0) := (others => '0');  -- cycles since the last index edge (motor on)
-  signal period_ok     : std_logic := '0';
   signal media_ready   : std_logic := '0';
   signal change_latched: std_logic := '0';
   signal motor_on_act  : std_logic := '0';
@@ -227,6 +233,43 @@ architecture rtl of physical_1581_controller is
   signal op_r       : std_logic_vector(2 downto 0) := (others => '0');
   signal trk_r      : unsigned(7 downto 0) := (others => '0');
   signal sec_r      : unsigned(7 downto 0) := (others => '0');
+  signal seq_r      : std_logic_vector(1 downto 0) := "00";  -- accepted request sequence tag
+
+  -- round 10 hardening (F4): rd_done_seq_o is a register written ONLY on the
+  -- cycles that toggle rd_done_tgl_o (capturing seq_r of the op being
+  -- completed, in the main process, exactly like rd_result_o and the flag
+  -- outputs), so the tag is stable for the whole inter-done interval BY
+  -- CONSTRUCTION -- even when a pending request is served (and seq_r
+  -- reloaded) one cycle after an abort's done toggle.
+
+  -- round 10 hardening (F5): minimum spacing between rd_done toggles. An
+  -- abort-done followed by serving a pending request that immediately aborts
+  -- again (persistent change_c) could otherwise produce two done toggles two
+  -- source cycles apart, which the fdc-side two-sample agreement synchronizer
+  -- can swallow entirely. The down-counter is armed at every done toggle;
+  -- while it is nonzero, RD_IDLE neither serves a pending request nor accepts
+  -- a live one into an abortable state (a live edge is latched as pending
+  -- instead, so it cannot be lost). Strictly decrementing -> always terminates.
+  -- At the enforced minimum spacing the fdc side may attribute the first done
+  -- to the newer tag (its done-edge delay and the independently synced tag bus
+  -- can overlap) -- harmless, because minimum-spaced dones only arise from
+  -- back-to-back aborts carrying identical flags. Re-derive this argument
+  -- before cloning the done handshake for the write milestone.
+  constant C_DONE_GAP   : natural := 8;
+  signal   done_gap_cnt : natural range 0 to C_DONE_GAP := 0;
+
+  -- pending-request latch (issue #90 round 10, delivery v2 C2): a rd_req toggle
+  -- arriving while the read FSM is busy used to be LOST FOREVER -- the old op's
+  -- done and bytes then paired with the new WD command, delivering stale data
+  -- with clean status (the audit's one silent desync channel). Now such an edge
+  -- is latched here with its parameters resampled at the edge (they are
+  -- quasi-static until the NEXT toggle, so this is race-free); the latest edge
+  -- wins, a cancel edge clears the latch, and RD_IDLE serves it immediately.
+  signal pend_v     : std_logic := '0';
+  signal pend_op    : std_logic_vector(2 downto 0) := (others => '0');
+  signal pend_trk   : unsigned(7 downto 0) := (others => '0');
+  signal pend_sec   : unsigned(7 downto 0) := (others => '0');
+  signal pend_seq   : std_logic_vector(1 downto 0) := "00";
   signal wd_cnt     : unsigned(31 downto 0) := (others => '0');  -- absolute search watchdog
   signal rdy_wd_cnt : unsigned(31 downto 0) := (others => '0');  -- readiness watchdog
   signal dam_cnt    : unsigned(31 downto 0) := (others => '0');
@@ -265,7 +308,8 @@ begin
       data_start_o => data_start, data_deleted_o => data_deleted,
       data_byte_o => data_byte, data_byte_valid_o => data_byte_v,
       data_end_o => data_end, data_crc_ok_o => data_crc_ok,
-      locked_o => dec_locked, gap_error_o => dec_gap_err, last_gap_o => dec_last_gap,
+      locked_o => dec_locked, gap_error_o => dec_gap_err, runt_o => dec_runt,
+      last_gap_o => dec_last_gap,
       crc_value_o => dec_crc_value
     );
 
@@ -302,6 +346,12 @@ begin
   st_head_cyl_o    <= to_unsigned(head_cyl, 8);
   st_locked_o      <= dec_locked;
 
+  -- C3 (delivery v2) + round 10 F4: rd_done_seq_o is registered in the main
+  -- process, ONLY on the cycles that toggle rd_done_tgl_o (capturing seq_r of
+  -- the op being completed), so it holds the completing op's tag for the
+  -- whole inter-done interval -- including aborts followed by an
+  -- immediately-served pending request. No concurrent assignment here.
+
   ---------------------------------------------------------------------------
   -- READ-ONLY diagnostic taps (issue #90; purely additive; no behavior change)
   ---------------------------------------------------------------------------
@@ -317,6 +367,7 @@ begin
   diag_data_end_o     <= data_end;
   diag_data_crc_ok_o  <= data_crc_ok;
   diag_gap_error_o    <= dec_gap_err;
+  diag_runt_o         <= dec_runt;
   diag_head_valid_o   <= head_valid;
   diag_head_dir_out_o <= last_dir_out;
 
@@ -402,11 +453,18 @@ begin
       end if;
 
       if rst_i = '1' or en = '0' then
-        -- inactive / reset: mechanics safe, state cleared (media presence pending)
+        -- inactive / reset: mechanics safe, state cleared (media presence pending).
+        -- KNOWN ACCEPTED HOLE (delivery v2 C5): a QNICE-domain-only reset (rst_i
+        -- without the accompanying core reset) mid-operation idles this FSM
+        -- WITHOUT toggling rd_done, so the WD front end would wait forever. In
+        -- M2M the QNICE reset never occurs without the core reset, which clears
+        -- the fdc1772 via floppy_reset -- so the pairing cannot desynchronize in
+        -- practice. Documented, not fixed (would need a reset-crossing done).
         step_st       <= SI_IDLE;
         step_dir_pulse <= '1';
         rd_st         <= RD_IDLE;
-        ready_cnt     <= (others => '0');
+        pend_v        <= '0';
+        done_gap_cnt  <= 0;
         idx_motor_cnt <= 0;
         idx_gap_cnt   <= (others => '0');
         media_ready   <= '0';
@@ -474,30 +532,19 @@ begin
         -- at-speed period measurement (~0.5-0.7 s) failed that deadline on
         -- hardware. Speed correctness needs no gate here: an off-speed disk
         -- does not MFM-decode, the read returns RNF, and the DOS retries.
-        -- period_ok remains maintained for the diagnostics and the eject
-        -- (index-staleness) detection below stays the disk-removed guard.
+        -- The eject (index-staleness) detection below stays the disk-removed
+        -- guard.
         if motor_s = '1' and idx_motor_cnt >= 2 then
           media_ready <= '1';
-        end if;
-
-        -- period plausibility (updated on each measured period)
-        if index_period >= to_unsigned(G_PERIOD_MIN_CYC, 32) and
-           index_period <= to_unsigned(G_PERIOD_MAX_CYC, 32) then
-          period_ok <= '1';
         end if;
 
         -- qualification counters + index-staleness eject detection. These come
         -- AFTER the assert above so their deasserts win within the same cycle.
         if motor_s = '0' then
-          ready_cnt     <= (others => '0');
           idx_motor_cnt <= 0;
           media_ready   <= '0';
-          period_ok     <= '0';
           idx_gap_cnt   <= (others => '0');
         else
-          if ready_cnt < to_unsigned(G_MOTOR_READY_CYC, 32) then
-            ready_cnt <= ready_cnt + 1;
-          end if;
           if index_edge = '1' then
             idx_gap_cnt <= (others => '0');
             if idx_motor_cnt < 7 then
@@ -512,7 +559,6 @@ begin
             -- media_ready is still 0 then and the counters restart cleanly)
             media_ready   <= '0';
             idx_motor_cnt <= 0;
-            period_ok     <= '0';
             idx_gap_cnt   <= (others => '0');
           end if;
         end if;
@@ -598,6 +644,12 @@ begin
         ------------------------------------------------------------------
         -- READ engine
         ------------------------------------------------------------------
+        -- F5: done-toggle spacing counter. Every rd_done toggle below arms it
+        -- (those later assignments override this decrement in the same cycle).
+        if done_gap_cnt /= 0 then
+          done_gap_cnt <= done_gap_cnt - 1;
+        end if;
+
         -- global cancel / disk-change abort during an active read
         if rd_st /= RD_IDLE and (cancel_edge or change_c = '1') then
           if change_c = '1' then
@@ -606,20 +658,47 @@ begin
             rd_result_o <= RES_CANCELLED; rd_rnf_o <= '0'; rd_crc_err_o <= '0';
           end if;
           rd_done_tgl_o <= not rd_done_tgl_o;
+          rd_done_seq_o <= seq_r;              -- F4: tag of the op being completed
+          done_gap_cnt  <= C_DONE_GAP;         -- F5: arm the spacing counter
           rd_st <= RD_IDLE;
         else
           case rd_st is
             when RD_IDLE =>
-              if rd_req_edge then
-                op_r   <= rd_op_i;
-                trk_r  <= rd_track_i;
-                sec_r  <= rd_sector_i;
-                saw_bad_crc <= '0';
-                ovf_l  <= '0';
-                edge_cnt <= 0;
-                rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
-                rd_req_evt <= '1';
-                rd_st  <= RD_WAIT;
+              -- accept a live request, or serve a latched pending one (C2). A
+              -- live edge is by definition the LATER request, so it supersedes
+              -- (and clears) any pending latch; a coincident cancel edge kills
+              -- the pending request but not a live one (the fdc only toggles
+              -- cancel BEFORE issuing a new request, never after it).
+              -- F5: while the done-spacing counter runs, accept NOTHING into
+              -- an abortable state (the next done toggle could otherwise land
+              -- too close to the previous one); a live edge arriving in that
+              -- window is latched as pending below, so it cannot be lost.
+              if done_gap_cnt = 0 then
+                if rd_req_edge then
+                  op_r   <= rd_op_i;
+                  trk_r  <= rd_track_i;
+                  sec_r  <= rd_sector_i;
+                  seq_r  <= rd_seq_i;
+                  pend_v <= '0';
+                  saw_bad_crc <= '0';
+                  ovf_l  <= '0';
+                  edge_cnt <= 0;
+                  rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
+                  rd_req_evt <= '1';             -- trace REQUEST on acceptance
+                  rd_st  <= RD_WAIT;
+                elsif pend_v = '1' and not cancel_edge then
+                  op_r   <= pend_op;
+                  trk_r  <= pend_trk;
+                  sec_r  <= pend_sec;
+                  seq_r  <= pend_seq;
+                  pend_v <= '0';
+                  saw_bad_crc <= '0';
+                  ovf_l  <= '0';
+                  edge_cnt <= 0;
+                  rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
+                  rd_req_evt <= '1';             -- a served pending traces here
+                  rd_st  <= RD_WAIT;
+                end if;
               end if;
 
             when RD_WAIT =>
@@ -632,6 +711,8 @@ begin
               elsif rdy_wd_cnt = 0 then
                 rd_result_o <= RES_NOT_READY; rd_rnf_o <= '1'; rd_crc_err_o <= '0';
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               end if;
 
@@ -660,12 +741,16 @@ begin
                       rd_c_o <= id_c; rd_h_o <= id_h; rd_r_o <= id_r; rd_n_o <= id_n;
                       rd_result_o <= RES_OK; rd_crc_err_o <= '0'; rd_rnf_o <= '0';
                       rd_done_tgl_o <= not rd_done_tgl_o;
+                      rd_done_seq_o <= seq_r;
+                      done_gap_cnt  <= C_DONE_GAP;
                       rd_st <= RD_IDLE;
                     elsif id_r = sec_r then          -- READ_SECTOR match on C and R
                       if id_n /= C_SIZECODE_512 then
                         rd_c_o <= id_c; rd_h_o <= id_h; rd_r_o <= id_r; rd_n_o <= id_n;
                         rd_result_o <= RES_UNSUPPORTED_SIZE; rd_rnf_o <= '1'; rd_crc_err_o <= '0';
                         rd_done_tgl_o <= not rd_done_tgl_o;
+                        rd_done_seq_o <= seq_r;
+                        done_gap_cnt  <= C_DONE_GAP;
                         rd_st <= RD_IDLE;
                       else
                         dam_cnt <= to_unsigned(G_DAM_TIMEOUT_CYC, 32);
@@ -678,15 +763,23 @@ begin
                 end if;
               end if;
 
-              -- search exhaustion
+              -- search exhaustion. The CRC and RNF flags are NEVER set
+              -- together: the genuine 318045-02 DOS job epilogue ($CD3F)
+              -- indexes its result table $CD5A with (status>>3) AND 0x0B, and
+              -- the CRC+RNF combination hits a 0x00 hole = job SUCCESS -- the
+              -- DOS would silently ACCEPT the failed operation. CRC-only maps
+              -- to job error 5 (DOS error 23) and is retried, which is the
+              -- intended self-healing. See doc/dev-issue90/PLAN.md, round-10
+              -- entry (proven ROM-in-the-loop).
               if edge_cnt >= G_SEARCH_EDGES or wd_cnt = 0 then
                 if saw_bad_crc = '1' then
-                  rd_result_o <= RES_ID_CRC_ERROR; rd_crc_err_o <= '1';
+                  rd_result_o <= RES_ID_CRC_ERROR;     rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 else
-                  rd_result_o <= RES_RECORD_NOT_FOUND; rd_crc_err_o <= '0';
+                  rd_result_o <= RES_RECORD_NOT_FOUND; rd_crc_err_o <= '0'; rd_rnf_o <= '1';
                 end if;
-                rd_rnf_o <= '1';
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               end if;
 
@@ -704,6 +797,8 @@ begin
               if edge_cnt >= G_SEARCH_EDGES or wd_cnt = 0 then
                 rd_result_o <= RES_MISSING_DAM; rd_rnf_o <= '1'; rd_crc_err_o <= '0';
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               end if;
 
@@ -711,13 +806,16 @@ begin
               -- keep the absolute op watchdog running: a flux dropout can stall the
               -- decoder mid-data-field (no data_end, no disk change) and without this
               -- bound the FSM would park here forever with the WD stuck busy. Report
-              -- it as a data CRC error; rnf is ALSO set because the byte stream is
-              -- incomplete and the WD front end releases busy on rnf without waiting
-              -- for the remaining (never-coming) bytes.
+              -- it as a data CRC error, CRC-only: setting RNF as well would hit the
+              -- $CD5A success hole (see the search-exhaustion comment above). The
+              -- delivery-v2 WD front end completes on done + empty FIFO, so an
+              -- incomplete byte stream no longer needs rnf to release busy.
               if wd_cnt /= 0 then wd_cnt <= wd_cnt - 1; end if;
               if wd_cnt = 0 then
-                rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               end if;
               if data_byte_v = '1' then
@@ -729,15 +827,18 @@ begin
                 rd_deleted_o <= deleted_l;
                 if ovf_l = '1' or (byte_wr_o = '1' and byte_ovf_i = '1') then
                   -- one or more payload bytes never made it into the FIFO: the
-                  -- stream is truncated, so fail the op (rnf releases the WD
-                  -- front end without waiting for bytes that will never come)
-                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                  -- stream is truncated, so fail the op. CRC-only, never with
+                  -- RNF (the $CD5A success hole -- see the search-exhaustion
+                  -- comment); the WD completes on done + empty FIFO.
+                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 elsif data_crc_ok = '1' then
                   rd_result_o <= RES_OK; rd_crc_err_o <= '0'; rd_rnf_o <= '0';
                 else
                   rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 end if;
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               end if;
 
@@ -755,15 +856,40 @@ begin
               if addr_idx = 5 then
                 if ovf_l = '1' or byte_ovf_i = '1' then
                   -- reply bytes were dropped (cannot happen with the 512-deep
-                  -- FIFO after the op-start drain, but never complete silently)
-                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '1';
+                  -- FIFO after the op-start drain, but never complete silently).
+                  -- CRC-only, never with RNF ($CD5A success hole -- see the
+                  -- search-exhaustion comment).
+                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 end if;
                 rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
                 rd_st <= RD_IDLE;
               else
                 addr_idx <= addr_idx + 1;
               end if;
           end case;
+        end if;
+
+        ------------------------------------------------------------------
+        -- pending-request latch maintenance (C2). Ordering inside this
+        -- process: the cancel-clear comes first and the busy-edge latch
+        -- last, so a cancel and a request edge landing in the same cycle
+        -- resolve in favor of the request (the fdc sequence is always
+        -- cancel-then-request). The RD_IDLE acceptance above already
+        -- cleared pend_v when it consumed the latch this cycle. F5: a live
+        -- edge arriving while RD_IDLE is blocked by the done-spacing counter
+        -- is latched here as well (it was not accepted above).
+        ------------------------------------------------------------------
+        if cancel_edge then
+          pend_v <= '0';
+        end if;
+        if (rd_st /= RD_IDLE or done_gap_cnt /= 0) and rd_req_edge then
+          pend_v   <= '1';                       -- latest edge wins
+          pend_op  <= rd_op_i;
+          pend_trk <= rd_track_i;
+          pend_sec <= rd_sector_i;
+          pend_seq <= rd_seq_i;
         end if;
 
       end if;

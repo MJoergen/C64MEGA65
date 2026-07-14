@@ -5,11 +5,12 @@
 -- READ SECTOR is issued against a deliberately tiny (4-entry) read FIFO whose
 -- consumer NEVER drains -- modeling the drive CPU being stolen away by IEC/IRQ
 -- work mid-sector. The controller MUST NOT complete the operation as OK with a
--- silently truncated stream: it must report RES_DATA_CRC_ERROR with both the
--- CRC and RNF flags set (RNF releases the WD front end, CRC makes the DOS
--- re-read, mirroring a real WD1772 LOST DATA situation). On hardware, the old
--- silent drop produced shifted directory names and programs that loaded but
--- did not run.
+-- silently truncated stream: it must report RES_DATA_CRC_ERROR with the CRC
+-- flag set and the RNF flag CLEAR (CRC-only makes the DOS retry via job error
+-- 5; CRC+RNF together would hit the genuine 318045-02 ROM's $CD5A table hole
+-- and be accepted as SUCCESS -- see doc/dev-issue90/PLAN.md, round-10 entry).
+-- On hardware, the old silent drop produced shifted directory names and
+-- programs that loaded but did not run.
 --
 -- C64MEGA65 project, GPLv3.
 -------------------------------------------------------------------------------
@@ -65,10 +66,8 @@ begin
   dut : entity work.physical_1581_controller
     generic map (
       G_CAPABLE => true,
-      G_MOTOR_READY_CYC => 5_000,
       G_READY_WD_CYC    => 150_000_000,
       G_SEARCH_EDGES    => 3,
-      G_PERIOD_MIN_CYC  => 7_500_000,
       G_PERIOD_MAX_CYC  => 12_500_000
     )
     port map (
@@ -130,15 +129,15 @@ begin
     wait until rd_done /= prev_done for 3 sec;
     assert rd_done /= prev_done report "TIMEOUT waiting for rd_done" severity failure;
 
-    assert rd_rnf = '1'
-      report "FAIL: overflowed read completed without RNF (silent truncation!)" severity error;
     assert rd_crc_err = '1'
-      report "FAIL: overflowed read completed without CRC error flag" severity error;
+      report "FAIL: overflowed read completed without CRC error flag (silent truncation!)" severity error;
+    assert rd_rnf = '0'
+      report "FAIL: overflowed read set RNF alongside CRC (the $CD5A hole: the DOS would accept it as SUCCESS)" severity error;
     assert rd_result = RES_DATA_CRC_ERROR
       report "FAIL: overflowed read result /= RES_DATA_CRC_ERROR" severity error;
 
-    if rd_rnf = '1' and rd_crc_err = '1' and rd_result = RES_DATA_CRC_ERROR then
-      report "tb_physical_1581_ovf: ALL TESTS PASSED (overflow reported, not silent)";
+    if rd_rnf = '0' and rd_crc_err = '1' and rd_result = RES_DATA_CRC_ERROR then
+      report "tb_physical_1581_ovf: ALL TESTS PASSED (overflow reported CRC-only, not silent)";
     end if;
     finish;
   end process;

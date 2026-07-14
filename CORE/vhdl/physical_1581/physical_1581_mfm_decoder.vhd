@@ -47,6 +47,7 @@ entity physical_1581_mfm_decoder is
     -- status / diagnostics
     locked_o          : out std_logic := '0';             -- separator locked
     gap_error_o       : out std_logic := '0';             -- pulse on invalid gap class
+    runt_o            : out std_logic := '0';             -- pulse per merged RDATA runt gap
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
@@ -109,7 +110,8 @@ begin
   ------------------------------------------------------------------------------
   i_gaps : entity work.physical_1581_mfm_gaps
     port map (clk_i => clk_i, rst_i => rst_i, f_rdata_i => f_rdata_i,
-              gap_valid_o => gap_valid, gap_len_o => gap_len);
+              gap_valid_o => gap_valid, gap_len_o => gap_len,
+              runt_o => runt_o);
 
   i_quant : entity work.physical_1581_mfm_quantise
     port map (clk_i => clk_i, rst_i => rst_i,

@@ -10,6 +10,13 @@
 -- prove they do NOT trigger a false sync/mark (only the missing-clock gap
 -- pattern establishes sync).
 --
+-- Runt-filter vectors (issue #90 round 10): one synthetic sub-C_GAP_GLITCH
+-- double edge is injected inside the ID field (the H byte) and one inside the
+-- data field (payload byte 100). Both fields must still decode byte-exact with
+-- CRC OK, runt_o must pulse exactly twice, and gap_error_o must never fire
+-- (without the filter each runt splits a legit gap into an out-of-window pair
+-- and kills the field).
+--
 -- Run: ghdl -a --std=08 --workdir=B  <pkg> <crc> <4 stages> <decoder> <flux_pkg> <this>
 --      ghdl --elab-run --std=08 --workdir=B tb_physical_1581_mfm_decoder --assert-level=error
 -------------------------------------------------------------------------------
@@ -41,7 +48,12 @@ architecture sim of tb_physical_1581_mfm_decoder is
   signal data_crc_ok     : std_logic;
   signal locked          : std_logic;
   signal gap_error       : std_logic;
+  signal runt            : std_logic;
   signal last_gap        : unsigned(15 downto 0);
+
+  -- runt-filter observation
+  signal runt_cnt      : integer := 0;
+  signal gap_error_cnt : integer := 0;
 
   -- test record identity
   constant TC : unsigned(7 downto 0) := x"05";   -- cylinder
@@ -97,8 +109,22 @@ begin
       data_start_o => data_start, data_deleted_o => data_deleted,
       data_byte_o => data_byte, data_byte_valid_o => data_byte_valid,
       data_end_o => data_end, data_crc_ok_o => data_crc_ok,
-      locked_o => locked, gap_error_o => gap_error, last_gap_o => last_gap
+      locked_o => locked, gap_error_o => gap_error, runt_o => runt,
+      last_gap_o => last_gap
     );
+
+  -- count runt merges and gap errors over the whole run
+  runt_watch : process (clk)
+  begin
+    if rising_edge(clk) then
+      if runt = '1' then
+        runt_cnt <= runt_cnt + 1;
+      end if;
+      if gap_error = '1' then
+        gap_error_cnt <= gap_error_cnt + 1;
+      end if;
+    end if;
+  end process;
 
   -- capture streamed payload + latch id
   capture : process (clk)
@@ -142,7 +168,7 @@ begin
     mfm_a1(f_rdata, prev);
     mfm_byte(f_rdata, x"FE", prev);               -- ID address mark
     mfm_byte(f_rdata, TC, prev);
-    mfm_byte(f_rdata, TH, prev);
+    mfm_byte_runt(f_rdata, TH, prev);             -- runt injected INSIDE the ID field
     mfm_byte(f_rdata, TR, prev);
     mfm_byte(f_rdata, TN, prev);
     -- ID CRC over A1,A1,A1,FE,C,H,R,N
@@ -165,7 +191,11 @@ begin
     v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1");
     v := crc16_update(v, x"FB");
     for i in 0 to 511 loop
-      mfm_byte(f_rdata, gen_data(i), prev);
+      if i = 100 then
+        mfm_byte_runt(f_rdata, gen_data(i), prev);  -- runt INSIDE the data field
+      else
+        mfm_byte(f_rdata, gen_data(i), prev);
+      end if;
       v := crc16_update(v, gen_data(i));
     end loop;
     mfm_byte(f_rdata, v(15 downto 8), prev);      -- data CRC high
@@ -198,6 +228,13 @@ begin
         severity error;
     end loop;
     report "DATA payload byte-for-byte MATCH (incl. embedded A1/FE/FB/F8/F5/F6/F7 values)";
+
+    -- runt-filter checks: both injected runts merged, no field killed
+    assert runt_cnt = 2
+      report "FAIL: runt_o pulsed " & integer'image(runt_cnt) & " times, expected 2" severity error;
+    assert gap_error_cnt = 0
+      report "FAIL: gap_error fired " & integer'image(gap_error_cnt) & " times, expected 0 (runt not merged?)" severity error;
+    report "RUNT FILTER OK: 2 runts merged (ID + data field), 0 gap errors";
 
     report "physical_1581_mfm_decoder: ALL TESTS PASSED";
     finish;

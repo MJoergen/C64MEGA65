@@ -15,17 +15,24 @@
 --     found C/H/R/N) latched at rd_done,
 --   * the last decoded CRCs (ID stored + ID calc residue + data calc residue),
 --   * the last measured index period / width and the last / min / max RDATA flux
---     gap, and
+--     gap,
 --   * 32-bit SATURATING event counters (raw index edges, index edges while the
 --     motor is on, steps, read operations, RNFs, CRC errors, cancellations, disk
---     changes, decoded ID fields, out-of-spec gaps).
+--     changes, decoded ID fields, out-of-spec gaps), and
+--   * (map v4, issue #90 round 10) delivery-v2 observability: the live read-FIFO
+--     write-side occupancy, the presented-byte count of the last finalized WD
+--     operation, and counters for LOST DATA events, between-ops drain episodes,
+--     stale (seq-mismatched) done edges, command writes ignored while busy, and
+--     merged RDATA runt gaps.
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
--- needed anywhere in this file. The single exception is img_drive_busy_i (the
--- "image drive 8 busy or dirty" level for the symmetric source-toggle idle-gate,
--- issue #90): it originates in the main clock domain and is 2-FF-synchronized
--- BEFORE it enters this file (in main.vhd), so it arrives here as a clean level.
+-- needed anywhere in this file. The exceptions all arrive PRE-CONDITIONED from
+-- main.vhd: img_drive_busy_i (the "image drive 8 busy or dirty" level for the
+-- symmetric source-toggle idle-gate) and the five dbg_*_i toggles (fdc1772
+-- drive-clock events) are 2-FF-synchronized there; dbg_pres_cnt_i crosses
+-- unsynchronized as a quasi-static bus (latched at the fdc finalize, i.e. at
+-- least two 50 MHz cycles before the synced dbg_fin_i edge that samples it).
 --
 -- It is STRICTLY observational: it drives nothing back into the controller and it
 -- has NO write side (qnice writes, if any, are simply ignored). Register reads are
@@ -114,6 +121,24 @@ entity physical_1581_diag is
     rd_req_side_i       : in  std_logic := '0';
 
     -----------------------------------------------------------------------------
+    -- Delivery-v2 observability (map v4, issue #90 round 10). The five dbg_*_i
+    -- inputs are fdc1772 drive-clock event TOGGLES, already 2-FF-synchronized
+    -- into clk_i by main.vhd; the edge detection and counting happen here.
+    -- dbg_pres_cnt_i is the presented-byte count of the last finalized WD op,
+    -- quasi-static after finalize (sampled on the dbg_fin_i edge). fifo_level_i
+    -- is the live read-FIFO write-side occupancy (same clock domain). runt_i is
+    -- a 1-cycle 50 MHz pulse per merged RDATA runt gap. Defaulted for older tbs.
+    -----------------------------------------------------------------------------
+    dbg_lost_i          : in  std_logic := '0';   -- toggle: LOST DATA (unconsumed byte overwritten)
+    dbg_drain_i         : in  std_logic := '0';   -- toggle: between-ops FIFO drain episode
+    dbg_staledone_i     : in  std_logic := '0';   -- toggle: seq-mismatched done ignored
+    dbg_busycmd_i       : in  std_logic := '0';   -- toggle: WD command write ignored while busy
+    dbg_fin_i           : in  std_logic := '0';   -- toggle: a phys WD op finalized
+    dbg_pres_cnt_i      : in  unsigned(10 downto 0) := (others => '0');
+    fifo_level_i        : in  unsigned(9 downto 0) := (others => '0');
+    runt_i              : in  std_logic := '0';
+
+    -----------------------------------------------------------------------------
     -- QNICE read interface (device C_DEV_C64_PHYS1581); read-only, no wait-state
     -----------------------------------------------------------------------------
     qnice_ce_i          : in  std_logic;                     -- chip enable (accepted, unused for reads)
@@ -169,14 +194,28 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_GAPERR_HI  : integer := 16#27#;
   constant RM_IMG_DRIVE      : integer := 16#28#;   -- bit0: image drive 8 busy or dirty
   constant RM_TRC_CNT        : integer := 16#29#;   -- total trace events since reset (ring wraps at 32)
+  -- map v4 (delivery v2 observability, issue #90 round 10)
+  constant RM_FIFO_LEVEL     : integer := 16#2A#;   -- live read-FIFO write-side occupancy
+  constant RM_LAST_PRESENT   : integer := 16#2B#;   -- presented bytes of the last finalized WD op
+  constant RM_CNT_LOST_LO    : integer := 16#2C#;   -- counter: LOST DATA events
+  constant RM_CNT_LOST_HI    : integer := 16#2D#;
+  constant RM_CNT_DRAIN_LO   : integer := 16#2E#;   -- counter: between-ops drain episodes
+  constant RM_CNT_DRAIN_HI   : integer := 16#2F#;
+  constant RM_CNT_STALEDONE_LO : integer := 16#30#; -- counter: seq-mismatched done edges ignored
+  constant RM_CNT_STALEDONE_HI : integer := 16#31#;
+  constant RM_CNT_BUSYCMD_LO : integer := 16#32#;   -- counter: command writes ignored while busy
+  constant RM_CNT_BUSYCMD_HI : integer := 16#33#;
+  constant RM_CNT_RUNT_LO    : integer := 16#34#;   -- counter: merged RDATA runt gaps
+  constant RM_CNT_RUNT_HI    : integer := 16#35#;
   constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)
   constant RM_TRC_END        : integer := 16#7F#;
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"03";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"04";
   -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
-  --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present
-  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"1F";
+  --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present,
+  --                   bit5 = delivery-v2 observability words (0x2A-0x35) present
+  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"3F";
 
   constant C_ONES32 : unsigned(31 downto 0) := (others => '1');
 
@@ -193,6 +232,12 @@ architecture rtl of physical_1581_diag is
   signal cnt_change   : unsigned(31 downto 0) := (others => '0');
   signal cnt_iddec    : unsigned(31 downto 0) := (others => '0');
   signal cnt_gaperr   : unsigned(31 downto 0) := (others => '0');
+  -- map v4 delivery-v2 counters
+  signal cnt_lost      : unsigned(31 downto 0) := (others => '0');
+  signal cnt_drain     : unsigned(31 downto 0) := (others => '0');
+  signal cnt_staledone : unsigned(31 downto 0) := (others => '0');
+  signal cnt_busycmd   : unsigned(31 downto 0) := (others => '0');
+  signal cnt_runt      : unsigned(31 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- latched "last" values + edge-detect history
@@ -218,6 +263,14 @@ architecture rtl of physical_1581_diag is
   signal prev_rd_done  : std_logic := '0';
   signal prev_step_ack : std_logic := '0';
   signal prev_change   : std_logic := '0';
+  -- map v4: edge-detect history for the synced fdc1772 event toggles
+  signal prev_lost      : std_logic := '0';
+  signal prev_drain     : std_logic := '0';
+  signal prev_staledone : std_logic := '0';
+  signal prev_busycmd   : std_logic := '0';
+  signal prev_fin       : std_logic := '0';
+  -- presented-byte count of the last finalized WD op (sampled on the fin edge)
+  signal last_present   : unsigned(10 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- WD-dialogue trace ring: 32 entries x 32 bits (one write per event). Entry
@@ -226,7 +279,7 @@ architecture rtl of physical_1581_diag is
   --           w1 = track0 (bit 0)
   --   RD REQ  w0 = 0x2000 | op<<9 | side<<8 | requested track
   --           w1 = requested sector << 8
-  --   RD DONE w0 = 0x3000 | rnf<<11 | crc<<10 | deleted<<9 | found C
+  --   RD DONE w0 = 0x3000 | rnf<<11 | crc<<10 | deleted<<9 | found_H_lsb<<8 | found C
   --           w1 = found R << 8 | result code
   -- On the rare coincidence of two events in one clock, priority is
   -- DONE > REQ > STEP and the lower-priority event of that cycle is dropped.
@@ -266,6 +319,11 @@ begin
     variable rddone_evt : std_logic;
     variable step_evt   : std_logic;
     variable change_evt : std_logic;
+    variable lost_evt      : std_logic;
+    variable drain_evt     : std_logic;
+    variable staledone_evt : std_logic;
+    variable busycmd_evt   : std_logic;
+    variable fin_evt       : std_logic;
   begin
     if rising_edge(clk_i) then
       if rst_i = '1' then
@@ -298,6 +356,17 @@ begin
         prev_step_ack <= step_ack_tgl_i;
         prev_change   <= st_change_i;
         trc_cnt       <= (others => '0');
+        cnt_lost       <= (others => '0');
+        cnt_drain      <= (others => '0');
+        cnt_staledone  <= (others => '0');
+        cnt_busycmd    <= (others => '0');
+        cnt_runt       <= (others => '0');
+        last_present   <= (others => '0');
+        prev_lost      <= dbg_lost_i;
+        prev_drain     <= dbg_drain_i;
+        prev_staledone <= dbg_staledone_i;
+        prev_busycmd   <= dbg_busycmd_i;
+        prev_fin       <= dbg_fin_i;
       else
         -- derived event pulses
         rddone_evt := rd_done_tgl_i  xor prev_rd_done;
@@ -306,11 +375,21 @@ begin
         prev_rd_done  <= rd_done_tgl_i;
         prev_step_ack <= step_ack_tgl_i;
         prev_change   <= st_change_i;
+        lost_evt      := dbg_lost_i      xor prev_lost;
+        drain_evt     := dbg_drain_i     xor prev_drain;
+        staledone_evt := dbg_staledone_i xor prev_staledone;
+        busycmd_evt   := dbg_busycmd_i   xor prev_busycmd;
+        fin_evt       := dbg_fin_i       xor prev_fin;
+        prev_lost      <= dbg_lost_i;
+        prev_drain     <= dbg_drain_i;
+        prev_staledone <= dbg_staledone_i;
+        prev_busycmd   <= dbg_busycmd_i;
+        prev_fin       <= dbg_fin_i;
 
         -- WD-dialogue trace ring (see layout comment at the declaration)
         if rddone_evt = '1' then
           trc_ram(to_integer(trc_cnt(4 downto 0))) <=
-            "0011" & rd_rnf_i & rd_crc_err_i & rd_deleted_i & '0' & std_logic_vector(rd_c_i) &
+            "0011" & rd_rnf_i & rd_crc_err_i & rd_deleted_i & rd_h_i(0) & std_logic_vector(rd_c_i) &
             std_logic_vector(rd_r_i) & "000" & rd_result_i;
           trc_cnt <= trc_cnt + 1;
         elsif rd_req_evt_i = '1' then
@@ -337,6 +416,16 @@ begin
         cnt_crcerr   <= sat_inc(cnt_crcerr,   rddone_evt and rd_crc_err_i);
         if rddone_evt = '1' and rd_result_i = RES_CANCELLED then
           cnt_cancel <= sat_inc(cnt_cancel, '1');
+        end if;
+
+        -- map v4 delivery-v2 counters + last-presented capture
+        cnt_lost      <= sat_inc(cnt_lost,      lost_evt);
+        cnt_drain     <= sat_inc(cnt_drain,     drain_evt);
+        cnt_staledone <= sat_inc(cnt_staledone, staledone_evt);
+        cnt_busycmd   <= sat_inc(cnt_busycmd,   busycmd_evt);
+        cnt_runt      <= sat_inc(cnt_runt,      runt_i);
+        if fin_evt = '1' then
+          last_present <= dbg_pres_cnt_i;
         end if;
 
         -- latch the last completed read result + found CHRN
@@ -449,6 +538,19 @@ begin
 
       when RM_IMG_DRIVE       => qnice_data_o <= x"000" & "000" & img_drive_busy_i;
       when RM_TRC_CNT         => qnice_data_o <= std_logic_vector(trc_cnt);
+
+      when RM_FIFO_LEVEL      => qnice_data_o <= "000000" & std_logic_vector(fifo_level_i);
+      when RM_LAST_PRESENT    => qnice_data_o <= "00000" & std_logic_vector(last_present);
+      when RM_CNT_LOST_LO     => qnice_data_o <= lo16(cnt_lost);
+      when RM_CNT_LOST_HI     => qnice_data_o <= hi16(cnt_lost);
+      when RM_CNT_DRAIN_LO    => qnice_data_o <= lo16(cnt_drain);
+      when RM_CNT_DRAIN_HI    => qnice_data_o <= hi16(cnt_drain);
+      when RM_CNT_STALEDONE_LO => qnice_data_o <= lo16(cnt_staledone);
+      when RM_CNT_STALEDONE_HI => qnice_data_o <= hi16(cnt_staledone);
+      when RM_CNT_BUSYCMD_LO  => qnice_data_o <= lo16(cnt_busycmd);
+      when RM_CNT_BUSYCMD_HI  => qnice_data_o <= hi16(cnt_busycmd);
+      when RM_CNT_RUNT_LO     => qnice_data_o <= lo16(cnt_runt);
+      when RM_CNT_RUNT_HI     => qnice_data_o <= hi16(cnt_runt);
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

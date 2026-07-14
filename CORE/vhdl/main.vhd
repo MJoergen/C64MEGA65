@@ -439,10 +439,12 @@ architecture synthesis of main is
   signal   p1581_rd_side       : std_logic;
   signal   p1581_rd_sector     : std_logic_vector(7 downto 0);
   signal   p1581_rd_cancel_tgl : std_logic;
+  signal   p1581_rd_seq        : std_logic_vector(1 downto 0);
   signal   p1581_byte_rd_en    : std_logic;
   -- controller / rdfifo OUTPUTS -> iec_drive:
   signal   p1581_step_ack_tgl  : std_logic;
   signal   p1581_rd_done_tgl   : std_logic;
+  signal   p1581_rd_done_seq   : std_logic_vector(1 downto 0);
   signal   p1581_rd_result     : std_logic_vector(4 downto 0);
   signal   p1581_rd_crc_err    : std_logic;
   signal   p1581_rd_rnf        : std_logic;
@@ -464,6 +466,40 @@ architecture synthesis of main is
   signal   p1581_fifo_wr_full  : std_logic;              -- rdfifo wr_full_o        -> controller byte_ovf_i
   signal   p1581_byte_data     : unsigned(7 downto 0);   -- rdfifo rd_data_o        -> iec_drive phys_byte_data
   signal   p1581_byte_empty    : std_logic;              -- rdfifo rd_empty_o       -> iec_drive phys_byte_empty
+
+  -- fdc1772 delivery-v2 diagnostic taps (issue #90 round 10). The five event
+  -- toggles are generated in the drive clock domain (clk_main_i) and 2-FF-synced
+  -- below into the 50 MHz diag domain (c64_clk_sd_i), same precedent as
+  -- img_drive_busy: a toggle is a slow, quasi-static level, so a plain 2-FF sync
+  -- is sufficient and each edge marks exactly one event. p1581_dbg_pres_cnt is
+  -- NOT synced: it is quasi-static long before (and after) its fin toggle and is
+  -- captured inside physical_1581_diag on the synced fin edge.
+  signal   p1581_dbg_lost_tgl      : std_logic;
+  signal   p1581_dbg_drain_tgl     : std_logic;
+  signal   p1581_dbg_staledone_tgl : std_logic;
+  signal   p1581_dbg_busycmd_tgl   : std_logic;
+  signal   p1581_dbg_fin_tgl       : std_logic;
+  signal   p1581_dbg_pres_cnt      : std_logic_vector(10 downto 0);
+  signal   p1581_dbg_lost_sd_m      : std_logic;
+  signal   p1581_dbg_lost_sd_s      : std_logic;
+  signal   p1581_dbg_drain_sd_m     : std_logic;
+  signal   p1581_dbg_drain_sd_s     : std_logic;
+  signal   p1581_dbg_staledone_sd_m : std_logic;
+  signal   p1581_dbg_staledone_sd_s : std_logic;
+  signal   p1581_dbg_busycmd_sd_m   : std_logic;
+  signal   p1581_dbg_busycmd_sd_s   : std_logic;
+  signal   p1581_dbg_fin_sd_m       : std_logic;
+  signal   p1581_dbg_fin_sd_s       : std_logic;
+  attribute async_reg of p1581_dbg_lost_sd_m      : signal is "true";
+  attribute async_reg of p1581_dbg_lost_sd_s      : signal is "true";
+  attribute async_reg of p1581_dbg_drain_sd_m     : signal is "true";
+  attribute async_reg of p1581_dbg_drain_sd_s     : signal is "true";
+  attribute async_reg of p1581_dbg_staledone_sd_m : signal is "true";
+  attribute async_reg of p1581_dbg_staledone_sd_s : signal is "true";
+  attribute async_reg of p1581_dbg_busycmd_sd_m   : signal is "true";
+  attribute async_reg of p1581_dbg_busycmd_sd_s   : signal is "true";
+  attribute async_reg of p1581_dbg_fin_sd_m       : signal is "true";
+  attribute async_reg of p1581_dbg_fin_sd_s       : signal is "true";
 
   -- physical_1581 read-only diagnostics (issue #90): controller diag_* taps and
   -- the two previously-open st_* outputs, fed to physical_1581_diag (device 0x0108).
@@ -492,6 +528,8 @@ architecture synthesis of main is
   signal   p1581_diag_rd_req_trk : unsigned(7 downto 0);
   signal   p1581_diag_rd_req_sec : unsigned(7 downto 0);
   signal   p1581_diag_rd_req_side: std_logic;
+  signal   p1581_diag_runt       : std_logic;             -- controller diag_runt_o -> diag runt_i (both 50 MHz)
+  signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- unprocessed video output of the C64 core
   signal   vga_hs    : std_logic;
@@ -777,6 +815,25 @@ begin
       p1581_fiforst_s <= p1581_fiforst_m;
     end if;
   end process p1581_fiforst_sync_proc;
+
+  -- 2-FF sync of the fdc1772 delivery-v2 diagnostic event toggles (drive clock
+  -- domain) into the 50 MHz diag domain; edge detection and counting happen
+  -- inside physical_1581_diag (see the signal declaration comment)
+  p1581_dbg_sync_proc : process (c64_clk_sd_i)
+  begin
+    if rising_edge(c64_clk_sd_i) then
+      p1581_dbg_lost_sd_m      <= p1581_dbg_lost_tgl;
+      p1581_dbg_lost_sd_s      <= p1581_dbg_lost_sd_m;
+      p1581_dbg_drain_sd_m     <= p1581_dbg_drain_tgl;
+      p1581_dbg_drain_sd_s     <= p1581_dbg_drain_sd_m;
+      p1581_dbg_staledone_sd_m <= p1581_dbg_staledone_tgl;
+      p1581_dbg_staledone_sd_s <= p1581_dbg_staledone_sd_m;
+      p1581_dbg_busycmd_sd_m   <= p1581_dbg_busycmd_tgl;
+      p1581_dbg_busycmd_sd_s   <= p1581_dbg_busycmd_sd_m;
+      p1581_dbg_fin_sd_m       <= p1581_dbg_fin_tgl;
+      p1581_dbg_fin_sd_s       <= p1581_dbg_fin_sd_m;
+    end if;
+  end process p1581_dbg_sync_proc;
 
   --------------------------------------------------------------------------------------------------
   -- Hard reset
@@ -1807,12 +1864,14 @@ begin
       phys_rd_side       => p1581_rd_side,
       phys_rd_sector     => p1581_rd_sector,
       phys_rd_cancel_tgl => p1581_rd_cancel_tgl,
+      phys_rd_seq        => p1581_rd_seq,
       phys_byte_ovf      => open,          -- fdc1772 ties this 0; unused here
       phys_byte_rd_en    => p1581_byte_rd_en,
 
       -- phys INPUTS (controller / rdfifo -> iec_drive)
       phys_step_ack_tgl  => p1581_step_ack_tgl,
       phys_rd_done_tgl   => p1581_rd_done_tgl,
+      phys_rd_done_seq   => p1581_rd_done_seq,
       phys_rd_result     => p1581_rd_result,
       phys_rd_crc_err    => p1581_rd_crc_err,
       phys_rd_rnf        => p1581_rd_rnf,
@@ -1829,7 +1888,16 @@ begin
       phys_wprot         => p1581_wprot,
       phys_change        => p1581_change,
       phys_motor_on      => p1581_motor_on,
-      phys_head_settled  => p1581_head_settled
+      phys_head_settled  => p1581_head_settled,
+
+      -- fdc1772 delivery-v2 diagnostic taps (drive clock; synced/captured above
+      -- and inside physical_1581_diag, see the p1581_dbg_* declarations)
+      phys_dbg_lost_tgl      => p1581_dbg_lost_tgl,
+      phys_dbg_drain_tgl     => p1581_dbg_drain_tgl,
+      phys_dbg_staledone_tgl => p1581_dbg_staledone_tgl,
+      phys_dbg_busycmd_tgl   => p1581_dbg_busycmd_tgl,
+      phys_dbg_fin_tgl       => p1581_dbg_fin_tgl,
+      phys_dbg_pres_cnt      => p1581_dbg_pres_cnt
     ); -- iec_drive_inst
 
   --------------------------------------------------------------------------------------------------
@@ -1877,8 +1945,10 @@ begin
       rd_track_i       => unsigned(p1581_rd_track),
       rd_side_i        => p1581_rd_side,
       rd_sector_i      => unsigned(p1581_rd_sector),
+      rd_seq_i         => p1581_rd_seq,
       rd_cancel_tgl_i  => p1581_rd_cancel_tgl,
       rd_done_tgl_o    => p1581_rd_done_tgl,
+      rd_done_seq_o    => p1581_rd_done_seq,
       rd_result_o      => p1581_rd_result,
       rd_crc_err_o     => p1581_rd_crc_err,
       rd_rnf_o         => p1581_rd_rnf,
@@ -1917,6 +1987,7 @@ begin
       diag_data_end_o     => p1581_diag_data_end,
       diag_data_crc_ok_o  => p1581_diag_data_crc_ok,
       diag_gap_error_o    => p1581_diag_gap_error,
+      diag_runt_o         => p1581_diag_runt,
       diag_rd_phase_o     => p1581_diag_rd_phase,
       diag_step_phase_o   => p1581_diag_step_phase,
       diag_head_valid_o   => p1581_diag_head_valid,
@@ -1947,6 +2018,7 @@ begin
       wr_en_i    => p1581_fifo_wr_en,
       wr_data_i  => p1581_fifo_wr_data,
       wr_full_o  => p1581_fifo_wr_full,
+      wr_level_o => p1581_fifo_level,
       -- read side: drive clock, clk_main_i (fdc1772 drains at its DRQ cadence).
       -- Reset by the SAME event as the write side (QNICE reset, synced into this
       -- domain) -- never by reset_core_n alone: a one-sided reset would zero the
@@ -2024,6 +2096,19 @@ begin
       rd_req_track_i      => p1581_diag_rd_req_trk,
       rd_req_sector_i     => p1581_diag_rd_req_sec,
       rd_req_side_i       => p1581_diag_rd_req_side,
+
+      -- delivery-v2 observability (map v4, issue #90 round 10): the five event
+      -- toggles are 2-FF-synced above (p1581_dbg_sync_proc); pres_cnt crosses
+      -- unsynced as a quasi-static bus captured inside on the synced fin edge;
+      -- fifo level and runt pulse are native 50 MHz
+      dbg_lost_i          => p1581_dbg_lost_sd_s,
+      dbg_drain_i         => p1581_dbg_drain_sd_s,
+      dbg_staledone_i     => p1581_dbg_staledone_sd_s,
+      dbg_busycmd_i       => p1581_dbg_busycmd_sd_s,
+      dbg_fin_i           => p1581_dbg_fin_sd_s,
+      dbg_pres_cnt_i      => unsigned(p1581_dbg_pres_cnt),
+      fifo_level_i        => p1581_fifo_level,
+      runt_i              => p1581_diag_runt,
 
       -- QNICE read interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,
