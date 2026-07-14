@@ -657,6 +657,116 @@ Deferred (nice-to-have, spec MFM-R04..R07): codec edge tbs for F8-deleted, bad I
   (the round-10 words 0x2A-0x35 — FIFO_LEVEL/LAST_PRESENT/CNT_LOST/CNT_DRAIN/CNT_STALEDONE/
   CNT_BUSYCMD/CNT_RUNT — were missing from the 2026-07-14 morning dumps).
 
+- 2026-07-14 (session 3, round 12): **ADAPTIVE MFM GAP QUANTISER — IMPLEMENTED AND FULLY
+  SIM-VERIFIED (VHDL-only, no submodule delta).** Motivation, hardware-measured via a 6-test
+  protocol on the round-11 bitstream: near cylinders (39-41) 100% reliable (C64ANABALT 4/4 loads,
+  zero RNFs, all delivery counters zero; side-1 reads + the found-H trace bit verified live); far
+  cylinders (61-62) fail most attempts with ~4 RNFs per load (SHADES stall reproduced with an
+  identical fingerprint: recovery runs without freezing now, DOS retry budget exhausts, C64 hangs
+  on the abandoned IEC transfer). Physics: higher linear density at inner cylinders -> peak shift
+  (ISI) smears the 4/6/8 us gap classes into the fixed classifier dead-bands for whole
+  revolutions. SEPARATE MINOR FINDING (logged, deferred): instant-FNF with CNT_READOP=0 when
+  loading immediately after inserting a disk post-power-on = the DOS one-shot 30-sample PA1
+  ready check races the settling mechanism (error class never retried); workaround: let the
+  mechanism settle or read the directory first.
+  DESIGN AS BUILT (physical_1581_mfm_quantise.vhd + C_QUANT_* in the pkg): each gap classifies
+  to the NEAREST class n in {2,3,4} half-cells around a tracked half-cell estimate (Q8.4,
+  nominal 100.0 cycles), acceptance |G - n*est| <= est/2 (windows touch at the midpoints
+  2.5*est / 3.5*est -> NO dead-bands), outside -> class 11 + re-seed to nominal; the estimate
+  adapts by a FIXED 1/8-cycle step toward each accepted gap (sign-based, median-seeking) with
+  hard clamps 90..110 cycles. NOTE: the originally planned proportional/mean estimator was
+  REJECTED BY THE A/B HARNESS — peak shift only ever lengthens short gaps and shortens long
+  ones, so a mean-seeking tracker has a biased equilibrium and walked to the +10% clamp at
+  S=20, losing to the old windows; the median-seeking update is anchored by the unshifted
+  majority (residual bias ~+1 cycle at S=20). Legacy window constants kept as documentation +
+  reference for the test-only fixed classifier. Diag map v5 (VERSION 0x053F): 0x36 EST (live
+  half-cell estimate, Q8.4), 0x37 RNF_CTX (requested track/sector of the last RNF); doc updated.
+  A/B MARGIN HARNESS (new tb_physical_1581_quantise_ab + ref_mfm_quantise_fixed, identical
+  stress vectors through old and new): NO regressions (canonical, speed to +/-8%, drift +/-2%,
+  jitter +/-12, peak S=20, the measured 126-cycle artifact, splice +2.5% step — both pass);
+  new WINS every discriminating class: speed +/-12%, drift 0..+/-12%, jitter +/-22 (3/3 seeds),
+  peak shift S=22 and S=24, combos S20+/-3% and S15+5% (family wins: speed=2 drift=2 jitter=4
+  peak/combo=5); jitter +/-24 = the physical decodability cliff (2- and 3-cell gaps overlap),
+  both mostly fail as they must. Payload equality asserted on every successful decode — no
+  silently wrong sector possible. rc=0, ALL ACCEPTANCE CRITERIA MET.
+  FULL VERIFICATION GREEN: GHDL analyze clean; decoder tb (canonical + runt vectors) byte-exact;
+  diag tb v5; crc/inputs/rdfifo/mech tbs; ovf tb; A/B harness; the ~22 min closed-loop
+  controller tb rc=0 (restore, media_ready ~398 ms, byte-exact payloads on cyl 0/1, Read
+  Address, Verify, absent-sector RNF, pending-latch, abort spacing 200 ns, recovery);
+  main.vhd differential vs HEAD identical. Files: mfm_quantise (rewrite), pkg, decoder +
+  controller (est/RNF-ctx taps), diag (v5), main.vhd (3 lines), 1581_dd_debug_device.md,
+  diag tb, 2 NEW test files (untracked: tb_physical_1581_quantise_ab.vhd,
+  ref_mfm_quantise_fixed.vhd). NEXT: rebuild R3, retest SHADES (expect: reliable loads; watch
+  0x36 EST near 0x64x and 0x37 RNF_CTX on any residual miss).
+
+- 2026-07-14 (session 3, round 13): **ROUND-12 WRITE-SPLICE REGRESSION ROOT-CAUSED, REPRODUCED
+  GAP-EXACT IN SIM, AND FIXED (preamble-qualified sync gate; VHDL only, all sim gates green).**
+  Hardware evidence (round-12 bitstream, 3 sessions): t39 s1 -- the sector right after the index
+  write-splice, holding the D81 header/BAM -- deterministically unreadable: 30/30 RNF with
+  RNF_CTX 0x2701, CNT_IDDEC pinned (s1 ID never decoded), CNT_CRCERR 0, EST healthy 99.25-99.75,
+  and CNT_GAPERR DROPPED to ~16/rev vs 20-29 under round-11 (splice junk that used to fail loudly
+  was being ACCEPTED). MECHANISM (confirmed, not just hypothesized): the round-12 no-dead-band
+  acceptance (est/2, span 1.5*est..4.5*est) swallows splice garbage; junk alternating
+  ~446/~344-cycle gaps IS the A1 sync gap pattern (long,med,long,med) -- the sync detector fires
+  overlapping FALSE A1s every 2 gaps (3 arm the decoder, sync_cnt=3), and 8 more junk gaps
+  (S,S,S,S,S,L,S) decode to bits 11111011 = a fake FB data mark -> the decoder opens a BOGUS
+  512-byte data field that consumes the next sectors real preamble+ID+A1 train every rev. That
+  reproduces EVERY counter signature: no id_valid (IDDEC flat), bogus-field CRC garbage is a data
+  crc fail not an ID crc error (CRCERR 0), junk accepted (GAPERR drop). The old windows survived
+  the same junk because 446..450 lies beyond C_GAP_LONG_HI=445 and 344 sits in the 343..354
+  dead-band: every chain element went class-11 and reset the pipeline before a field could open.
+  WHY NOT THE PLANNED TWO-TIER TOLERANCE (tight est/4 acquisition + est/2 in-field): REFUTED BY
+  THE HARNESS, kept as a live instance. ISI moves every transition of the A1 train (alternating
+  long/med -> both neighbors differ) so each train gap deviates 2*S; est/4 = +/-25 rejects the
+  sync train of any record with S>=13, and the tacq column fails peak S=15/S=20/S=22/S=24 and all
+  3 combos (5 must-row refutations recorded) -- the exact far-cylinder wins round 12 exists for.
+  Junk (+46..+48) and legit S=22/24 train deviations (+/-44..48) overlap, so NO per-gap tolerance
+  separates them; the discriminator is STRUCTURE, not width.
+  FIX AS BUILT (matches what a real data separator PLL does -- it only locks during the 00
+  lock-up preamble, which the 1581/WD1772 writes 12x before every A1 train, including after every
+  sector-write splice): (a) decoder physical_1581_mfm_decoder: while HUNTING, an A1 sync is
+  honored only if a run of C_QUANT_SYNC_RUN=16 consecutive SHORT-class gaps ended at most
+  C_QUANT_SYNC_LAT=6 gaps ago (A1 window = med entry gap + L,M,L,M = 5); class-11 hard-closes the
+  gate; in-field syncs (A1 #2/#3, field_active = sync_cnt/=0 or state/=S_IDLE) bypass it;
+  (b) quantiser gets field_i (threaded from the decoder): while hunting, est adapts from
+  SHORT-class gaps only (junk cannot walk it; in-field adaptation unchanged); classification
+  tolerance stays est/2 in BOTH phases. Test knobs (production defaults harmless): decoder
+  G_SYNC_GATE=false + G_QUANT_HUNT_ADAPT_ALL=true restores exact round-12 semantics,
+  G_QUANT_TOL_ACQ_SHR=2 instantiates the refuted two-tier candidate. No port/ABI change above the
+  decoder; controller/main/mega65 untouched; no diag map change (locked bit now only blips on
+  honored syncs -- strictly more truthful).
+  VERIFICATION, ALL GREEN: (1) baseline: the UNMODIFIED round-12 harness re-run first (rc=0, same
+  win table) proving the environment reproduces round 12. (2) A/B harness extended to FOUR
+  decoders on identical flux (old fixed | r12-compat | r13 prod | tacq refuted; 44 trials + probe
+  table; the 38-row round-12 result table is PRESERVED ROW-FOR-ROW on r13 incl. speed/drift +/-12%,
+  jitter +/-22 3/3, peak S=22/24, combos, artifact-126, splice-step, jitter +/-24 parity with
+  r12 (s1/s2 fail, s3 pass), payload-equality guard everywhere). NEW junk-splice trials:
+  junk rand x3 (naive [130..480] LFSR junk + fluxless stretches) = too tame, all columns pass,
+  kept as documented iteration evidence; junk chain x3 (mfm_flux_gen_pkg junk_splice_chain: the
+  reconstructed splice profile) = old=PASS r12=FAIL r13=PASS deterministically, with mechanism
+  instrumentation: r12 junk_lock=1 (false A1 in junk) and data_start ~5.8 us BEFORE the record
+  even starts (bogus field), old/r13 lock 0; per-splice gap errors old 8-9 vs r12/r13 3-4
+  (mirrors the hardware GAPERR drop) vs tacq 18-19. rc=0, ALL ACCEPTANCE CRITERIA MET (incl.
+  hard asserts: chain rows must show r12 fail + bogus-field signature; r12-compat must pass every
+  round-12 must-row; tacq must fail at least one peak/combo must-row). (3) decoder tb canonical +
+  runt vectors byte-exact through the gate. (4) diag tb v5 green (no map change). (5) GHDL
+  analyze clean for all 11 production units. (6) crc/inputs/rdfifo/mech/ovf tbs green; the long
+  closed-loop controller tb re-run to completion rc=0. Mech-model junk case NOT added: the model
+  emits mathematically clean MFM with exact index timing, and injecting splice junk would perturb
+  sector positions the controller tb depends on -- codec-level coverage (4 decoders, gap-exact
+  reproduction) is where the classifier lives; documented here instead. (7) main.vhd untouched
+  (no differential needed). BUILD NOTE: GHDL 5.1.1 multi-library harness builds need SEPARATE
+  workdirs per library (object files share basenames and silently overwrite in a shared dir;
+  round-12s "one workdir" recipe linked stale objects) -- harness header updated.
+  Files: physical_1581_pkg.vhd (C_QUANT_SYNC_RUN/LAT + full round-12/13 story),
+  physical_1581_mfm_quantise.vhd (field_i, tier generics, hunt-adapt gating),
+  physical_1581_mfm_decoder.vhd (sync gate + field_active + test generics),
+  ref_mfm_quantise_fixed.vhd (shape compat), mfm_flux_gen_pkg.vhd (LFSR junk model:
+  junk_splice_rand/chain + mfm_splice_junk), tb_physical_1581_quantise_ab.vhd (4-column harness,
+  junk trials, mechanism instrumentation). NEXT: rebuild R3, retest -- expect t39 s1 readable
+  again (LOAD"\$" works), no RNF_CTX 0x2701, CNT_GAPERR back to round-11-like levels at the
+  splice, far-cylinder (61-62) reliability retained; watch EST 0x36 stays ~0x64x.
+
 - 2026-07-12: **R3 TIMING NOT CLOSED (blocking next step, documented in HANDOVER.md sec 8.0).**
   Routed WNS -5.051 ns / 83 failing endpoints (setup; hold OK). 71 = physical_1581 CDC (qnice_clk<->main_clk)
   with NO timing exceptions; 12 = pre-existing framework qnice half-cycle path (QNICE ramrom->CPU SP,

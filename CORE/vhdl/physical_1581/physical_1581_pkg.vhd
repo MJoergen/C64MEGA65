@@ -93,6 +93,61 @@ package physical_1581_pkg is
   constant C_QUANT_EST_MAX   : natural := 110; -- clamp, integer cycles (+10%)
   constant C_QUANT_TOL_SHR   : natural := 1;   -- tolerance = est/2 (windows touch)
   constant C_QUANT_STEP_Q    : natural := 2;   -- adaptation step: 2/16 = 1/8 cycle
+
+  -----------------------------------------------------------------------------
+  -- Write-splice sync qualification (issue #90 round 13)
+  --
+  -- HARDWARE REGRESSION the round-12 quantiser introduced: the sector
+  -- immediately after the index write-splice (t39 s1, which holds the D81
+  -- header/BAM) became DETERMINISTICALLY unreadable -- 30/30 RNF, its ID never
+  -- decoded (CNT_IDDEC stuck at 10/rev), zero CRC errors, and CNT_GAPERR
+  -- DROPPED from 20..29/rev to ~16/rev. Mechanism (reproduced gap-exact in
+  -- tb_physical_1581_quantise_ab, "junk chain" trials): the splice leaves
+  -- garbage flux whose gaps the old fixed windows rejected loudly (dead-bands
+  -- 241..257 / 343..354 / >445 -> class 11 -> the whole pipeline re-synced),
+  -- but the round-12 no-dead-band acceptance (est/2, span [1.5*est..4.5*est])
+  -- swallows as valid 2/3/4-half-cell classes. A junk run that alternates
+  -- long/medium-looking gaps (e.g. ~446/~344 cycles) then reads EXACTLY like
+  -- the A1 missing-clock pattern (long,med,long,med): the sync detector fires
+  -- FALSE A1 syncs every two gaps, three of them arm the decoder (sync_cnt=3),
+  -- and eight more junk gaps can then assemble an FB data mark -> the decoder
+  -- opens a BOGUS 512-byte data field that consumes the following sector's
+  -- real preamble + ID + A1 train every revolution. All observed counter
+  -- signatures follow (no id_valid -> IDDEC 10; garbage data CRC is not
+  -- counted as an ID CRC error; junk that used to be loud is now accepted ->
+  -- GAPERR drop).
+  --
+  -- WHY NOT a tight acquisition tolerance (the first fix candidate, est/4
+  -- while hunting / est/2 in-field): the A/B harness REFUTED it. Under peak
+  -- shift (ISI) every gap of the A1 train itself deviates by 2*S (the train
+  -- alternates long/med, so both neighbors of every transition differ: longs
+  -- shrink 2*S, mediums grow 2*S). est/4 = +/-25 cycles therefore rejects the
+  -- sync train of every record with S >= 13 -- killing the round-12 far-
+  -- cylinder wins (peak S=15/20/22/24 and the S20+/-3%, S15+5% inner-cylinder
+  -- combos) that motivated the adaptive quantiser in the first place. Worse,
+  -- the junk deviations (+46..+48) and the legitimate S=22/24 train deviations
+  -- (+/-44..48) OVERLAP, so NO per-gap tolerance can separate them.
+  --
+  -- THE SHIPPED FIX is structural instead, matching what a real data
+  -- separator does (a PLL only locks during the lock-up preamble field; the
+  -- 1581/WD1772 format writes 12 x 00 before every A1 train for exactly this):
+  -- while the decoder is HUNTING (not inside a field), an A1 sync is honored
+  -- only if a run of C_QUANT_SYNC_RUN consecutive SHORT-class gaps (the 00
+  -- preamble; 12 bytes = 96 short gaps, so 16 = 2 bytes is a generous lower
+  -- bound) ended no more than C_QUANT_SYNC_LAT gaps ago. The A1 window itself
+  -- consumes exactly 5 gaps after the preamble (the med entry gap + the
+  -- long,med,long,med pattern), hence LAT = 6. Splice junk contains no such
+  -- run -> false syncs are ignored and a bogus field can never open; every
+  -- legitimate field (including freshly written ones -- the WD1772 always
+  -- writes its own 12 x 00 preamble after the write splice) passes untouched,
+  -- so ALL round-12 stress wins are preserved bit-for-bit. In-field syncs
+  -- (A1 #2/#3 of a train) bypass the gate. Additionally, while hunting the
+  -- estimate adapts from SHORT-class gaps only (the preamble is all shorts,
+  -- which is what legitimate acquisition tracks), so splice junk cannot walk
+  -- est; in-field adaptation is unchanged from round 12.
+  -----------------------------------------------------------------------------
+  constant C_QUANT_SYNC_RUN  : natural := 16;  -- shorts run that banks the gate (2 x 00)
+  constant C_QUANT_SYNC_LAT  : natural := 6;   -- gaps allowed between run end and sync
   constant C_QUANT_EST_NOM_Q : natural := C_HALF_CELL_CYC * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MIN_Q : natural := C_QUANT_EST_MIN * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MAX_Q : natural := C_QUANT_EST_MAX * 2**C_QUANT_FRAC;

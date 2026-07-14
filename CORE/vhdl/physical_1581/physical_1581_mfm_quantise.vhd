@@ -19,8 +19,9 @@
 --     idle/re-search also re-seeds;
 --   * classifies each gap G to the NEAREST class n in {2,3,4} half-cells by
 --     comparing G against the midpoints 2.5*est and 3.5*est;
---   * accepts the class iff |G - n*est| <= est/2**G_TOL_SHR. With the
---     default G_TOL_SHR = 1 the acceptance windows touch at the midpoints:
+--   * accepts the class iff |G - n*est| <= est/2**shr (shr selected by
+--     field_i, both generics default C_QUANT_TOL_SHR = 1). With shr = 1 the
+--     acceptance windows touch at the midpoints:
 --     every gap in [1.5*est .. 4.5*est] classifies, there are NO dead-bands,
 --     and only gaps outside that span are class "11" (loss of lock), exactly
 --     as loud as before. (A stray mid-gap noise edge, e.g. the stable
@@ -39,6 +40,21 @@
 --   * hard-clamps est to [C_QUANT_EST_MIN .. C_QUANT_EST_MAX] = [90 .. 110]
 --     cycles (+/-10% of nominal), bounding any runaway adaptation (real
 --     drive speed tolerance is ~+/-3%).
+--
+-- ROUND-13 UPDATE (write-splice regression, see the C_QUANT_SYNC_* comment
+-- block in physical_1581_pkg for the full story): while the decoder is
+-- HUNTING (field_i = '0', i.e. not between an accepted A1 sync and the end
+-- of its field), the estimate adapts from SHORT-class gaps only -- the 00
+-- preamble that legitimate acquisition tracks is all shorts, while write-
+-- splice junk is dominated by medium/long-looking garbage that must not
+-- walk est. In-field adaptation (field_i = '1') is unchanged from round 12.
+-- The classification tolerance itself stays est/2 in BOTH phases: the A/B
+-- harness REFUTED a tight (est/4) acquisition tier, because ISI deviates
+-- every gap of the A1 train itself by 2*S (the train alternates long/med),
+-- so est/4 rejects the sync train of any record with peak shift S >= 13 and
+-- loses the round-12 far-cylinder wins. The G_TOL_ACQ_SHR generic exists so
+-- the harness can still instantiate that refuted variant as evidence; both
+-- tolerance generics default to the single production C_QUANT_TOL_SHR.
 --
 -- est_o exposes the estimate (Q8.4) as a read-only diagnostic tap; it is
 -- threaded decoder -> controller -> physical_1581_diag word 0x36 and never
@@ -61,14 +77,28 @@ use work.physical_1581_pkg.all;
 
 entity physical_1581_mfm_quantise is
   generic (
-    -- acceptance half-width = est / 2**G_TOL_SHR. Production default (from
-    -- the pkg) is 1 = est/2: windows touch at the midpoints, no dead-bands.
-    -- The A/B harness also instantiates 2 = est/4 to quantify the difference.
-    G_TOL_SHR : natural := C_QUANT_TOL_SHR
+    -- Acceptance half-width = est / 2**shr, selected by field_i:
+    -- G_TOL_ACQ_SHR while hunting, G_TOL_FIELD_SHR inside a field. BOTH
+    -- default to the single production tolerance C_QUANT_TOL_SHR = 1 (est/2:
+    -- windows touch at the midpoints, no dead-bands). A tight acquisition
+    -- tier (G_TOL_ACQ_SHR = 2 = est/4) was evaluated for the round-13
+    -- write-splice fix and REJECTED -- the A/B harness proves it loses the
+    -- peak-shift/combo win rows (see entity header); the generic remains so
+    -- the harness can keep demonstrating that.
+    G_TOL_ACQ_SHR    : natural := C_QUANT_TOL_SHR;
+    G_TOL_FIELD_SHR  : natural := C_QUANT_TOL_SHR;
+    -- true restores the round-12 adaptation rule (adapt from EVERY accepted
+    -- gap, even while hunting). Test-only knob for the A/B harness round-12
+    -- compatibility instance; production keeps the default.
+    G_HUNT_ADAPT_ALL : boolean := false
   );
   port (
     clk_i       : in  std_logic;
     rst_i       : in  std_logic;                       -- sync reset (re-seeds est)
+    -- '1' while the decoder field FSM is inside a field (from the first
+    -- accepted A1 sync of a train through the end of ID/data + CRC). Selects
+    -- the tolerance tier and gates hunting-phase adaptation (see header).
+    field_i     : in  std_logic := '0';
     gap_valid_i : in  std_logic := '0';
     gap_len_i   : in  unsigned(15 downto 0) := (others => '0');
     gap_valid_o : out std_logic := '0';
@@ -96,7 +126,7 @@ begin
     variable center   : unsigned(14 downto 0);   -- n*est of the nearest class
     variable n_cls    : integer range 2 to 4;
     variable e        : signed(21 downto 0);     -- G - n*est (Q4)
-    variable tol      : unsigned(14 downto 0);   -- est / 2**G_TOL_SHR
+    variable tol      : unsigned(14 downto 0);   -- est / 2**(tier shr)
     variable upd      : signed(21 downto 0);     -- adaptation step, +/-C_QUANT_STEP_Q (Q4)
     variable nxt      : signed(21 downto 0);     -- est + upd before clamping
   begin
@@ -127,26 +157,34 @@ begin
           end if;
 
           e   := signed(resize(g_q, e'length)) - signed(resize(center, e'length));
-          tol := shift_right(resize(est_q, 15), G_TOL_SHR);
+          if field_i = '1' then
+            tol := shift_right(resize(est_q, 15), G_TOL_FIELD_SHR);
+          else
+            tol := shift_right(resize(est_q, 15), G_TOL_ACQ_SHR);
+          end if;
 
           if abs(e) <= signed(resize(tol, e'length)) then
             -- accepted: emit the class and adapt est by a fixed 1/8-cycle
-            -- step toward the gap (sign-based / median-seeking -- see header)
+            -- step toward the gap (sign-based / median-seeking -- see header).
+            -- Round 13: while HUNTING only SHORT-class gaps adapt (the 00
+            -- preamble); write-splice junk must not walk the estimate.
             gap_class_o <= to_unsigned(n_cls - 2, 2);
-            if e > 0 then
-              upd := to_signed(C_QUANT_STEP_Q, upd'length);
-            elsif e < 0 then
-              upd := to_signed(-C_QUANT_STEP_Q, upd'length);
-            else
-              upd := (others => '0');
-            end if;
-            nxt := signed(resize(est_q, nxt'length)) + upd;
-            if nxt < to_signed(C_QUANT_EST_MIN_Q, nxt'length) then
-              est_q <= to_unsigned(C_QUANT_EST_MIN_Q, est_q'length);
-            elsif nxt > to_signed(C_QUANT_EST_MAX_Q, nxt'length) then
-              est_q <= to_unsigned(C_QUANT_EST_MAX_Q, est_q'length);
-            else
-              est_q <= unsigned(nxt(est_q'range));
+            if G_HUNT_ADAPT_ALL or field_i = '1' or n_cls = 2 then
+              if e > 0 then
+                upd := to_signed(C_QUANT_STEP_Q, upd'length);
+              elsif e < 0 then
+                upd := to_signed(-C_QUANT_STEP_Q, upd'length);
+              else
+                upd := (others => '0');
+              end if;
+              nxt := signed(resize(est_q, nxt'length)) + upd;
+              if nxt < to_signed(C_QUANT_EST_MIN_Q, nxt'length) then
+                est_q <= to_unsigned(C_QUANT_EST_MIN_Q, est_q'length);
+              elsif nxt > to_signed(C_QUANT_EST_MAX_Q, nxt'length) then
+                est_q <= to_unsigned(C_QUANT_EST_MAX_Q, est_q'length);
+              else
+                est_q <= unsigned(nxt(est_q'range));
+              end if;
             end if;
           else
             -- out of tolerance: loss of lock, re-seed the estimate

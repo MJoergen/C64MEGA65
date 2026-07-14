@@ -16,9 +16,10 @@
 --
 -- Behavior: classification against the inclusive legacy windows
 -- C_GAP_SHORT/MED/LONG_LO/HI from physical_1581_pkg, with hard dead-bands
--- (241..257, 343..354) that classify as "11" loss of lock. The generic and
--- the est_o port exist only for port-shape compatibility with the adaptive
--- production entity: G_TOL_SHR is ignored and est_o is the nominal constant.
+-- (241..257, 343..354) that classify as "11" loss of lock. The generics and
+-- the field_i / est_o ports exist only for shape compatibility with the
+-- adaptive production entity (the q_old decoder instantiates them by name):
+-- all of them are ignored and est_o is the nominal constant.
 --
 -- C64MEGA65 project.
 -------------------------------------------------------------------------------
@@ -29,11 +30,14 @@ use work.physical_1581_pkg.all;
 
 entity physical_1581_mfm_quantise is
   generic (
-    G_TOL_SHR : natural := C_QUANT_TOL_SHR   -- ignored (fixed windows)
+    G_TOL_ACQ_SHR    : natural := C_QUANT_TOL_SHR;   -- ignored (fixed windows)
+    G_TOL_FIELD_SHR  : natural := C_QUANT_TOL_SHR;   -- ignored (fixed windows)
+    G_HUNT_ADAPT_ALL : boolean := false              -- ignored (no adaptation)
   );
   port (
     clk_i       : in  std_logic;
     rst_i       : in  std_logic;                       -- sync reset
+    field_i     : in  std_logic := '0';                -- ignored (fixed windows)
     gap_valid_i : in  std_logic := '0';
     gap_len_i   : in  unsigned(15 downto 0) := (others => '0');
     gap_valid_o : out std_logic := '0';

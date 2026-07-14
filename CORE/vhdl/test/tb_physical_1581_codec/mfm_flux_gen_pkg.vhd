@@ -57,6 +57,56 @@ package mfm_flux_gen_pkg is
   function crc16_update(crc : unsigned(15 downto 0); b : unsigned(7 downto 0))
     return unsigned;
 
+  -----------------------------------------------------------------------------
+  -- Write-splice junk model (issue #90 round 13)
+  --
+  -- Models the garbage flux a write splice leaves on the medium (write-gate
+  -- turn-off transient + partially erased residue of earlier writes + AGC/
+  -- read-channel settling): a burst of gaps with junk lengths, including
+  -- fluxless stretches. Two profiles, both driven by a deterministic 16-bit
+  -- LFSR (no real randomness):
+  --
+  --   * junk_splice_rand: 28..36 pseudo-random gaps spanning [130..480]
+  --     cycles plus two fluxless stretches. Naive splice garbage; it turned
+  --     out to be TOO TAME to reproduce the round-12 hardware failure (all
+  --     classifiers survive it: enough gaps land outside every acceptance
+  --     profile, so the pipeline keeps re-syncing loudly).
+  --
+  --   * junk_splice_chain: the profile that DOES reproduce the hardware
+  --     failure gap-exact, derived from what the round-12 acceptance uniquely
+  --     swallows: random junk, a fluxless stretch, a run of ~205-cycle
+  --     short-ish gaps (walks the round-12 estimate up a little, exactly what
+  --     coherent splice residue does), then an alternating ~446/~344 chain --
+  --     which the no-dead-band round-12 classifier reads as the A1 sync gap
+  --     pattern long,med,long,med (false syncs every two gaps; three arm the
+  --     decoder) -- and a 224/446 tail whose decoded bits spell the FB data
+  --     mark, opening a bogus 512-byte data field that eats the following
+  --     sector. The OLD fixed windows reject every chain element loudly
+  --     (446..450 is beyond C_GAP_LONG_HI = 445; 344 is inside the 343..354
+  --     dead-band), which is precisely why round 11 read the post-splice
+  --     sector fine and round 12 deterministically lost it.
+  --
+  -- The last entry of a profile is the boundary gap to the first real flux
+  -- transition that follows the junk (the caller emits it as the final wait).
+  -----------------------------------------------------------------------------
+  type nat_arr is array (natural range <>) of natural;
+  constant JUNK_MAX : natural := 63;
+  type junk_arr_t is record
+    cnt : natural;                        -- number of valid entries in g
+    g   : nat_arr(0 to JUNK_MAX);         -- gap lengths in 50 MHz cycles
+  end record;
+
+  -- one step of a maximal 16-bit Fibonacci LFSR (x^16 + x^14 + x^13 + x^11 + 1)
+  function lfsr16_step(x : natural) return natural;
+
+  function junk_splice_rand (seed : natural) return junk_arr_t;
+  function junk_splice_chain(seed : natural) return junk_arr_t;
+
+  -- Emit a junk burst on RDATA in the time domain (one low pulse per entry,
+  -- then the entry's gap). The caller's next flux transition closes the final
+  -- (boundary) gap.
+  procedure mfm_splice_junk(signal rdata : out std_logic; j : in junk_arr_t);
+
 end package mfm_flux_gen_pkg;
 
 package body mfm_flux_gen_pkg is
@@ -162,5 +212,99 @@ package body mfm_flux_gen_pkg is
     end loop;
     return v;
   end function;
+
+  -----------------------------------------------------------------------------
+  -- write-splice junk model (round 13) -- see package declaration
+  -----------------------------------------------------------------------------
+  function lfsr16_step(x : natural) return natural is
+    variable v  : unsigned(15 downto 0) := to_unsigned(x mod 65536, 16);
+    variable fb : std_logic;
+  begin
+    fb := v(15) xor v(13) xor v(12) xor v(10);
+    return to_integer(unsigned'(v(14 downto 0) & fb));
+  end function;
+
+  function junk_splice_rand(seed : natural) return junk_arr_t is
+    variable s : natural := (seed mod 65535) + 1;   -- LFSR state, never 0
+    variable r : junk_arr_t := (cnt => 0, g => (others => 300));
+    variable n : natural;
+  begin
+    s := lfsr16_step(s);
+    n := 28 + (s mod 9);                            -- 28..36 gaps
+    for k in 0 to n - 1 loop
+      s      := lfsr16_step(s);
+      r.g(k) := 130 + (s mod 351);                  -- [130..480] cycles
+    end loop;
+    s := lfsr16_step(s);
+    r.g(n / 3) := 900 + (s mod 400);                -- fluxless stretch 1
+    s := lfsr16_step(s);
+    r.g((2 * n) / 3) := 1300 + (s mod 700);         -- fluxless stretch 2
+    r.cnt := n;                                     -- g(n-1) = boundary gap
+    return r;
+  end function;
+
+  function junk_splice_chain(seed : natural) return junk_arr_t is
+    variable s  : natural := (seed mod 65535) + 1;  -- LFSR state, never 0
+    variable r  : junk_arr_t := (cnt => 0, g => (others => 300));
+    variable i  : natural := 0;
+    variable np : natural;
+  begin
+    -- random splice garbage
+    s := lfsr16_step(s);
+    np := 8 + (s mod 5);
+    for k in 1 to np loop
+      s      := lfsr16_step(s);
+      r.g(i) := 130 + (s mod 351);
+      i      := i + 1;
+    end loop;
+    -- a fluxless stretch (class 11 everywhere -> re-seeds the adaptive est)
+    s := lfsr16_step(s);
+    r.g(i) := 1100 + (s mod 500);  i := i + 1;
+    -- four medium/long-ish values: deliberately NOT short-class, so the
+    -- round-13 preamble-run gate cannot be banked by what follows
+    for k in 1 to 4 loop
+      s      := lfsr16_step(s);
+      r.g(i) := 251 + (s mod 230);
+      i      := i + 1;
+    end loop;
+    -- 14 short-ish gaps (~205): coherent residue that walks the round-12
+    -- estimate up by ~1.75 cycles -- and stays BELOW the round-13
+    -- C_QUANT_SYNC_RUN = 16 threshold, so the gate stays closed
+    for k in 1 to 14 loop
+      r.g(i) := 205;  i := i + 1;
+    end loop;
+    -- the killer: ~446/~344 alternation = the A1 sync gap pattern
+    -- long,med,long,med under the round-12 no-dead-band acceptance
+    -- (deviations +46/+44 <= est/2), while the OLD windows reject BOTH
+    -- (446 > C_GAP_LONG_HI = 445; 344 inside the 343..354 dead-band).
+    -- Four pairs -> false syncs after gaps 4, 6 and 8 -> decoder armed.
+    for k in 1 to 4 loop
+      r.g(i) := 446;  i := i + 1;
+      r.g(i) := 344;  i := i + 1;
+    end loop;
+    -- tail spelling the FB data mark: gap classes S,S,S,S,S,L,S decode to
+    -- bits 1,1,1,1,1,0,1,1 = 0xFB after the last false sync
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    r.g(i) := 446;  i := i + 1;
+    r.g(i) := 224;  i := i + 1;
+    -- boundary gap to the first real flux transition after the splice
+    r.g(i) := 300;  i := i + 1;
+    r.cnt := i;
+    return r;
+  end function;
+
+  procedure mfm_splice_junk(signal rdata : out std_logic; j : in junk_arr_t) is
+  begin
+    for k in 0 to j.cnt - 1 loop
+      rdata <= '0';
+      wait for MFM_LOW_WIDTH;
+      rdata <= '1';
+      wait for j.g(k) * 20 ns - MFM_LOW_WIDTH;
+    end loop;
+  end procedure;
 
 end package body mfm_flux_gen_pkg;

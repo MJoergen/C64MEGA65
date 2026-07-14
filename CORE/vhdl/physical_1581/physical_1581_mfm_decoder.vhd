@@ -15,6 +15,21 @@
 -- CRC coverage: reset at the first of the three A1 syncs, then A1,A1,A1 are fed
 -- synthetically (bits_to_bytes signals A1 via sync_o, not a byte), then the mark
 -- byte and every field/data byte and the two stored CRC bytes; residue 0 == good.
+--
+-- WRITE-SPLICE SYNC GATE (issue #90 round 13; full story at the C_QUANT_SYNC_*
+-- block in physical_1581_pkg): while HUNTING (no field open, no A1 accepted
+-- yet) an A1 sync from the pipeline is honored only if a run of
+-- C_QUANT_SYNC_RUN consecutive SHORT-class gaps -- the 00 lock-up preamble
+-- that precedes every legitimate A1 train -- ended at most C_QUANT_SYNC_LAT
+-- gaps ago (the med entry gap + the long,med,long,med sync window = 5). This
+-- is what a real data separator PLL does implicitly. Without it, round-12's
+-- no-dead-band gap acceptance let index-write-splice garbage form FALSE A1
+-- syncs (junk alternating ~long/~med IS the sync gap pattern) plus a fake FB
+-- data mark, opening a bogus 512-byte data field that deterministically
+-- consumed the following sector's real preamble + ID (hardware: t39 s1
+-- unreadable 30/30, IDDEC pinned at 10/rev). In-field syncs (A1 #2/#3 of a
+-- train) bypass the gate; a class-11 gap hard-closes it. The quantiser gets
+-- field_i from the same state so hunting-phase adaptation is preamble-only.
 -------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -22,6 +37,15 @@ use ieee.numeric_std.all;
 use work.physical_1581_pkg.all;
 
 entity physical_1581_mfm_decoder is
+  generic (
+    -- Test-only knobs for the A/B margin harness (production keeps defaults):
+    -- G_SYNC_GATE false + G_QUANT_HUNT_ADAPT_ALL true restores the exact
+    -- round-12 behavior; G_QUANT_TOL_ACQ_SHR = 2 instantiates the refuted
+    -- tight-acquisition variant (see the quantiser entity header).
+    G_SYNC_GATE          : boolean := true;
+    G_QUANT_TOL_ACQ_SHR  : natural := C_QUANT_TOL_SHR;
+    G_QUANT_HUNT_ADAPT_ALL : boolean := false
+  );
   port (
     clk_i             : in  std_logic;
     rst_i             : in  std_logic;                    -- sync reset / invalidate
@@ -94,6 +118,15 @@ architecture rtl of physical_1581_mfm_decoder is
   signal crc_stored_r : unsigned(15 downto 0) := (others => '0');
   signal deleted_r    : std_logic := '0';
 
+  -- write-splice sync gate (round 13, see entity header). field_active is '1'
+  -- from the first honored A1 sync of a train through the end of its field;
+  -- it bypasses the gate and selects the quantiser's in-field behavior.
+  signal field_active : std_logic;
+  signal short_run    : integer range 0 to 255 := 0;  -- consecutive short-class gaps
+  -- gaps since a >= C_QUANT_SYNC_RUN shorts run last ended; saturates at 15
+  -- (= gate closed; C_QUANT_SYNC_LAT < 15). Reset value = closed.
+  signal run_age      : integer range 0 to 15 := 15;
+
   -- N -> payload length in bytes
   function data_len(n : unsigned(7 downto 0)) return integer is
   begin
@@ -118,7 +151,9 @@ begin
               runt_o => runt_o);
 
   i_quant : entity work.physical_1581_mfm_quantise
-    port map (clk_i => clk_i, rst_i => rst_i,
+    generic map (G_TOL_ACQ_SHR    => G_QUANT_TOL_ACQ_SHR,
+                 G_HUNT_ADAPT_ALL => G_QUANT_HUNT_ADAPT_ALL)
+    port map (clk_i => clk_i, rst_i => rst_i, field_i => field_active,
               gap_valid_i => gap_valid, gap_len_i => gap_len,
               gap_valid_o => q_valid, gap_class_o => q_class,
               est_o => est_o);
@@ -140,6 +175,11 @@ begin
   -- read-only diagnostic tap: expose the running CRC value (see port comment)
   crc_value_o <= crc_value;
 
+  -- inside a field = from the first honored A1 sync (sync_cnt /= 0) through
+  -- the ID/data field FSM (state /= S_IDLE). Gap events are >= 160 cycles
+  -- apart, so the one-cycle register lag of state/sync_cnt is harmless.
+  field_active <= '1' when state /= S_IDLE or sync_cnt /= 0 else '0';
+
   ------------------------------------------------------------------------------
   -- field FSM
   ------------------------------------------------------------------------------
@@ -156,13 +196,16 @@ begin
       gap_error_o       <= '0';
 
       if rst_i = '1' then
-        state    <= S_IDLE;
-        sync_cnt <= 0;
-        locked_o <= '0';
-        last_n   <= x"02";
-        chk_cnt  <= 0;
+        state     <= S_IDLE;
+        sync_cnt  <= 0;
+        locked_o  <= '0';
+        last_n    <= x"02";
+        chk_cnt   <= 0;
+        short_run <= 0;
+        run_age   <= 15;                -- gate closed until a preamble run
       else
-        -- diagnostics + loss of lock on an out-of-spec gap
+        -- diagnostics + loss of lock on an out-of-spec gap; also the
+        -- preamble-run bookkeeping for the write-splice sync gate
         if q_valid = '1' then
           last_gap_o <= gap_len;
           if q_class = "11" then
@@ -170,11 +213,32 @@ begin
             locked_o    <= '0';
             state       <= S_IDLE;
             sync_cnt    <= 0;
+            short_run   <= 0;
+            run_age     <= 15;          -- loud loss of lock: close the gate
+          elsif q_class = "00" then
+            if short_run >= C_QUANT_SYNC_RUN - 1 then
+              run_age <= 0;             -- preamble run complete/continuing
+            elsif run_age < 15 then
+              run_age <= run_age + 1;
+            end if;
+            if short_run < 255 then
+              short_run <= short_run + 1;
+            end if;
+          else                          -- medium/long: run over, gate ages
+            short_run <= 0;
+            if run_age < 15 then
+              run_age <= run_age + 1;
+            end if;
           end if;
         end if;
 
-        -- three A1 syncs: reset CRC at the first, feed one A1 per sync (cap 3)
-        if gtb_sync = '1' then
+        -- three A1 syncs: reset CRC at the first, feed one A1 per sync (cap
+        -- 3). Round 13: while hunting, a sync is honored only if a 00
+        -- preamble run ended at most C_QUANT_SYNC_LAT gaps ago (see entity
+        -- header); a suppressed junk sync changes no state here (the
+        -- pipeline below already realigned itself, which is harmless).
+        if gtb_sync = '1' and
+           ((not G_SYNC_GATE) or field_active = '1' or run_age <= C_QUANT_SYNC_LAT) then
           locked_o <= '1';
           if sync_cnt = 0 then
             crc_reset <= '1';
