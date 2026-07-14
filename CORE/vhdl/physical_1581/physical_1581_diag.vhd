@@ -29,6 +29,8 @@
 --     track / requested sector, latched whenever a read op completes with rnf).
 --   * (map v6) 16-bit saturating counters for coarse A1 candidates, candidates
 --     rejected by the complete-word span check, and qualified 3xA1 trains.
+--   * (map v7) record-level counters for FE/DAM marks, unsolicited DAMs,
+--     requested-ID matches and matched IDs whose DAM was not found.
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -149,6 +151,11 @@ entity physical_1581_diag is
     a1_candidate_i      : in  std_logic := '0';
     a1_span_reject_i    : in  std_logic := '0';
     a1_train_i          : in  std_logic := '0';
+    mark_fe_i           : in  std_logic := '0';
+    mark_dam_i          : in  std_logic := '0';
+    dam_unarmed_i       : in  std_logic := '0';
+    match_id_i          : in  std_logic := '0';
+    dam_miss_i          : in  std_logic := '0';
 
     -----------------------------------------------------------------------------
     -- QNICE read interface (device C_DEV_C64_PHYS1581); read-only, no wait-state
@@ -226,16 +233,23 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_A1_CAND    : integer := 16#38#;   -- 16-bit saturating coarse candidates
   constant RM_CNT_A1_REJECT  : integer := 16#39#;   -- 16-bit saturating span rejects
   constant RM_CNT_A1_TRAIN   : integer := 16#3A#;   -- 16-bit saturating qualified trains
+  -- map v7 (record sequencing + sector-read acquisition forensics)
+  constant RM_CNT_MARK_FE     : integer := 16#3B#;   -- qualified train followed by FE
+  constant RM_CNT_MARK_DAM    : integer := 16#3C#;   -- qualified train followed by FB/F8
+  constant RM_CNT_DAM_UNARMED : integer := 16#3D#;   -- DAM ignored without valid preceding ID
+  constant RM_CNT_MATCH_ID    : integer := 16#3E#;   -- requested sector ID matched
+  constant RM_CNT_DAM_MISS    : integer := 16#3F#;   -- matched ID followed by no DAM
   constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)
   constant RM_TRC_END        : integer := 16#7F#;
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"06";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"07";
   -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
   --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present,
   --                   bit5 = delivery-v2 observability words (0x2A-0x35) present,
-  --                   bit6 = complete-A1 qualifier counters (0x38-0x3A) present
-  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"7F";
+  --                   bit6 = complete-A1 qualifier counters (0x38-0x3A) present,
+  --                   bit7 = record-sequencing counters (0x3B-0x3F) present
+  constant C_CAPABILITY  : std_logic_vector(7 downto 0) := x"FF";
 
   constant C_ONES32 : unsigned(31 downto 0) := (others => '1');
 
@@ -259,6 +273,8 @@ architecture rtl of physical_1581_diag is
   signal cnt_busycmd   : unsigned(31 downto 0) := (others => '0');
   signal cnt_runt      : unsigned(31 downto 0) := (others => '0');
   signal cnt_a1_cand, cnt_a1_reject, cnt_a1_train : unsigned(15 downto 0) := (others => '0');
+  signal cnt_mark_fe, cnt_mark_dam, cnt_dam_unarmed : unsigned(15 downto 0) := (others => '0');
+  signal cnt_match_id, cnt_dam_miss : unsigned(15 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- latched "last" values + edge-detect history
@@ -396,6 +412,11 @@ begin
         cnt_a1_cand    <= (others => '0');
         cnt_a1_reject  <= (others => '0');
         cnt_a1_train   <= (others => '0');
+        cnt_mark_fe     <= (others => '0');
+        cnt_mark_dam    <= (others => '0');
+        cnt_dam_unarmed <= (others => '0');
+        cnt_match_id    <= (others => '0');
+        cnt_dam_miss    <= (others => '0');
         last_present   <= (others => '0');
         rnf_ctx        <= (others => '0');
         prev_lost      <= dbg_lost_i;
@@ -463,6 +484,11 @@ begin
         cnt_a1_cand   <= sat_inc16(cnt_a1_cand,   a1_candidate_i);
         cnt_a1_reject <= sat_inc16(cnt_a1_reject, a1_span_reject_i);
         cnt_a1_train  <= sat_inc16(cnt_a1_train,  a1_train_i);
+        cnt_mark_fe     <= sat_inc16(cnt_mark_fe,     mark_fe_i);
+        cnt_mark_dam    <= sat_inc16(cnt_mark_dam,    mark_dam_i);
+        cnt_dam_unarmed <= sat_inc16(cnt_dam_unarmed, dam_unarmed_i);
+        cnt_match_id    <= sat_inc16(cnt_match_id,    match_id_i);
+        cnt_dam_miss    <= sat_inc16(cnt_dam_miss,    dam_miss_i);
         if fin_evt = '1' then
           last_present <= dbg_pres_cnt_i;
         end if;
@@ -601,6 +627,11 @@ begin
       when RM_CNT_A1_CAND     => qnice_data_o <= std_logic_vector(cnt_a1_cand);
       when RM_CNT_A1_REJECT   => qnice_data_o <= std_logic_vector(cnt_a1_reject);
       when RM_CNT_A1_TRAIN    => qnice_data_o <= std_logic_vector(cnt_a1_train);
+      when RM_CNT_MARK_FE     => qnice_data_o <= std_logic_vector(cnt_mark_fe);
+      when RM_CNT_MARK_DAM    => qnice_data_o <= std_logic_vector(cnt_mark_dam);
+      when RM_CNT_DAM_UNARMED => qnice_data_o <= std_logic_vector(cnt_dam_unarmed);
+      when RM_CNT_MATCH_ID    => qnice_data_o <= std_logic_vector(cnt_match_id);
+      when RM_CNT_DAM_MISS    => qnice_data_o <= std_logic_vector(cnt_dam_miss);
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

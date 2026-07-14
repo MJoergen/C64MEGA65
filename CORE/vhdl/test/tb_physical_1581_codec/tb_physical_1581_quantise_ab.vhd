@@ -1,9 +1,9 @@
 -------------------------------------------------------------------------------
 -- tb_physical_1581_quantise_ab.vhd   (issue #90 rounds 12 through 14)
 --
--- A/B margin harness: SIX complete decoders run in parallel on
+-- A/B margin harness: SEVEN complete decoders run in parallel on
 -- identical stress flux, so every trial reports one row of
---   old | r12 | r13 | prod | tacq | spanoff
+--   old | r12 | r13 | prod | tacq | spanoff | seqoff
 --
 --   * old  = the pre-round-12 FIXED-WINDOW classifier (library q_old = the
 --            production sources with the test-only ref_mfm_quantise_fixed.vhd
@@ -15,8 +15,8 @@
 --            accepted gap)
 --   * r13  = superseded round-13 00-preamble gate, retained to prove both
 --            its splice fix and its F011 zero-ID regression
---   * prod = production adaptive quantiser + complete-A1 span and exact
---            three-A1 train spacing
+--   * prod = production adaptive quantiser + complete-A1 span, exact
+--            three-A1 train spacing and ID-before-DAM record sequencing
 --   * tacq = the REFUTED round-13 fix candidate (two-tier tolerance, tight
 --            est/4 acquisition: G_QUANT_TOL_ACQ_SHR => 2, no gate). Kept as
 --            live evidence of WHY the shipped fix is the preamble-run sync
@@ -26,6 +26,9 @@
 --   * spanoff = exact commit-3803152 production semantics: adaptive hunting
 --               plus candidate spacing, but no complete-A1 span check. Kept
 --               to hard-prove the new spaced-junk failure mechanism.
+--   * seqoff = exact commit-0ab9f92 production semantics: complete-A1 span
+--              qualification, but no ID-before-DAM record sequencing. Kept
+--              to reproduce the new hardware failure upper bound.
 --
 -- Build (three libraries, SEPARATE workdirs -- the per-library object files
 -- share basenames and would overwrite each other in a shared directory):
@@ -125,7 +128,7 @@ architecture sim of tb_physical_1581_quantise_ab is
 
   constant NAME_LEN : integer := 26;
   constant MAXT     : integer := 6144;   -- max flux transitions per record
-  constant NDUT     : integer := 6;      -- 0=old 1=r12 2=r13 3=prod 4=tacq 5=spanoff
+  constant NDUT     : integer := 7;      -- 0=old 1=r12 2=r13 3=prod 4=tacq 5=spanoff 6=seqoff
 
   type int_arr  is array (natural range <>) of integer;
   type real_arr is array (natural range <>) of real;
@@ -192,7 +195,7 @@ architecture sim of tb_physical_1581_quantise_ab is
     name    : string(1 to NAME_LEN);
     fam     : integer;   -- 0 can / 1 speed / 2 drift / 3 jit / 4 peak+combo
                          -- / 6 art / 7 splice / 8 junk
-    ok      : boolean_vector(0 to NDUT - 1);   -- old/r12/r13/prod/tacq/spanoff
+    ok      : boolean_vector(0 to NDUT - 1);   -- old/r12/r13/prod/tacq/spanoff/seqoff
     must_n  : boolean;
     emin    : integer;   -- production-side est excursion (integer cycles)
     emax    : integer;
@@ -219,7 +222,8 @@ architecture sim of tb_physical_1581_quantise_ab is
       when 2      => return "r13 ";
       when 3      => return "prod";
       when 4      => return "tacq";
-      when others => return "spanoff";
+      when 5      => return "spanoff";
+      when others => return "seqoff";
     end case;
   end function;
 
@@ -228,11 +232,11 @@ begin
   clk <= not clk after 10 ns;   -- 50 MHz
 
   ---------------------------------------------------------------------------
-  -- the five decoders under test, same flux
+  -- the seven decoders under test, same flux
   ---------------------------------------------------------------------------
   -- 0: pre-round-12 fixed windows (exact round-11: no sync gate)
   dut_old : entity q_old.physical_1581_mfm_decoder
-    generic map (G_SYNC_GATE => false)
+    generic map (G_SYNC_GATE => false, G_RECORD_SEQUENCE_GATE => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(0), id_c_o => d_idc(0), id_h_o => d_idh(0),
@@ -245,7 +249,8 @@ begin
 
   -- 1: round-12 compatibility (exact round-12 RTL semantics)
   dut_r12 : entity q_new.physical_1581_mfm_decoder
-    generic map (G_SYNC_GATE => false, G_QUANT_HUNT_ADAPT_ALL => true)
+    generic map (G_SYNC_GATE => false, G_QUANT_HUNT_ADAPT_ALL => true,
+                 G_RECORD_SEQUENCE_GATE => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(1), id_c_o => d_idc(1), id_h_o => d_idh(1),
@@ -258,7 +263,8 @@ begin
 
   -- 2: exact round-13 preamble-gate behavior (historical regression column)
   dut_r13 : entity q_new.physical_1581_mfm_decoder
-    generic map (G_SYNC_PREAMBLE_GATE => true, G_QUANT_HUNT_ADAPT_ALL => false)
+    generic map (G_SYNC_PREAMBLE_GATE => true, G_QUANT_HUNT_ADAPT_ALL => false,
+                 G_RECORD_SEQUENCE_GATE => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(2), id_c_o => d_idc(2), id_h_o => d_idh(2),
@@ -285,7 +291,8 @@ begin
   -- 4: refuted fix candidate (tight est/4 acquisition tier, no gate)
   dut_tacq : entity q_new.physical_1581_mfm_decoder
     generic map (G_SYNC_GATE => false, G_QUANT_TOL_ACQ_SHR => 2,
-                 G_QUANT_HUNT_ADAPT_ALL => false)
+                 G_QUANT_HUNT_ADAPT_ALL => false,
+                 G_RECORD_SEQUENCE_GATE => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(4), id_c_o => d_idc(4), id_h_o => d_idh(4),
@@ -298,7 +305,7 @@ begin
 
   -- 5: exact commit-3803152 spacing-only production behavior
   dut_spanoff : entity q_new.physical_1581_mfm_decoder
-    generic map (G_SYNC_SPAN_GATE => false)
+    generic map (G_SYNC_SPAN_GATE => false, G_RECORD_SEQUENCE_GATE => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(5), id_c_o => d_idc(5), id_h_o => d_idh(5),
@@ -307,6 +314,19 @@ begin
       data_byte_valid_o => d_bytev(5), data_end_o => d_data_end(5),
       data_crc_ok_o => d_data_crc_ok(5),
       locked_o => d_lock(5), gap_error_o => d_gerr(5)
+    );
+
+  -- 6: exact commit-0ab9f92 behavior (span-qualified, no record sequencing)
+  dut_seqoff : entity q_new.physical_1581_mfm_decoder
+    generic map (G_RECORD_SEQUENCE_GATE => false)
+    port map (
+      clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
+      id_valid_o => d_id_valid(6), id_c_o => d_idc(6), id_h_o => d_idh(6),
+      id_r_o => d_idr(6), id_n_o => d_idn(6), id_crc_ok_o => d_id_crc_ok(6),
+      data_start_o => d_data_start(6), data_byte_o => d_byte(6),
+      data_byte_valid_o => d_bytev(6), data_end_o => d_data_end(6),
+      data_crc_ok_o => d_data_crc_ok(6),
+      locked_o => d_lock(6), gap_error_o => d_gerr(6)
     );
 
   ---------------------------------------------------------------------------
@@ -439,11 +459,41 @@ begin
     -- no 00 bytes before IDs; data still has 12 x 00. Keeping these as
     -- separate vectors prevents formatter-specific acquisition rules.
     procedure build_record(lead_4e, id_zeros, id_data_4e, trailer_4e : natural;
-                           prefix_zeros : natural := 0) is
+                           prefix_zeros : natural := 0;
+                           prefix_fake_dam : boolean := false;
+                           prefix_armed_fake_dam : boolean := false) is
     begin
       nt := 0; hc := 0; prev := '0';
       art_after_t := -1; splice_t := -1;
       for k in 1 to prefix_zeros loop enc_byte(x"00"); end loop;
+      -- Hardware map-v6 evidence shows two additional, timing-valid A1 trains
+      -- per revolution. This is the indistinguishable upper bound: a complete
+      -- A1x3+FB before any valid ID, followed by enough junk for the old parser
+      -- to consume the real record as a bogus 512-byte data field. Production
+      -- must ignore the unsolicited DAM and acquire the following real ID.
+      if prefix_fake_dam then
+        for k in 1 to 8 loop enc_byte(x"00"); end loop;
+        enc_a1; enc_a1; enc_a1; enc_byte(x"FB");
+        for k in 1 to 32 loop enc_byte(x"4E"); end loop;
+      end if;
+      -- Stronger recovery case: a CRC-valid decoy ID legitimately arms the
+      -- following bogus DAM. Production must start that field, then let the
+      -- real record's qualified FE preempt the unfinished 512-byte parse.
+      if prefix_armed_fake_dam then
+        for k in 1 to 8 loop enc_byte(x"00"); end loop;
+        enc_a1; enc_a1; enc_a1; enc_byte(x"FE");
+        enc_byte(TC); enc_byte(TH); enc_byte(TR); enc_byte(TN);
+        crcv := x"FFFF";
+        crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"A1");
+        crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"FE");
+        crcv := crc16_update(crcv, TC); crcv := crc16_update(crcv, TH);
+        crcv := crc16_update(crcv, TR); crcv := crc16_update(crcv, TN);
+        enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
+        for k in 1 to 8 loop enc_byte(x"4E"); end loop;
+        for k in 1 to 8 loop enc_byte(x"00"); end loop;
+        enc_a1; enc_a1; enc_a1; enc_byte(x"FB");
+        for k in 1 to 32 loop enc_byte(x"4E"); end loop;
+      end if;
       for k in 1 to lead_4e loop enc_byte(x"4E"); end loop;
       for k in 1 to id_zeros loop
         if k = 7 then art_after_t := nt - 1; end if;
@@ -518,7 +568,8 @@ begin
       must_new     : boolean;
       seed         : integer;
       junk         : integer := -1;      -- <0 none; 100+s rand; 200+s chain; 300+s spaced
-      exp_r12_fail : boolean := false    -- junk-chain: r12 MUST fail (regression proof)
+      exp_r12_fail : boolean := false;   -- junk-chain: r12 MUST fail (regression proof)
+      exp_seqoff_fail : boolean := false -- timing-valid unsolicited DAM: 0ab9f92 MUST fail
     ) is
       variable t   : real_arr(0 to MAXT - 1);
       variable sh  : real_arr(0 to MAXT - 1);
@@ -714,6 +765,25 @@ begin
           end if;
         end if;
       end if;
+      if exp_seqoff_fail then
+        if not okv(3) then
+          report "FAIL: record-sequenced production did not recover after unsolicited DAM"
+            severity error;
+          fails := fails + 1;
+        end if;
+        if okv(6) then
+          report "FAIL: 0ab9f92 control survived timing-valid unsolicited DAM"
+            severity error;
+          fails := fails + 1;
+        elsif m_ds_cnt(6) = 0 then
+          report "FAIL: 0ab9f92 control failed without opening the bogus data field"
+            severity error;
+          fails := fails + 1;
+        else
+          report "CONFIRMED: 0ab9f92 opened an unsolicited timing-valid DAM;"
+               & " record-sequenced production ignored it and decoded the real record";
+        end if;
+      end if;
 
       res(nres) := (name => pad(name), fam => fam, ok => okv,
                     must_n => must_new, emin => n_est_min / 16,
@@ -724,7 +794,7 @@ begin
       end if;
       report "TRIAL " & pad(name) & " old=" & pf(okv(0)) & " r12=" & pf(okv(1))
            & " r13=" & pf(okv(2)) & " prod=" & pf(okv(3)) & " tacq=" & pf(okv(4))
-           & " spanoff=" & pf(okv(5))
+           & " spanoff=" & pf(okv(5)) & " seqoff=" & pf(okv(6))
            & "  est=[" & integer'image(n_est_min / 16) & ".." & integer'image((n_est_max + 15) / 16) & "]";
     end procedure;
 
@@ -786,6 +856,16 @@ begin
     run_trial("F011 later S20 -3%", 9, M_UNIFORM, 0.970, 0.970, 0, 20, false, true, 51);
     run_trial("F011 + junk chain",   9, M_UNIFORM, 1.000, 1.000, 0, 0, false, true, 47,
               junk => 204, exp_r12_fail => true);
+
+    -- Map-v6 hardware upper bound: a complete timing-valid A1x3+FB splice
+    -- field precedes a stock record. Sync timing alone cannot reject it;
+    -- enforcing valid-ID-before-DAM must recover, while exact 0ab9f92 fails.
+    build_record(32, 12, 22, 8, prefix_fake_dam => true);
+    run_trial("valid unsolicited DAM", 5, M_UNIFORM, 1.000, 1.000, 0, 0,
+              false, true, 53, exp_seqoff_fail => true);
+    build_record(32, 12, 22, 8, prefix_armed_fake_dam => true);
+    run_trial("armed bogus DAM recovery", 5, M_UNIFORM, 1.000, 1.000, 0, 0,
+              false, true, 54, exp_seqoff_fail => true);
 
     -- Restore the stock-ROM layout for the complete historical matrix.
     build_record(32, 12, 22, 8);
@@ -869,11 +949,12 @@ begin
     ---------------------------------------------------------------------
     -- PHASE 2: table + acceptance
     ---------------------------------------------------------------------
-    report "==== A/B RESULT TABLE (old | r12 | r13 | production full A1 | tacq | spanoff) ====";
+    report "==== A/B RESULT TABLE (old | r12 | r13 | prod | tacq | spanoff | seqoff) ====";
     for k in 0 to nres - 1 loop
       report res(k).name & " | old=" & pf(res(k).ok(0)) & " | r12=" & pf(res(k).ok(1))
            & " | r13=" & pf(res(k).ok(2)) & " | prod=" & pf(res(k).ok(3))
            & " | tacq=" & pf(res(k).ok(4)) & " | spanoff=" & pf(res(k).ok(5))
+           & " | seqoff=" & pf(res(k).ok(6))
            & " | est " & integer'image(res(k).emin) & ".." & integer'image(res(k).emax);
     end loop;
 
@@ -894,7 +975,7 @@ begin
         fails := fails + 1;
       end if;
       -- round-12 compat instance must reproduce the round-12 green table
-      if res(k).fam < 8 and res(k).must_n and not res(k).ok(1) then
+      if res(k).fam < 8 and res(k).fam /= 5 and res(k).must_n and not res(k).ok(1) then
         report "FAIL (r12 compat): " & res(k).name
              & " failed on the round-12 compatibility instance" severity error;
         fails := fails + 1;
@@ -937,7 +1018,7 @@ begin
     finish;
   end process;
 
-  -- global guard: 52 trials x ~20 ms + probes
+  -- global guard: 54 trials x ~20 ms + probes
   guard : process
   begin
     wait for 2000 ms;

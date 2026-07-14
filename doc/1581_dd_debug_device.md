@@ -43,14 +43,14 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-59 words at offsets `0x00`–`0x3A`, plus the 64-word WD-dialogue trace ring at
+64 words at offsets `0x00`–`0x3F`, plus the 64-word WD-dialogue trace ring at
 `0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
 fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x067F` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x07FF` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -93,11 +93,16 @@ fields are right-aligned unless a bit layout is given.
 | `0x38` | `CNT_A1_CAND`   | 16-bit saturating counter: coarse L-M-L-M A1 candidates |
 | `0x39` | `CNT_A1_REJECT` | 16-bit saturating counter: candidates rejected because the complete raw-word span is inconsistent with 14 estimated half-cells |
 | `0x3A` | `CNT_A1_TRAIN`  | 16-bit saturating counter: complete qualified three-A1 trains |
+| `0x3B` | `CNT_MARK_FE`    | 16-bit saturating counter: qualified A1 train followed by an ID mark (`FE`) |
+| `0x3C` | `CNT_MARK_DAM`   | 16-bit saturating counter: qualified A1 train followed by a data mark (`FB`/`F8`) |
+| `0x3D` | `CNT_DAM_UNARMED` | 16-bit saturating counter: data marks ignored because no CRC-valid ID armed them |
+| `0x3E` | `CNT_MATCH_ID`   | 16-bit saturating counter: CRC-valid IDs matching the requested track/sector |
+| `0x3F` | `CNT_DAM_MISS`   | 16-bit saturating counter: matching IDs after which the controller saw another ID or timed out before a DAM |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 
 The original fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never
 wrap). Read the low word first, then the high word (`0x0000` in the high word while
-values stay small). The three A1 counters at `0x38`–`0x3A` are single-word 16-bit
+values stay small). The eight counters at `0x38`–`0x3F` are single-word 16-bit
 saturating counters.
 
 ### Delivery v2 (map v4, words `0x2A`–`0x35`)
@@ -159,10 +164,25 @@ errors all lean in the same direction.
 
 `CNT_A1_CAND` counts every coarse candidate, `CNT_A1_REJECT` counts candidates rejected
 by the aggregate span check, and `CNT_A1_TRAIN` counts completed three-A1 trains. On a
-healthy ten-sector track, train count should track the real ID/data address-mark rate;
-a large reject count concentrated around the index is expected evidence that splice
-junk is being rejected rather than allowed to consume sector 1. Capability bit 6 in
-`VERSION` announces that these words exist.
+healthy ten-sector track there are normally ten ID and ten data address-mark trains.
+Some physical write splices can themselves produce timing-valid trains, so a zero reject
+count is not proof that every train is a real record. Capability bit 6 in `VERSION`
+announces that these words exist.
+
+### Record sequencing and DAM acquisition (map v7, words `0x3B`–`0x3F`)
+
+Timing alone cannot distinguish a splice that happens to reproduce a complete A1 train.
+Production therefore also enforces the IBM/WD record grammar: a data mark is accepted
+only after a CRC-valid ID field, and a qualified ID mark re-anchors the parser if junk had
+started a bogus data parse. This is formatter-neutral: both stock WD1772 and MEGA65/F011
+records use ID-before-data even though their surrounding gap and preamble lengths differ.
+
+`CNT_MARK_FE + CNT_MARK_DAM` classifies the qualified trains whose following byte was a
+supported mark; subtracting those from `CNT_A1_TRAIN` gives trains followed by some other
+byte. `CNT_DAM_UNARMED` is direct evidence that an unsolicited splice DAM was safely
+ignored. During a failed sector read, `CNT_MATCH_ID` and `CNT_DAM_MISS` distinguish
+"target ID never found" from "target ID found, but its data mark was missed." Capability
+bit 7 announces these counters.
 
 ### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
 
@@ -305,11 +325,11 @@ ME            (Memory/Examine) -> prompt "EXAMINE ADDRESS="
 ```text
 MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 7000          start
-703A          -> prompt " END ADDRESS=" ; end (0x7000 + 0x3A = last scalar diagnostic word)
+703F          -> prompt " END ADDRESS=" ; end (0x7000 + 0x3F = last scalar diagnostic word)
 ```
 
 This prints all 59 scalar diagnostic words in one block. To watch a value live, re-issue the
-`MD 7000 703A` (or `ME 70xx`) command repeatedly — the registers update continuously while
+`MD 7000 703F` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 
 ### 3.4 Typical checks

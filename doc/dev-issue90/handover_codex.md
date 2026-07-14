@@ -1,7 +1,7 @@
 # Issue #90 — Codex handover
 
-This is the Codex-owned handover for work after commits `2e2c852` and
-`3803152`. It is kept
+This is the Codex-owned handover for work after commits `2e2c852`, `3803152`
+and `0ab9f92`. It is kept
 separate from Fable's `HANDOVER.md` and must be updated with each material
 finding or implementation step.
 
@@ -169,7 +169,7 @@ the read path: `CNT_A1_CAND` at `0x38`, `CNT_A1_REJECT` at `0x39`, and
 `CNT_A1_TRAIN` at `0x3A`. `VERSION` is now `0x067F`. The diagnostic unit bench
 checks all three counters and passes.
 
-The next bitstream must still be qualified on physical R3 media:
+The hardware qualification requested for `0ab9f92` was:
 
 - cold power-on, enable physical 1581, then `LOAD"$",8`;
 - load SHADES and C64ANABALT repeatedly;
@@ -178,6 +178,93 @@ The next bitstream must still be qualified on physical R3 media:
   remains `0x2701`;
 - verify far cylinders remain reliable and `EST` remains bounded near nominal;
 - confirm splice-adjacent sector 1 remains readable.
+
+## Hardware result for `0ab9f92` (map v6)
+
+The maintainer committed the span-qualified repair as `0ab9f92` and tested a
+new R3 bitstream. A cold `LOAD"SHADES",8,1` again failed with `RNF_CTX=0x2701`.
+The new counters make this result decisive:
+
+- 138 qualified index revolutions (`CNT_IDX_QUAL=0x008A`);
+- 1,379 decoded IDs (`CNT_IDDEC=0x0563`), essentially exactly ten per
+  revolution;
+- 9,054 A1 candidates and 3,018 qualified trains (`0x235E = 3 * 0x0BCA`);
+- zero span rejects;
+- 94 read operations, nine RNFs, zero CRC-error completions;
+- healthy estimate `0x0638` and the same sector-1 trace signature.
+
+After startup phase is accounted for, the train count is 22 per revolution,
+not the 20 real trains expected from ten ID plus ten data fields. Every train
+contains exactly three accepted candidates, and none violates the full-word
+span. Therefore the physical splice supplies two complete timing-valid
+A1-like trains per revolution. The aggregate-span hypothesis is disproved for
+this disk. The span check remains a sound additional rejection layer for the
+simulated long-biased junk profile, but it cannot be the primary discriminator.
+
+No more repetitions of the map-v6 bitstream are useful; they will reproduce
+the same already-counted structure.
+
+## Record-sequencing repair after `0ab9f92`
+
+Once splice residue can be timing-indistinguishable from a real A1 train, no
+further sync tolerance can reliably separate it without rejecting legitimate
+media. Production now enforces the next invariant in the standard IBM/WD
+record grammar:
+
+1. a data address mark (`FB`/`F8`) is decoded only after a CRC-valid ID field
+   has armed it;
+2. accepting or ignoring a DAM consumes that arm;
+3. a qualified `A1 A1 A1 FE` always re-anchors the parser, even if splice junk
+   had already opened a bogus data parse.
+
+This is not F011-specific. Stock 1581/WD1772 and MEGA65/F011 tracks differ in
+their gap and 00-preamble lengths, but both necessarily encode an ID record
+before its data record. Adaptive gap classification, estimate tracking,
+complete-A1 span qualification and candidate spacing are otherwise unchanged.
+
+The A/B harness now has seven columns. The new `seqoff` column is exact
+`0ab9f92` behavior (span qualification on, record sequencing off). A permanent
+upper-bound vector emits a timing-perfect `A1x3 + FB` before any ID, followed
+by a real stock record. `seqoff` opens the unsolicited 512-byte field and loses
+the real record; production ignores it and decodes the real ID/data byte-exact.
+A second vector first emits a CRC-valid ID, then a timing-perfect bogus DAM.
+This deliberately arms and starts the bogus field even in production; the next
+qualified real `A1x3 + FE` must preempt it and recover the genuine record. The
+final 54-row matrix reports:
+
+`valid unsolicited DAM: old=fail | r12=fail | r13=fail | prod=PASS | tacq=fail | spanoff=fail | seqoff=fail`
+
+`armed bogus DAM recovery: old=fail | r12=fail | r13=fail | prod=PASS | tacq=fail | spanoff=fail | seqoff=fail`
+
+All prior stock and F011 layouts, F011 peak-S20 +/-3% rows, adaptive
+far-cylinder wins, splice profiles, and CRC/byte-exact guards remain green.
+The focused decoder bench also injects a timing-perfect unsolicited DAM and
+requires exactly one ignored-DAM event before the valid record.
+
+Final verification is green:
+
+- seven-way 54-row A/B matrix: `ALL ACCEPTANCE CRITERIA MET`, exit 0;
+- canonical decoder with unsolicited-DAM recovery: pass;
+- diagnostic map unit bench: pass;
+- complete closed-loop controller: byte-exact cylinders 0/1, Read Address,
+  Verify, expected RNF, pending/abort tag sequencing and recovery: pass;
+- FIFO overflow guard: CRC-only failure, never silent: pass;
+- `git diff --check`: pass.
+
+Diagnostic map v7 is `VERSION=0x07FF`. Five new 16-bit counters occupy the
+remaining scalar words before the trace ring:
+
+- `0x3B CNT_MARK_FE`: qualified train followed by FE;
+- `0x3C CNT_MARK_DAM`: qualified train followed by FB/F8;
+- `0x3D CNT_DAM_UNARMED`: unsolicited DAM ignored without a valid ID arm;
+- `0x3E CNT_MATCH_ID`: requested sector ID matched;
+- `0x3F CNT_DAM_MISS`: matched ID abandoned because another ID arrived or the
+  local DAM timeout expired.
+
+For the next R3 test, dump `0x7000..0x707F` as before. A successful directory
+and program load is the primary criterion. If sector 1 still fails, the five
+new words distinguish an unsolicited splice DAM from a target-ID/DAM pairing
+failure without another instrumentation build.
 
 ## Source discipline
 

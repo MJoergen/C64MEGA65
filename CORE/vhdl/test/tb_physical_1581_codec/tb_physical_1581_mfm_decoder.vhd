@@ -49,11 +49,13 @@ architecture sim of tb_physical_1581_mfm_decoder is
   signal locked          : std_logic;
   signal gap_error       : std_logic;
   signal runt            : std_logic;
+  signal dam_unarmed     : std_logic;
   signal last_gap        : unsigned(15 downto 0);
 
   -- runt-filter observation
   signal runt_cnt      : integer := 0;
   signal gap_error_cnt : integer := 0;
+  signal dam_unarmed_cnt : integer := 0;
 
   -- test record identity
   constant TC : unsigned(7 downto 0) := x"05";   -- cylinder
@@ -110,6 +112,7 @@ begin
       data_byte_o => data_byte, data_byte_valid_o => data_byte_valid,
       data_end_o => data_end, data_crc_ok_o => data_crc_ok,
       locked_o => locked, gap_error_o => gap_error, runt_o => runt,
+      dam_unarmed_o => dam_unarmed,
       last_gap_o => last_gap
     );
 
@@ -122,6 +125,9 @@ begin
       end if;
       if gap_error = '1' then
         gap_error_cnt <= gap_error_cnt + 1;
+      end if;
+      if dam_unarmed = '1' then
+        dam_unarmed_cnt <= dam_unarmed_cnt + 1;
       end if;
     end if;
   end process;
@@ -160,6 +166,15 @@ begin
     wait for 200 ns;
     rst <= '0';
     wait for 200 ns;
+
+    -- ===== timing-valid unsolicited DAM (write-splice upper bound) ==========
+    -- A complete A1x3+FB cannot be rejected from sync timing alone. With no
+    -- preceding CRC-valid ID, production must ignore it and remain able to
+    -- acquire the real record that follows.
+    mfm_bytes(f_rdata, x"00", 8, prev);
+    mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev);
+    mfm_byte(f_rdata, x"FB", prev);
+    mfm_bytes(f_rdata, x"4E", 8, prev);
 
     -- ===== ID field ==========================================================
     mfm_bytes(f_rdata, x"00", 12, prev);         -- 12 x 00 preamble
@@ -234,7 +249,10 @@ begin
       report "FAIL: runt_o pulsed " & integer'image(runt_cnt) & " times, expected 2" severity error;
     assert gap_error_cnt = 0
       report "FAIL: gap_error fired " & integer'image(gap_error_cnt) & " times, expected 0 (runt not merged?)" severity error;
+    assert dam_unarmed_cnt = 1
+      report "FAIL: unsolicited DAM count=" & integer'image(dam_unarmed_cnt) & ", expected 1" severity error;
     report "RUNT FILTER OK: 2 runts merged (ID + data field), 0 gap errors";
+    report "RECORD SEQUENCE OK: timing-valid unsolicited DAM ignored before real ID";
 
     report "physical_1581_mfm_decoder: ALL TESTS PASSED";
     finish;

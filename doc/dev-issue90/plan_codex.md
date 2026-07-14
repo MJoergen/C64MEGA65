@@ -57,8 +57,28 @@ separate from Fable's `PLAN.md`.
     16-bit candidate, span-reject, and qualified-train counters at `0x38`–`0x3A`.
 12. **DONE — final verification and R3 handoff.** The 52-row six-way matrix,
     canonical decoder, diagnostic bank, overflow guard, and full closed-loop
-    controller pass. Remaining work is maintainer R3 synthesis/timing and
-    physical-media qualification.
+    controller pass. The resulting `0ab9f92` bitstream was synthesized and its
+    physical-media qualification failed at the same track-39 sector-1 boundary.
+13. **DONE — interpret map-v6 hardware evidence.** Normalize the new counters
+    per revolution. The disk produces ten decoded IDs but 22 qualified A1
+    trains per revolution; candidate count is exactly three times train count
+    and span rejects are zero. The physical splice therefore contains two
+    complete timing-valid trains, disproving aggregate span as the sufficient
+    discriminator.
+14. **DONE — enforce format-neutral record sequencing.** Accept FB/F8 only
+    after a CRC-valid ID and let qualified FE re-anchor the parser out of a
+    bogus data parse. Keep adaptive classification and both A1 timing checks.
+15. **DONE — add decisive acquisition diagnostics.** Map v7
+    (`VERSION=0x07FF`) adds FE, DAM, unarmed-DAM, requested-ID-match and
+    missing-DAM counters at `0x3B`–`0x3F`.
+16. **DONE — reproduce and verify.** Timing-perfect unsolicited and
+    CRC-valid-ID-armed bogus A1x3+FB vectors fail the exact `0ab9f92` control
+    and pass production. The latter also proves that a real qualified FE can
+    preempt an already-started bogus data parse. The final 54-row seven-way
+    matrix, focused decoder, diagnostic bank, overflow guard and full
+    closed-loop controller all pass. Remaining work is maintainer R3
+    synthesis/timing and physical-media qualification of this record-sequenced
+    candidate.
 
 ## 2026-07-14 checkpoint 1
 
@@ -139,3 +159,23 @@ separate from Fable's `PLAN.md`.
   Read Address, Verify, expected RNF, pending-request tags, abort spacing, and
   post-abort recovery. The overflow bench also passes with CRC-only reporting
   and no silent corruption.
+
+## 2026-07-14 checkpoint 5
+
+- Maintainer tested commit `0ab9f92` on R3. Cold `LOAD"SHADES",8,1` still
+  failed with `RNF_CTX=0x2701`; this supersedes the simulated span-rejection
+  prediction.
+- Map-v6 counters are internally exact: `CNT_A1_CAND=0x235E` equals three times
+  `CNT_A1_TRAIN=0x0BCA`, while `CNT_A1_REJECT=0`. Across 138 revolutions the
+  disk yields essentially ten IDs and 22 trains per revolution. Two splice
+  trains are timing-valid all the way through the span check.
+- The next discriminator is record grammar, not narrower flux tolerance.
+  Production now requires a CRC-valid ID before accepting a DAM and treats a
+  qualified FE as an unconditional parser re-anchor. Both stock WD1772 and
+  F011 media obey this ID-before-data structure.
+- The seven-column harness retains exact `0ab9f92` as `seqoff`. New
+  timing-perfect unsolicited-DAM and armed-bogus-DAM rows hard-prove
+  `seqoff=fail` and `production=PASS`; all 52 prior rows are unchanged.
+- Final 54-row matrix, focused decoder, map-v7 diagnostic unit test, overflow
+  guard and long closed-loop controller all pass. Map v7 (`0x07FF`) adds
+  counters at `0x3B`–`0x3F`; the next hardware dump remains `0x7000..0x707F`.

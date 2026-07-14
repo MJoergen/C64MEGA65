@@ -533,6 +533,11 @@ architecture synthesis of main is
   signal   p1581_diag_a1_candidate : std_logic;
   signal   p1581_diag_a1_reject    : std_logic;
   signal   p1581_diag_a1_train     : std_logic;
+  signal   p1581_diag_mark_fe      : std_logic;
+  signal   p1581_diag_mark_dam     : std_logic;
+  signal   p1581_diag_dam_unarmed  : std_logic;
+  signal   p1581_diag_match_id     : std_logic;
+  signal   p1581_diag_dam_miss     : std_logic;
   signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- unprocessed video output of the C64 core
@@ -1995,6 +2000,11 @@ begin
       diag_a1_candidate_o => p1581_diag_a1_candidate,
       diag_a1_reject_o    => p1581_diag_a1_reject,
       diag_a1_train_o     => p1581_diag_a1_train,
+      diag_mark_fe_o      => p1581_diag_mark_fe,
+      diag_mark_dam_o     => p1581_diag_mark_dam,
+      diag_dam_unarmed_o  => p1581_diag_dam_unarmed,
+      diag_match_id_o     => p1581_diag_match_id,
+      diag_dam_miss_o     => p1581_diag_dam_miss,
       diag_est_o          => p1581_diag_est,
       diag_rd_phase_o     => p1581_diag_rd_phase,
       diag_step_phase_o   => p1581_diag_step_phase,
@@ -2121,6 +2131,11 @@ begin
       a1_candidate_i      => p1581_diag_a1_candidate,
       a1_span_reject_i    => p1581_diag_a1_reject,
       a1_train_i          => p1581_diag_a1_train,
+      mark_fe_i           => p1581_diag_mark_fe,
+      mark_dam_i          => p1581_diag_mark_dam,
+      dam_unarmed_i       => p1581_diag_dam_unarmed,
+      match_id_i          => p1581_diag_match_id,
+      dam_miss_i          => p1581_diag_dam_miss,
 
       -- QNICE read interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,

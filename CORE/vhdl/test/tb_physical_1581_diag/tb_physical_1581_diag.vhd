@@ -78,6 +78,7 @@ architecture sim of tb_physical_1581_diag is
   signal fifo_level    : unsigned(9 downto 0) := (others => '0');
   signal runt          : std_logic := '0';
   signal a1_candidate, a1_span_reject, a1_train : std_logic := '0';
+  signal mark_fe, mark_dam, dam_unarmed, match_id, dam_miss : std_logic := '0';
 
   -- QNICE read interface
   signal q_ce   : std_logic := '0';
@@ -120,6 +121,9 @@ begin
       a1_candidate_i => a1_candidate,
       a1_span_reject_i => a1_span_reject,
       a1_train_i => a1_train,
+      mark_fe_i => mark_fe, mark_dam_i => mark_dam,
+      dam_unarmed_i => dam_unarmed, match_id_i => match_id,
+      dam_miss_i => dam_miss,
       qnice_ce_i => q_ce, qnice_addr_i => q_addr, qnice_data_o => q_data
     );
 
@@ -189,7 +193,7 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"067F", "VERSION/CAP");
+    expect(16#01#, x"07FF", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
     expect(16#36#, x"0000", "EST(reset input)");
@@ -197,6 +201,11 @@ begin
     expect(16#38#, x"0000", "CNT_A1_CAND(reset)");
     expect(16#39#, x"0000", "CNT_A1_REJECT(reset)");
     expect(16#3A#, x"0000", "CNT_A1_TRAIN(reset)");
+    expect(16#3B#, x"0000", "CNT_MARK_FE(reset)");
+    expect(16#3C#, x"0000", "CNT_MARK_DAM(reset)");
+    expect(16#3D#, x"0000", "CNT_DAM_UNARMED(reset)");
+    expect(16#3E#, x"0000", "CNT_MATCH_ID(reset)");
+    expect(16#3F#, x"0000", "CNT_DAM_MISS(reset)");
 
     -- ---- packed live input / output words ------------------------------
     diag_in_bits  <= x"02AA";
@@ -418,6 +427,18 @@ begin
     expect(16#38#, x"0005", "CNT_A1_CAND=5");
     expect(16#39#, x"0002", "CNT_A1_REJECT=2");
     expect(16#3A#, x"0003", "CNT_A1_TRAIN=3");
+
+    -- ---- map v7: record-sequencing/acquisition counters ----------------
+    for i in 1 to 4 loop pulse1(mark_fe); end loop;
+    for i in 1 to 5 loop pulse1(mark_dam); end loop;
+    for i in 1 to 2 loop pulse1(dam_unarmed); end loop;
+    for i in 1 to 3 loop pulse1(match_id); end loop;
+    pulse1(dam_miss);
+    expect(16#3B#, x"0004", "CNT_MARK_FE=4");
+    expect(16#3C#, x"0005", "CNT_MARK_DAM=5");
+    expect(16#3D#, x"0002", "CNT_DAM_UNARMED=2");
+    expect(16#3E#, x"0003", "CNT_MATCH_ID=3");
+    expect(16#3F#, x"0001", "CNT_DAM_MISS=1");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

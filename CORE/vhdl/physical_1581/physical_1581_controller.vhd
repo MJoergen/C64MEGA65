@@ -135,6 +135,11 @@ entity physical_1581_controller is
     diag_a1_candidate_o : out std_logic := '0';   -- 1-cycle pulse: coarse A1 candidate
     diag_a1_reject_o    : out std_logic := '0';   -- 1-cycle pulse: bad complete-word span
     diag_a1_train_o     : out std_logic := '0';   -- 1-cycle pulse: qualified 3xA1 train
+    diag_mark_fe_o      : out std_logic := '0';   -- 1-cycle pulse: qualified FE mark
+    diag_mark_dam_o     : out std_logic := '0';   -- 1-cycle pulse: qualified FB/F8 mark
+    diag_dam_unarmed_o  : out std_logic := '0';   -- 1-cycle pulse: unsolicited DAM ignored
+    diag_match_id_o     : out std_logic := '0';   -- 1-cycle pulse: requested sector ID matched
+    diag_dam_miss_o     : out std_logic := '0';   -- 1-cycle pulse: matched ID had no DAM
     -- adaptive quantiser half-cell estimate (Q8.4; issue #90 round 12)
     diag_est_o          : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12);
     -- FSM phases + head estimate
@@ -287,6 +292,7 @@ architecture rtl of physical_1581_controller is
   signal ovf_l      : std_logic := '0';   -- a FIFO write was dropped during this op
   signal rd_req_evt : std_logic := '0';   -- 1-cycle diag strobe: read request accepted
   signal dec_a1_candidate, dec_a1_reject, dec_a1_train : std_logic;
+  signal dec_mark_fe, dec_mark_dam, dec_dam_unarmed : std_logic;
 
 begin
 
@@ -319,6 +325,9 @@ begin
       a1_candidate_o => dec_a1_candidate,
       a1_span_reject_o => dec_a1_reject,
       a1_train_o => dec_a1_train,
+      mark_fe_o => dec_mark_fe,
+      mark_dam_o => dec_mark_dam,
+      dam_unarmed_o => dec_dam_unarmed,
       last_gap_o => dec_last_gap,
       crc_value_o => dec_crc_value,
       est_o => dec_est
@@ -382,6 +391,9 @@ begin
   diag_a1_candidate_o <= dec_a1_candidate;
   diag_a1_reject_o    <= dec_a1_reject;
   diag_a1_train_o     <= dec_a1_train;
+  diag_mark_fe_o      <= dec_mark_fe;
+  diag_mark_dam_o     <= dec_mark_dam;
+  diag_dam_unarmed_o  <= dec_dam_unarmed;
   diag_est_o          <= dec_est;
   diag_head_valid_o   <= head_valid;
   diag_head_dir_out_o <= last_dir_out;
@@ -453,6 +465,8 @@ begin
       dec_rst  <= '0';
       byte_wr_o <= '0';
       rd_req_evt <= '0';
+      diag_match_id_o <= '0';
+      diag_dam_miss_o <= '0';
 
       step_req_edge := (stq_s /= stq_d);
       rd_req_edge   := (rdq_s /= rdq_d);
@@ -768,6 +782,7 @@ begin
                         done_gap_cnt  <= C_DONE_GAP;
                         rd_st <= RD_IDLE;
                       else
+                        diag_match_id_o <= '1';
                         dam_cnt <= to_unsigned(G_DAM_TIMEOUT_CYC, 32);
                         rd_st   <= RD_DAM;
                       end if;
@@ -807,6 +822,7 @@ begin
                 rd_st     <= RD_STREAM;
               elsif id_valid = '1' or dam_cnt = 0 then
                 -- another ID or local timeout: resume ID search within the budget
+                diag_dam_miss_o <= '1';
                 rd_st <= RD_SEARCH;
               end if;
               if edge_cnt >= G_SEARCH_EDGES or wd_cnt = 0 then

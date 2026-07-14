@@ -16,7 +16,7 @@
 -- synthetically (bits_to_bytes signals A1 via sync_o, not a byte), then the mark
 -- byte and every field/data byte and the two stored CRC bytes; residue 0 == good.
 --
--- SYNC-TRAIN QUALIFIER (issue #90 round 14): the adaptive quantiser remains
+-- SYNC-TRAIN QUALIFIER (issue #90 rounds 14/15): the adaptive quantiser remains
 -- deliberately tolerant, but a field boundary is accepted only after three
 -- non-overlapping missing-clock A1 candidates at their exact MFM spacing.
 -- Consecutive A1 bytes produce candidates five quantised gaps apart. The
@@ -25,6 +25,13 @@
 -- the address-mark train itself and is formatter-independent: stock 1581
 -- media have 12 x 00 before an ID, while the MEGA65 F011 formatter writes an
 -- ID immediately after 4E gap bytes. Both still contain the same A1 train.
+--
+-- A timing-valid splice can nevertheless contain a complete A1-like train.
+-- Therefore production also enforces the IBM/WD record grammar: a DAM is
+-- decoded only after a CRC-valid ID field, and a qualified FE always
+-- re-anchors the parser even if splice junk had started a bogus data field.
+-- This rule is common to stock WD1772 and MEGA65/F011 media; it does not depend
+-- on either formatter's gap or preamble lengths.
 -------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -38,13 +45,15 @@ entity physical_1581_mfm_decoder is
     -- round-12 behavior. G_SYNC_PREAMBLE_GATE true plus
     -- G_QUANT_HUNT_ADAPT_ALL false selects the superseded round-13 rule for
     -- the permanent A/B regression column. G_SYNC_SPAN_GATE false preserves
-    -- commit-3803152 spacing-only acquisition as another control column.
+    -- commit-3803152 spacing-only acquisition as another control column;
+    -- G_RECORD_SEQUENCE_GATE false preserves commit-0ab9f92 behavior.
     -- G_QUANT_TOL_ACQ_SHR = 2 selects
     -- the refuted tight-
     -- acquisition variant (see the quantiser entity header).
     G_SYNC_GATE          : boolean := true;
     G_SYNC_PREAMBLE_GATE : boolean := false;
     G_SYNC_SPAN_GATE     : boolean := true;
+    G_RECORD_SEQUENCE_GATE : boolean := true;
     G_QUANT_TOL_ACQ_SHR  : natural := C_QUANT_TOL_SHR;
     G_QUANT_HUNT_ADAPT_ALL : boolean := true
   );
@@ -77,6 +86,9 @@ entity physical_1581_mfm_decoder is
     a1_candidate_o    : out std_logic := '0';             -- pulse per coarse L,M,L,M candidate
     a1_span_reject_o  : out std_logic := '0';             -- pulse when candidate fails full-word span
     a1_train_o        : out std_logic := '0';             -- pulse when a complete 3xA1 train qualifies
+    mark_fe_o         : out std_logic := '0';             -- pulse: qualified train followed by FE
+    mark_dam_o        : out std_logic := '0';             -- pulse: qualified train followed by FB/F8
+    dam_unarmed_o     : out std_logic := '0';             -- pulse: DAM ignored without a valid preceding ID
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
@@ -123,6 +135,7 @@ architecture rtl of physical_1581_mfm_decoder is
   signal id_c_r, id_h_r, id_r_r, id_n_r : unsigned(7 downto 0) := (others => '0');
   signal crc_stored_r : unsigned(15 downto 0) := (others => '0');
   signal deleted_r    : std_logic := '0';
+  signal data_armed   : std_logic := '0';
 
   -- Sync qualification state. The round-13 preamble counters remain only for
   -- the test-selectable historical column; production uses sync_gap_age.
@@ -233,6 +246,9 @@ begin
       a1_candidate_o    <= '0';
       a1_span_reject_o  <= '0';
       a1_train_o        <= '0';
+      mark_fe_o         <= '0';
+      mark_dam_o        <= '0';
+      dam_unarmed_o     <= '0';
 
       if rst_i = '1' then
         state     <= S_IDLE;
@@ -244,6 +260,7 @@ begin
         run_age   <= 15;                -- gate closed until a preamble run
         sync_gap_age <= 15;
         a1_gap_0 <= 0; a1_gap_1 <= 0; a1_gap_2 <= 0; a1_gap_3 <= 0;
+        data_armed <= '0';
       else
         -- diagnostics + loss of lock on an out-of-spec gap; also the
         -- preamble-run bookkeeping for the write-splice sync gate
@@ -345,9 +362,27 @@ begin
           end if;
         end if;
 
-        -- decoded byte events
+        -- decoded byte events. In production, a qualified FE is an
+        -- unconditional record-boundary re-anchor: a legal MFM payload cannot
+        -- contain the missing-clock A1x3+FE sequence. This lets the real ID
+        -- terminate a bogus data parse opened by timing-valid splice residue.
         if byte_v = '1' then
-          case state is
+          if sync_cnt = 3 and byte_d = MARK_FE then
+            mark_fe_o <= '1';
+          elsif sync_cnt = 3 and (byte_d = MARK_FB or byte_d = MARK_F8) then
+            mark_dam_o <= '1';
+            if G_RECORD_SEQUENCE_GATE and (state /= S_IDLE or data_armed = '0') then
+              dam_unarmed_o <= '1';
+            end if;
+          end if;
+
+          if G_RECORD_SEQUENCE_GATE and sync_cnt = 3 and byte_d = MARK_FE and state /= S_IDLE then
+            crc_feed <= '1'; crc_byte <= byte_d;
+            state <= S_ID_C;
+            sync_cnt <= 0;
+            data_armed <= '0';
+          else
+           case state is
             when S_IDLE =>
               if sync_cnt = 3 then          -- this byte is the address mark
                 crc_feed <= '1';
@@ -355,16 +390,27 @@ begin
                 case byte_d is
                   when MARK_FE =>
                     state <= S_ID_C;
+                    data_armed <= '0';
                   when MARK_FB =>
-                    deleted_r    <= '0';
-                    data_start_o <= '1';
-                    data_cnt     <= data_len(last_n);
-                    state        <= S_DATA;
+                    if not G_RECORD_SEQUENCE_GATE or data_armed = '1' then
+                      deleted_r    <= '0';
+                      data_start_o <= '1';
+                      data_cnt     <= data_len(last_n);
+                      state        <= S_DATA;
+                    else
+                      dam_unarmed_o <= '1';
+                    end if;
+                    data_armed <= '0';
                   when MARK_F8 =>
-                    deleted_r    <= '1';
-                    data_start_o <= '1';
-                    data_cnt     <= data_len(last_n);
-                    state        <= S_DATA;
+                    if not G_RECORD_SEQUENCE_GATE or data_armed = '1' then
+                      deleted_r    <= '1';
+                      data_start_o <= '1';
+                      data_cnt     <= data_len(last_n);
+                      state        <= S_DATA;
+                    else
+                      dam_unarmed_o <= '1';
+                    end if;
+                    data_armed <= '0';
                   when others =>
                     null;                   -- unsupported mark: ignore
                 end case;
@@ -403,7 +449,8 @@ begin
 
             when others =>
               sync_cnt <= 0;                -- CHECK states: ignore stray bytes
-          end case;
+           end case;
+          end if;
         end if;
 
         -- CRC settle + evaluate (counter guarantees the last fed byte is shifted)
@@ -416,6 +463,11 @@ begin
             id_crc_stored_o <= crc_stored_r;
             if crc_value = x"0000" then id_crc_ok_o <= '1'; else id_crc_ok_o <= '0'; end if;
             id_valid_o      <= '1';
+            if G_RECORD_SEQUENCE_GATE and crc_value = x"0000" then
+              data_armed <= '1';
+            else
+              data_armed <= '0';
+            end if;
             state           <= S_IDLE;
           else
             chk_cnt <= chk_cnt - 1;
