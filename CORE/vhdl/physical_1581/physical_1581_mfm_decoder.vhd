@@ -52,7 +52,11 @@ entity physical_1581_mfm_decoder is
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
     -- field (x"0000" == good). Purely additive; does not affect decoding.
-    crc_value_o       : out unsigned(15 downto 0) := (others => '0')
+    crc_value_o       : out unsigned(15 downto 0) := (others => '0');
+    -- read-only diagnostic tap (issue #90 round 12): the adaptive quantiser's
+    -- live half-cell estimate, Q8.4 (bits 11:4 integer cycles, 3:0 sixteenths).
+    -- Purely additive; does not affect decoding.
+    est_o             : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12)
   );
 end entity physical_1581_mfm_decoder;
 
@@ -116,7 +120,8 @@ begin
   i_quant : entity work.physical_1581_mfm_quantise
     port map (clk_i => clk_i, rst_i => rst_i,
               gap_valid_i => gap_valid, gap_len_i => gap_len,
-              gap_valid_o => q_valid, gap_class_o => q_class);
+              gap_valid_o => q_valid, gap_class_o => q_class,
+              est_o => est_o);
 
   i_g2b : entity work.physical_1581_mfm_gaps_to_bits
     port map (clk_i => clk_i, rst_i => rst_i,

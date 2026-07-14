@@ -40,15 +40,62 @@ package physical_1581_pkg is
   constant C_GAP_LONG_CYC  : natural := 400;   -- 8 us
   constant C_BYTE_CYC      : natural := 1600;  -- 32 us decoded byte time
 
-  -- Gap-classification acceptance windows (spec 14.3), inclusive, in cycles.
-  -- Intervals in the dead-bands (241..257, 343..354) are loss-of-lock, not
-  -- snapped to a neighbouring class.
+  -- LEGACY fixed gap-classification windows (spec 14.3), inclusive, in cycles.
+  -- UNUSED by production code since round 12: physical_1581_mfm_quantise now
+  -- classifies adaptively against a tracked half-cell estimate (see the
+  -- C_QUANT_* constants below) with no dead-bands. Kept as documentation of
+  -- the original acceptance profile and as the behavior reference for the
+  -- test-only fixed-window classifier in
+  -- CORE/vhdl/test/tb_physical_1581_codec/ref_mfm_quantise_fixed.vhd (the
+  -- "old" side of the A/B margin harness). Hardware motivation for the
+  -- change: on real DD media the inner cylinders (60+) show enough peak
+  -- shift that gaps smeared into the dead-bands (241..257, 343..354) for
+  -- revolutions at a time -> class-11 loss of lock -> persistent RNF.
   constant C_GAP_SHORT_LO : natural := 160;    -- 3.2 us
   constant C_GAP_SHORT_HI : natural := 240;    -- 4.8 us
   constant C_GAP_MED_LO   : natural := 258;    -- 5.16 us
   constant C_GAP_MED_HI   : natural := 342;    -- 6.84 us
   constant C_GAP_LONG_LO  : natural := 355;    -- 7.1 us
   constant C_GAP_LONG_HI  : natural := 445;    -- 8.9 us
+
+  -----------------------------------------------------------------------------
+  -- Adaptive gap quantiser (issue #90 round 12)
+  --
+  -- The quantiser tracks the live half-cell length as a fixed-point estimate
+  -- est with C_QUANT_FRAC fraction bits (unit: 50 MHz cycles; nominal 100.0).
+  -- Each gap G is classified to the nearest class n in {2,3,4} half-cells via
+  -- the midpoints 2.5*est / 3.5*est and ACCEPTED iff
+  --     |G - n*est| <= est / 2**C_QUANT_TOL_SHR
+  -- With C_QUANT_TOL_SHR = 1 the acceptance windows touch at the midpoints:
+  -- every gap in [1.5*est .. 4.5*est] gets a class, there are NO dead-bands,
+  -- and everything outside is class "11" (loss of lock), which also re-seeds
+  -- est to nominal. On every accepted gap est adapts by a FIXED step of
+  -- C_QUANT_STEP_Q toward the gap (sign-based / median-seeking:
+  -- est += step * sign(G - n*est)), and is hard-clamped to
+  -- [C_QUANT_EST_MIN .. C_QUANT_EST_MAX] cycles (real drive speed tolerance
+  -- is ~+/-3%; the +/-10% clamp bounds any runaway adaptation).
+  --
+  -- WHY sign-based and not the proportional IIR est += (G/n - est)/8: the
+  -- A/B margin harness (tb_physical_1581_quantise_ab) showed that under
+  -- peak shift (ISI) short gaps only ever lengthen and long gaps only ever
+  -- shrink, so a magnitude-weighted mean estimator has a biased equilibrium
+  -- and was dragged to the +10% clamp at shift S=20 -- misclassifying the
+  -- shrunken long gaps (360 < 3.5*110) as mediums and LOSING to the old
+  -- fixed windows. A uniform-step sign update converges to the MEDIAN of
+  -- the per-gap error, which the unshifted majority anchors at the true
+  -- speed (residual bias about +1 cycle at S=20). Convergence: 1/8 cycle
+  -- per accepted gap reaches the clamp from nominal in 80 gaps, well inside
+  -- one preamble+lead-in; drift of a few percent per revolution is orders
+  -- of magnitude slower than that.
+  -----------------------------------------------------------------------------
+  constant C_QUANT_FRAC      : natural := 4;   -- fraction bits of est (1/16 cycle)
+  constant C_QUANT_EST_MIN   : natural := 90;  -- clamp, integer cycles (-10%)
+  constant C_QUANT_EST_MAX   : natural := 110; -- clamp, integer cycles (+10%)
+  constant C_QUANT_TOL_SHR   : natural := 1;   -- tolerance = est/2 (windows touch)
+  constant C_QUANT_STEP_Q    : natural := 2;   -- adaptation step: 2/16 = 1/8 cycle
+  constant C_QUANT_EST_NOM_Q : natural := C_HALF_CELL_CYC * 2**C_QUANT_FRAC;
+  constant C_QUANT_EST_MIN_Q : natural := C_QUANT_EST_MIN * 2**C_QUANT_FRAC;
+  constant C_QUANT_EST_MAX_Q : natural := C_QUANT_EST_MAX * 2**C_QUANT_FRAC;
   -- Runt-merge threshold for the gaps stage. Round 11: reduced from 120 to 16
   -- cycles (320 ns). At 120, a noise edge landing LATE in a real gap (more
   -- than 120 cycles after the previous edge but less than 120 before the next

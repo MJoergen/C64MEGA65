@@ -132,6 +132,8 @@ entity physical_1581_controller is
     diag_data_crc_ok_o  : out std_logic := '0';   -- valid at diag_data_end_o
     diag_gap_error_o    : out std_logic := '0';   -- 1-cycle pulse: out-of-spec flux gap
     diag_runt_o         : out std_logic := '0';   -- 1-cycle pulse: merged RDATA runt gap
+    -- adaptive quantiser half-cell estimate (Q8.4; issue #90 round 12)
+    diag_est_o          : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12);
     -- FSM phases + head estimate
     diag_rd_phase_o     : out std_logic_vector(3 downto 0) := (others => '0');  -- read FSM state code
     diag_step_phase_o   : out std_logic_vector(1 downto 0) := (others => '0');  -- step FSM state code
@@ -181,6 +183,7 @@ architecture rtl of physical_1581_controller is
   signal dec_runt       : std_logic;
   signal dec_last_gap   : unsigned(15 downto 0);
   signal dec_crc_value  : unsigned(15 downto 0);   -- diag tap: live CRC residue
+  signal dec_est        : unsigned(11 downto 0);   -- diag tap: quantiser half-cell estimate (Q8.4)
 
   -- 2FF synchronizers for level inputs
   signal active_m, active_s : std_logic := '0';
@@ -310,7 +313,8 @@ begin
       data_end_o => data_end, data_crc_ok_o => data_crc_ok,
       locked_o => dec_locked, gap_error_o => dec_gap_err, runt_o => dec_runt,
       last_gap_o => dec_last_gap,
-      crc_value_o => dec_crc_value
+      crc_value_o => dec_crc_value,
+      est_o => dec_est
     );
 
   ---------------------------------------------------------------------------
@@ -368,6 +372,7 @@ begin
   diag_data_crc_ok_o  <= data_crc_ok;
   diag_gap_error_o    <= dec_gap_err;
   diag_runt_o         <= dec_runt;
+  diag_est_o          <= dec_est;
   diag_head_valid_o   <= head_valid;
   diag_head_dir_out_o <= last_dir_out;
 

@@ -2,17 +2,55 @@
 -- physical_1581_mfm_quantise.vhd
 --
 -- DD-MFM read pipeline, stage 2 of 4: gap interval -> 2-bit gap class.
---   "00" = short  (1.0 interval)   "01" = medium (1.5 interval)
---   "10" = long   (2.0 interval)   "11" = invalid / loss-of-lock
+--   "00" = short  (2 half-cells)   "01" = medium (3 half-cells)
+--   "10" = long   (4 half-cells)   "11" = invalid / loss-of-lock
 --
--- Adapted from mega65-core src/vhdl/mfm_quantise_gaps.vhdl @ a9158930
---   (Paul Gardner-Stephen / MEGA65, LGPLv3). Changes: removed report/
---   debugtools/TextIO; renamed ports to the project _i/_o convention; added an
---   explicit synchronous reset. DEVIATION FROM UPSTREAM ALGORITHM: the upstream
---   cycles_per_interval / 0x51-cpi midpoint thresholds are replaced by the spec
---   acceptance windows from physical_1581_pkg (50 MHz). A gap below C_GAP_SHORT_LO,
---   above C_GAP_LONG_HI, or in a dead-band between windows classifies as "11"
---   invalid rather than snapping to a neighbouring class.
+-- ADAPTIVE quantiser (issue #90 round 12). The fixed windows of the previous
+-- revision (see the LEGACY C_GAP_* constants in physical_1581_pkg) had hard
+-- dead-bands between the classes; on real DD media the inner cylinders (60+)
+-- show enough peak shift that a sector's gaps landed in a dead-band for
+-- revolutions at a time -> class-11 loss of lock -> persistent RNF (hardware
+-- evidence 2026-07-14, cyls 61-62). This stage now:
+--
+--   * tracks the live half-cell length as a fixed-point estimate est
+--     (C_QUANT_FRAC = 4 fraction bits; unit 50 MHz cycles; nominal 100.0),
+--     seeded to nominal on reset AND on every loss of lock (a rejected gap);
+--     the decoder above resets this stage at every operation start, so an
+--     idle/re-search also re-seeds;
+--   * classifies each gap G to the NEAREST class n in {2,3,4} half-cells by
+--     comparing G against the midpoints 2.5*est and 3.5*est;
+--   * accepts the class iff |G - n*est| <= est/2**G_TOL_SHR. With the
+--     default G_TOL_SHR = 1 the acceptance windows touch at the midpoints:
+--     every gap in [1.5*est .. 4.5*est] classifies, there are NO dead-bands,
+--     and only gaps outside that span are class "11" (loss of lock), exactly
+--     as loud as before. (A stray mid-gap noise edge, e.g. the stable
+--     126-cycle artifact measured on the test disk, still rejects: 126 is
+--     below 1.5*est for every legal est.);
+--   * adapts est on every ACCEPTED gap by a FIXED step of C_QUANT_STEP_Q
+--     (1/8 cycle) toward the gap: est += step * sign(G - n*est). This
+--     sign-based (median-seeking) update replaces the originally-drafted
+--     proportional IIR est += (G/n - est)/8: the A/B margin harness showed
+--     the proportional form has a BIASED equilibrium under peak shift (ISI
+--     lengthens short gaps and shrinks long gaps systematically, dragging a
+--     magnitude-weighted mean to the +10% clamp at S=20 and misclassifying
+--     the shrunken longs), while the sign update converges to the MEDIAN of
+--     the per-gap error, anchored at true speed by the unshifted majority
+--     gaps -- see the C_QUANT_* comment block in physical_1581_pkg;
+--   * hard-clamps est to [C_QUANT_EST_MIN .. C_QUANT_EST_MAX] = [90 .. 110]
+--     cycles (+/-10% of nominal), bounding any runaway adaptation (real
+--     drive speed tolerance is ~+/-3%).
+--
+-- est_o exposes the estimate (Q8.4) as a read-only diagnostic tap; it is
+-- threaded decoder -> controller -> physical_1581_diag word 0x36 and never
+-- read back into any behavior.
+--
+-- Lineage: this stage replaces the fixed-window classifier adapted from
+-- mega65-core src/vhdl/mfm_quantise_gaps.vhdl @ a9158930 (Paul
+-- Gardner-Stephen / MEGA65, LGPLv3); the upstream cycles_per_interval idea
+-- returns here as a tracked estimate with explicit tolerance + clamps. The
+-- previous fixed-window architecture is preserved verbatim as the test-only
+-- reference entity in CORE/vhdl/test/tb_physical_1581_codec/
+-- ref_mfm_quantise_fixed.vhd (the "old" side of the A/B margin harness).
 --
 -- C64MEGA65 project.
 -------------------------------------------------------------------------------
@@ -22,38 +60,100 @@ use ieee.numeric_std.all;
 use work.physical_1581_pkg.all;
 
 entity physical_1581_mfm_quantise is
+  generic (
+    -- acceptance half-width = est / 2**G_TOL_SHR. Production default (from
+    -- the pkg) is 1 = est/2: windows touch at the midpoints, no dead-bands.
+    -- The A/B harness also instantiates 2 = est/4 to quantify the difference.
+    G_TOL_SHR : natural := C_QUANT_TOL_SHR
+  );
   port (
     clk_i       : in  std_logic;
-    rst_i       : in  std_logic;                       -- sync reset
+    rst_i       : in  std_logic;                       -- sync reset (re-seeds est)
     gap_valid_i : in  std_logic := '0';
     gap_len_i   : in  unsigned(15 downto 0) := (others => '0');
     gap_valid_o : out std_logic := '0';
-    gap_class_o : out unsigned(1 downto 0) := "11"
+    gap_class_o : out unsigned(1 downto 0) := "11";
+    -- read-only diagnostic tap: live half-cell estimate, Q8.4 fixed point
+    -- (bits 11:4 = integer cycles, bits 3:0 = sixteenths). Never read back.
+    est_o       : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12)
   );
 end entity physical_1581_mfm_quantise;
 
 architecture rtl of physical_1581_mfm_quantise is
+  -- half-cell estimate, Q8.4 (range clamped to [1440 .. 1760] = 90.0 .. 110.0)
+  signal est_q : unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12);
 begin
 
+  est_o <= est_q;
+
   process (clk_i)
+    -- all arithmetic in Q4 (sixteenths of a cycle)
+    variable g_q      : unsigned(19 downto 0);   -- gap in Q4
+    variable c2, c3, c4 : unsigned(14 downto 0); -- n*est, n = 2/3/4
+    variable half_est : unsigned(14 downto 0);   -- est/2
+    variable mid23    : unsigned(14 downto 0);   -- 2.5*est
+    variable mid34    : unsigned(14 downto 0);   -- 3.5*est
+    variable center   : unsigned(14 downto 0);   -- n*est of the nearest class
+    variable n_cls    : integer range 2 to 4;
+    variable e        : signed(21 downto 0);     -- G - n*est (Q4)
+    variable tol      : unsigned(14 downto 0);   -- est / 2**G_TOL_SHR
+    variable upd      : signed(21 downto 0);     -- adaptation step, +/-C_QUANT_STEP_Q (Q4)
+    variable nxt      : signed(21 downto 0);     -- est + upd before clamping
   begin
     if rising_edge(clk_i) then
       if rst_i = '1' then
         gap_valid_o <= '0';
         gap_class_o <= "11";
+        est_q       <= to_unsigned(C_QUANT_EST_NOM_Q, est_q'length);
       else
-        -- Classify against the spec acceptance windows (inclusive).
-        if    gap_len_i >= C_GAP_SHORT_LO and gap_len_i <= C_GAP_SHORT_HI then
-          gap_class_o <= "00";                          -- short  (1.0)
-        elsif gap_len_i >= C_GAP_MED_LO   and gap_len_i <= C_GAP_MED_HI   then
-          gap_class_o <= "01";                          -- medium (1.5)
-        elsif gap_len_i >= C_GAP_LONG_LO  and gap_len_i <= C_GAP_LONG_HI  then
-          gap_class_o <= "10";                          -- long   (2.0)
-        else
-          gap_class_o <= "11";                          -- invalid / dead-band
-        end if;
-
         gap_valid_o <= gap_valid_i;
+
+        if gap_valid_i = '1' then
+          g_q      := gap_len_i & "0000";
+          c2       := resize(est_q & '0', 15);                    -- 2*est
+          c3       := resize(est_q & '0', 15) + resize(est_q, 15);-- 3*est
+          c4       := resize(est_q & "00", 15);                   -- 4*est
+          half_est := resize(est_q(11 downto 1), 15);             -- est/2
+          mid23    := c2 + half_est;                              -- 2.5*est
+          mid34    := c3 + half_est;                              -- 3.5*est
+
+          -- nearest class by midpoint comparison
+          if g_q < resize(mid23, g_q'length) then
+            n_cls := 2; center := c2;
+          elsif g_q < resize(mid34, g_q'length) then
+            n_cls := 3; center := c3;
+          else
+            n_cls := 4; center := c4;
+          end if;
+
+          e   := signed(resize(g_q, e'length)) - signed(resize(center, e'length));
+          tol := shift_right(resize(est_q, 15), G_TOL_SHR);
+
+          if abs(e) <= signed(resize(tol, e'length)) then
+            -- accepted: emit the class and adapt est by a fixed 1/8-cycle
+            -- step toward the gap (sign-based / median-seeking -- see header)
+            gap_class_o <= to_unsigned(n_cls - 2, 2);
+            if e > 0 then
+              upd := to_signed(C_QUANT_STEP_Q, upd'length);
+            elsif e < 0 then
+              upd := to_signed(-C_QUANT_STEP_Q, upd'length);
+            else
+              upd := (others => '0');
+            end if;
+            nxt := signed(resize(est_q, nxt'length)) + upd;
+            if nxt < to_signed(C_QUANT_EST_MIN_Q, nxt'length) then
+              est_q <= to_unsigned(C_QUANT_EST_MIN_Q, est_q'length);
+            elsif nxt > to_signed(C_QUANT_EST_MAX_Q, nxt'length) then
+              est_q <= to_unsigned(C_QUANT_EST_MAX_Q, est_q'length);
+            else
+              est_q <= unsigned(nxt(est_q'range));
+            end if;
+          else
+            -- out of tolerance: loss of lock, re-seed the estimate
+            gap_class_o <= "11";
+            est_q       <= to_unsigned(C_QUANT_EST_NOM_Q, est_q'length);
+          end if;
+        end if;
       end if;
     end if;
   end process;

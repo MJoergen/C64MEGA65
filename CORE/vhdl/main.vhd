@@ -529,6 +529,7 @@ architecture synthesis of main is
   signal   p1581_diag_rd_req_sec : unsigned(7 downto 0);
   signal   p1581_diag_rd_req_side: std_logic;
   signal   p1581_diag_runt       : std_logic;             -- controller diag_runt_o -> diag runt_i (both 50 MHz)
+  signal   p1581_diag_est        : unsigned(11 downto 0); -- adaptive quantiser half-cell estimate, Q8.4 (round 12)
   signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- unprocessed video output of the C64 core
@@ -1988,6 +1989,7 @@ begin
       diag_data_crc_ok_o  => p1581_diag_data_crc_ok,
       diag_gap_error_o    => p1581_diag_gap_error,
       diag_runt_o         => p1581_diag_runt,
+      diag_est_o          => p1581_diag_est,
       diag_rd_phase_o     => p1581_diag_rd_phase,
       diag_step_phase_o   => p1581_diag_step_phase,
       diag_head_valid_o   => p1581_diag_head_valid,
@@ -2082,6 +2084,7 @@ begin
       diag_data_end_i     => p1581_diag_data_end,
       diag_data_crc_ok_i  => p1581_diag_data_crc_ok,
       diag_gap_error_i    => p1581_diag_gap_error,
+      diag_est_i          => p1581_diag_est,
       diag_rd_phase_i     => p1581_diag_rd_phase,
       diag_step_phase_i   => p1581_diag_step_phase,
       diag_head_valid_i   => p1581_diag_head_valid,

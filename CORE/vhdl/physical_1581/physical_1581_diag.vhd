@@ -23,7 +23,10 @@
 --     write-side occupancy, the presented-byte count of the last finalized WD
 --     operation, and counters for LOST DATA events, between-ops drain episodes,
 --     stale (seq-mismatched) done edges, command writes ignored while busy, and
---     merged RDATA runt gaps.
+--     merged RDATA runt gaps, and
+--   * (map v5, issue #90 round 12) the adaptive quantiser's live half-cell
+--     estimate (word 0x36, Q8.4) and the last-RNF context word 0x37 (requested
+--     track / requested sector, latched whenever a read op completes with rnf).
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -96,6 +99,10 @@ entity physical_1581_diag is
     diag_data_end_i     : in  std_logic;    -- 1-cycle: a data field CRC was checked
     diag_data_crc_ok_i  : in  std_logic;
     diag_gap_error_i    : in  std_logic;    -- 1-cycle: out-of-spec flux gap
+    -- adaptive quantiser half-cell estimate (map v5, issue #90 round 12):
+    -- Q8.4, bits 11:4 = integer cycles, 3:0 = sixteenths. Same clock domain
+    -- (controller tap). Defaulted so older testbenches keep building.
+    diag_est_i          : in  unsigned(11 downto 0) := (others => '0');
     diag_rd_phase_i     : in  std_logic_vector(3 downto 0);
     diag_step_phase_i   : in  std_logic_vector(1 downto 0);
     diag_head_valid_i   : in  std_logic;
@@ -207,10 +214,13 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_BUSYCMD_HI : integer := 16#33#;
   constant RM_CNT_RUNT_LO    : integer := 16#34#;   -- counter: merged RDATA runt gaps
   constant RM_CNT_RUNT_HI    : integer := 16#35#;
+  -- map v5 (adaptive quantiser, issue #90 round 12)
+  constant RM_EST            : integer := 16#36#;   -- live half-cell estimate (Q8.4)
+  constant RM_RNF_CTX        : integer := 16#37#;   -- last-RNF context: req track (hi) / req sector (lo)
   constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)
   constant RM_TRC_END        : integer := 16#7F#;
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"04";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"05";
   -- capability flags: bit0 = read-only, bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
   --                   bit4 = WD-dialogue trace ring (RM_TRC_*) present,
@@ -271,6 +281,12 @@ architecture rtl of physical_1581_diag is
   signal prev_fin       : std_logic := '0';
   -- presented-byte count of the last finalized WD op (sampled on the fin edge)
   signal last_present   : unsigned(10 downto 0) := (others => '0');
+  -- map v5: last-RNF context, latched at every read completion with rnf = 1:
+  -- requested track (high byte) / requested sector (low byte). The controller
+  -- holds its latched request parameters stable for at least C_DONE_GAP cycles
+  -- after every done toggle, so sampling them one cycle after the toggle
+  -- (rddone_evt) is race-free.
+  signal rnf_ctx        : std_logic_vector(15 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- WD-dialogue trace ring: 32 entries x 32 bits (one write per event). Entry
@@ -362,6 +378,7 @@ begin
         cnt_busycmd    <= (others => '0');
         cnt_runt       <= (others => '0');
         last_present   <= (others => '0');
+        rnf_ctx        <= (others => '0');
         prev_lost      <= dbg_lost_i;
         prev_drain     <= dbg_drain_i;
         prev_staledone <= dbg_staledone_i;
@@ -426,6 +443,11 @@ begin
         cnt_runt      <= sat_inc(cnt_runt,      runt_i);
         if fin_evt = '1' then
           last_present <= dbg_pres_cnt_i;
+        end if;
+
+        -- map v5: last-RNF context (see the rnf_ctx declaration comment)
+        if rddone_evt = '1' and rd_rnf_i = '1' then
+          rnf_ctx <= std_logic_vector(rd_req_track_i) & std_logic_vector(rd_req_sector_i);
         end if;
 
         -- latch the last completed read result + found CHRN
@@ -551,6 +573,9 @@ begin
       when RM_CNT_BUSYCMD_HI  => qnice_data_o <= hi16(cnt_busycmd);
       when RM_CNT_RUNT_LO     => qnice_data_o <= lo16(cnt_runt);
       when RM_CNT_RUNT_HI     => qnice_data_o <= hi16(cnt_runt);
+
+      when RM_EST             => qnice_data_o <= "0000" & std_logic_vector(diag_est_i);
+      when RM_RNF_CTX         => qnice_data_o <= rnf_ctx;
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

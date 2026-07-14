@@ -65,6 +65,9 @@ architecture sim of tb_physical_1581_diag is
   signal rd_req_sector : unsigned(7 downto 0) := (others => '0');
   signal rd_req_side   : std_logic := '0';
 
+  -- map v5 adaptive quantiser estimate (Q8.4)
+  signal diag_est      : unsigned(11 downto 0) := (others => '0');
+
   -- map v4 delivery-v2 observability inputs
   signal dbg_lost      : std_logic := '0';
   signal dbg_drain     : std_logic := '0';
@@ -102,6 +105,7 @@ begin
       diag_id_valid_i => diag_id_valid, diag_id_crc_ok_i => diag_id_crc_ok,
       diag_data_end_i => diag_data_end, diag_data_crc_ok_i => diag_data_crc_ok,
       diag_gap_error_i => diag_gap_error,
+      diag_est_i => diag_est,
       diag_rd_phase_i => diag_rd_phase, diag_step_phase_i => diag_step_phase,
       diag_head_valid_i => diag_head_valid, diag_head_dir_out_i => diag_head_dir_out,
       img_drive_busy_i => img_drive_busy,
@@ -181,10 +185,12 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"043F", "VERSION/CAP");
+    expect(16#01#, x"053F", "VERSION/CAP");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
-    expect(16#36#, x"0000", "RESERVED");
+    expect(16#36#, x"0000", "EST(reset input)");
+    expect(16#37#, x"0000", "RNF_CTX(reset)");
+    expect(16#38#, x"0000", "RESERVED");
 
     -- ---- packed live input / output words ------------------------------
     diag_in_bits  <= x"02AA";
@@ -375,6 +381,29 @@ begin
     pulse1(runt);
     expect(16#34#, x"0003", "CNT_RUNT_LO=3");
     expect(16#35#, x"0000", "CNT_RUNT_HI=0");
+
+    -- ---- map v5: adaptive quantiser estimate (live word) -----------------
+    diag_est <= to_unsigned(16#64D#, 12);   -- 100 + 13/16 cycles in Q8.4
+    wait until rising_edge(clk);
+    expect(16#36#, x"064D", "EST live (Q8.4 0x64D)");
+
+    -- ---- map v5: last-RNF context ----------------------------------------
+    -- The rnf=1 read earlier latched track 0 / sector 0 (its request inputs
+    -- were still zero), so the context reads 0x0000 here; a non-RNF read must
+    -- not touch it, an RNF read latches requested track (hi) / sector (lo),
+    -- and the value then holds across later non-RNF completions.
+    rd_req_track  <= x"27";
+    rd_req_sector <= x"05";
+    wait until rising_edge(clk);
+    do_read(RES_OK, '0', '0', '0', 16#27#, 0, 5, 2);
+    expect(16#37#, x"0000", "RNF_CTX untouched by non-RNF read");
+    do_read(RES_RECORD_NOT_FOUND, '0', '1', '0', 16#27#, 0, 5, 2);
+    expect(16#37#, x"2705", "RNF_CTX=trk27/sec05 after RNF");
+    rd_req_track  <= x"3E";
+    rd_req_sector <= x"01";
+    wait until rising_edge(clk);
+    do_read(RES_OK, '0', '0', '0', 16#3E#, 0, 1, 2);
+    expect(16#37#, x"2705", "RNF_CTX held across later OK read");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

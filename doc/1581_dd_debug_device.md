@@ -43,14 +43,14 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-54 words at offsets `0x00`–`0x35`, plus the 64-word WD-dialogue trace ring at
+56 words at offsets `0x00`–`0x37`, plus the 64-word WD-dialogue trace ring at
 `0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
 fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x043F` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x053F` |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
@@ -88,6 +88,8 @@ fields are right-aligned unless a bit layout is given.
 | `0x30` / `0x31` | `CNT_STALEDONE` | counter: completion edges ignored — sequence-tag mismatch, or the completion of an already-cancelled operation (one benign event per Force Interrupt that lands mid-operation) |
 | `0x32` / `0x33` | `CNT_BUSYCMD`   | counter: WD command writes ignored because the WD was busy executing a command |
 | `0x34` / `0x35` | `CNT_RUNT`      | counter: merged RDATA runt gaps (flux glitches absorbed by the decoder input filter) |
+| `0x36` | `EST`           | live half-cell estimate of the adaptive gap quantiser, Q8.4 fixed point: bits 11:4 = integer 50 MHz cycles (nominal `0x64` = 100), bits 3:0 = sixteenths |
+| `0x37` | `RNF_CTX`       | last-RNF context: requested track (high byte) / requested sector (low byte), latched whenever a read operation completes with RNF set |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 
 All fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the
@@ -109,6 +111,37 @@ maps to job error 5 (DOS error 23, "read error"), which the DOS retries as inten
 `LAST_PRESENT`, `FIFO_LEVEL` and the five counters make every abnormal delivery event
 (lost byte, discarded residue, stale completion, ignored command write, flux runt)
 visible from QNICE. Capability bit 5 in `VERSION` announces that these words exist.
+
+### Adaptive gap quantiser (map v5, words `0x36`–`0x37`)
+
+Since map v5 the MFM gap classifier is adaptive: instead of fixed acceptance
+windows with dead-bands between the gap classes, it tracks the live half-cell
+length as an estimate (nominal 100 cycles), classifies every gap to the nearest
+class in {2, 3, 4} half-cells via the midpoints at 2.5 and 3.5 times the
+estimate, and accepts anything within half an estimate of a class center — so
+every gap between 1.5 and 4.5 estimated half-cells decodes, with no dead-bands.
+The estimate adapts by a fixed 1/8-cycle step per accepted gap toward the
+observed value (median-seeking, robust against the systematic gap smearing that
+peak shift causes on inner cylinders), is clamped to 90–110 cycles, and is
+re-seeded to nominal on reset, at every operation start and on any loss of lock.
+
+How to read the two words:
+
+- **`EST` (`0x36`)** shows the estimate the classifier is using *right now*.
+  `0x0640` is exactly 100.0 cycles (the value after reset, re-seed or on a
+  perfectly nominal disk). A value pinned near `0x05A0` (90) or `0x06E0` (110)
+  means the adaptation hit its clamp — the medium is far off nominal speed, or
+  decodes are failing and the estimate keeps re-seeding mid-adaptation. Watch it
+  during a long load: on healthy media it hovers within a few sixteenths of the
+  disk's true speed for the cylinder being read.
+- **`RNF_CTX` (`0x37`)** answers "*which* sector did the last RNF hit?" without
+  catching the trace ring in time: high byte = requested track, low byte =
+  requested sector, updated at every completion with the RNF flag (including
+  not-ready and disk-changed completions, which also carry RNF). Compare it
+  against `CNT_RNF` (`0x1C`): if `CNT_RNF` climbs while `RNF_CTX` stays on one
+  track/sector pair, one specific sector is persistently unreadable; if
+  `RNF_CTX` wanders, the misses are scattered (speed/media problem, not a
+  single bad sector).
 
 ### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
 
@@ -251,11 +284,11 @@ ME            (Memory/Examine) -> prompt "EXAMINE ADDRESS="
 ```text
 MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 7000          start
-7035          -> prompt " END ADDRESS=" ; end (0x7000 + 0x35 = last word, CNT_RUNT high)
+7037          -> prompt " END ADDRESS=" ; end (0x7000 + 0x37 = last word, RNF_CTX)
 ```
 
-This prints all 54 diagnostic words in one block. To watch a value live, re-issue the
-`MD 7000 7035` (or `ME 70xx`) command repeatedly — the registers update continuously while
+This prints all 56 diagnostic words in one block. To watch a value live, re-issue the
+`MD 7000 7037` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 
 ### 3.4 Typical checks
@@ -267,10 +300,14 @@ the C64 accesses drive 8.
   `LAST_RESULT` (`0x06`): `0x0000` means the last sector read cleanly.
 - **Sector present but garbled?** A rising `CNT_CRCERR` (`0x1E`) with `ID_CALC_CRC`/`DATA_CALC_CRC`
   (`0x0A`/`0x0B`) non-zero points at MFM decode/CRC trouble; compare `GAP_MIN`/`GAP_MAX`
-  (`0x12`/`0x13`) against the DD nominals (200/300/400 cycles) and watch `CNT_GAPERR` (`0x26`).
+  (`0x12`/`0x13`) against the DD nominals (200/300/400 cycles), watch `CNT_GAPERR` (`0x26`),
+  and check `EST` (`0x36`) — an estimate pinned at a clamp (90/110 cycles) means the flux
+  timing is far off what the quantiser can track.
 - **Head never finds the track?** A climbing `CNT_RNF` (`0x1C`) with `HEAD` (`0x05`) not
   matching the wanted cylinder, or `CTRL_STATE` (`0x04`) stuck in read phase `2` (ID search),
-  means the ID field was never matched.
+  means the ID field was never matched. `RNF_CTX` (`0x37`) names the requested track/sector
+  of the last RNF — one repeating pair is a persistently unreadable sector, a wandering pair
+  is a scattered media/speed problem.
 - **Drive never becomes ready?** `CTRL_STATE` bit0 stays `0`: check the motor bit (bit3), that
   `CNT_IDX_QUAL` (`0x16`) is counting (index edges only count toward readiness while the motor
   is on), and that `IDX_PERIOD` (`0x0D`/`0x0E`) is plausible (one revolution, about `0x00989680`
