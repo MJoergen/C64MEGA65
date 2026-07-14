@@ -41,13 +41,14 @@
 --     cycles (+/-10% of nominal), bounding any runaway adaptation (real
 --     drive speed tolerance is ~+/-3%).
 --
--- ROUND-13 UPDATE (write-splice regression, see the C_QUANT_SYNC_* comment
--- block in physical_1581_pkg for the full story): while the decoder is
--- HUNTING (field_i = '0', i.e. not between an accepted A1 sync and the end
--- of its field), the estimate adapts from SHORT-class gaps only -- the 00
--- preamble that legitimate acquisition tracks is all shorts, while write-
--- splice junk is dominated by medium/long-looking garbage that must not
--- walk est. In-field adaptation (field_i = '1') is unchanged from round 12.
+-- ROUND-14 ACQUISITION (write-splice regression, see the C_QUANT_SYNC_* comment
+-- block in physical_1581_pkg for the full story): production restores round
+-- 12's adaptation from every accepted gap. Restricting hunt adaptation to
+-- short gaps was part of round 13's 00-preamble assumption; on an F011 4E gap,
+-- peak shift biases those shorts and can walk est far enough to lose the next
+-- ID train. The exact three-A1 spacing qualifier above this stage now rejects
+-- splice false syncs independently of the adaptation policy. The
+-- G_HUNT_ADAPT_ALL generic remains so the harness can preserve round 13.
 -- The classification tolerance itself stays est/2 in BOTH phases: the A/B
 -- harness REFUTED a tight (est/4) acquisition tier, because ISI deviates
 -- every gap of the A1 train itself by 2*S (the train alternates long/med),
@@ -87,17 +88,16 @@ entity physical_1581_mfm_quantise is
     -- the harness can keep demonstrating that.
     G_TOL_ACQ_SHR    : natural := C_QUANT_TOL_SHR;
     G_TOL_FIELD_SHR  : natural := C_QUANT_TOL_SHR;
-    -- true restores the round-12 adaptation rule (adapt from EVERY accepted
-    -- gap, even while hunting). Test-only knob for the A/B harness round-12
-    -- compatibility instance; production keeps the default.
-    G_HUNT_ADAPT_ALL : boolean := false
+    -- true is production and the round-12 rule (adapt from EVERY accepted gap,
+    -- even while hunting); false preserves the round-13 reference behavior.
+    G_HUNT_ADAPT_ALL : boolean := true
   );
   port (
     clk_i       : in  std_logic;
     rst_i       : in  std_logic;                       -- sync reset (re-seeds est)
-    -- '1' while the decoder field FSM is inside a field (from the first
-    -- accepted A1 sync of a train through the end of ID/data + CRC). Selects
-    -- the tolerance tier and gates hunting-phase adaptation (see header).
+    -- '1' once the decoder has qualified a complete A1 train and while its
+    -- field FSM is inside ID/data + CRC. Selects the tolerance tier and, when
+    -- G_HUNT_ADAPT_ALL=false, gates hunting-phase adaptation (see header).
     field_i     : in  std_logic := '0';
     gap_valid_i : in  std_logic := '0';
     gap_len_i   : in  unsigned(15 downto 0) := (others => '0');

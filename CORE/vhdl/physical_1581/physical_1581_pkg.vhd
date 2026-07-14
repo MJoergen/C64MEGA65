@@ -128,26 +128,27 @@ package physical_1581_pkg is
   -- the junk deviations (+46..+48) and the legitimate S=22/24 train deviations
   -- (+/-44..48) OVERLAP, so NO per-gap tolerance can separate them.
   --
-  -- THE SHIPPED FIX is structural instead, matching what a real data
-  -- separator does (a PLL only locks during the lock-up preamble field; the
-  -- 1581/WD1772 format writes 12 x 00 before every A1 train for exactly this):
-  -- while the decoder is HUNTING (not inside a field), an A1 sync is honored
-  -- only if a run of C_QUANT_SYNC_RUN consecutive SHORT-class gaps (the 00
-  -- preamble; 12 bytes = 96 short gaps, so 16 = 2 bytes is a generous lower
-  -- bound) ended no more than C_QUANT_SYNC_LAT gaps ago. The A1 window itself
-  -- consumes exactly 5 gaps after the preamble (the med entry gap + the
-  -- long,med,long,med pattern), hence LAT = 6. Splice junk contains no such
-  -- run -> false syncs are ignored and a bogus field can never open; every
-  -- legitimate field (including freshly written ones -- the WD1772 always
-  -- writes its own 12 x 00 preamble after the write splice) passes untouched,
-  -- so ALL round-12 stress wins are preserved bit-for-bit. In-field syncs
-  -- (A1 #2/#3 of a train) bypass the gate. Additionally, while hunting the
-  -- estimate adapts from SHORT-class gaps only (the preamble is all shorts,
-  -- which is what legitimate acquisition tracks), so splice junk cannot walk
-  -- est; in-field adaptation is unchanged from round 12.
+  -- Round 13 tried a structural precondition, but chose the wrong structure:
+  -- it required a preceding run of C_QUANT_SYNC_RUN short gaps. That works for
+  -- stock 1581 media, whose ROM writes 12 x 00 before each ID, but the pinned
+  -- MEGA65 F011 formatter writes sector IDs directly after 4E gap bytes. The
+  -- result on hardware was zero decoded IDs on every cylinder. SYNC_RUN and
+  -- SYNC_LAT remain only so the A/B harness can instantiate that exact failed
+  -- design as a permanent historical column.
+  --
+  -- Production now qualifies structure that both formatters must share: the
+  -- three missing-clock A1 bytes themselves. One raw A1 (0x4489) ends in the
+  -- four-gap pattern long,medium,long,medium; consecutive A1 candidates are
+  -- exactly C_QUANT_A1_SPACING quantised gaps apart. Three candidates at that
+  -- non-overlapping spacing arm the field decoder. The reproduced splice junk
+  -- alternates long/medium and therefore makes overlapping candidates every
+  -- two gaps, which continually restart rather than complete the train. This
+  -- keeps the adaptive, no-dead-band field classifier while making address-
+  -- mark acquisition independent of formatter preamble policy.
   -----------------------------------------------------------------------------
   constant C_QUANT_SYNC_RUN  : natural := 16;  -- shorts run that banks the gate (2 x 00)
   constant C_QUANT_SYNC_LAT  : natural := 6;   -- gaps allowed between run end and sync
+  constant C_QUANT_A1_SPACING : natural := 5;  -- gap events between consecutive A1 candidates
   constant C_QUANT_EST_NOM_Q : natural := C_HALF_CELL_CYC * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MIN_Q : natural := C_QUANT_EST_MIN * 2**C_QUANT_FRAC;
   constant C_QUANT_EST_MAX_Q : natural := C_QUANT_EST_MAX * 2**C_QUANT_FRAC;

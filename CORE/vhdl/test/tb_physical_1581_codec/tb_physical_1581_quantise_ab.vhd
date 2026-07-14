@@ -1,9 +1,9 @@
 -------------------------------------------------------------------------------
--- tb_physical_1581_quantise_ab.vhd   (issue #90 rounds 12 + 13)
+-- tb_physical_1581_quantise_ab.vhd   (issue #90 rounds 12 through 14)
 --
--- A/B margin harness: FOUR complete production decoders run in parallel on
+-- A/B margin harness: FIVE complete decoders run in parallel on
 -- identical stress flux, so every trial reports one row of
---   old | r12 | r13 | tacq
+--   old | r12 | r13 | prod | tacq
 --
 --   * old  = the pre-round-12 FIXED-WINDOW classifier (library q_old = the
 --            production sources with the test-only ref_mfm_quantise_fixed.vhd
@@ -13,9 +13,9 @@
 --            G_SYNC_GATE => false, G_QUANT_HUNT_ADAPT_ALL => true -- exactly
 --            the round-12 RTL semantics: no sync gate, adapt on every
 --            accepted gap)
---   * r13  = unmodified production defaults (adaptive quantiser + the
---            round-13 write-splice sync gate + hunting adaptation from
---            short-class gaps only)
+--   * r13  = superseded round-13 00-preamble gate, retained to prove both
+--            its splice fix and its F011 zero-ID regression
+--   * prod = production adaptive quantiser + exact three-A1 train spacing
 --   * tacq = the REFUTED round-13 fix candidate (two-tier tolerance, tight
 --            est/4 acquisition: G_QUANT_TOL_ACQ_SHR => 2, no gate). Kept as
 --            live evidence of WHY the shipped fix is the preamble-run sync
@@ -36,7 +36,8 @@
 --
 -- Vector classes (one canonical 1581 record = ID field C/H/R/N + 512-byte
 -- data field, lead-in/gap/trailer included):
---   (i)    canonical nominal        -- regression: old/r12/r13 decode byte-exact
+--   (i)    dual formatter layouts   -- exact stock-ROM and pinned-F011 ID gaps
+--                                      (including F011's first/subsequent IDs)
 --   (ii)   uniform speed offsets    -- +/-1.5%, 3%, 5%, 8% (both) and the
 --                                      +/-12% discriminators (old must die:
 --                                      long gaps leave 355..445 / hit a
@@ -65,18 +66,23 @@
 --                                      regression gap-exact (t39 s1 after the
 --                                      index splice deterministically
 --                                      unreadable): they MUST show
---                                      old=PASS, r12=FAIL, r13=PASS.
+--                                      old=PASS, r12=FAIL, r13=PASS, prod=PASS
+--                                      on the stock layout; production also
+--                                      passes the F011 layout and junk chain.
 --
 -- ACCEPTANCE (all machine-checked at the end):
---   * canonical decodes byte-exact on old, r12 and r13;
---   * NO REGRESSION: no trial where the old decoder succeeds and r13 fails;
---   * every trial marked must_new decodes byte-exact on r13;
+--   * canonical decodes byte-exact on old, r12, r13 and production;
+--   * F011 first and subsequent IDs decode in production while the r13 column
+--     hard-reproduces its zero-ID failure;
+--   * NO REGRESSION: no trial where the old decoder succeeds and production
+--     fails; every must_new trial decodes byte-exact in production;
 --   * the r12 instance passes every must_new row of the original round-12
 --     table (fam < 8) -- proves the compatibility instance is faithful;
 --   * per stress family (speed / drift / jitter / peak+combo) at least one
---     trial where r13 succeeds and the OLD decoder fails (the round-12 wins
+--     trial where production succeeds and the OLD decoder fails (the round-12 wins
 --     are preserved);
---   * every junk-chain trial: old=PASS, r13=PASS, r12=FAIL, and the r12
+--   * every stock-layout junk-chain trial: old/r13/production=PASS, r12=FAIL,
+--     while the F011 junk-chain row is production=PASS and r13=FAIL; the r12
 --     failure is a BOGUS DATA FIELD opened during the junk (data_start
 --     observed before the record could have produced one) -- the confirmed
 --     false-A1 mechanism;
@@ -110,7 +116,7 @@ architecture sim of tb_physical_1581_quantise_ab is
 
   constant NAME_LEN : integer := 26;
   constant MAXT     : integer := 6144;   -- max flux transitions per record
-  constant NDUT     : integer := 4;      -- 0=old 1=r12 2=r13 3=tacq
+  constant NDUT     : integer := 5;      -- 0=old 1=r12 2=r13 3=prod 4=tacq
 
   type int_arr  is array (natural range <>) of integer;
   type real_arr is array (natural range <>) of real;
@@ -149,7 +155,7 @@ architecture sim of tb_physical_1581_quantise_ab is
   signal d_id_valid, d_id_crc_ok, d_data_start, d_bytev, d_data_end,
          d_data_crc_ok, d_lock, d_gerr : std_logic_vector(0 to NDUT - 1);
   signal d_idc, d_idh, d_idr, d_idn, d_byte : u8xN;
-  signal n_est : unsigned(11 downto 0);            -- r13 instance only
+  signal n_est : unsigned(11 downto 0);            -- production instance only
 
   -- per-instance captures
   signal c_id_seen, c_id_ok, c_saw_end, c_crc_ok : std_logic_vector(0 to NDUT - 1) := (others => '0');
@@ -177,9 +183,9 @@ architecture sim of tb_physical_1581_quantise_ab is
     name    : string(1 to NAME_LEN);
     fam     : integer;   -- 0 can / 1 speed / 2 drift / 3 jit / 4 peak+combo
                          -- / 6 art / 7 splice / 8 junk
-    ok      : boolean_vector(0 to NDUT - 1);   -- old / r12 / r13 / tacq
+    ok      : boolean_vector(0 to NDUT - 1);   -- old / r12 / r13 / prod / tacq
     must_n  : boolean;
-    emin    : integer;   -- r13-side est excursion (integer cycles)
+    emin    : integer;   -- production-side est excursion (integer cycles)
     emax    : integer;
   end record;
   type res_arr is array (0 to 63) of res_rec;
@@ -202,6 +208,7 @@ architecture sim of tb_physical_1581_quantise_ab is
       when 0      => return "old ";
       when 1      => return "r12 ";
       when 2      => return "r13 ";
+      when 3      => return "prod";
       when others => return "tacq";
     end case;
   end function;
@@ -211,7 +218,7 @@ begin
   clk <= not clk after 10 ns;   -- 50 MHz
 
   ---------------------------------------------------------------------------
-  -- the four decoders under test, same flux
+  -- the five decoders under test, same flux
   ---------------------------------------------------------------------------
   -- 0: pre-round-12 fixed windows (exact round-11: no sync gate)
   dut_old : entity q_old.physical_1581_mfm_decoder
@@ -239,8 +246,9 @@ begin
       locked_o => d_lock(1), gap_error_o => d_gerr(1)
     );
 
-  -- 2: round-13 production defaults
-  dut_new : entity q_new.physical_1581_mfm_decoder
+  -- 2: exact round-13 preamble-gate behavior (historical regression column)
+  dut_r13 : entity q_new.physical_1581_mfm_decoder
+    generic map (G_SYNC_PREAMBLE_GATE => true, G_QUANT_HUNT_ADAPT_ALL => false)
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(2), id_c_o => d_idc(2), id_h_o => d_idh(2),
@@ -248,13 +256,11 @@ begin
       data_start_o => d_data_start(2), data_byte_o => d_byte(2),
       data_byte_valid_o => d_bytev(2), data_end_o => d_data_end(2),
       data_crc_ok_o => d_data_crc_ok(2),
-      locked_o => d_lock(2), gap_error_o => d_gerr(2),
-      est_o => n_est
+      locked_o => d_lock(2), gap_error_o => d_gerr(2)
     );
 
-  -- 3: refuted fix candidate (tight est/4 acquisition tier, no gate)
-  dut_tacq : entity q_new.physical_1581_mfm_decoder
-    generic map (G_SYNC_GATE => false, G_QUANT_TOL_ACQ_SHR => 2)
+  -- 3: production adaptive decoder with exact A1-train qualification
+  dut_new : entity q_new.physical_1581_mfm_decoder
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
       id_valid_o => d_id_valid(3), id_c_o => d_idc(3), id_h_o => d_idh(3),
@@ -262,7 +268,22 @@ begin
       data_start_o => d_data_start(3), data_byte_o => d_byte(3),
       data_byte_valid_o => d_bytev(3), data_end_o => d_data_end(3),
       data_crc_ok_o => d_data_crc_ok(3),
-      locked_o => d_lock(3), gap_error_o => d_gerr(3)
+      locked_o => d_lock(3), gap_error_o => d_gerr(3),
+      est_o => n_est
+    );
+
+  -- 4: refuted fix candidate (tight est/4 acquisition tier, no gate)
+  dut_tacq : entity q_new.physical_1581_mfm_decoder
+    generic map (G_SYNC_GATE => false, G_QUANT_TOL_ACQ_SHR => 2,
+                 G_QUANT_HUNT_ADAPT_ALL => false)
+    port map (
+      clk_i => clk, rst_i => rst, f_rdata_i => f_rdata,
+      id_valid_o => d_id_valid(4), id_c_o => d_idc(4), id_h_o => d_idh(4),
+      id_r_o => d_idr(4), id_n_o => d_idn(4), id_crc_ok_o => d_id_crc_ok(4),
+      data_start_o => d_data_start(4), data_byte_o => d_byte(4),
+      data_byte_valid_o => d_bytev(4), data_end_o => d_data_end(4),
+      data_crc_ok_o => d_data_crc_ok(4),
+      locked_o => d_lock(4), gap_error_o => d_gerr(4)
     );
 
   ---------------------------------------------------------------------------
@@ -359,7 +380,7 @@ begin
     -- results
     variable res   : res_arr;
     variable nres  : integer := 0;
-    variable wins  : int_arr(0 to 8) := (others => 0);   -- r13-over-old wins per family
+    variable wins  : int_arr(0 to 9) := (others => 0);   -- production-over-old wins per family
     variable fails : integer := 0;
     variable tacq_peak_fails : integer := 0;
 
@@ -386,6 +407,53 @@ begin
         hc := hc + 1;
       end loop;
       prev := '1';
+    end procedure;
+
+    -- Build one complete 512-byte record using an explicit formatter layout.
+    -- Stock 1581 ROM (318045-02, $C3F8..$C51D): 32 x 4E + 12 x 00
+    -- before the ID, 22 x 4E + 12 x 00 before data. MEGA65 F011
+    -- auto-format (mega65-core a9158930 sdcardio.vhdl FDCAutoFormatTrack):
+    -- no 00 bytes before IDs; data still has 12 x 00. Keeping these as
+    -- separate vectors prevents formatter-specific acquisition rules.
+    procedure build_record(lead_4e, id_zeros, id_data_4e, trailer_4e : natural;
+                           prefix_zeros : natural := 0) is
+    begin
+      nt := 0; hc := 0; prev := '0';
+      art_after_t := -1; splice_t := -1;
+      for k in 1 to prefix_zeros loop enc_byte(x"00"); end loop;
+      for k in 1 to lead_4e loop enc_byte(x"4E"); end loop;
+      for k in 1 to id_zeros loop
+        if k = 7 then art_after_t := nt - 1; end if;
+        enc_byte(x"00");
+      end loop;
+      enc_a1; enc_a1; enc_a1;
+      enc_byte(x"FE");
+      enc_byte(TC); enc_byte(TH); enc_byte(TR); enc_byte(TN);
+      crcv := x"FFFF";
+      crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"A1");
+      crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"FE");
+      crcv := crc16_update(crcv, TC);    crcv := crc16_update(crcv, TH);
+      crcv := crc16_update(crcv, TR);    crcv := crc16_update(crcv, TN);
+      enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
+      for k in 1 to id_data_4e loop enc_byte(x"4E"); end loop;
+      for k in 1 to 12 loop
+        if k = 7 then splice_t := nt; end if;
+        enc_byte(x"00");
+      end loop;
+      enc_a1; enc_a1; enc_a1;
+      enc_byte(x"FB");
+      crcv := x"FFFF";
+      crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"A1");
+      crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"FB");
+      for i in 0 to 511 loop
+        enc_byte(pl(i));
+        crcv := crc16_update(crcv, pl(i));
+      end loop;
+      enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
+      for k in 1 to trailer_4e loop enc_byte(x"4E"); end loop;
+      report "record built: " & integer'image(nt) & " flux transitions, "
+           & integer'image(hc) & " half-cells";
+      assert nt < MAXT - 8 report "MAXT too small" severity failure;
     end procedure;
 
     -- probe a single gap through the three quantiser variants ---------------
@@ -559,7 +627,6 @@ begin
             severity failure;
         end if;
       end loop;
-
       -- junk trials: mechanism evidence + expectations
       if junk >= 0 then
         for k in 0 to NDUT - 1 loop
@@ -573,6 +640,16 @@ begin
         if not okv(0) then
           report "FAIL: junk trial " & name & " broke the OLD decoder (model too aggressive)"
             severity error;
+          fails := fails + 1;
+        end if;
+        if not okv(3) then
+          report "FAIL: junk trial " & name & " broke the production decoder"
+            severity error;
+          fails := fails + 1;
+        end if;
+        if fam = 8 and not okv(2) then
+          report "FAIL: stock-layout junk trial " & name
+               & " broke the round-13 reference decoder" severity error;
           fails := fails + 1;
         end if;
         if exp_r12_fail then
@@ -602,51 +679,21 @@ begin
                     must_n => must_new, emin => n_est_min / 16,
                     emax => (n_est_max + 15) / 16);
       nres := nres + 1;
-      if okv(2) and not okv(0) then
+      if okv(3) and not okv(0) then
         wins(fam) := wins(fam) + 1;
       end if;
       report "TRIAL " & pad(name) & " old=" & pf(okv(0)) & " r12=" & pf(okv(1))
-           & " r13=" & pf(okv(2)) & " tacq=" & pf(okv(3))
+           & " r13=" & pf(okv(2)) & " prod=" & pf(okv(3)) & " tacq=" & pf(okv(4))
            & "  est=[" & integer'image(n_est_min / 16) & ".." & integer'image((n_est_max + 15) / 16) & "]";
     end procedure;
 
   begin
     ---------------------------------------------------------------------
-    -- build the golden record ONCE (half-cell transition positions)
+    -- Build the stock 1581-ROM record first. The exact ROM uses 32 lead-in
+    -- 4E bytes and 22 ID/data-gap 4E bytes. Eight trailing bytes are enough
+    -- for this finite test vector after the completed data CRC.
     ---------------------------------------------------------------------
-    for k in 1 to 8 loop enc_byte(x"4E"); end loop;         -- lead-in
-    for k in 1 to 12 loop                                    -- ID preamble
-      if k = 7 then art_after_t := nt - 1; end if;           -- artifact target: inside the sync train
-      enc_byte(x"00");
-    end loop;
-    enc_a1; enc_a1; enc_a1;
-    enc_byte(x"FE");
-    enc_byte(TC); enc_byte(TH); enc_byte(TR); enc_byte(TN);
-    crcv := x"FFFF";
-    crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"A1");
-    crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"FE");
-    crcv := crc16_update(crcv, TC);    crcv := crc16_update(crcv, TH);
-    crcv := crc16_update(crcv, TR);    crcv := crc16_update(crcv, TN);
-    enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
-    for k in 1 to 22 loop enc_byte(x"4E"); end loop;         -- ID/data gap
-    for k in 1 to 12 loop                                    -- data preamble
-      if k = 7 then splice_t := nt; end if;                  -- splice: mid-preamble
-      enc_byte(x"00");
-    end loop;
-    enc_a1; enc_a1; enc_a1;
-    enc_byte(x"FB");
-    crcv := x"FFFF";
-    crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"A1");
-    crcv := crc16_update(crcv, x"A1"); crcv := crc16_update(crcv, x"FB");
-    for i in 0 to 511 loop
-      enc_byte(pl(i));
-      crcv := crc16_update(crcv, pl(i));
-    end loop;
-    enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
-    for k in 1 to 8 loop enc_byte(x"4E"); end loop;          -- trailer
-    report "record built: " & integer'image(nt) & " flux transitions, "
-         & integer'image(hc) & " half-cells";
-    assert nt < MAXT - 8 report "MAXT too small" severity failure;
+    build_record(32, 12, 22, 8);
     assert art_after_t > 0 and splice_t > 0 severity failure;
 
     rst <= '1';
@@ -674,11 +721,44 @@ begin
     probe_gap(148, "11", "11", "11");   -- below 1.5*est: loud everywhere
 
     ---------------------------------------------------------------------
+    -- PHASE 1a: MEGA65 F011 auto-format compatibility. Do this first so
+    -- a formatter-specific acquisition regression fails quickly instead
+    -- of after the complete margin matrix. Sector IDs have NO 00 preamble
+    -- The first ID follows the track-info block's four-zero flush and one final
+    -- 4E; subsequent IDs follow 24 x 4E. Neither has an immediately adjacent
+    -- 00 preamble. Data retains 12 x 00.
+    ---------------------------------------------------------------------
+    report "==== PHASE 1a: F011 auto-format compatibility ====";
+    build_record(1, 0, 23, 8, prefix_zeros => 4);
+    run_trial("F011 first ID", 9, M_UNIFORM, 1.000, 1.000, 0, 0, false, true, 46);
+    assert c_id_seen(2) = '0'
+      report "round-13 reference no longer reproduces the F011 zero-ID regression"
+      severity failure;
+    assert c_id_seen(3) = '1' and c_id_ok(3) = '1'
+      report "production decoder rejected the F011 ID field without a 00 preamble"
+      severity failure;
+    run_trial("F011 first S20 +3%", 9, M_UNIFORM, 1.030, 1.030, 0, 20, false, true, 48);
+    run_trial("F011 first S20 -3%", 9, M_UNIFORM, 0.970, 0.970, 0, 20, false, true, 49);
+    build_record(24, 0, 23, 8);
+    run_trial("F011 subsequent ID", 9, M_UNIFORM, 1.000, 1.000, 0, 0, false, true, 47);
+    run_trial("F011 later S20 +3%", 9, M_UNIFORM, 1.030, 1.030, 0, 20, false, true, 50);
+    run_trial("F011 later S20 -3%", 9, M_UNIFORM, 0.970, 0.970, 0, 20, false, true, 51);
+    run_trial("F011 + junk chain",   9, M_UNIFORM, 1.000, 1.000, 0, 0, false, true, 47,
+              junk => 204, exp_r12_fail => true);
+
+    -- Restore the stock-ROM layout for the complete historical matrix.
+    build_record(32, 12, 22, 8);
+
+    ---------------------------------------------------------------------
     -- PHASE 1: A/B decoder trials
     ---------------------------------------------------------------------
     report "==== PHASE 1: A/B decoder trials ====";
     --         name                fam mode       sp0    sp1    jit ps  art   must  seed
     run_trial("canonical",          0, M_UNIFORM, 1.000, 1.000,  0,  0, false, true,  1);
+    assert c_id_seen(2) = '1' and c_id_ok(2) = '1' and
+           c_saw_end(2) = '1' and c_crc_ok(2) = '1'
+      report "round-13 reference failed the canonical stock-1581 record"
+      severity failure;
 
     run_trial("speed +1.5%",        1, M_UNIFORM, 1.015, 1.015,  0,  0, false, true,  2);
     run_trial("speed -1.5%",        1, M_UNIFORM, 0.985, 0.985,  0,  0, false, true,  3);
@@ -746,20 +826,28 @@ begin
     ---------------------------------------------------------------------
     -- PHASE 2: table + acceptance
     ---------------------------------------------------------------------
-    report "==== A/B RESULT TABLE (old fixed | r12 adaptive | r13 gate | tacq refuted) ====";
+    report "==== A/B RESULT TABLE (old | r12 | r13 preamble | production A1 train | tacq) ====";
     for k in 0 to nres - 1 loop
       report res(k).name & " | old=" & pf(res(k).ok(0)) & " | r12=" & pf(res(k).ok(1))
-           & " | r13=" & pf(res(k).ok(2)) & " | tacq=" & pf(res(k).ok(3))
+           & " | r13=" & pf(res(k).ok(2)) & " | prod=" & pf(res(k).ok(3))
+           & " | tacq=" & pf(res(k).ok(4))
            & " | est " & integer'image(res(k).emin) & ".." & integer'image(res(k).emax);
     end loop;
 
     for k in 0 to nres - 1 loop
-      if res(k).ok(0) and not res(k).ok(2) then
-        report "FAIL (REGRESSION): " & res(k).name & " old passed, r13 failed" severity error;
+      if res(k).ok(0) and not res(k).ok(3) then
+        report "FAIL (REGRESSION): " & res(k).name & " old passed, production failed" severity error;
         fails := fails + 1;
       end if;
-      if res(k).must_n and not res(k).ok(2) then
-        report "FAIL (must_new): " & res(k).name & " r13 did not decode" severity error;
+      if res(k).must_n and not res(k).ok(3) then
+        report "FAIL (must_new): " & res(k).name & " production did not decode" severity error;
+        fails := fails + 1;
+      end if;
+      -- Keep the round-13 hardware failure live: every source-derived F011 ID
+      -- layout must fail that historical preamble-gate column.
+      if res(k).fam = 9 and res(k).ok(2) then
+        report "FAIL (r13 reference): " & res(k).name
+             & " no longer reproduces the F011 zero-ID regression" severity error;
         fails := fails + 1;
       end if;
       -- round-12 compat instance must reproduce the round-12 green table
@@ -769,26 +857,22 @@ begin
         fails := fails + 1;
       end if;
       -- record the refutation of the tight-acquisition candidate
-      if res(k).fam = 4 and res(k).must_n and not res(k).ok(3) then
+      if res(k).fam = 4 and res(k).must_n and not res(k).ok(4) then
         tacq_peak_fails := tacq_peak_fails + 1;
         report "REFUTATION: tight-acq candidate fails must-pass row " & res(k).name;
       end if;
     end loop;
-    if not (res(0).ok(0) and res(0).ok(1) and res(0).ok(2)) then
-      report "FAIL: canonical regression (old/r12/r13 must decode byte-exact)" severity error;
-      fails := fails + 1;
-    end if;
     if wins(1) < 1 then
-      report "FAIL: no r13-over-old win in the SPEED family" severity error; fails := fails + 1;
+      report "FAIL: no production-over-old win in the SPEED family" severity error; fails := fails + 1;
     end if;
     if wins(2) < 1 then
-      report "FAIL: no r13-over-old win in the DRIFT family" severity error; fails := fails + 1;
+      report "FAIL: no production-over-old win in the DRIFT family" severity error; fails := fails + 1;
     end if;
     if wins(3) < 1 then
-      report "FAIL: no r13-over-old win in the JITTER family" severity error; fails := fails + 1;
+      report "FAIL: no production-over-old win in the JITTER family" severity error; fails := fails + 1;
     end if;
     if wins(4) < 1 then
-      report "FAIL: no r13-over-old win in the PEAK/COMBO family" severity error; fails := fails + 1;
+      report "FAIL: no production-over-old win in the PEAK/COMBO family" severity error; fails := fails + 1;
     end if;
     if tacq_peak_fails < 1 then
       report "FAIL: the tight-acquisition candidate passed every peak/combo row"
@@ -796,7 +880,7 @@ begin
         severity error;
       fails := fails + 1;
     end if;
-    report "family wins (r13 ok, old fail): speed=" & integer'image(wins(1))
+    report "family wins (production ok, old fail): speed=" & integer'image(wins(1))
          & " drift=" & integer'image(wins(2)) & " jitter=" & integer'image(wins(3))
          & " peak/combo=" & integer'image(wins(4)) & " artifact=" & integer'image(wins(6))
          & " splice=" & integer'image(wins(7)) & " junk=" & integer'image(wins(8))
@@ -810,7 +894,7 @@ begin
     finish;
   end process;
 
-  -- global guard: 44 trials x ~20 ms + probes
+  -- global guard: 51 trials x ~20 ms + probes
   guard : process
   begin
     wait for 2000 ms;

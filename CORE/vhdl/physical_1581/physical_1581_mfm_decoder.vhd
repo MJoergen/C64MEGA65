@@ -16,20 +16,15 @@
 -- synthetically (bits_to_bytes signals A1 via sync_o, not a byte), then the mark
 -- byte and every field/data byte and the two stored CRC bytes; residue 0 == good.
 --
--- WRITE-SPLICE SYNC GATE (issue #90 round 13; full story at the C_QUANT_SYNC_*
--- block in physical_1581_pkg): while HUNTING (no field open, no A1 accepted
--- yet) an A1 sync from the pipeline is honored only if a run of
--- C_QUANT_SYNC_RUN consecutive SHORT-class gaps -- the 00 lock-up preamble
--- that precedes every legitimate A1 train -- ended at most C_QUANT_SYNC_LAT
--- gaps ago (the med entry gap + the long,med,long,med sync window = 5). This
--- is what a real data separator PLL does implicitly. Without it, round-12's
--- no-dead-band gap acceptance let index-write-splice garbage form FALSE A1
--- syncs (junk alternating ~long/~med IS the sync gap pattern) plus a fake FB
--- data mark, opening a bogus 512-byte data field that deterministically
--- consumed the following sector's real preamble + ID (hardware: t39 s1
--- unreadable 30/30, IDDEC pinned at 10/rev). In-field syncs (A1 #2/#3 of a
--- train) bypass the gate; a class-11 gap hard-closes it. The quantiser gets
--- field_i from the same state so hunting-phase adaptation is preamble-only.
+-- SYNC-TRAIN QUALIFIER (issue #90 round 14): the adaptive quantiser remains
+-- deliberately tolerant, but a field boundary is accepted only after three
+-- non-overlapping missing-clock A1 candidates at their exact MFM spacing.
+-- Consecutive A1 bytes produce candidates five quantised gaps apart. The
+-- round-12 write-splice junk produced overlapping candidates two gaps apart,
+-- so it cannot open a field. Unlike round 13's 00-preamble gate, this tests
+-- the address-mark train itself and is formatter-independent: stock 1581
+-- media have 12 x 00 before an ID, while the MEGA65 F011 formatter writes an
+-- ID immediately after 4E gap bytes. Both still contain the same A1 train.
 -------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -40,11 +35,15 @@ entity physical_1581_mfm_decoder is
   generic (
     -- Test-only knobs for the A/B margin harness (production keeps defaults):
     -- G_SYNC_GATE false + G_QUANT_HUNT_ADAPT_ALL true restores the exact
-    -- round-12 behavior; G_QUANT_TOL_ACQ_SHR = 2 instantiates the refuted
-    -- tight-acquisition variant (see the quantiser entity header).
+    -- round-12 behavior. G_SYNC_PREAMBLE_GATE true plus
+    -- G_QUANT_HUNT_ADAPT_ALL false selects the superseded round-13 rule for
+    -- the permanent A/B regression column. G_QUANT_TOL_ACQ_SHR = 2 selects
+    -- the refuted tight-
+    -- acquisition variant (see the quantiser entity header).
     G_SYNC_GATE          : boolean := true;
+    G_SYNC_PREAMBLE_GATE : boolean := false;
     G_QUANT_TOL_ACQ_SHR  : natural := C_QUANT_TOL_SHR;
-    G_QUANT_HUNT_ADAPT_ALL : boolean := false
+    G_QUANT_HUNT_ADAPT_ALL : boolean := true
   );
   port (
     clk_i             : in  std_logic;
@@ -118,14 +117,16 @@ architecture rtl of physical_1581_mfm_decoder is
   signal crc_stored_r : unsigned(15 downto 0) := (others => '0');
   signal deleted_r    : std_logic := '0';
 
-  -- write-splice sync gate (round 13, see entity header). field_active is '1'
-  -- from the first honored A1 sync of a train through the end of its field;
-  -- it bypasses the gate and selects the quantiser's in-field behavior.
+  -- Sync qualification state. The round-13 preamble counters remain only for
+  -- the test-selectable historical column; production uses sync_gap_age.
   signal field_active : std_logic;
   signal short_run    : integer range 0 to 255 := 0;  -- consecutive short-class gaps
   -- gaps since a >= C_QUANT_SYNC_RUN shorts run last ended; saturates at 15
   -- (= gate closed; C_QUANT_SYNC_LAT < 15). Reset value = closed.
   signal run_age      : integer range 0 to 15 := 15;
+  -- Quantised gaps since the previous A1 candidate, saturating above the
+  -- exact spacing. Reset value means "no preceding candidate".
+  signal sync_gap_age : integer range 0 to 15 := 15;
 
   -- N -> payload length in bytes
   function data_len(n : unsigned(7 downto 0)) return integer is
@@ -175,10 +176,13 @@ begin
   -- read-only diagnostic tap: expose the running CRC value (see port comment)
   crc_value_o <= crc_value;
 
-  -- inside a field = from the first honored A1 sync (sync_cnt /= 0) through
-  -- the ID/data field FSM (state /= S_IDLE). Gap events are >= 160 cycles
-  -- apart, so the one-cycle register lag of state/sync_cnt is harmless.
-  field_active <= '1' when state /= S_IDLE or sync_cnt /= 0 else '0';
+  -- Production does not switch to in-field adaptation on a provisional A1:
+  -- only a complete train or an open field can do that. Historical A/B modes
+  -- retain their original first-A1 behavior.
+  field_active <= '1' when state /= S_IDLE or
+                    ((not G_SYNC_GATE or G_SYNC_PREAMBLE_GATE) and sync_cnt /= 0) or
+                    (G_SYNC_GATE and not G_SYNC_PREAMBLE_GATE and sync_cnt = 3)
+                  else '0';
 
   ------------------------------------------------------------------------------
   -- field FSM
@@ -203,11 +207,15 @@ begin
         chk_cnt   <= 0;
         short_run <= 0;
         run_age   <= 15;                -- gate closed until a preamble run
+        sync_gap_age <= 15;
       else
         -- diagnostics + loss of lock on an out-of-spec gap; also the
         -- preamble-run bookkeeping for the write-splice sync gate
         if q_valid = '1' then
           last_gap_o <= gap_len;
+          if sync_gap_age < 15 then
+            sync_gap_age <= sync_gap_age + 1;
+          end if;
           if q_class = "11" then
             gap_error_o <= '1';
             locked_o    <= '0';
@@ -215,6 +223,7 @@ begin
             sync_cnt    <= 0;
             short_run   <= 0;
             run_age     <= 15;          -- loud loss of lock: close the gate
+            sync_gap_age <= 15;
           elsif q_class = "00" then
             if short_run >= C_QUANT_SYNC_RUN - 1 then
               run_age <= 0;             -- preamble run complete/continuing
@@ -232,24 +241,52 @@ begin
           end if;
         end if;
 
-        -- three A1 syncs: reset CRC at the first, feed one A1 per sync (cap
-        -- 3). Round 13: while hunting, a sync is honored only if a 00
-        -- preamble run ended at most C_QUANT_SYNC_LAT gaps ago (see entity
-        -- header); a suppressed junk sync changes no state here (the
-        -- pipeline below already realigned itself, which is harmless).
-        if gtb_sync = '1' and
-           ((not G_SYNC_GATE) or field_active = '1' or run_age <= C_QUANT_SYNC_LAT) then
-          locked_o <= '1';
-          if sync_cnt = 0 then
-            crc_reset <= '1';
-            crc_feed  <= '1';
-            crc_byte  <= MARK_A1;
-            sync_cnt  <= 1;
-          elsif sync_cnt < 3 then
-            crc_feed <= '1';
-            crc_byte <= MARK_A1;
-            sync_cnt <= sync_cnt + 1;
+        -- Feed exactly three A1 bytes into the CRC. Production qualifies the
+        -- train by candidate spacing; a wrong-spacing candidate becomes a
+        -- new provisional first A1. The two generic branches retain rounds
+        -- 12 and 13 exactly for the regression matrix.
+        if gtb_sync = '1' then
+          if not G_SYNC_GATE then
+            locked_o <= '1';
+            if sync_cnt = 0 then
+              crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
+              sync_cnt <= 1;
+            elsif sync_cnt < 3 then
+              crc_feed <= '1'; crc_byte <= MARK_A1; sync_cnt <= sync_cnt + 1;
+            end if;
+          elsif G_SYNC_PREAMBLE_GATE then
+            if field_active = '1' or run_age <= C_QUANT_SYNC_LAT then
+              locked_o <= '1';
+              if sync_cnt = 0 then
+                crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
+                sync_cnt <= 1;
+              elsif sync_cnt < 3 then
+                crc_feed <= '1'; crc_byte <= MARK_A1; sync_cnt <= sync_cnt + 1;
+              end if;
+            end if;
+          else
+            if sync_cnt = 0 then
+              -- First candidate is provisional: prime the CRC, but do not
+              -- claim separator lock until the complete train is proven.
+              crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
+              sync_cnt <= 1;
+              locked_o <= '0';
+            elsif sync_gap_age = C_QUANT_A1_SPACING then
+              if sync_cnt < 3 then
+                crc_feed <= '1'; crc_byte <= MARK_A1;
+                sync_cnt <= sync_cnt + 1;
+                if sync_cnt = 2 then
+                  locked_o <= '1';
+                end if;
+              end if;
+            else
+              -- Overlap or wrong spacing: restart at this candidate.
+              crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
+              sync_cnt <= 1;
+              locked_o <= '0';
+            end if;
           end if;
+          sync_gap_age <= 0;
         end if;
 
         -- decoded byte events
