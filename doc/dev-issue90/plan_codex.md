@@ -79,6 +79,34 @@ separate from Fable's `PLAN.md`.
     closed-loop controller all pass. Remaining work is maintainer R3
     synthesis/timing and physical-media qualification of this record-sequenced
     candidate.
+17. **DONE — interpret the map-v7 hardware failure from `47432c8`.** The cold
+    directory read now reaches the target ID/DAM pair and ends in data CRC
+    error rather than RNF. Healthy estimate/ID counts rule out global
+    acquisition loss. `CNT_LOST=686` exposes a second, ROM-fatal WD delivery
+    problem.
+18. **DONE — re-derive the contract from primary implementations.** The stock
+    ROM, WD1772 handbook and pinned F011 formatter agree on a twelve-zero
+    lock-up before data marks, while F011 IDs can lack it. ROM-in-the-loop
+    proofs show 33-cycle maximum consumption versus a 64-cycle byte pace and
+    prove that even one LOST flag can corrupt the genuine ROM return path.
+19. **DONE — reject an armed splice DAM without rejecting F011 IDs.** A
+    permanent valid-ID -> preamble-less `A1x3+FB` -> legitimate data-field
+    vector fails current production and passes the historical round-13
+    control. Implement a DAM-only zero-run qualifier, retain the ID arm after
+    rejecting the false DAM, and keep FE acquisition preamble-independent.
+20. **DONE — make the physical/WD boundary transactional.** Use the
+    existing 512-byte async FIFO as quarantine: no WD presentation before the
+    controller's CRC/result completion; release clean sectors at WD pace and
+    drain failed sectors unseen. Also block presentation during the registered
+    data-register read-clear pulse so a short CPU-select window cannot swallow
+    DRQ or generate false LOST.
+21. **DONE — verify the complete repaired chain.** Run the focused decoder,
+    55-row A/B matrix, physical controller/FIFO benches, SystemVerilog WD
+    dialogue bench including the short-select collision, ROM proofs, lint/
+    compile checks and `git diff --check`.
+22. **TODO — R3 qualification.** Synthesize the repaired candidate, cold boot,
+    run `LOAD"$",8` and program loads, then inspect map-v7 counters. Success
+    requires correct data plus zero LOST, not merely a clean WD completion.
 
 ## 2026-07-14 checkpoint 1
 
@@ -179,3 +207,61 @@ separate from Fable's `PLAN.md`.
 - Final 54-row matrix, focused decoder, map-v7 diagnostic unit test, overflow
   guard and long closed-loop controller all pass. Map v7 (`0x07FF`) adds
   counters at `0x3B`–`0x3F`; the next hardware dump remains `0x7000..0x707F`.
+
+## 2026-07-16 checkpoint 6
+
+- The verified R3 map-v7 bitstream failed a cold `LOAD"$",8`, but no longer by
+  RNF: the target ID/DAM was found and the operation ended with data CRC
+  residue `0x917B`. This is progress and localizes the remaining media error
+  to a false post-ID data field.
+- A new source-derived regression places a preamble-less timing-perfect DAM
+  after a CRC-valid ID and before the real data field. Unmodified production
+  fails exactly there; the superseded whole-field preamble gate passes, proving
+  the missing discriminator without reviving its F011-ID bug.
+- Stock ROM and F011 source both write twelve zero bytes before data A1 trains.
+  The repair therefore records zero-run qualification at the first A1 and uses
+  it for DAMs only. A rejected early DAM does not consume the valid-ID arm.
+- The same hardware dump contains 686 LOST events. ROM proofs show this cannot
+  be dismissed as an error-status detail: the genuine `$CD3F` path skips a
+  `PLP` when LOST is set and can return through a corrupt stack. Normal ROM
+  servicing has ample margin (33 versus 64 drive-CPU cycles), so LOST points
+  to the presenter handshake.
+- Architecture decision: retain the proven MiSTer/T65/ROM/IEC upper drive and
+  turn physical acquisition into a validated-sector producer. The existing
+  512-byte async FIFO becomes a quarantine buffer; only CRC-clean completion
+  opens WD-paced delivery. Failed captures are drained without exposure.
+- Documentation is now updated before verification. Current edits remain
+  uncommitted; the maintainer owns commits.
+
+## 2026-07-16 checkpoint 7
+
+- The 55th A/B row now passes production while retaining the expected
+  `r13=PASS` and all other historical controls failing. The complete seven-way
+  matrix reports `ALL ACCEPTANCE CRITERIA MET`; all earlier stock/F011 and
+  adaptive-margin rows remain unchanged. The false four-byte mark occupies
+  part of Gap 2, keeping the real DAM at byte 38 after the ID and therefore
+  inside the controller/WD 43-byte acquisition window.
+- The WD path now exposes FIFO bytes only after a tag-matched clean result.
+  CRC/RNF completions drop `phys_reading` and drain quarantine unseen. This
+  uses the existing 512-byte FIFO and adds no memory; image-mode behavior is
+  outside the modified physical presentation predicate.
+- A registered `cpu_rw_data` pulse is now an explicit presentation exclusion
+  window. The permanent one-cycle-select regression previously swallowed the
+  new DRQ and left LOST set; repaired RTL defers the byte and presents it later
+  with a fresh DRQ and clean status.
+- The strengthened WD bench uses the production 512-byte depth and exact
+  controller timing where the sixth Read Address FIFO write and done toggle
+  share one source edge. It passes clean/CRC-bad quarantine, normal and short
+  CPU-read collisions, forced real LOST, stale tags, Force Interrupt,
+  multi-sector reissue, Type-I busy visibility and post-error recovery.
+- All VHDL physical-1581 benches pass, including the 1.431-second simulated
+  closed loop (cylinder 0/1 byte-exact, expected RNF, pending requests,
+  abort-done spacing and recovery). The genuine-ROM proof suite and both diff
+  checks pass.
+- Correctness cost: clean sector data is replayed for about 16.4 ms after its
+  physical CRC is known. This is intentional; the ROM has no busy deadline,
+  and it prevents speculative magnetic data from crossing into the WD/ROM
+  contract. Hardware performance can be measured after correctness is proven.
+- Remaining step is R3 synthesis and cold hardware qualification. Keep map v7
+  (`0x07FF`); on a clean directory read require `CNT_LOST=0` and
+  `LAST_PRESENT=512` for the last successful sector.

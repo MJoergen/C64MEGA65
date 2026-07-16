@@ -256,7 +256,8 @@ remaining scalar words before the trace ring:
 
 - `0x3B CNT_MARK_FE`: qualified train followed by FE;
 - `0x3C CNT_MARK_DAM`: qualified train followed by FB/F8;
-- `0x3D CNT_DAM_UNARMED`: unsolicited DAM ignored without a valid ID arm;
+- `0x3D CNT_DAM_UNARMED`: DAM ignored without a valid ID arm (current repair
+  also counts a missing data lock-up; see below);
 - `0x3E CNT_MATCH_ID`: requested sector ID matched;
 - `0x3F CNT_DAM_MISS`: matched ID abandoned because another ID arrived or the
   local DAM timeout expired.
@@ -265,6 +266,146 @@ For the next R3 test, dump `0x7000..0x707F` as before. A successful directory
 and program load is the primary criterion. If sector 1 still fails, the five
 new words distinguish an unsolicited splice DAM from a target-ID/DAM pairing
 failure without another instrumentation build.
+
+## Hardware result for `47432c8` (map v7)
+
+The maintainer power-cycled the R3 machine and ran the normal `LOAD"$",8`
+test. It failed. The dump was from the intended map-v7 build
+(`VERSION=0x07FF`) and materially changes the diagnosis:
+
+- 22 qualified index revolutions, 163 decoded IDs and 12 read operations;
+- seven requested-ID matches, one missing-DAM event and no RNF completion;
+- the last request reached track 39, sector 7 and paired with an `FE`/`FB`
+  record (`C/H/R/N = 39/0/7/2`);
+- the operation completed with data CRC error (`LAST_RESULT=0x27`, data CRC
+  residue `0x917B`), not record-not-found;
+- acquisition timing stayed healthy (`EST=0x0640`, exactly 100 cycles);
+- 1,641 A1 candidates produced 327 qualified trains, 164 FE marks and 163 DAM
+  marks; five DAMs were ignored and the target pairing mostly worked;
+- the WD-facing path recorded 686 cumulative LOST DATA events; the last
+  operation's presentation count was 512 bytes.
+
+Thus record sequencing did move the failure boundary: the controller now finds
+the requested ID and a following DAM, but it can still accept a timing-perfect
+splice DAM after the valid ID and before the genuine data field. That bogus
+512-byte parse naturally ends with a bad CRC. Independently, hundreds of LOST
+events prove that the WD/drive-CPU delivery seam is not yet safe enough for the
+stock ROM.
+
+## First-principles audit after the map-v7 failure
+
+The genuine bundled `318045-02` ROM was converted and disassembled, then run
+through `doc/dev-issue90/rom_emu/run_proofs.py`. All proofs pass. The important
+ROM facts are:
+
+- the transfer loop at `$C969` polls BUSY first, then DRQ, and reads `$6003`;
+- a clean directory-track model fills all ten sectors byte-exact with zero
+  LOST events;
+- measured worst ROM consumption latency is 33 drive-CPU cycles, versus the
+  configured 64-cycle DD byte pace, so a healthy interface has about 47%
+  timing margin;
+- the genuine error epilogue at `$CD3F` has an asymmetric stack path when LOST
+  is set: it skips a `PLP` and returns through a corrupted stack. One false
+  LOST indication can therefore derail the drive firmware rather than merely
+  produce a normal retry.
+
+The 1986 Western Digital storage handbook gives the relevant WD1772 contract:
+after a CRC-valid target ID, the data address mark must occur within 43 DD byte
+times; the standard data lock-up is 22 x `4E`, 12 x `00`, 3 x missing-clock
+`A1`, then `FB`/`F8`; and LOST is asserted when DRQ is not serviced within one
+byte time. The genuine 1581 ROM writes that sequence. Pinned MEGA65 F011 source
+uses 23 x `4E`, 12 x `00`, 3 x `A1`, then `FB` for sector data. F011 differs for
+ID fields, which can lack the adjacent zero preamble, but both formats have the
+same twelve-zero data-field lock-up. Therefore a zero-run qualifier is valid
+for DAMs only and remains invalid for general ID acquisition.
+
+The MiSTer-derived upper drive remains the right compatibility anchor: its
+T65/ROM/CIA/IEC and image-backed WD path already read D81 images reliably. The
+fragile duplication is below that boundary. At the map-v7 failure, the physical
+path streamed unvalidated bytes into the asynchronous FIFO while CRC was still
+being computed, then independently recreated WD pacing. The stronger boundary
+is:
+
+`physical flux -> qualified complete sector + result -> existing WD/ROM path`
+
+The existing 512-byte async FIFO can serve as the sector quarantine without a
+new memory block: fill it during physical decoding, release it to WD pacing
+only after the controller reports a clean CRC, and drain it without presenting
+bytes on an error. This prevents a false field from reaching the ROM at all and
+makes physical acquisition a transaction producer rather than a second live
+WD implementation. The WD presenter also needs to defer on the registered
+data-read clear pulse, not only while `cpu_sel` is visibly open; a one-cycle
+select can otherwise close exactly when a paced byte arrives, swallowing its
+DRQ and falsely setting LOST.
+
+## Implemented uncommitted repair
+
+A permanent 55th A/B row now emits a CRC-valid target ID, a timing-perfect
+`A1x3+FB` splice mark with no zero lock-up, and then the genuine stock/F011-
+compatible data preamble and field. The false four-byte mark replaces four
+bytes of the normal 22-byte Gap 2, so the genuine DAM remains at its standard
+38-byte post-ID position, within the WD1772's 43-byte search window. Before the
+repair the exact result is:
+
+`armed splice before data: old=fail | r12=fail | r13=PASS | prod=fail | tacq=fail | spanoff=fail | seqoff=fail`
+
+The production failure is asserted immediately. The working-tree decoder
+captures whether the first A1 of a train follows the zero run, requires that
+bit only for a DAM, preserves the CRC-valid-ID arm when an early DAM is
+rejected, and leaves FE/ID acquisition formatter-neutral. The repaired row is:
+
+`armed splice before data: old=fail | r12=fail | r13=PASS | prod=PASS | tacq=fail | spanoff=fail | seqoff=fail`
+
+The WD front end now treats the existing production-depth 512-byte async FIFO
+as a quarantine. `phys_present_now` requires a tag-matched clean controller
+completion; an RNF/CRC completion closes `phys_reading`, so the established
+residue path drains all speculative bytes without DRQ. Clean data is then
+released at the existing 32 us WD pace. Presentation is also excluded while
+the registered `cpu_rw_data` clear pulse is active, closing the short-select
+DRQ/lost-data race after the combinational bus select disappears.
+
+This intentionally trades latency for a much stronger boundary. A 512-byte
+read gains about 16.4 ms of replay time after physical CRC validation, but the
+ROM has no busy-loop deadline and the WD remains disk-paced once release starts.
+No new RAM is used, and the image-backed path is untouched because every new
+gate is inside `phys_mode` presentation logic.
+
+The strengthened SystemVerilog bench first failed on unmodified RTL, exposing
+371 speculative bytes before its guard, leaving FIFO residue that poisoned the
+next operation, and reproducing LOST on the one-cycle select collision. With
+the repair it proves:
+
+- a production-sized 512-byte FIFO holds a complete clean sector until done;
+- a full 512-byte CRC-bad capture exposes zero bytes and zero DRQs to the ROM,
+  drains completely, reports CRC-only, and the next Read Address is byte-exact;
+- no byte is presented before clean completion;
+- both a normal 16-cycle read window and a one-cycle select/registered-clear
+  collision defer the next byte, preserve its fresh DRQ and leave LOST clear;
+- the controller's same-edge sixth Read Address byte plus done toggle cannot
+  outrun the FIFO pointer synchronization;
+- all prior register, Type-I minimum-busy, stalled-CPU real-LOST, Force
+  Interrupt, stale-done, multi-sector and status-belt checks remain green.
+
+Final verification on the current working tree:
+
+- final seven-way 55-row A/B matrix: `ALL ACCEPTANCE CRITERIA MET`, exit 0;
+- focused decoder: two ignored false DAMs, real payload byte-exact/CRC OK;
+- CRC, conditioned inputs, async FIFO and map-v7 diagnostics: pass;
+- overflow bench: CRC-only failure, never silent: pass;
+- mechanism decoder loop: cylinders 0 and 1 byte-exact: pass;
+- long controller loop: cylinder 0/1 reads, Read Address, Verify, expected RNF,
+  pending tags, abort spacing and recovery: pass;
+- CRC-gated SystemVerilog WD dialogue bench: pass;
+- genuine 318045-02 ROM proof suite: `RESULT: ALL PROOFS PASS`;
+- root and submodule `git diff --check`: pass.
+
+Diagnostic addresses and capabilities are unchanged, so the map remains
+`VERSION=0x07FF`. The meaning of `CNT_DAM_UNARMED` is deliberately broadened:
+it counts a DAM ignored either because no CRC-valid ID armed it or because its
+A1 train lacked the data zero-lock-up. For the next R3 build the decisive
+success signature is a working cold `LOAD"$",8` with `CNT_LOST=0`; clean sector
+ops should finish with `LAST_PRESENT=512`, while rejected/CRC-bad speculative
+captures may increase `CNT_DAM_UNARMED`/`CNT_DRAIN` but must present zero bytes.
 
 ## Source discipline
 

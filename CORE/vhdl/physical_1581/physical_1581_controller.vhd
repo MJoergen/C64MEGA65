@@ -11,7 +11,9 @@
 --   * a read operation: Read Sector / Verify / Read Address
 --   * a cancel/force
 -- Decoded payload bytes are pushed to an external dual-clock read FIFO
--- (physical_1581_rdfifo) which the WD front end drains at its DRQ cadence.
+-- (physical_1581_rdfifo). The FIFO quarantines one complete sector; the WD
+-- front end releases it at DRQ cadence only after this controller reports a
+-- clean field CRC, or drains it unseen when this controller reports an error.
 --
 -- Writes are NOT part of this milestone: f_wgate/f_wdata are never driven here and
 -- stay tied inactive at the top level.
@@ -137,7 +139,7 @@ entity physical_1581_controller is
     diag_a1_train_o     : out std_logic := '0';   -- 1-cycle pulse: qualified 3xA1 train
     diag_mark_fe_o      : out std_logic := '0';   -- 1-cycle pulse: qualified FE mark
     diag_mark_dam_o     : out std_logic := '0';   -- 1-cycle pulse: qualified FB/F8 mark
-    diag_dam_unarmed_o  : out std_logic := '0';   -- 1-cycle pulse: unsolicited DAM ignored
+    diag_dam_unarmed_o  : out std_logic := '0';   -- pulse: DAM ignored (no ID/data lock-up)
     diag_match_id_o     : out std_logic := '0';   -- 1-cycle pulse: requested sector ID matched
     diag_dam_miss_o     : out std_logic := '0';   -- 1-cycle pulse: matched ID had no DAM
     -- adaptive quantiser half-cell estimate (Q8.4; issue #90 round 12)

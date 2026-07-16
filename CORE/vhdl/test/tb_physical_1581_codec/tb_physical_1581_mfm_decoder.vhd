@@ -9,6 +9,10 @@
 -- The payload deliberately embeds 0xA1/0xFE/0xFB/0xF8/0xF5/0xF6/0xF7 values to
 -- prove they do NOT trigger a false sync/mark (only the missing-clock gap
 -- pattern establishes sync).
+-- A second timing-valid false DAM is placed after the valid ID but before the
+-- real data lock-up preamble. ID sequencing alone arms it; production must
+-- reject it for lack of the stock/F011 00 run, retain the ID arm, and decode
+-- the genuine data field that follows.
 --
 -- Runt-filter vectors (issue #90 round 10): one synthetic sub-C_GAP_GLITCH
 -- double edge is injected inside the ID field (the H byte) and one inside the
@@ -195,8 +199,15 @@ begin
     mfm_byte(f_rdata, v(15 downto 8), prev);
     mfm_byte(f_rdata, v(7 downto 0), prev);
 
-    -- ===== gap ===============================================================
-    mfm_bytes(f_rdata, x"4E", 22, prev);          -- 22 x 4E gap
+    -- ===== armed write-splice DAM (must not consume the ID arm) =============
+    -- The false four-byte mark occupies part of the normal 22-byte Gap 2:
+    -- 8 x 4E + A1x3/FB + 10 x 4E = 22 byte times. The real DAM below therefore
+    -- remains at the standard 38-byte post-ID position (inside WD's 43-byte
+    -- search window), rather than relying on the decoder's longer-lived arm.
+    mfm_bytes(f_rdata, x"4E", 8, prev);
+    mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev);
+    mfm_byte(f_rdata, x"FB", prev);
+    mfm_bytes(f_rdata, x"4E", 10, prev);
 
     -- ===== DATA field ========================================================
     mfm_bytes(f_rdata, x"00", 12, prev);          -- 12 x 00 preamble
@@ -249,10 +260,10 @@ begin
       report "FAIL: runt_o pulsed " & integer'image(runt_cnt) & " times, expected 2" severity error;
     assert gap_error_cnt = 0
       report "FAIL: gap_error fired " & integer'image(gap_error_cnt) & " times, expected 0 (runt not merged?)" severity error;
-    assert dam_unarmed_cnt = 1
-      report "FAIL: unsolicited DAM count=" & integer'image(dam_unarmed_cnt) & ", expected 1" severity error;
+    assert dam_unarmed_cnt = 2
+      report "FAIL: ignored DAM count=" & integer'image(dam_unarmed_cnt) & ", expected 2" severity error;
     report "RUNT FILTER OK: 2 runts merged (ID + data field), 0 gap errors";
-    report "RECORD SEQUENCE OK: timing-valid unsolicited DAM ignored before real ID";
+    report "RECORD SEQUENCE OK: unsolicited and post-ID preamble-less DAMs ignored";
 
     report "physical_1581_mfm_decoder: ALL TESTS PASSED";
     finish;

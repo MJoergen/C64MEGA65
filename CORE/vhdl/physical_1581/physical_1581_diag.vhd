@@ -236,7 +236,7 @@ architecture rtl of physical_1581_diag is
   -- map v7 (record sequencing + sector-read acquisition forensics)
   constant RM_CNT_MARK_FE     : integer := 16#3B#;   -- qualified train followed by FE
   constant RM_CNT_MARK_DAM    : integer := 16#3C#;   -- qualified train followed by FB/F8
-  constant RM_CNT_DAM_UNARMED : integer := 16#3D#;   -- DAM ignored without valid preceding ID
+  constant RM_CNT_DAM_UNARMED : integer := 16#3D#;   -- DAM ignored without valid ID/data lock-up
   constant RM_CNT_MATCH_ID    : integer := 16#3E#;   -- requested sector ID matched
   constant RM_CNT_DAM_MISS    : integer := 16#3F#;   -- matched ID followed by no DAM
   constant RM_TRC_BASE       : integer := 16#40#;   -- trace ring: entry k at 0x40+2k (w0) / 0x41+2k (w1)

@@ -28,10 +28,11 @@
 --
 -- A timing-valid splice can nevertheless contain a complete A1-like train.
 -- Therefore production also enforces the IBM/WD record grammar: a DAM is
--- decoded only after a CRC-valid ID field, and a qualified FE always
--- re-anchors the parser even if splice junk had started a bogus data field.
--- This rule is common to stock WD1772 and MEGA65/F011 media; it does not depend
--- on either formatter's gap or preamble lengths.
+-- decoded only after a CRC-valid ID field AND after the data-field lock-up run
+-- of zero bytes. Both the stock 1581 ROM and the MEGA65 F011 formatter write
+-- 12 x 00 immediately before a data A1 train. The gate is deliberately DAM-
+-- only: F011 ID fields do not always have a zero preamble. A qualified FE
+-- always re-anchors the parser even if splice junk had started a bogus field.
 -------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -46,7 +47,8 @@ entity physical_1581_mfm_decoder is
     -- G_QUANT_HUNT_ADAPT_ALL false selects the superseded round-13 rule for
     -- the permanent A/B regression column. G_SYNC_SPAN_GATE false preserves
     -- commit-3803152 spacing-only acquisition as another control column;
-    -- G_RECORD_SEQUENCE_GATE false preserves commit-0ab9f92 behavior.
+    -- G_RECORD_SEQUENCE_GATE false preserves commit-0ab9f92 behavior (no
+    -- ID-before-DAM or DAM-only data-lock-up qualification).
     -- G_QUANT_TOL_ACQ_SHR = 2 selects
     -- the refuted tight-
     -- acquisition variant (see the quantiser entity header).
@@ -88,7 +90,7 @@ entity physical_1581_mfm_decoder is
     a1_train_o        : out std_logic := '0';             -- pulse when a complete 3xA1 train qualifies
     mark_fe_o         : out std_logic := '0';             -- pulse: qualified train followed by FE
     mark_dam_o        : out std_logic := '0';             -- pulse: qualified train followed by FB/F8
-    dam_unarmed_o     : out std_logic := '0';             -- pulse: DAM ignored without a valid preceding ID
+    dam_unarmed_o     : out std_logic := '0';             -- pulse: DAM ignored without valid ID/data lock-up
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
@@ -136,6 +138,9 @@ architecture rtl of physical_1581_mfm_decoder is
   signal crc_stored_r : unsigned(15 downto 0) := (others => '0');
   signal deleted_r    : std_logic := '0';
   signal data_armed   : std_logic := '0';
+  -- Captured at the first A1 of a production train. This is separate from
+  -- sync qualification so F011 ID fields remain legal without a zero run.
+  signal data_preamble_ok : std_logic := '0';
 
   -- Sync qualification state. The round-13 preamble counters remain only for
   -- the test-selectable historical column; production uses sync_gap_age.
@@ -261,6 +266,7 @@ begin
         sync_gap_age <= 15;
         a1_gap_0 <= 0; a1_gap_1 <= 0; a1_gap_2 <= 0; a1_gap_3 <= 0;
         data_armed <= '0';
+        data_preamble_ok <= '0';
       else
         -- diagnostics + loss of lock on an out-of-spec gap; also the
         -- preamble-run bookkeeping for the write-splice sync gate
@@ -281,6 +287,7 @@ begin
             short_run   <= 0;
             run_age     <= 15;          -- loud loss of lock: close the gate
             sync_gap_age <= 15;
+            data_preamble_ok <= '0';
           elsif q_class = "00" then
             if short_run >= C_QUANT_SYNC_RUN - 1 then
               run_age <= 0;             -- preamble run complete/continuing
@@ -310,6 +317,11 @@ begin
             if sync_cnt = 0 then
               crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
               sync_cnt <= 1;
+              if run_age <= C_QUANT_SYNC_LAT then
+                data_preamble_ok <= '1';
+              else
+                data_preamble_ok <= '0';
+              end if;
             elsif sync_cnt < 3 then
               crc_feed <= '1'; crc_byte <= MARK_A1; sync_cnt <= sync_cnt + 1;
             end if;
@@ -319,6 +331,11 @@ begin
               if sync_cnt = 0 then
                 crc_reset <= '1'; crc_feed <= '1'; crc_byte <= MARK_A1;
                 sync_cnt <= 1;
+                if run_age <= C_QUANT_SYNC_LAT then
+                  data_preamble_ok <= '1';
+                else
+                  data_preamble_ok <= '0';
+                end if;
               elsif sync_cnt < 3 then
                 crc_feed <= '1'; crc_byte <= MARK_A1; sync_cnt <= sync_cnt + 1;
               end if;
@@ -332,6 +349,7 @@ begin
               locked_o <= '0';
               sync_gap_age <= 15;
               a1_span_reject_o <= '1';
+              data_preamble_ok <= '0';
             elsif sync_cnt = 0 then
               -- First candidate is provisional: prime the CRC, but do not
               -- claim separator lock until the complete train is proven.
@@ -339,6 +357,11 @@ begin
               sync_cnt <= 1;
               locked_o <= '0';
               sync_gap_age <= 0;
+              if run_age <= C_QUANT_SYNC_LAT then
+                data_preamble_ok <= '1';
+              else
+                data_preamble_ok <= '0';
+              end if;
             elsif sync_gap_age = C_QUANT_A1_SPACING then
               if sync_cnt < 3 then
                 crc_feed <= '1'; crc_byte <= MARK_A1;
@@ -355,6 +378,11 @@ begin
               sync_cnt <= 1;
               locked_o <= '0';
               sync_gap_age <= 0;
+              if run_age <= C_QUANT_SYNC_LAT then
+                data_preamble_ok <= '1';
+              else
+                data_preamble_ok <= '0';
+              end if;
             end if;
           end if;
           if not G_SYNC_GATE or G_SYNC_PREAMBLE_GATE then
@@ -371,7 +399,8 @@ begin
             mark_fe_o <= '1';
           elsif sync_cnt = 3 and (byte_d = MARK_FB or byte_d = MARK_F8) then
             mark_dam_o <= '1';
-            if G_RECORD_SEQUENCE_GATE and (state /= S_IDLE or data_armed = '0') then
+            if G_RECORD_SEQUENCE_GATE and
+               (state /= S_IDLE or data_armed = '0' or data_preamble_ok = '0') then
               dam_unarmed_o <= '1';
             end if;
           end if;
@@ -381,6 +410,7 @@ begin
             state <= S_ID_C;
             sync_cnt <= 0;
             data_armed <= '0';
+            data_preamble_ok <= '0';
           else
            case state is
             when S_IDLE =>
@@ -391,28 +421,33 @@ begin
                   when MARK_FE =>
                     state <= S_ID_C;
                     data_armed <= '0';
+                    data_preamble_ok <= '0';
                   when MARK_FB =>
-                    if not G_RECORD_SEQUENCE_GATE or data_armed = '1' then
+                    if not G_RECORD_SEQUENCE_GATE or
+                       (data_armed = '1' and data_preamble_ok = '1') then
                       deleted_r    <= '0';
                       data_start_o <= '1';
                       data_cnt     <= data_len(last_n);
                       state        <= S_DATA;
+                      data_armed   <= '0';
                     else
                       dam_unarmed_o <= '1';
                     end if;
-                    data_armed <= '0';
+                    data_preamble_ok <= '0';
                   when MARK_F8 =>
-                    if not G_RECORD_SEQUENCE_GATE or data_armed = '1' then
+                    if not G_RECORD_SEQUENCE_GATE or
+                       (data_armed = '1' and data_preamble_ok = '1') then
                       deleted_r    <= '1';
                       data_start_o <= '1';
                       data_cnt     <= data_len(last_n);
                       state        <= S_DATA;
+                      data_armed   <= '0';
                     else
                       dam_unarmed_o <= '1';
                     end if;
-                    data_armed <= '0';
+                    data_preamble_ok <= '0';
                   when others =>
-                    null;                   -- unsupported mark: ignore
+                    data_preamble_ok <= '0'; -- unsupported mark: ignore
                 end case;
               end if;
               sync_cnt <= 0;

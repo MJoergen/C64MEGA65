@@ -2021,12 +2021,11 @@ begin
 
   i_physical_1581_rdfifo : entity work.physical_1581_rdfifo
     generic map (
-      -- Depth = 512 = one full physical sector, so a streamed read can NEVER
-      -- overflow, no matter how long the drive CPU is away servicing IEC/IRQ
-      -- work mid-sector (observed on hardware with the earlier 32-byte depth:
-      -- silently dropped bytes -> shifted directory names, programs that load
-      -- but do not run). The controller additionally reports any write-while-
-      -- full as a data error so a drop can never again be silent.
+      -- Depth = 512 = one full physical sector. The FIFO is a CRC quarantine:
+      -- the controller can capture a complete field without any drive-CPU
+      -- consumption, then fdc1772 releases it only after a clean result (or
+      -- drains it unseen on error). The controller additionally reports any
+      -- write-while-full as a data error so a drop can never be silent.
       G_AW => 9
     )
     port map (

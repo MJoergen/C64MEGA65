@@ -95,7 +95,7 @@ fields are right-aligned unless a bit layout is given.
 | `0x3A` | `CNT_A1_TRAIN`  | 16-bit saturating counter: complete qualified three-A1 trains |
 | `0x3B` | `CNT_MARK_FE`    | 16-bit saturating counter: qualified A1 train followed by an ID mark (`FE`) |
 | `0x3C` | `CNT_MARK_DAM`   | 16-bit saturating counter: qualified A1 train followed by a data mark (`FB`/`F8`) |
-| `0x3D` | `CNT_DAM_UNARMED` | 16-bit saturating counter: data marks ignored because no CRC-valid ID armed them |
+| `0x3D` | `CNT_DAM_UNARMED` | 16-bit saturating counter: data marks ignored because no CRC-valid ID or data lock-up armed them |
 | `0x3E` | `CNT_MATCH_ID`   | 16-bit saturating counter: CRC-valid IDs matching the requested track/sector |
 | `0x3F` | `CNT_DAM_MISS`   | 16-bit saturating counter: matching IDs after which the controller saw another ID or timed out before a DAM |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
@@ -109,10 +109,13 @@ saturating counters.
 
 Since map v4 the WD front end delivers read data **disk-paced**, like the real WD1772:
 every DD byte-time (32 us) the next byte from the read FIFO is presented on the data
-register and DRQ is raised, whether or not the drive CPU consumed the previous byte. If
-it did not, the byte is overwritten, the WD status shows LOST DATA (bit 2) and `CNT_LOST`
-increments — the transfer never stalls waiting for the CPU, and busy is released one full
-byte-time after the last presentation, once the controller has signaled completion.
+register and DRQ is raised, whether or not the drive CPU consumed the previous byte. The
+current physical path first uses the 512-byte FIFO as a CRC quarantine: a clean completed
+sector is released at that pace only after the controller result arrives, while a CRC/RNF
+failure is drained without being presented. Once a clean sector is released, an unconsumed
+byte is still overwritten at the following byte time, the WD status shows LOST DATA (bit
+2), and `CNT_LOST` increments. Busy is released one full byte-time after the last
+presentation.
 CRC-flagged error completions **never also set RNF**: the genuine 1581 DOS
 ROM (318045-02) job epilogue at `$CD3F` indexes the table at `$CD5A` with
 `(status >> 3) AND 0x0B`, and the CRC+RNF combination hits a `0x00` hole in that table —
@@ -173,14 +176,15 @@ announces that these words exist.
 
 Timing alone cannot distinguish a splice that happens to reproduce a complete A1 train.
 Production therefore also enforces the IBM/WD record grammar: a data mark is accepted
-only after a CRC-valid ID field, and a qualified ID mark re-anchors the parser if junk had
-started a bogus data parse. This is formatter-neutral: both stock WD1772 and MEGA65/F011
-records use ID-before-data even though their surrounding gap and preamble lengths differ.
+only after a CRC-valid ID field and the data-field zero lock-up, and a qualified ID mark
+re-anchors the parser if junk had started a bogus data parse. The data-only qualifier is
+dual-format: stock WD1772 and MEGA65/F011 both write twelve zero bytes before a DAM, while
+F011 ID fields can omit that preamble and therefore remain preamble-independent.
 
 `CNT_MARK_FE + CNT_MARK_DAM` classifies the qualified trains whose following byte was a
 supported mark; subtracting those from `CNT_A1_TRAIN` gives trains followed by some other
-byte. `CNT_DAM_UNARMED` is direct evidence that an unsolicited splice DAM was safely
-ignored. During a failed sector read, `CNT_MATCH_ID` and `CNT_DAM_MISS` distinguish
+byte. `CNT_DAM_UNARMED` is direct evidence that an unsolicited or post-ID preamble-less
+splice DAM was safely ignored. During a failed sector read, `CNT_MATCH_ID` and `CNT_DAM_MISS` distinguish
 "target ID never found" from "target ID found, but its data mark was missed." Capability
 bit 7 announces these counters.
 

@@ -16,7 +16,8 @@
 --   * r13  = superseded round-13 00-preamble gate, retained to prove both
 --            its splice fix and its F011 zero-ID regression
 --   * prod = production adaptive quantiser + complete-A1 span, exact
---            three-A1 train spacing and ID-before-DAM record sequencing
+--            three-A1 train spacing, ID-before-DAM record sequencing and
+--            DAM-only stock/F011 zero-lock-up qualification
 --   * tacq = the REFUTED round-13 fix candidate (two-tier tolerance, tight
 --            est/4 acquisition: G_QUANT_TOL_ACQ_SHR => 2, no gate). Kept as
 --            live evidence of WHY the shipped fix is the preamble-run sync
@@ -81,11 +82,19 @@
 --                                      with short separators, but with a 1580-
 --                                      cycle rather than ~1400-cycle raw-word
 --                                      span.
+--   (ix)   ARMED SPLICE DAM           -- after a CRC-valid target ID, a
+--                                      timing-perfect preamble-less A1x3+FB
+--                                      precedes the genuine data field. This
+--                                      is the map-v7 CRC-error upper bound:
+--                                      production must reject the false DAM,
+--                                      retain the ID arm and accept the real
+--                                      stock/F011 twelve-zero data lock-up.
 --
 -- ACCEPTANCE (all machine-checked at the end):
 --   * canonical decodes byte-exact on old, r12, r13 and production;
 --   * F011 first and subsequent IDs decode in production while the r13 column
 --     hard-reproduces its zero-ID failure;
+--   * the armed splice DAM is rejected without consuming the valid-ID arm;
 --   * NO REGRESSION: no trial where the old decoder succeeds and production
 --     fails; every must_new trial decodes byte-exact in production;
 --   * the r12 instance passes every must_new row of the original round-12
@@ -461,7 +470,8 @@ begin
     procedure build_record(lead_4e, id_zeros, id_data_4e, trailer_4e : natural;
                            prefix_zeros : natural := 0;
                            prefix_fake_dam : boolean := false;
-                           prefix_armed_fake_dam : boolean := false) is
+                           prefix_armed_fake_dam : boolean := false;
+                           armed_splice_before_data : boolean := false) is
     begin
       nt := 0; hc := 0; prev := '0';
       art_after_t := -1; splice_t := -1;
@@ -508,7 +518,22 @@ begin
       crcv := crc16_update(crcv, TC);    crcv := crc16_update(crcv, TH);
       crcv := crc16_update(crcv, TR);    crcv := crc16_update(crcv, TN);
       enc_byte(crcv(15 downto 8)); enc_byte(crcv(7 downto 0));
-      for k in 1 to id_data_4e loop enc_byte(x"4E"); end loop;
+      -- Hardware map-v7 upper bound: the target ID is valid, so ordinary
+      -- ID-before-DAM sequencing is armed. A timing-perfect splice DAM then
+      -- appears before the formatter's real Gap-2 lock-up sequence. A real
+      -- WD1772 data field must follow a 22/23-byte Gap 2 plus 12 x 00 before
+      -- A1x3+FB. The four-byte false mark REPLACES part of Gap 2 rather than
+      -- extending it, so the genuine DAM remains at the standard 38-byte
+      -- post-ID position and inside the WD's 43-byte search window. Production
+      -- must ignore the early DAM without consuming the valid-ID arm, then
+      -- accept the genuine data mark below.
+      if armed_splice_before_data then
+        for k in 1 to 8 loop enc_byte(x"4E"); end loop;
+        enc_a1; enc_a1; enc_a1; enc_byte(x"FB");
+        for k in 1 to id_data_4e - 12 loop enc_byte(x"4E"); end loop;
+      else
+        for k in 1 to id_data_4e loop enc_byte(x"4E"); end loop;
+      end if;
       for k in 1 to 12 loop
         if k = 7 then splice_t := nt; end if;
         enc_byte(x"00");
@@ -866,6 +891,12 @@ begin
     build_record(32, 12, 22, 8, prefix_armed_fake_dam => true);
     run_trial("armed bogus DAM recovery", 5, M_UNIFORM, 1.000, 1.000, 0, 0,
               false, true, 54, exp_seqoff_fail => true);
+    build_record(32, 12, 22, 8, armed_splice_before_data => true);
+    run_trial("armed splice before data", 5, M_UNIFORM, 1.000, 1.000, 0, 0,
+              false, true, 55);
+    assert res(nres - 1).ok(3)
+      report "production consumed an armed splice DAM before the real Gap-2 field"
+      severity failure;
 
     -- Restore the stock-ROM layout for the complete historical matrix.
     build_record(32, 12, 22, 8);
@@ -1018,7 +1049,7 @@ begin
     finish;
   end process;
 
-  -- global guard: 54 trials x ~20 ms + probes
+  -- global guard: 55 trials x ~20 ms + probes
   guard : process
   begin
     wait for 2000 ms;
