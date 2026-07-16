@@ -55,8 +55,27 @@ class Machine:
         self.disk_in = True
         self.chg_latch = True      # mechanism DSKCHG latch: set until step w/ disk
         self.motor_on_at = None
-        self.ids_per_rev = 11      # 10 sectors + MEGA65 TIB (R=11)
+        self.ids_per_rev = 11      # 10 sectors + the truncated F011 R=11 ID
         self.rot = 0               # rotation position (ID index)
+        # Media-state experiment controls.  Defaults preserve the historical
+        # proof model.  Tests can lengthen cold readiness, enable the proposed
+        # same-medium one-index shortcut, or force PA1/PA7 independently.
+        self.ready_after_cycles = 60000
+        self.ready_resume_after_cycles = None
+        self.rotation_confirmed = False
+        self.force_ready = None
+        self.force_change = None
+        self.media_log = False
+        self.media_samples = []    # (cycle, PC, motor age, ready, change)
+        # Rotational Read-Address model.  "simple" retains the old one-ID-per-
+        # command behavior.  "f011" uses the source-derived auto-format byte
+        # schedule: 6250 DD bytes/rev, first ID at byte 30, 587 bytes/record,
+        # ten complete sectors plus the complete ID of sector 11 before index
+        # truncates its data field.  Event positions are ID-end byte offsets.
+        self.ra_layout = 'simple'
+        self.f011_rev_bytes = 6250
+        self.f011_id_end_bytes = tuple(40 + 587*i for i in range(11))
+        self.f011_phase_origin = 0
         # ---- WD registers + delivery v2 engine (mirror fdc1772) ----
         # CPU runs at 2 MHz: one DD byte-time (32 us) = 64 CPU cycles.
         self.PACE = 64             # cycles per presented byte (contract A1/A2)
@@ -136,8 +155,28 @@ class Machine:
         # output pins: driven where ddra=1, else pulled 1
         return (self.cia_pra_out | ~self.cia_ddra) & 0xFF
     def ready(self):
-        # our media_ready: motor + 2 index edges (~2/5 rev incl. ramp): model 60k cyc
-        return self.motor_on_time() > 60000
+        # Abstract the controller's index qualification as a motor-age delay.
+        # The default 60k stand-in is historical.  The optional shorter resume
+        # delay models the proposed invariant: after a previously confirmed
+        # rotation, and with no intervening disk change, one fresh index is
+        # sufficient when the same motor is restarted.
+        age = self.motor_on_time()
+        change = self.change_asserted()
+        if change:
+            self.rotation_confirmed = False
+        if self.force_ready is not None:
+            value = bool(self.force_ready)
+        else:
+            delay = self.ready_after_cycles
+            if (self.ready_resume_after_cycles is not None and
+                self.rotation_confirmed and not change):
+                delay = self.ready_resume_after_cycles
+            value = age > delay
+        if value and self.disk_in and not change:
+            self.rotation_confirmed = True
+        return value
+    def change_asserted(self):
+        return self.chg_latch if self.force_change is None else bool(self.force_change)
     def motor_on_time(self):
         if not self.motor(): self.motor_on_at=None; return 0
         if self.motor_on_at is None: self.motor_on_at=self.cyc
@@ -181,6 +220,8 @@ class Machine:
         self.dbg['fins'] += 1
         self.trace.append(('FIN', self.phys_op, self.dbg['presented'],
                            'rnf=%d crc=%d lost=%d' % (self.rnf, self.crc, self.lost)))
+        if not self.rnf and not self.crc and self.disk_in and not self.change_asserted():
+            self.rotation_confirmed = True
         self.phys_op = None; self.ctrl_done_at = None; self.ra_found_c = None
     def wd_read(self, r):
         if r==0:
@@ -258,15 +299,32 @@ class Machine:
         elif top==0xC:    # READ ADDRESS
             self.start_phys_op('ra')
             if self.ctrl_done_at is not None: return   # not-ready path armed
-            self.rot=(self.rot+1)%self.ids_per_rev
-            rr=self.rot+1
+            if self.ra_layout == 'f011':
+                rev_cycles = self.f011_rev_bytes * self.PACE
+                phase = (self.cyc - self.f011_phase_origin) % rev_cycles
+                next_pos = None
+                rr = None
+                for idx, byte_pos in enumerate(self.f011_id_end_bytes):
+                    pos = byte_pos * self.PACE
+                    if pos > phase:
+                        next_pos = pos
+                        rr = idx + 1
+                        break
+                if next_pos is None:
+                    next_pos = self.f011_id_end_bytes[0] * self.PACE + rev_cycles
+                    rr = 1
+                latency = next_pos - phase
+            else:
+                self.rot=(self.rot+1)%self.ids_per_rev
+                rr=self.rot+1
+                latency = self.T_LATENCY
             c=self.head; h=self.pa0_to_physside(); n=2
             crc = crc16_ccitt([0xA1,0xA1,0xA1,0xFE,c,h,rr,n])
             self.ra_found_c=c
-            self.staged=(self.cyc+self.T_LATENCY, [c,h,rr,n,crc>>8,crc&0xFF])
+            self.staged=(self.cyc+latency, [c,h,rr,n,crc>>8,crc&0xFF])
             self.ctrl_rnf=0; self.ctrl_crc=0
-            self.ctrl_done_at=self.cyc+self.T_LATENCY+7*self.PACE
-            self.trace.append(('RA',c,h,rr))
+            self.ctrl_done_at=self.cyc+latency+7*self.PACE
+            self.trace.append(('RA',c,h,rr,'lat=%d'%latency))
         elif top==0xD:    # FORCE INTERRUPT: cancel path (kept by contract B2)
             self.fifo=[]; self.staged=None
             self.phys_op=None; self.ctrl_done_at=None
@@ -301,8 +359,13 @@ class Machine:
     def cia_read(self, r):
         if r==0:
             pa_in = 0xFF
-            if self.chg_latch: pa_in &= ~0x80
-            if self.ready():   pa_in &= ~0x02
+            change = self.change_asserted()
+            ready = self.ready()
+            if change: pa_in &= ~0x80
+            if ready:  pa_in &= ~0x02
+            if self.media_log:
+                self.media_samples.append((self.cyc, self.cpu.pc,
+                                           self.motor_on_time(), ready, change))
             pa_in &= ~0x18     # drive number 00 -> bits 3,4 low
             return pa_in & self.cia_pra_eff()
         if r==1:

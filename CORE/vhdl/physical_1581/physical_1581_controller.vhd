@@ -221,6 +221,13 @@ architecture rtl of physical_1581_controller is
   signal idx_motor_cnt : integer range 0 to 7 := 0;
   signal idx_gap_cnt   : unsigned(31 downto 0) := (others => '0');  -- cycles since the last index edge (motor on)
   signal media_ready   : std_logic := '0';
+  -- Sticky proof that this same, unchanged medium previously completed a
+  -- two-index rotation qualification.  Preserve it across ordinary motor-off
+  -- intervals so a restart may assert RDY after the first fresh index; clear
+  -- it on reset/disable, raw disk change, or index staleness while commanded
+  -- on.  This closes the stock 1581 ROM's finite PA1 spin-up window without
+  -- weakening cold-start/eject qualification.
+  signal rotation_confirmed : std_logic := '0';
   signal change_latched: std_logic := '0';
   signal motor_on_act  : std_logic := '0';
 
@@ -499,6 +506,7 @@ begin
         idx_motor_cnt <= 0;
         idx_gap_cnt   <= (others => '0');
         media_ready   <= '0';
+        rotation_confirmed <= '0';
         motor_on_act  <= '0';
         -- The head is at rest while we are inactive, so it IS settled: the settle
         -- timer only guards reads against a just-finished step. Starting at '0'
@@ -526,6 +534,7 @@ begin
         ------------------------------------------------------------------
         if change_c = '1' then
           change_latched <= '1';
+          rotation_confirmed <= '0';
         end if;
 
         ------------------------------------------------------------------
@@ -556,16 +565,18 @@ begin
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
 
-        -- RDY asserts on ROTATION DETECTION: motor commanded + two index edges
-        -- seen. This mirrors the FB-354 and matches the stock 1581 ROM, whose
-        -- spin-up allowance is only 80 dispatcher ticks (LDA #$50 -> $01D9,
-        -- ~0.7 s) followed by an INSTANT PA1 check -- waiting for a full
-        -- at-speed period measurement (~0.5-0.7 s) failed that deadline on
-        -- hardware. Speed correctness needs no gate here: an off-speed disk
-        -- does not MFM-decode, the read returns RNF, and the DOS retries.
-        -- The eject (index-staleness) detection below stays the disk-removed
-        -- guard.
-        if motor_s = '1' and idx_motor_cnt >= 2 then
+        -- Cold/new media still requires two index edges.  Once two edges have
+        -- confirmed a medium and no /DSKCHG assertion has occurred since, a
+        -- later motor restart may reassert RDY after its first fresh edge.
+        -- Hardware A/B proved why: the stock ROM's finite PA1 window can expire
+        -- before a worst-phase second edge, while an immediate warm command
+        -- succeeds.  Saving one revolution only for unchanged media preserves
+        -- eject/reinsert safety; the raw change and staleness paths below clear
+        -- the history.  Speed correctness remains a decode/CRC concern.
+        if motor_s = '1' and
+           (idx_motor_cnt >= 2 or
+            (rotation_confirmed = '1' and change_latched = '0' and
+             idx_motor_cnt >= 1)) then
           media_ready <= '1';
         end if;
 
@@ -578,6 +589,9 @@ begin
         else
           if index_edge = '1' then
             idx_gap_cnt <= (others => '0');
+            if idx_motor_cnt >= 1 and change_latched = '0' and change_c = '0' then
+              rotation_confirmed <= '1';
+            end if;
             if idx_motor_cnt < 7 then
               idx_motor_cnt <= idx_motor_cnt + 1;
             end if;
@@ -591,6 +605,7 @@ begin
             media_ready   <= '0';
             idx_motor_cnt <= 0;
             idx_gap_cnt   <= (others => '0');
+            rotation_confirmed <= '0';
           end if;
         end if;
 
@@ -755,16 +770,27 @@ begin
 
               if id_valid = '1' then
                 if op_r = RDOP_READ_ADDRESS then
-                  -- first complete ID is the target (match not required)
-                  m_c <= id_c; m_h <= id_h; m_r <= id_r; m_n <= id_n;
-                  rd_c_o <= id_c; rd_h_o <= id_h; rd_r_o <= id_r; rd_n_o <= id_n;
-                  if id_crc_ok = '1' then
-                    rd_result_o <= RES_OK;            rd_crc_err_o <= '0'; rd_rnf_o <= '0';
-                  else
-                    rd_result_o <= RES_ID_CRC_ERROR;  rd_crc_err_o <= '1'; rd_rnf_o <= '0';
+                  -- Present physical media through the stock 1581 contract:
+                  -- ten sectors numbered 1..10 per surface.  The MEGA65 F011
+                  -- auto-formatter can fit a CRC-valid sector-11 ID before
+                  -- index truncates the following record.  A genuine-ROM
+                  -- rotational model proves that exposing that ID through
+                  -- Read Address can terminate login before any Read Sector.
+                  -- Ignore only out-of-range IDs here; Read Sector already
+                  -- matches requested 1..10 naturally, and decoder diagnostics
+                  -- continue to observe every physical ID.
+                  if id_r >= to_unsigned(1, id_r'length) and
+                     id_r <= to_unsigned(10, id_r'length) then
+                    m_c <= id_c; m_h <= id_h; m_r <= id_r; m_n <= id_n;
+                    rd_c_o <= id_c; rd_h_o <= id_h; rd_r_o <= id_r; rd_n_o <= id_n;
+                    if id_crc_ok = '1' then
+                      rd_result_o <= RES_OK;            rd_crc_err_o <= '0'; rd_rnf_o <= '0';
+                    else
+                      rd_result_o <= RES_ID_CRC_ERROR;  rd_crc_err_o <= '1'; rd_rnf_o <= '0';
+                    end if;
+                    addr_idx <= 0;
+                    rd_st <= RD_ADDR;
                   end if;
-                  addr_idx <= 0;
-                  rd_st <= RD_ADDR;
                 elsif id_c = trk_r then
                   if id_crc_ok = '1' then
                     m_c <= id_c; m_h <= id_h; m_r <= id_r; m_n <= id_n;

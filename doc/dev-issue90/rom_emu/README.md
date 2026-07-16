@@ -46,7 +46,24 @@ CRC-only status -> job error 5, cache invalidated, retry heals (P-C — the
 retry (P-D2); the legacy crc+rnf pair -> silent success with a valid-marked
 stale cache (P-E regression demonstrator); the transfer-loop timing margin
 (P-T); WD unit semantics (P-U); and the shipped-ROM LOST-DATA defect
-(P-D1/P-D3, below).
+(P-D1/P-D3, below). The P-M media-state proofs additionally establish:
+
+- stopped-motor PA1 readiness that lands after the ROM window returns job 03
+  without issuing any WD read command;
+- a one-index resume for a previously confirmed, unchanged medium succeeds
+  with a byte-exact ten-sector fill;
+- independently forced PA7 disk change also returns job 03 without WD reads;
+- the source-derived F011 rotation (`6250` bytes, sector records every `587`
+  bytes, complete sector-11 ID before the truncated tail) exposes Read Address
+  sequence `5,10,11` and returns job 02 before any Read Sector; and
+- hiding only physical Read Address IDs outside `1..10` changes that sequence
+  to `5,10,1` and heals the fill byte-exactly.
+
+`machine.py` keeps the historical simple RA model by default. Set
+`ra_layout='f011'` for the rotational source-derived model. The readiness
+controls (`ready_after_cycles`, `ready_resume_after_cycles`,
+`rotation_confirmed`, `force_ready`, and `force_change`) exist solely to force
+one media-state variable at a time around the genuine ROM.
 
 ## Transfer-loop timing margin (P-T)
 

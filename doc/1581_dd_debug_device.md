@@ -188,6 +188,23 @@ splice DAM was safely ignored. During a failed sector read, `CNT_MATCH_ID` and `
 "target ID never found" from "target ID found, but its data mark was missed." Capability
 bit 7 announces these counters.
 
+### Media-ready restart and physical Read Address compatibility
+
+Cold, changed, or newly enabled media still needs two motor-qualified index
+edges before synthesized `media ready` asserts. Once that same medium has
+completed a two-index qualification, an ordinary motor-off interval preserves
+the proof: if `/DSKCHG` stayed clear, the next motor start reasserts ready after
+the first fresh index. Reset/disable, raw disk change, or index staleness clears
+the history and restores the two-edge rule. This matches the finite PA1 window
+of the genuine 1581 ROM without weakening eject/reinsert detection.
+
+Physical Read Address presents only sector IDs `1..10`. MEGA65 F011 formatting
+can finish a CRC-valid sector-11 ID before index truncates its following record;
+the stock ROM can mis-handle that out-of-range reply during rotational login.
+The decoder and diagnostic counters still observe sector 11, and ordinary Read
+Sector already matches only the requested sector; normalization is confined to
+the physical Read Address result.
+
 ### 2.1 WD-dialogue trace ring (`0x29`, `0x40`–`0x7F`)
 
 The ring records the last 32 operations the WD front end sent to the physical

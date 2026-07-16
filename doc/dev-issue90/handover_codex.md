@@ -412,3 +412,503 @@ captures may increase `CNT_DAM_UNARMED`/`CNT_DRAIN` but must present zero bytes.
 - Do not modify Fable's `HANDOVER.md` or `PLAN.md`.
 - Codex progress belongs in this file and `plan_codex.md`.
 - The maintainer commits; Codex does not commit.
+
+## 2026-07-16 R3 hardware qualification of `ef272ef`
+
+Commit `ef272ef` is the map-v7 build containing DAM-only zero-run
+qualification, full-sector CRC quarantine, and the registered CPU-read
+presentation exclusion. The first cold R3 `LOAD"$",8` failed, but its trace
+did not resemble the earlier false-DAM or LOST failures:
+
+- all five Read Address operations completed without RNF, CRC, LOST, drain,
+  stale-done, busy-command, or runt errors;
+- the final two Read Address results were cylinder 39, sector 6 and then
+  cylinder 39, sector 11;
+- no Read Sector command followed the sector-11 reply; and
+- the 58 trace entries exactly accounted for 48 step events plus five request
+  and five result events.
+
+This localized that attempt above the magnetic decoder: the ROM stopped at a
+Read Address transition rather than losing or corrupting a sector. A genuine
+318045-02 ROM-emulator experiment forced the same sector-6 then sector-11
+sequence. The ROM did not stop; it requested sectors 1 and 2 and then began
+sector reads. Consequently, sector 11 is correlated with the hardware failure
+but is not yet a demonstrated root cause. A faithful rotational F011 track
+model is required before installing an out-of-range-sector workaround.
+
+After a power cycle, re-JTAG, feature re-enable, and disk reinsertion, the same
+build successfully completed `LOAD"$",8`. This is the first unequivocal R3
+proof since introducing the adaptive quantizer that the complete chain works:
+
+`physical disk -> adaptive MFM decoder -> qualified records -> CRC quarantine
+-> WD presentation -> stock 1581 ROM -> IEC -> C64 directory load`
+
+The next `LOAD"SHADES",8,1` returned `FILE NOT FOUND`, with error channel
+`74 DRIVE NOT READY 40 0`. Its map-v7 dump is especially important:
+
+- 80 step events reached a valid, settled cylinder-39 estimate;
+- all 15 controller operations were clean: five Read Address operations and
+  ten Read Sector operations;
+- the last ten sector reads were 3, 4, 5, 6, 7, 8, 9, 10, 1, and 2, i.e. a
+  complete successful directory-track cache fill;
+- `LAST_PRESENT=512`, and LOST, drain, stale-done, busy-command, runt, RNF,
+  CRC, and DAM-miss counters were all zero;
+- all 110 trace entries are explained exactly by 80 steps plus 15 request and
+  15 result entries; there was no physical FDC request after the directory
+  fill; and
+- raw disk change was deasserted, the conditioned change latch was clear, and
+  the head estimate was valid. The live ready bit was low only after the motor
+  had stopped.
+
+Therefore the successful directory load and the subsequent error are
+consistent, not contradictory. The second command failed before submitting a
+physical job. The leading hypothesis is the synthetic `/READY` contract, not
+the decoder: current `media_ready` requires motor-on plus at least two index
+edges, while the stock ROM allows only roughly 0.7 seconds of spin-up before a
+short CIA PA1 readiness sample. Motor ramp plus two revolutions can
+intermittently miss that window. Whether the motor had stopped between the two
+commands is the most valuable next observation. The disk-change path remains a
+secondary possibility, but the successful dump refutes it as a persistent
+regression.
+
+The successful trace materially strengthens the present architecture decision.
+Keep the MiSTer/T65/stock-ROM/IEC upper drive and the full-sector quarantine.
+The end-to-end sector path is now proven on hardware. Diagnose readiness first;
+do not replace the WD presenter or broaden record acceptance merely because
+the later high-level command returned error 74.
+
+## Fable 5 advisory collaboration
+
+The maintainer is also using Fable 5 as an assistant and will relay its replies
+between sessions. At least for the present phase, Codex leads the investigation:
+Codex owns the integrated evidence model, execution order, and final technical
+recommendation; Fable is an adversarial reviewer and independent source-code
+analyst. Treat its work as team input, neither as an authority to follow
+blindly nor as a competing plan. Preserve disagreements until an experiment
+resolves them.
+
+Fable's current analysis is in the maintainer-owned, currently untracked
+`doc/dev-issue90/f011_reference_notes.md`. Do not edit that file. Its most
+valuable source-derived findings, which Codex independently checked against
+the pinned MEGA65 F011 RTL, are:
+
+- the MEGA65 F011 succeeds with a permissive fixed-window quantizer, a
+  four-gap A1 detector, unconditional parser re-anchoring on any sync, and
+  CRC/matching-ID gating that prevents acquired junk from reaching software;
+- the F011 acceptance window is substantially broader than our present
+  adaptive 1.5x-to-4.5x window and has no equivalent adaptive deadbands;
+- its formatter has no explicit ten-sector stop: it loops until index, so a
+  complete sector-11 ID followed by a truncated record at the index splice is
+  plausible and explains roughly 10.9 IDs per revolution; and
+- the architectural principle is sound: make acquisition tolerant, re-anchor
+  quickly, and make false acquisitions harmless through semantic checks, CRC,
+  and retry. Our ID arm plus full-sector quarantine is converging on that
+  principle.
+
+Codex's current qualifications to Fable's conclusions must be retained for its
+next reply:
+
+1. Fable called sector 11 the confirmed or prime root cause too strongly. It
+   is a real correlation, but the genuine-ROM forced-sequence experiment
+   recovered from sector 11. Reproduce the actual F011 rotational layout and
+   ready inputs before deciding.
+2. The diagnostic stored CRC value `0x06AA` must not be paired with the final
+   sector-11 result. That diagnostic tap updates continuously: `0x06AA` is the
+   cylinder-39/head-0/sector-7/size-2 ID CRC, whereas the sector-11 ID CRC is
+   `0x43C7`. The later successful dump similarly retains `0x53F9` (sector 4)
+   while the last controller CHRN is sector 2. The controller's clean result
+   proves a valid sector-11 ID without that tap.
+3. Absence of a software CRC storm does not prove the ROM accepted and
+   processed the final reply; it may have stopped on that reply.
+4. Disk-change was not stuck in the successful session, so it is not presently
+   a demonstrated systematic regression.
+5. Decoder diagnostics such as gap-error totals continue outside useful motor
+   intervals and must not be treated as exact per-revolution media statistics.
+6. The new successful directory read proves the production sector architecture
+   before any proposed F011-style simplification. The immediate problem is the
+   readiness/login boundary, while a true-F011-window and any-sync-reanchor A/B
+   remain promising controlled experiments.
+
+That response was subsequently delivered to Fable; its reply is captured in
+the next section. A physical-Read-Address compatibility rule that hides sectors
+outside 1..10 remains a possible normalization for stock 1581 media, but only
+after the faithful ROM/F011 experiment. Read Sector already naturally selects
+requested sectors 1..10, so do not generalize such a rule to every decoder
+path.
+
+No RTL or testbench was changed during this analysis round.
+
+## Fable 5 response: corrections resolved, media-state hypothesis added
+
+Fable re-read Codex's analysis and updated
+`doc/dev-issue90/f011_reference_notes.md` to remove the inherited errors. It
+accepts the following as resolved factual corrections:
+
+- `ID_STORED_CRC` is free-running and cannot be paired with the final
+  operation's CHRN result;
+- `CNT_LOST=0` proves timely consumption of each presented byte that had a
+  successor, but cannot show whether the final byte of the final reply was
+  consumed or acted upon;
+- the dump does not prove that the ROM accepted its final Read Address reply;
+  and
+- sector 11 is correlated with the first failure, not established as its
+  cause. The forced sector-6/sector-11 genuine-ROM control remains decisive
+  against treating that correlation as a verdict.
+
+Fable agrees that the second failure is best explained by the synthetic PA1
+`/READY` gate and accepts the current plan ordering. It adds a useful unifying
+hypothesis: both failed attempts may have died at stock-DOS media-validation
+gates while the WD/controller was silent. In the second failure, error 74 and
+the absence of new physical operations identify PA1. In the first failure,
+PA7 `/DSKCHG` was asserted for the entire captured session; therefore the
+critical transition might have been a PA7 validation gate, with the observed
+sector-11 reply merely a passenger. This is plausible, not yet proven, because
+the exact user-visible result of the first failure is not recorded.
+
+The genuine-ROM experiment should now adjudicate three conditions
+independently rather than being designed only to reproduce R=11:
+
+1. a rotationally faithful F011 track containing sectors 1..10, the complete
+   sector-11 ID, the truncated following record, TIB, and index splice, with
+   PA1 and PA7 healthy;
+2. a normal ten-sector control with a PA1 ready dip at the DOS validation
+   point; and
+3. a normal ten-sector control with PA7 disk change stuck asserted.
+
+Run combinations where necessary, but keep one variable changed at a time for
+the causal verdicts. This one harness can show the exact ROM branch and WD
+silence produced by each condition. Only after that result should a sector-11
+normalization or media-state RTL change enter production.
+
+Fable also proposes treating readiness and change history as one design
+problem. If no `/DSKCHG` assertion has occurred since a confirmed rotation,
+the same medium should still be present, potentially allowing `media_ready` to
+reassert after the first index edge following motor-on instead of waiting for
+two. This could recover one full revolution of the ROM's spin-up allowance
+without deliberately weakening eject detection. It is a promising invariant,
+not an approved fix: verify power-up state, CDC/sampling, raw-pin polarity,
+remove/reinsert behavior, and latch-clear semantics first.
+
+The successful dump's `GAP_MIN=126` is also directionally useful: at
+`EST=96.625`, our lower adaptive acceptance edge is about 145 cycles, whereas
+the F011-style fixed window reaches roughly 100. It proves that such a short
+gap occurred in the observed session, but the present diagnostic is not
+motor/record-qualified. Do not claim that a real record mark was rejected from
+this value alone. It strengthens the case for the true-F011-window A/B and for
+a motor-qualified raw-gap trace around the splice; it does not move that work
+ahead of PA1/PA7 diagnosis.
+
+Three maintainer-only facts must be requested at the start of the next session:
+
+1. What was the exact visible outcome of the first failed `LOAD"$",8`: error
+   74 `DRIVE NOT READY`, `FILE NOT FOUND`, a hang, or something else?
+2. Before the `LOAD"SHADES",8,1` failure, had the motor audibly stopped, and
+   approximately how long was the pause after the successful directory load?
+3. In the first failed session, was the disk already inserted at power-on, or
+   inserted afterward?
+
+These answers are high-value discriminators but do not block building the
+three-condition ROM-emulator harness. The consolidated priority remains:
+media-state evidence and faithful ROM modeling first, then the true-F011
+availability A/B, then the smallest evidence-backed RTL change.
+
+Codex remains technical lead for the present collaboration. Fable's role is
+independent review and source-derived challenge; the maintainer relays results
+between them. The next Codex instance should re-read the now-corrected Fable
+note rather than relying only on the older summary above.
+
+No RTL or testbench was changed in this final handoff update.
+
+## 2026-07-16 hardware matrix start: unexpected mechanism noise
+
+The maintainer clarified the outstanding observations before beginning the
+controlled matrix:
+
+- the first failed `LOAD"$",8` ended promptly with the BASIC `FILE NOT FOUND`
+  error after visible loading activity; it did not hang, and the drive error
+  channel was not read in that attempt;
+- the later `LOAD"SHADES",8,1` was issued roughly one minute after the
+  successful directory load, after the motor had audibly stopped; and
+- the insertion timing of the original first failed session is no longer
+  known.
+
+For the first new cold condition, "cold" meant power-cycle the MEGA65, JTAG-load
+`ef272ef`, then enable `Use internal 1581`; the disk had remained inserted since
+power-on. Enabling the option caused roughly three seconds of unfamiliar heavy
+clicking/mechanical noise, so the maintainer took a map-v7 dump before issuing a
+C64 drive command. Its important facts are:
+
+- physical mode was active but motor-off at the snapshot (`LIVE_OUT=0x0079`,
+  `CTRL_STATE=0x0042`); raw/conditioned disk change and the sticky change latch
+  were all clear;
+- exactly two completed step events occurred, and the entire trace consists of
+  `0x1001/0x0000` followed by `0x1100/0x0000` (one inward and one outward step);
+- the mechanism produced 20 qualified index edges but no WD read operation;
+- only 22 IDs decoded and `CNT_GAPERR=0x0001B032` during that startup interval,
+  an unusually poor availability sample that must not yet be treated as a
+  steady-state per-revolution statistic; and
+- the physical path remains structurally read-only: the R3 top level hard-ties
+  both `f_wgate_o` and `f_wdata_o` inactive. No magnetic write or erase was
+  possible.
+
+The maintainer then tried `LOAD"$",8`, heard the noise again, and ejected the
+disk for safety before completion. The command promptly ended with BASIC `FILE
+NOT FOUND`; the error channel was `74 DRIVE NOT READY 0 0`. The post-ejection
+dump has raw and conditioned disk change asserted and the sticky latch set
+(`LIVE_IN=0x022F`, `CTRL_STATE=0x0052`). It still has exactly two steps and zero
+read operations. Therefore the second dump cannot adjudicate the intended PA1
+or PA7 condition: ejection itself makes not-ready unavoidable. It does prove
+that the noise during this command was not accompanied by additional completed
+head-step requests.
+
+Disk-in testing was paused. The next observation should separate mechanism
+startup noise from disk/spindle noise without risking the problem medium; do
+not interpret this aborted attempt as a pass or failure of the planned cold
+matrix. No RTL or testbench was changed.
+
+The requested empty-drive activation baseline reproduces the clicking and
+identifies it unambiguously as head stepping. `CNT_STEP=10`, `TRC_CNT=10`, and
+the complete trace is five repetitions of:
+
+`0x1001/0x0000` (one inward step to estimate 1), then
+`0x1100/0x0000` (one outward step to estimate 0).
+
+There are no read request/result entries and `CNT_READOP=0`. At the snapshot
+the motor is off, physical mode remains enabled, raw and conditioned disk
+change are asserted, and the sticky change latch is set (`LIVE_IN=0x022F`,
+`CTRL_STATE=0x0052`). This is a bounded sequence of ordinary 4 us STEP pulses,
+not a runaway restore and not a write. The leading explanation is stock-ROM
+media-change handling repeatedly using an in/out step pair while the empty
+mechanism continues to assert `/DSKCHG`; confirm that dialogue in the ROM model.
+
+One datum requires provenance clarification before treating this as a clean
+empty-drive reset baseline: the same dump contains 24 qualified index edges,
+seven decoded IDs, CRC-good ID/data flags, and `ID_STORED_CRC=0x43C7` (the known
+F011 cylinder-39 sector-11 ID CRC). Those values cannot have been newly decoded
+from an empty mechanism. Establish whether the disk was absent for the entire
+FPGA configuration and whether a full reconfiguration/reset actually preceded
+the dump; otherwise regard the magnetic counters as retained from an earlier
+disk-present interval. The ten-entry step trace itself is internally complete
+and sufficient to identify the clicking.
+
+## Hardware control recovered with replacement DD medium
+
+The previously known-good native MEGA65/C65 core subsequently reproduced the
+clicking on the old medium and `DIR` returned `27, READ ERROR,40,00`. This moved
+that immediate symptom outside the issue-90 RTL boundary. The maintainer then
+inserted a different genuine DD disk, formatted it successfully with the native
+MEGA65, and copied the complete reference `~/Downloads/C64.D81` image to it.
+Thus the mechanism, native F011 path, and write/read path are operational; the
+old approximately 30-year-old new-old-stock medium (or its seating/clamp) was
+the failed variable.
+
+Do not claim that issue-90 reads magnetically trashed the old disk: the tested
+bitstream physically cannot assert WGATE. Repeated handling or ordinary media
+age may have exposed a mechanical or magnetic weakness, but causation is not
+available from the evidence. The replacement is a particularly useful test
+medium because it is genuine DD media freshly formatted and written by the
+native F011 from the same reference image.
+
+Resume the PA1/PA7 hardware matrix using only this replacement disk. Preserve
+each failed state until the map-v7 dump is captured; do not eject before the
+dump. In parallel, the next software work remains the genuine-ROM
+three-condition model (faithful F011 end-of-track, PA1 dip, and PA7 assertion),
+followed by true-F011-window/any-sync A/B experiments. No production RTL change
+is justified before those results.
+
+## Manual RPM pre-flight rejected; clean insertion baseline captured
+
+The proposed manual Step 0 (enter QNICE and sample index period while the brief
+automatic motor interval is still active) is not operationally achievable: the
+motor stops before the maintainer can close the OSM, enter the QNICE monitor,
+select the diagnostic device, and read the words. A period sampled after motor
+stop is not a trustworthy steady-state RPM gate. Remove this as a required
+manual test rather than turning an inaccessible timing point into ceremony.
+
+A fresh replacement-disk session nevertheless produced a decisive static
+baseline. The drive was empty through power-on, JTAG load, feature enable and
+the bounded startup wiggle. The first full dump is genuinely clean: ten
+alternating step events and zero index, ID, CRC, gap, A1, or read-operation
+activity. The replacement disk was then inserted while the motor was off; a
+second dump was bit-for-bit identical. In particular, raw and conditioned
+`/DSKCHG` and the sticky latch remain asserted (`LIVE_IN=0x022F`,
+`CTRL_STATE=0x0052`) after insertion alone. This confirms the mechanism
+contract: insertion does not clear disk change; a subsequent physical STEP
+must clear it. It also resolves the earlier nominally empty dump with retained
+sector-11/CRC evidence as a contaminated, non-clean-reset baseline.
+
+This live session already instantiates hardware-matrix condition 4 (enable
+empty, let the wiggle finish, then insert). The next action is to leave the disk
+inserted, exit QNICE, run `LOAD"$",8`, and dump before any eject or menu toggle.
+
+## Replacement-disk matrix test 1: cold directory plus warm SHADES passes
+
+The first complete replacement-disk trial followed the requested condition 1:
+cold directory access followed immediately by `LOAD"SHADES",8,1` while the
+motor was still warm. Both succeeded. Map v7 is internally exact:
+
+- steady index period is `0x00985053` = 199.641 ms and pulse width is
+  `0x0001CA82` = 2.348 ms;
+- 246 qualified revolutions produced 2,698 decoded IDs = 10.97 IDs/revolution,
+  the expected F011 ten sectors plus truncated sector-11 structure;
+- 56 read operations completed with zero RNF, CRC error, cancel, LOST, drain,
+  stale completion, busy-command, runt, or DAM-miss events;
+- 40 requested IDs matched and `LAST_PRESENT=512`; the final result is clean;
+- `TRC_CNT=137` equals exactly 25 completed steps plus two events for each of
+  the 56 read operations, so no trace event is unexplained;
+- raw/conditioned/sticky disk change are clear, FIFO occupancy is zero, and the
+  final estimate is healthy at `0x063A` = 99.625 cycles; and
+- all 2,698 FE marks and 2,698 DAM marks were accepted, with no span reject or
+  unarmed-DAM event. `GAP_MIN=126` repeats on a clean successful medium/session,
+  strengthening its value as an availability A/B datum without proving that a
+  record mark used that minimum.
+
+This re-proves the complete physical decoder, CRC quarantine, WD/ROM/IEC path
+on a fresh F011-formatted medium and establishes the warm-motor control. The
+next hardware trial must change only one variable: after a fresh successful
+directory load, wait for the motor to stop plus approximately one second before
+issuing SHADES.
+
+## Replacement-disk matrix test 2: stopped-motor SHADES proves PA1 failure
+
+The controlled stopped-motor trial is the causal complement to test 1.
+`LOAD"$",8` succeeded. After the motor audibly stopped and one additional
+second elapsed, `LOAD"SHADES",8,1` displayed `FILE NOT FOUND`; the error channel
+was `74 DRIVE NOT READY 40 0`. The dump proves the failure occurred before the
+WD/controller boundary:
+
+- exactly 15 read operations completed, comprising the successful directory
+  login/fill; ten target IDs matched and `LAST_PRESENT=512`;
+- every completed operation is clean: zero RNF, CRC, LOST, drain, stale,
+  busy-command, runt, unarmed-DAM, or DAM-miss events;
+- `TRC_CNT=134` equals exactly 104 steps plus two events for each of 15
+  operations; there is no request/result pair for SHADES;
+- the final directory result is clean (`C/R=39/4`, size code 2), the head is
+  valid and settled at cylinder 39, disk change is clear, and FIFO level is
+  zero;
+- rotation during the directory was healthy: `0x00984EC5` = 199.633 ms with a
+  2.477-ms index width; 1,295 IDs over 117 revolutions and estimate `0x063A`
+  show normal media/decode behavior; and
+- at the post-failure snapshot motor and synthesized ready are both low, as
+  expected after the DOS has already rejected the command.
+
+Together with test 1, this changes one variable only:
+
+`warm motor -> SHADES succeeds with physical traffic`
+
+`stopped motor -> error 74 with zero new physical traffic`
+
+The synthetic PA1 `/READY` spin-up contract is therefore hardware-proven as
+the immediate bug. Further tests 3/4 on the unchanged bitstream cannot improve
+the causal verdict and are deferred to qualification of the repaired build.
+Proceed with the genuine-ROM PA1 model, retain PA7/F011 one-variable controls,
+then implement the smallest safe readiness change.
+
+## Genuine-ROM closure: PA1 and F011 R=11 are independent
+
+The emulator now has four explicit media controls (`ready_after_cycles`,
+`ready_resume_after_cycles`, `rotation_confirmed`, and forced PA1/PA7 state)
+plus a source-derived rotational F011 layout. The layout is 6,250 DD bytes per
+revolution; ID ends are spaced 587 bytes apart, so all ten stock sectors and a
+CRC-valid R=11 ID fit before index truncates the following data record.
+
+Five permanent P-M proofs run against the genuine 318045-02 ROM:
+
+1. Late PA1 after motor restart returns job 03 with zero WD read commands.
+2. The same state with confirmed-medium one-index readiness returns job 00,
+   issues ten Read Sector commands and fills the cache byte-exactly.
+3. Independently forced PA7 returns job 03 with zero WD reads and the expected
+   two-step disk-change wiggle.
+4. Faithful F011 rotation from the original seek context returns Read Address
+   sectors `[5,10,11]`, then job 02 with zero Read Sector commands.
+5. Hiding only out-of-range physical Read Address IDs changes the sequence to
+   `[5,10,1]` and heals the job byte-exactly.
+
+This is the controlled one-variable evidence that was previously missing.
+Failure 2 is PA1 on hardware and in the ROM. The R=11 sequence is causal in the
+faithful ROM/F011 model. Neither result calls for detecting a disk format:
+stock and F011 media stay on the same physical decoder path.
+
+## Implemented minimum repair
+
+`CORE/vhdl/physical_1581/physical_1581_controller.vhd` now contains two small,
+independent compatibility rules:
+
+- `rotation_confirmed` remembers that the unchanged medium previously passed
+  a two-index qualification. Ordinary motor-off preserves it; the next start
+  asserts ready after one fresh index. Reset/disable, raw `/DSKCHG`, or index
+  staleness while motor is commanded clears it. Cold, changed and newly enabled
+  media still requires two indexes. Type-I handling is untouched.
+- Physical `RDOP_READ_ADDRESS` accepts only R=1..10. The decoder still sees and
+  counts every ID, including F011 R=11; Read Sector remains unchanged and
+  naturally matches the requested 1..10 sector.
+
+The new
+`CORE/vhdl/test/tb_physical_1581_controller/tb_physical_1581_media_contract.vhd`
+proves cold two-edge readiness, confirmed-medium one-edge restart, stale-index
+invalidation, raw disk-change invalidation plus fresh two-edge qualification,
+and a CRC-valid R11 followed by R1 returning R1 cleanly.
+
+## Verification and remaining hardware gate
+
+Every software regression passes:
+
+- focused media-contract test;
+- complete closed-loop controller/mechanism loop, including cold ready at
+  398.2 ms, Type-I, byte-exact cylinder 0/1 reads, Read Address, Verify, RNF,
+  pending requests, abort and recovery;
+- CRC, canonical MFM decoder, conditioned inputs, async FIFO, diagnostic map,
+  FIFO-overflow quarantine and standalone mechanism tests;
+- seven-way 55-row quantizer A/B matrix (`ALL ACCEPTANCE CRITERIA MET`);
+- SystemVerilog `tb_fdc1772_physical` delivery dialogue; and
+- genuine-ROM `run_proofs.py` (`RESULT: ALL PROOFS PASS`).
+
+Fable's three readiness cautions are valid release criteria and are covered as
+far as simulation can cover them. Eject/change and index staleness both clear
+the history; cold qualification remains two-index; Type-I is unchanged and
+passes the long loop. Timing remains the one necessarily physical gate. The
+fresh disk measures 199.63--199.64 ms/revolution, so one-index resume saves one
+full revolution. The ROM model last samples PA1 at about 0.810 s and a 0.750-s
+one-index stand-in succeeds, but the modeled delays are intentionally abstract
+and cannot guarantee real spindle acceleration.
+
+Next repaired-R3 qualification, using the fresh DD disk and no intermediate
+eject before each dump:
+
+1. Fresh power/JTAG session, enable internal 1581, run `LOAD"$",8`; it must
+   pass. Immediately run `LOAD"SHADES",8,1`; it must pass. This rechecks the
+   cold and warm controls.
+2. In the same session let the motor stop, wait one additional second, then run
+   `LOAD"SHADES",8,1`; it must now pass. Dump map v7 immediately. This is the
+   direct repaired PA1 A/B.
+3. Eject and reinsert, then run `LOAD"$",8`; it must pass and must not reuse
+   stale one-index confidence. Dump map v7 before another eject. This qualifies
+   `/DSKCHG` invalidation and the restored cold two-index path.
+4. Repeat directory plus SHADES once after a fresh JTAG/power session with the
+   disk already inserted. This covers the original cold insertion class and
+   gives the R=11 normalization multiple natural rotational opportunities.
+
+Keep diagnostic map v7. No new counters are needed. The earlier broad-F011
+fixed-window / unconditional-any-sync idea is deferred to marginal-media
+research: fresh hardware already proves the production decoder, both current
+failures have independent causes, and the broad F011 window would accept the
+measured 126-cycle artifact that production deliberately rejects.
+
+## Qualification of Fable's secondary observations
+
+Fable's causal PA1 verdict, R=11 model interpretation and three repair gates
+are adopted. Three secondary claims need narrower wording in future summaries:
+
+- The old working medium's roughly 420 gap errors/revolution versus 17.6 in
+  fresh test 2 (22.9 in fresh test 1) is strong evidence that the old disk was
+  a marginal stress medium. The counters cannot distinguish weak magnetization
+  from hub/shell-induced timing instability, so do not call the failure
+  specifically magnetic or specifically mechanical.
+- Exact `CNT_A1_CAND = 3 * CNT_A1_TRAIN` holds for fresh test 2
+  (`7776 = 3 * 2592`). Fresh test 1 has five additional candidates
+  (`16565` versus `3 * 5520 = 16560`). Both sessions have zero span rejects
+  and clean records, so fresh media is dramatically cleaner; "zero junk on
+  every fresh session" is nevertheless too broad.
+- The head estimate is anchored and valid in the stopped-motor test-2 flow.
+  That resolves the cosmetic concern for this normal restore/seek path, not for
+  every possible enable/insertion history.

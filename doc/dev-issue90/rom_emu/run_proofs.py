@@ -26,7 +26,7 @@
 #         Run LAST: it leaves the machine unusable.
 #
 # Usage: python3 run_proofs.py   (any CWD; ROM is found automatically)
-import sys, os
+import sys, os, copy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import machine as machmod
 
@@ -78,6 +78,14 @@ def run_until_idle(m, maxsteps, label):
           % (label, m.cpu.pc, ['%02X' % m.ram[2+i] for i in range(9)]))
     return False
 
+def run_until_motor_off(m, maxsteps, label):
+    for chunk in range(maxsteps // 10000):
+        m.run(10000)
+        if not m.motor() and not m.wd_busy():
+            return True
+    print('!! %s: motor did not stop; pc=$%04X' % (label, m.cpu.pc))
+    return False
+
 def post_job(m, job, t, s, bufpage=3):
     m.ram[0x0B] = t; m.ram[0x0C] = s
     m.ram[0x01F1] = bufpage
@@ -91,6 +99,12 @@ def wd_cmds(m, mark):
 
 def rs_cmds(m, mark):
     return [c for c in wd_cmds(m, mark) if (c[1] >> 4) in (0x8, 0x9)]
+
+def media_cmds(m, mark):
+    return [c for c in wd_cmds(m, mark) if (c[1] >> 4) in (0x8, 0x9, 0xC)]
+
+def ra_sectors(m, mark):
+    return [t[3] for t in m.trace[mark:] if t[0] == 'RA']
 
 def cache_expected(m):
     # cache $0C00-$1FFF + 256*logical-in-side holds cyl39/side0 = T40 S0..S19
@@ -106,6 +120,12 @@ check('P-A register self-test + boot to idle',
       0xB0F0 <= m.cpu.pc <= 0xB135 and (m.ram[0x79] & 0x40) == 0,
       'pc=$%04X (idle loop $B0F0-$B135), $79 bit6 (blink)=%d, $02AB=%02X'
       % (m.cpu.pc, (m.ram[0x79] >> 6) & 1, m.ram[0x02AB]))
+
+# Preserve one genuine-ROM post-boot state for the independent media-state
+# proofs below.  deepcopy correctly rebinds the CPU read/write callbacks to the
+# cloned Machine, avoiding four additional multi-million-step ROM boots.
+media_base = copy.deepcopy(m)
+run_until_motor_off(media_base, 7_000_000, 'media-base motor stop')
 
 # ================= P-B: cold directory-track fill =================
 cold_cache(m)
@@ -126,6 +146,93 @@ check('P-B paced fill end-to-end, cache byte-exact, zero LOST',
       'result=%02X rs=%d exact=%s lost=%d' % (res, len(rs), exact, m.dbg['lost']))
 pb_maxlat = m.dbg['max_consume_lat']
 pb_tail = m.fin_tail
+
+# ================= P-M: ROM-visible media-state causality =================
+# Scaled readiness timing: 3.0M cycles represents a worst-phase two-index
+# reacquisition that misses the ROM's finite spin-up window; 1.5M represents
+# the same already-confirmed medium becoming ready after the first fresh index.
+# The absolute scale is a harness stand-in; the one-index difference and the
+# genuine ROM branch/WD-command history are the contract under test.
+pm1 = copy.deepcopy(media_base)
+pm1.ready_after_cycles = 3_000_000
+pm1.ready_resume_after_cycles = None
+pm1.media_log = True
+cold_cache(pm1)
+mark = len(pm1.trace)
+post_job(pm1, 0x80, 40, 3)
+run_until_idle(pm1, 4_000_000, 'P-M1 PA1 late')
+pm1_media = media_cmds(pm1, mark)
+pm1_max_age = max((s[2] for s in pm1.media_samples), default=0)
+check('P-M1 stopped motor + late PA1 -> job 03, zero WD read commands',
+      pm1.ram[2] == 0x03 and len(pm1_media) == 0,
+      'result=%02X media_cmds=%d max_motor_age=%d'
+      % (pm1.ram[2], len(pm1_media), pm1_max_age))
+
+pm2 = copy.deepcopy(media_base)
+pm2.ready_after_cycles = 3_000_000
+pm2.ready_resume_after_cycles = 1_500_000
+pm2.rotation_confirmed = True
+cold_cache(pm2)
+mark = len(pm2.trace)
+post_job(pm2, 0x80, 40, 3)
+run_until_idle(pm2, 4_000_000, 'P-M2 one-index resume')
+pm2_rs = rs_cmds(pm2, mark)
+pm2_exact = bytes(pm2.ram[0x0C00:0x2000]) == cache_expected(pm2)
+check('P-M2 confirmed unchanged medium + first-index resume succeeds',
+      pm2.ram[2] < 2 and len(pm2_rs) == 10 and pm2_exact,
+      'result=%02X rs=%d exact=%s'
+      % (pm2.ram[2], len(pm2_rs), pm2_exact))
+
+pm3 = copy.deepcopy(media_base)
+pm3.force_change = True
+pm3.media_log = True
+cold_cache(pm3)
+mark = len(pm3.trace)
+post_job(pm3, 0x80, 40, 3)
+run_until_idle(pm3, 4_000_000, 'P-M3 PA7 stuck')
+pm3_media = media_cmds(pm3, mark)
+check('P-M3 stuck PA7 independently -> job 03, zero WD read commands',
+      pm3.ram[2] == 0x03 and len(pm3_media) == 0,
+      'result=%02X media_cmds=%d steps=%d'
+      % (pm3.ram[2], len(pm3_media),
+         len([t for t in pm3.trace[mark:] if t[0] == 'STEP'])))
+
+# Source-derived F011 rotational layout.  Starting from cylinder 3 reproduces
+# the genuine login context: one RA locates the resting cylinder, 36 steps seek
+# to cylinder 39, and subsequent RAs can encounter the complete sector-11 ID.
+pm4 = copy.deepcopy(media_base)
+pm4.head = 3
+pm4.wd_track = 0
+pm4.ra_layout = 'f011'
+pm4.f011_phase_origin = 0
+cold_cache(pm4)
+mark = len(pm4.trace)
+post_job(pm4, 0x80, 40, 3)
+run_until_idle(pm4, 4_000_000, 'P-M4 F011 sector 11')
+pm4_ra = ra_sectors(pm4, mark)
+pm4_rs = rs_cmds(pm4, mark)
+check('P-M4 faithful F011 layout exposes sector 11 and stops before Read Sector',
+      pm4.ram[2] == 0x02 and pm4_ra[-3:] == [5, 10, 11] and len(pm4_rs) == 0,
+      'result=%02X RA=%s rs=%d' % (pm4.ram[2], pm4_ra, len(pm4_rs)))
+
+pm5 = copy.deepcopy(media_base)
+pm5.head = 3
+pm5.wd_track = 0
+pm5.ra_layout = 'f011'
+pm5.f011_phase_origin = 0
+pm5.f011_id_end_bytes = pm5.f011_id_end_bytes[:10]  # physical RA normalization
+cold_cache(pm5)
+mark = len(pm5.trace)
+post_job(pm5, 0x80, 40, 3)
+run_until_idle(pm5, 4_000_000, 'P-M5 normalized F011 RA')
+pm5_ra = ra_sectors(pm5, mark)
+pm5_rs = rs_cmds(pm5, mark)
+pm5_exact = bytes(pm5.ram[0x0C00:0x2000]) == cache_expected(pm5)
+check('P-M5 hiding R outside 1..10 heals F011 login byte-exact',
+      pm5.ram[2] < 2 and pm5_ra[-3:] == [5, 10, 1] and
+      len(pm5_rs) == 10 and pm5_exact,
+      'result=%02X RA=%s rs=%d exact=%s'
+      % (pm5.ram[2], pm5_ra, len(pm5_rs), pm5_exact))
 
 # ================= P-C: truncated sector, CRC-only status =================
 cold_cache(m)
