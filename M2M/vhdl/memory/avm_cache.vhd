@@ -111,7 +111,7 @@ begin
    assert G_CACHE_SIZE >= 2 and G_CACHE_SIZE mod 2 = 0
       report "G_CACHE_SIZE must be even and >= 2"
       severity failure;
-   assert G_CACHE_SIZE < 2 ** G_ADDRESS_SIZE
+   assert real(G_CACHE_SIZE) < 2.0 ** G_ADDRESS_SIZE
       report "G_CACHE_SIZE must be < 2**G_ADDRESS_SIZE"
       severity failure;
    assert G_CACHE_SIZE < 2 ** G_BURST_BITS
@@ -325,7 +325,8 @@ begin
                      -- ensures the slide fires on the very next cycle
                      -- instead, once the buffer is fully committed.
                      --------------------------------------------------------
-                     if unsigned(cache_offset_s) >= G_CACHE_SIZE / 2 - 1 then
+                     if unsigned(cache_offset_s) >= G_CACHE_SIZE / 2 - 1
+                        and s_avm_byteenable_i(G_DATA_SIZE / 8 - 1) = '1' then
                         -- Slide the window: shift the upper half into the lower half
                         cache_data(0 to G_CACHE_SIZE / 2 - 1) <= cache_data(G_CACHE_SIZE / 2 to G_CACHE_SIZE - 1);
                         -- Advance the base address by half the buffer size
