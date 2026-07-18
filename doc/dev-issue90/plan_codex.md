@@ -104,9 +104,15 @@ separate from Fable's `PLAN.md`.
     55-row A/B matrix, physical controller/FIFO benches, SystemVerilog WD
     dialogue bench including the short-select collision, ROM proofs, lint/
     compile checks and `git diff --check`.
-22. **TODO — R3 qualification.** Synthesize the repaired candidate, cold boot,
-    run `LOAD"$",8` and program loads, then inspect map-v7 counters. Success
-    requires correct data plus zero LOST, not merely a clean WD completion.
+22. **DONE — R3 qualification.** The final `bdd457b` candidate passes cold,
+    warm, varied stopped-motor, eject/reinsert and disk-preinserted JTAG flows
+    with directory and program loads, plus a clean physical/IEC wildcard-load
+    transaction while SHADES continued SID playback. Starting the newly loaded
+    game in that contaminated application state crashed, but reset followed by
+    a no-SID reload/start ran normally, isolating application memory/IRQ
+    interference rather than a drive defect. Every final map-v7 dump has exact
+    trace accounting, `LAST_PRESENT=512`, and zero LOST/RNF/CRC/delivery
+    failures.
 
 ## 2026-07-14 checkpoint 1
 
@@ -356,8 +362,8 @@ separate from Fable's `PLAN.md`.
     `RA=[5,10,11]`, job 02 and zero sector reads becomes `RA=[5,10,1]`, job 00,
     ten sector reads and a byte-exact fill. Normalization is confined to
     physical Read Address; Read Sector and decoder diagnostics are unchanged.
-29. **DONE in refined RTL/simulation; another R3 rebuild and hardware
-    qualification are required.** Implement the
+29. **DONE in refined RTL/simulation and all prescribed R3 hardware classes.**
+    Implement the
     change-qualified one-index resume and physical Read Address R=1..10 filter.
     The first rebuilt candidate passed one stopped-motor restart, then failed a
     later same-session restart before issuing any physical request. The cause
@@ -365,9 +371,12 @@ separate from Fable's `PLAN.md`.
     remembered rotation before a slow first spin-up index arrived. Preserve
     history until the current motor-on interval has produced at least one
     index; raw `/DSKCHG` remains authoritative before that edge. All impacted
-    controller, overflow/quarantine and genuine-ROM regressions pass. Rebuild,
-    repeat stopped-motor starts, then qualify eject/reinsert and the original
-    preinserted-cold class. Map v7 is retained.
+    controller, overflow/quarantine and genuine-ROM regressions pass. The
+    final `bdd457b` R3 build passes repeated unchanged-media restarts after
+    short, 30-second and minute-scale pauses, the load-bearing real `/DSKCHG`
+    eject/reinsert flow, and the original disk-preinserted cold power/JTAG
+    class with directory plus immediate SHADES. A concurrent SID-playback plus
+    IEC wildcard-load stress also passes. Map v7 is retained.
 
 No RTL or testbench was changed during checkpoints 8 through 10.
 
@@ -598,3 +607,97 @@ No RTL or testbench was changed during checkpoint 11.
   Read Address, Verify, RNF, pending delivery, change abort and recovery. The
   tiny-FIFO overflow bench also passes CRC-only quarantine with RNF clear. The
   refinement is ready for commit and a second R3 build.
+
+## 2026-07-18 checkpoint 21: refined varied-pause R3 restarts pass
+
+- The second R3 bitstream passed the prescribed disk-out power/JTAG/enable
+  start, insertion, directory load, and all unchanged-media stopped-motor file
+  restarts after short, approximately 30-second and minute-scale pauses.
+- Map v7 proves real successful media traffic rather than a cached/DOS-only
+  outcome: 154 completed reads, 120 requested-ID matches, final clean
+  `C/R=41/7`, and `LAST_PRESENT=512`. The newest trace contains a complete
+  clean cylinder-41 sector sequence `8,9,10,1..7` for C64ANABALT.
+- Accounting is exact: `TRC_CNT=372 = 64 steps + 2 * 154 reads`. There are zero
+  RNF, CRC, cancel, disk-change, LOST, drain, stale-completion, busy-command,
+  runt or DAM-miss events.
+- Rotation and decoding are healthy: 632 raw and 632 motor-qualified indexes,
+  `IDX_PERIOD=0x00985257` = 199.651 ms, 6,955 decoded IDs and about 21.5 gap
+  errors/revolution. `EST=0x063C` = 99.75 cycles.
+- Fifteen complete-A1 span rejects, 71 candidates beyond exactly three per
+  qualified train, and one unarmed DAM are benign splice/junk observations:
+  all requested records completed cleanly and no DAM was missed.
+- This closes fast and slow same-medium restart timing on hardware. Continue
+  in the same FPGA session with the load-bearing motor-off eject/reinsert test,
+  dumping before a second eject; then run the disk-preinserted power/JTAG cold
+  case with directory plus immediate SHADES.
+
+## 2026-07-18 checkpoint 22: eject/reinsert authority passes on hardware
+
+- In the unchanged FPGA session, the maintainer waited for motor-off, ejected,
+  waited, reinserted, and successfully ran `LOAD"$",8`; the dump was taken
+  before another eject.
+- Against checkpoint 21, `CNT_CHANGE` rose exactly once from 0 to 1, proving
+  the physical eject asserted `/DSKCHG`. At the final snapshot raw,
+  conditioned and sticky change state are clear, so the mechanical/DOS
+  revalidation completed.
+- The operation delta is exact: steps 64 -> 68, reads 154 -> 169 and trace
+  count 372 -> 406, with `34 = 4 steps + 2 * 15 reads`. Requested-ID matches
+  rose 120 -> 130, exactly the ten directory sectors. The last operation is
+  clean `C/R=39/8` with `LAST_PRESENT=512`.
+- Every error and delivery counter remains zero. Sixty-four additional
+  motor-qualified revolutions ran at `0x0098515F` = 199.646 ms; the added 1,060
+  gap errors are about 16.6/revolution. The added A1 population is also exact:
+  4,209 candidates = `3 * 1,403` trains with no new span reject.
+- This closes the refined rule's load-bearing physical assumption: before the
+  first post-restart index, the remembered proof may rely on `/DSKCHG`, and a
+  real eject does clear it. Only the disk-preinserted power/JTAG cold case with
+  directory plus immediate SHADES remains.
+
+## 2026-07-18 checkpoint 23: disk-preinserted cold R3 class passes; read gate closed
+
+- With the disk already inserted, the maintainer performed a fresh power-on,
+  JTAG load and internal-1581 activation, then successfully ran the directory
+  and immediate SHADES sequence.
+- Map v7 is exact: 103 steps, 53 completed reads and `TRC_CNT=209`, where
+  `209 = 103 + 2 * 53`. Forty requested IDs matched, the final result is clean
+  `C/R=62/8`, and `LAST_PRESENT=512`.
+- All RNF, CRC, cancel, disk-change, LOST, drain, stale-completion,
+  busy-command, runt, span-reject, unarmed-DAM and DAM-miss counters are zero.
+  The head estimate is anchored/valid at cylinder 62.
+- Rotation and decoding are healthy: 217 raw and motor-qualified indexes,
+  `IDX_PERIOD=0x009850A6` = 199.642 ms, 2,363 decoded IDs, about 24.4 gap
+  errors/revolution and `EST=0x0634` = 99.25 cycles.
+- Acquisition is exceptionally clean: 14,543 A1 candidates versus
+  `3 * 4,847 = 14,541` completed trains, only two incomplete extras, no span
+  rejects, and `CNT_MARK_FE=CNT_MARK_DAM=CNT_IDDEC=2,363`.
+- The retained trace contains successful Read Address and sector work at
+  cylinders 61 and 62, ending with the clean cylinder-62 sector sequence. This
+  closes the original cold insertion class and every remaining fresh-media
+  read-side hardware gate for the read-only milestone. Marginal-media stress
+  and physical write/format support remain separate future work.
+
+## 2026-07-18 checkpoint 24: concurrent load transport passes; clean control runs
+
+- Continuing the successful disk-preinserted session, the maintainer left the
+  SHADES SID tune playing and issued `LOAD"C64ana*",8,1`. The wildcard program
+  load command completed successfully while playback continued. Attempting to
+  start C64ANABALT afterward crashed; arbitrary game startup over a live SID
+  player's code, zero page, vectors and IRQ state is not a drive contract.
+- Against checkpoint 23, steps rose 103 -> 128, reads 53 -> 104 and trace count
+  209 -> 336. The delta is exact: `127 = 25 steps + 2 * 51 reads`.
+  Requested-ID matches rose 40 -> 80, the final result is clean `C/R=41/4`,
+  and `LAST_PRESENT=512`.
+- Every RNF, CRC, cancel, disk-change, LOST, drain, stale-completion,
+  busy-command, runt, unarmed-DAM and DAM-miss counter remains zero. The head
+  estimate is valid at cylinder 41.
+- The added 196 qualified revolutions ran at `0x00985356` = 199.656 ms. Gap
+  errors rose by 4,216 = about 21.5/revolution, and `EST=0x0638` = 99.5 cycles.
+- Sixteen A1 span rejects and 34 candidates beyond `3 * 9,316` completed trains
+  are safely rejected splice/junk observations: the newest trace contains
+  clean cylinder-41 delivery through sectors `7,8,9,10,1,2,3,4`, with no
+  requested-record consequence.
+- The decisive control was a short C64 reset, then a normal no-SID reload and
+  start of C64ANABALT; it ran normally. Thus the medium, program, physical/WD
+  path and normal IEC load are good. The prior crash was application-state
+  interference, while the concurrent command still exposed no physical-drive
+  delivery weakness. No further fresh-media read qualification is required.

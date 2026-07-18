@@ -1043,31 +1043,135 @@ The refinement is regression-complete and ready for a second R3 build:
 
 Decoder, quantizer, input, diagnostic and SystemVerilog production sources are
 unchanged from `b13d99e`; their already-green full matrices remain applicable.
-The uncommitted production change is confined to the controller condition and
-its focused test. Build the second candidate and first repeat several
-stopped-motor starts in one unchanged-media session. Only then run the deferred
-eject/reinsert test and the final fresh power/JTAG session with the disk already
-inserted.
+The controller refinement and focused test were committed as `bdd457b`, and
+all hardware gates described below subsequently passed.
 
-## Working tree at refined-build handoff
+## Working tree at final hardware handoff
 
-Repository HEAD remains the maintainer commit `b13d99e`. There are no generated
-simulator artifacts. The intended uncommitted refinement is:
+Repository HEAD is the pushed maintainer commit `bdd457b` (`Fix slow physical
+1581 restart qualification (#90)`), containing the controller refinement,
+focused contract, Fable 5 notes, and checkpoints through the pre-build handoff.
+There are no generated simulator artifacts. Only this handover and
+`doc/dev-issue90/plan_codex.md` are modified after that commit, recording the
+four successful final hardware checkpoints below.
 
-- `CORE/vhdl/physical_1581/physical_1581_controller.vhd`;
-- `CORE/vhdl/test/tb_physical_1581_controller/tb_physical_1581_media_contract.vhd`;
-- this handover and `doc/dev-issue90/plan_codex.md`; and
-- `doc/dev-issue90/f011_reference_notes.md`, updated independently by Fable 5
-  with the same guard audit and pending hardware gates. Preserve that file; it
-  is advisory-reviewer-owned.
+## Second R3 hardware: varied-pause restart qualification passes
 
-Suggested maintainer commit:
+The bitstream containing the delayed-first-index refinement passed hardware
+steps 1 and 2. The disk was absent during power/JTAG/feature activation and was
+then inserted. Directory and all prescribed unchanged-media stopped-motor
+loads succeeded after short, approximately 30-second and minute-scale waits.
 
-```text
-Fix slow physical 1581 restart qualification (#90)
+The post-sequence map-v7 dump is exact and clean:
 
-Preserve confirmed rotation across pre-first-index spin-up timeouts while
-keeping post-index staleness, disk change, reset and disable invalidation.
+- `CNT_IDX_RAW=CNT_IDX_QUAL=632`, with
+  `IDX_PERIOD=0x00985257` = 199.651 ms and a 2.636-ms index width;
+- 64 completed steps, 154 completed reads and `TRC_CNT=372`, exactly
+  `64 + 2 * 154`;
+- 120 requested-ID matches, final clean `C/R=41/7`, size code 2 and
+  `LAST_PRESENT=512`;
+- zero RNF, CRC, cancel, disk-change, LOST, drain, stale completion,
+  busy-command, runt and DAM-miss counters;
+- 6,955 decoded IDs, 13,595 gap errors = about 21.5 per qualified revolution,
+  and `EST=0x063C` = 99.75 cycles; and
+- the newest ring entries are a complete clean cylinder-41 sector sequence
+  `8,9,10,1,2,3,4,5,6,7`, proving C64ANABALT reached the physical medium.
 
-Extend the media contract for delayed first index and disable/re-enable.
-```
+The acquisition diagnostics are safe rather than perfectly empty:
+`CNT_A1_CAND=42878`, `CNT_A1_REJECT=15`, `CNT_A1_TRAIN=14269`, and
+`CNT_DAM_UNARMED=1`. There are 71 candidates beyond three per completed train,
+but zero CRC/RNF/DAM-miss consequences; the complete-span and record-sequencing
+guards rejected the observed splice/junk candidates as designed.
+
+This closes the fast- and slow-restart classes on real hardware. The maintainer
+is continuing immediately with (3) motor-off eject/reinsert in the same FPGA
+session, with a dump before another eject, and (4) a fresh disk-preinserted
+power/JTAG session followed by directory and immediate SHADES.
+
+## Second R3 hardware: eject/reinsert qualification passes
+
+In the same FPGA session, after motor-off the disk was ejected, left out for
+the prescribed pause, reinserted, and `LOAD"$",8` succeeded. The dump was taken
+before another eject. Compared with the varied-pause dump:
+
+- `CNT_CHANGE` rose 0 -> 1 exactly once; raw, conditioned and sticky change
+  state are clear at the final snapshot;
+- steps rose 64 -> 68, reads 154 -> 169 and trace count 372 -> 406, exactly
+  `34 = 4 + 2 * 15`;
+- requested-ID matches rose 120 -> 130, final `C/R=39/8` is clean, and
+  `LAST_PRESENT=512`;
+- all RNF, CRC, cancel, LOST, drain, stale, busy, runt and DAM-miss counters
+  remain zero;
+- qualified indexes rose 632 -> 696, with
+  `IDX_PERIOD=0x0098515F` = 199.646 ms; and
+- gap errors rose by 1,060 = 16.6 per added revolution, while A1 candidates
+  rose by 4,209 and trains by 1,403 exactly, with no new span reject.
+
+This is the load-bearing hardware proof that a real eject asserts `/DSKCHG`,
+destroys the same-medium history, and allows a clean cold requalification. The
+then-remaining read-milestone gate was the disk-preinserted cold case, which
+also passed as recorded below.
+
+## Final R3 hardware: disk-preinserted cold qualification passes
+
+With the disk already inserted, the maintainer performed a fresh power-on,
+JTAG load and internal-1581 activation, then successfully ran the directory and
+immediate SHADES sequence. The final map-v7 dump is wholly clean:
+
+- 217 raw and 217 motor-qualified index edges,
+  `IDX_PERIOD=0x009850A6` = 199.642 ms and index width 2.992 ms;
+- 103 steps, 53 completed reads and `TRC_CNT=209`, exactly
+  `103 + 2 * 53`;
+- 40 requested-ID matches, final clean `C/R=62/8`, size code 2 and
+  `LAST_PRESENT=512`;
+- zero RNF, CRC, cancel, disk-change, LOST, drain, stale completion,
+  busy-command, runt, span-reject, unarmed-DAM and DAM-miss counters;
+- a valid anchored head estimate at cylinder 62;
+- 2,363 decoded IDs, 5,295 gap errors = about 24.4/revolution, and
+  `EST=0x0634` = 99.25 cycles; and
+- 14,543 A1 candidates versus `3 * 4,847 = 14,541` complete trains, only two
+  incomplete extras, with `CNT_MARK_FE=CNT_MARK_DAM=CNT_IDDEC=2,363`.
+
+The retained trace contains clean Read Address and sector operations on
+cylinders 61/62 and ends with successful cylinder-62 delivery. Together with
+the varied-pause and eject/reinsert checkpoints, this closes every prescribed
+fresh-media R3 hardware class: cold, warm, fast restart, slow restart,
+post-eject, and disk-preinserted JTAG cold. The read-only physical-1581
+milestone is complete in substance. Marginal-media stress and physical
+write/format support remain explicitly separate future milestones.
+
+## Bonus R3 stress: concurrent load transport passes; clean control runs
+
+In the same successful disk-preinserted session, SHADES was left playing its
+SID tune while the maintainer issued `LOAD"C64ana*",8,1`. The wildcard program
+load command completed successfully. Attempting to start C64ANABALT in that
+still-live application environment then crashed. This is not evidence of a
+drive error: an arbitrary SID player may own code/data memory, zero page,
+vectors and IRQ state that the game load overwrites or continues to modify.
+Compared with the immediately preceding dump, the drive transaction itself is
+clean:
+
+- steps rose 103 -> 128, completed reads 53 -> 104 and trace count 209 -> 336,
+  exactly `127 = 25 + 2 * 51`;
+- requested-ID matches rose 40 -> 80, final `C/R=41/4` is clean, and
+  `LAST_PRESENT=512`;
+- every RNF, CRC, cancel, disk-change, LOST, drain, stale completion,
+  busy-command, runt, unarmed-DAM and DAM-miss counter remains zero;
+- qualified indexes rose 217 -> 413, with
+  `IDX_PERIOD=0x00985356` = 199.656 ms;
+- gap errors rose by 4,216 = 21.5 per added revolution, with
+  `EST=0x0638` = 99.5 cycles; and
+- the newest trace contains clean cylinder-41 sectors
+  `7,8,9,10,1,2,3,4`.
+
+The 16 A1 span rejects and 34 candidates beyond `3 * 9,316` complete trains
+were safely quarantined with no requested-record effect. This proves that
+simultaneous C64 SID playback and the load command exposed no physical-drive
+delivery or media-state weakness; it does not claim arbitrary loaded programs
+can start safely over an active SID player.
+
+The maintainer then performed the necessary one-variable control: short C64
+reset, no SID player, normal C64ANABALT reload and start. The game ran normally.
+Therefore the disk content, program, physical/WD path and normal IEC transfer
+are good, while the earlier crash is isolated to application memory/IRQ state.
+No further fresh-media read testing is needed for this milestone.
