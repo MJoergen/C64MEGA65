@@ -31,6 +31,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A17    | 06/14/26 | c556cdc | DMA support for hardware cartridges (issues #199 and #205); fix two hardware cartridge regressions introduced by Alpha 12 (issues #220, #222 and #227); the file browser loads large directories up to 15x faster (issue #228); implemented first version of V6 OSM (issues #229 and #230)
 | WIP-V6-A18    | 07/03/26 | 3d80b81 | Simulate 1581 drive and add support for D81 disk images (issue #91)
 | WIP-V6-A18X1  | 07/18/26 | 95eae0f | Read-only support MEGA65's built-in floppy drive as 1581 (issue #90)
+| WIP-V6-A18X2  | 07/18/26 | d94fa73 | Fixed a regression that prevented simulated D81 images to work
 
 ## Version 5.2
 
