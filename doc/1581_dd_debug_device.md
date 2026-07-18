@@ -222,7 +222,7 @@ Entry types (by `w0` bits 15:12):
 | `3` = read op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found-H LSB`<<8` \| found C | found R `<<8` \| result code |
 
 To capture a failure: reset/power-on, reproduce the failing access once, then dump
-`MD 7000 7035` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
+`MD 7000 703F` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
 entry; STEP entries in between show the seek pattern (direction + the controller's
 head-position estimate at each step). This reconstructs where the DOS was heading,
 what it asked to read, and what it got — without any scope.
@@ -349,7 +349,7 @@ MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 703F          -> prompt " END ADDRESS=" ; end (0x7000 + 0x3F = last scalar diagnostic word)
 ```
 
-This prints all 59 scalar diagnostic words in one block. To watch a value live, re-issue the
+This prints all 64 scalar diagnostic words in one block. To watch a value live, re-issue the
 `MD 7000 703F` (or `ME 70xx`) command repeatedly — the registers update continuously while
 the C64 accesses drive 8.
 
