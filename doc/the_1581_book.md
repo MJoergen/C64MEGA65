@@ -1644,7 +1644,24 @@ guard them all — gets a walk-through here: its role, its interface, how it
 works, and the details a maintainer needs before touching it. Entries
 assume Section A's concepts and point back to the chapters that teach
 them; acronyms are nonetheless spelled out again on first use in this
-section, because reference readers jump straight in. File groups follow
+section, because reference readers jump straight in.
+
+This section is written to be readable *without the source code open*, and
+three conventions serve that. First, nontrivial entries begin with an
+**anatomy card** — a small diagram of the entity as a box, its connections
+grouped by role, its clock domain named — so that when the prose later
+says "the request toggle" or "the image path", you have already seen where
+that lives. (The B1 decode stages are the exception: they share the
+group's chain map instead of carrying individual cards.) Second, the files with real machinery inside get a short
+**walked example**: one concrete operation traced through the file, so the
+mechanism is seen running once before it is described at rest. Third, the
+entries are layered by altitude: each one moves from role to mechanism to
+fine detail, and the finest stratum — exact constants, edge cases,
+register quirks — is maintainer material. If you are reading cover to
+cover, you have an explicit license to skim those passages; nothing later
+in the book depends on them. Signal names in `backticks` are lookup keys
+into the source for the day you open it; the prose around them is written
+to survive without them. File groups follow
 the architecture, bottom-up on the physical side first: the decode chain
 (B1), the controller and delivery (B2), the MiSTer-heritage drive proper
 (B3) and its peripherals (B4), the glue that wires everything into the
@@ -1775,7 +1792,7 @@ This file is where the pipeline becomes a decoder. It instantiates the four stag
 
 The entity `physical_1581_mfm_decoder` takes six generics, all of them test-only knobs for the A/B margin harness; production instantiates the defaults everywhere. `G_SYNC_GATE` (default true) set false restores the original adaptive-quantiser behavior in which every stage-three sync pulse counts immediately. `G_SYNC_PREAMBLE_GATE` (default false) set true selects the superseded preceding-run-of-shorts rule as a permanent regression column. `G_SYNC_SPAN_GATE` (default true) set false preserves spacing-only acquisition (the behavior of commit `3803152`), and `G_RECORD_SEQUENCE_GATE` (default true) set false preserves pre-record-grammar behavior (commit `0ab9f92`). `G_QUANT_TOL_ACQ_SHR` and `G_QUANT_HUNT_ADAPT_ALL` pass through to the quantiser — note that the quantiser's field-tier tolerance generic is not passed through and always keeps its production default. These generics are how the refuted designs recorded in B1.1's comment blocks stay executable: the harness (B6.2) instantiates seven decoder variants side by side and races them, so every design claim in the comments remains a running experiment rather than folklore.
 
-The ports fall into three groups. The decoded-ID group: `id_valid_o` pulses once per completed ID field, with `id_c_o`/`id_h_o`/`id_r_o`/`id_n_o` (Cylinder, Head, Record and size-code Number — the four bytes of an ID field), `id_crc_ok_o`, and `id_crc_stored_o`, the CRC as stored on disk, first byte in bits 15..8. The decoded-data group: `data_start_o` pulses when a data address mark (DAM) is accepted, `data_byte_o`/`data_byte_valid_o` stream each payload byte, and `data_end_o` closes the field with `data_crc_ok_o` and `data_deleted_o`. The status and diagnostics group: `locked_o` (separator locked), plus one-cycle event pulses — `gap_error_o`, `runt_o`, `a1_candidate_o`, `a1_span_reject_o`, `a1_train_o`, `mark_fe_o`, `mark_dam_o`, `dam_unarmed_o` — and the taps `last_gap_o` (raw length of the last gap), `crc_value_o` (the live CRC register), and `est_o` (the quantiser estimate). The diagnostic device counts the pulses and exposes the taps (B2.4; Section A Chapter 17).
+The ports fall into three groups — they are the pulses of the walk below, under their formal names. The decoded-ID group: `id_valid_o` pulses once per completed ID field, with `id_c_o`/`id_h_o`/`id_r_o`/`id_n_o` (Cylinder, Head, Record and size-code Number — the four bytes of an ID field), `id_crc_ok_o`, and `id_crc_stored_o`, the CRC as stored on disk, first byte in bits 15..8. The decoded-data group: `data_start_o` pulses when a data address mark (DAM) is accepted, `data_byte_o`/`data_byte_valid_o` stream each payload byte, and `data_end_o` closes the field with `data_crc_ok_o` and `data_deleted_o`. The status and diagnostics group: `locked_o` (separator locked), plus one-cycle event pulses — `gap_error_o`, `runt_o`, `a1_candidate_o`, `a1_span_reject_o`, `a1_train_o`, `mark_fe_o`, `mark_dam_o`, `dam_unarmed_o` — and the taps `last_gap_o` (raw length of the last gap), `crc_value_o` (the live CRC register), and `est_o` (the quantiser estimate). The diagnostic device counts the pulses and exposes the taps (B2.4; Section A Chapter 17).
 
 Three qualification layers stand between a stage-three sync pulse and an open field. Layer one is the aggregate span check: alongside the quantiser's classes, the decoder retains the raw lengths of the last four gaps (`a1_gap_0..3`), because the class detector alone loses their combined timing. A combinational process compares their sum against the expected span of a complete raw A1 — 14 half-cells, `C_QUANT_A1_CELLS`, at the current estimate — within a tolerance of half the estimate. The tolerance is deliberately broad for individual jitter yet lethal to coherent junk: legitimate peak shift moves transitions substantially but its internal movements cancel end to end, whereas splice residue such as the 446/344/446/344 pattern passes every per-gap window and still totals 1580 cycles against a nominal 1400 — that is, 14 half-cells at the 100-cycle nominal estimate, with the half-estimate tolerance accepting 1350 to 1450, so 1580 misses by a wide margin and is rejected structurally (Chapter 13 draws the complete word). A failed span not only discards the candidate; it clears any provisional train and pulses `a1_span_reject_o`.
 
@@ -1784,6 +1801,8 @@ Layer two is exact train spacing. Consecutive A1 bytes in a genuine A1 A1 A1 tra
 Layer three is the record grammar — the IBM-style ID-before-data sequencing rule that the WD1772 (the Western Digital floppy-disk controller in a real 1581) relies on, enforced here because a timing-valid splice can still contain a complete A1-like train. Two flags implement it. `data_armed` is set only when an ID field completes with CRC residue zero, and is consumed when a DAM opens a data field or an FE starts a new ID. `data_preamble_ok` is captured at the first A1 of each train and records whether the train began within `C_QUANT_SYNC_LAT = 6` gaps of a run of at least `C_QUANT_SYNC_RUN = 16` consecutive short-class gaps — two bytes of 0x00, the lock-up run both formatters write before every data field. The gate is deliberately DAM-only, because F011 ID fields do not always have a zero preamble. A DAM byte (0xFB normal, 0xF8 deleted) arriving with a complete train opens a data field only if both flags are set; otherwise it pulses `dam_unarmed_o` and is ignored. An FE after a complete train, by contrast, is trusted unconditionally — a legal MFM payload cannot contain the missing-clock A1-times-three-plus-FE sequence — and if the FSM is mid-field when one arrives, it re-anchors the parser outright, aborting the bogus parse and jumping straight into ID decoding.
 
 The field FSM itself is plain by comparison. With a complete train, the next assembled byte is the mark: FE leads through `S_ID_C..S_ID_N` (latching C, H, R, N) and two stored-CRC states; FB or F8, if armed, latches the deleted flag and streams `data_len(last_n)` payload bytes — 512 for the 1581's universal size code two, with `last_n` remembering the most recent ID's N — through `S_DATA` and its CRC states. Every field byte, the three A1s (fed synthetically, since stage four signals syncs on a separate strobe), and the mark all pass through the CRC engine; after the second stored CRC byte, a CHECK state waits `chk_cnt = 12` clocks for the bit-serial engine to finish shifting, then publishes results in a single pulse. `sync_cnt` is cleared on every consumed byte, so a train must be immediately followed by its mark. A class 11 from the quantiser aborts everything, loudly: `gap_error_o` pulses, lock drops, the FSM returns to idle, and every gate closes.
+
+**One ID field, walked.** Follow a single directory-track ID field through the gates, streaming in off a healthy disk. The twelve preamble bytes arrive first: ninety-six shortest-class gaps, marching the short-run counter far past its threshold of sixteen. The first sync byte's four defining gaps fire an A1 candidate; its raw lengths pass the span check; the train goes provisional at one. Five gaps later the second candidate lands exactly on cadence — two — and five more bring the third: the train is complete, lock is asserted, and the preamble credential is captured for whatever mark follows (the zero run ended five gaps before the first candidate, inside the window of six). The next assembled byte is 0xFE, so the FSM steps through the four label states — cylinder 39, head 0, record 3, size code 2 — then the two stored CRC bytes. Twelve clocks of CHECK while the bit-serial engine drains, the residue compares equal to zero, and the file speaks three pulses upward: an ID is valid, its CHRN is on the bus, and the data arm is set for the field about to follow.
 
 Details worth knowing. `field_active`, the signal driving the quantiser's `field_i`, is true in production only when the FSM has left idle or a complete train is pending — a provisional first A1 does not switch adaptation tiers. `id_valid_o` pulses whether or not the CRC matched; interpreting a bad ID is the controller's decision. `data_deleted_o` is registered at data-end while the controller samples it at data-start, a one-field lag that is harmless on D81 media, where every DAM is FB. Unsupported mark bytes after a train are simply ignored. The generics' commit references and the round-by-round path to the three-layer design are the centerpiece of Appendix C2; Section A Chapter 13 explains the algorithm, and Chapter 14 what the controller builds on top of these pulses.
 
@@ -1804,6 +1823,20 @@ The engine was adapted from mega65-core's `crc1581.vhdl` at `a9158930` (Paul Gar
 Where the B1 files turn flux into decoded records, the four files in this group turn decoded records into a disk drive. The controller is the operations-and-mechanics brain of physical mode; the input conditioner is its safe front door for the raw connector pins; the read FIFO (first-in, first-out buffer) carries verified sector bytes across to the drive computer; and the diagnostic device makes the whole apparatus observable from the QNICE helper CPU. Section A Chapters 14 (media state and motion), 15 (delivery: the WD boundary), and 17 (observability: the diagnostic device) develop the concepts these files implement.
 
 #### B2.1 physical_1581_controller.vhd
+
+```
+ mechanism pins           ┌───────────────────────────────┐
+ (motor, select, step, ◀─▶│   physical_1581_controller    │──▶ byte stream to the
+ dir, side out; index,    │      50 MHz (QNICE clock)     │    quarantine FIFO
+ track-0, write-protect,  │                               │
+ change, flux in — via    │  generics: the whole timing   │──▶ live levels to the
+ the B2.2 conditioner)    │  table (step, settle, search  │    drive: ready, disk
+                          │  budgets…) + G_CAPABLE        │    change, write-protect
+ WD front end (B3.1)   ◀─▶│                               │
+ step + read requests as  │                               │──▶ observation taps to
+ toggles with a 2-bit     │                               │    the diagnostics
+ tag; done + result back  └───────────────────────────────┘    (B2.4) — read-only
+```
 
 This file is the largest and most consequential piece of the physical path: the operation and mechanics finite state machine (FSM) for the internal 1581 drive, running entirely on the 50 MHz controller clock. Entity `physical_1581_controller` instantiates the input conditioner (`physical_1581_inputs`, B2.2) and the whole Modified Frequency Modulation (MFM) decode chain (`physical_1581_mfm_decoder`, B1.6), so from the outside it is the single component that owns the mechanism — the physical 3.5-inch unit. It drives the six output pins of the internal floppy connector, synthesizes the drive-status levels the drive computer reads through its 8520 CIA (Complex Interface Adapter), executes Type-I head steps, and runs read operations whose payload bytes it pushes into the quarantine FIFO (B2.3). This is the read-only milestone: `f_wgate` and `f_wdata` are never driven here and stay tied inactive at the board tops.
 
@@ -1851,9 +1884,22 @@ On exhaustion the result is `RES_ID_CRC_ERROR` if such a flagged ID was seen, el
 
 `RD_DAM` waits for the data field to open (sampling the deleted-data flag, which the decoder registered at the previous field's end — a one-field lag that is harmless on D81 media, where every data address mark (DAM) is the normal FB); another ID or the local timeout resumes the search inside the same budgets, and budget exhaustion yields `RES_MISSING_DAM`. `RD_STREAM` pushes each payload byte into the FIFO and keeps the absolute watchdog running so a flux dropout mid-field cannot park the FSM forever; on field end the result is `RES_OK` only if the data CRC checked out *and* no byte was ever dropped against a full FIFO — a truncated stream is reported as `RES_DATA_CRC_ERROR`, the analog of the real WD1772's LOST DATA. `RD_ADDR` streams the six Read Address bytes (C, H, R, N, stored CRC high and low) one per cycle with the same never-complete-silently discipline. One documented, accepted hole remains: a QNICE-domain-only reset mid-operation would idle the FSM without a done toggle, but in the M2M framework that reset never occurs without the core reset that also clears the drive side.
 
+**One Read Sector, walked.** The WD front end flips the request toggle: operation read-sector, cylinder 39, record 3, tag 2. The engine leaves idle, latches the parameters, and parks in its wait state until the media-ready contract and the settle timers agree the mechanism is trustworthy — then resets the decoder for a fresh lock and begins the search with both budgets armed. Decoded ID fields flow past; one matches cylinder and record with a clean CRC and announces size code 2, so the engine arms the 43-byte-time window and waits for the data field. The DAM opens in time; 512 payload bytes stream into the quarantine FIFO, each pushed the cycle the decoder publishes it. The field's CRC residue is zero and no byte was dropped, so the engine flips the done toggle, publishes tag 2 and the all-clear result in that same cycle, and arms the eight-cycle spacing guard. In the diagnostic ring, two entries have appeared: the request with its parameters, and the clean completion — exactly the pair every hardware session audited first.
+
 Nearly every rule in this file — the two-edge/one-edge readiness contract, the `$CD5A` flag discipline, the sector-11 filter, the pending latch, the done spacing — was forced by hardware sessions or by the genuine DOS ROM in the loop; Appendix C2 tells those stories in order. Section A Chapter 14 explains the media-state model, Chapter 15 the delivery contract, and Chapter 13 the decoder this file commands; B3.1 describes the `fdc1772.v` front end on the other side of the handshakes.
 
 #### B2.2 physical_1581_inputs.vhd
+
+```
+ raw connector pins    ┌──────────────────────────┐──▶ synchronized flux
+ (index, track-0,    ─▶│   physical_1581_inputs   │    (kept active-low)
+ write-protect,        │   50 MHz (QNICE clock)   │──▶ index: filtered level,
+ disk-change, flux —   │                          │    accepted edge, period,
+ all asynchronous,     │  generics: clock rate,   │    pulse width
+ all active-low)       │  200 µs index glitch     │──▶ clean levels: track-0,
+                       │  floor                   │    write-protect, change
+                       └──────────────────────────┘
+```
 
 This small file is the safe front door between the internal floppy connector and everything synchronous: the asynchronous input conditioner, entity `physical_1581_inputs`, on the 50 MHz controller clock. It exists so that exactly one block in the design touches raw, asynchronous, active-low connector signals, and everything downstream can assume clean synchronous levels with positive semantics. It is instantiated only by the controller (B2.1).
 
@@ -1867,6 +1913,17 @@ Section A Chapter 12 places this block at the start of the physical path; Chapte
 
 #### B2.3 physical_1581_rdfifo.vhd
 
+```
+ 50 MHz write side           ┌────────────────────────┐  drive-domain read side
+ push one decoded byte ─────▶│  physical_1581_rdfifo  │◀─ pop (first-word-fall-
+ full? (a push while full  ◀─│  two clocks, one       │   through: head byte
+ is a known dropped byte)    │  storage array         │   always visible)
+ occupancy tap (to diag)   ◀─│  depth 2^G_AW —        │─▶ head byte, empty?
+                             │  production: 512 = one │
+                             │  whole sector          │
+                             └────────────────────────┘
+```
+
 Entity `physical_1581_rdfifo` is the dual-clock byte FIFO that carries decoded sector bytes from the 50 MHz controller domain to the drive computer's clock domain — and, just as importantly, it is the *quarantine FIFO* of Section A Chapter 15: deep enough to hold one complete 512-byte sector, so a whole data field can be captured and judged before the drive computer sees a single byte of it.
 
 The single generic `G_AW` sets the depth to `2**G_AW` (default 5, i.e. 32, for the testbenches; it must be at least 2). The production instance in `CORE/vhdl/main.vhd` uses `G_AW => 9` — 512 bytes, exactly one physical sector. The write side (`wr_clk_i`, `wr_rst_i`, `wr_en_i`, `wr_data_i`, `wr_full_o`) belongs to the controller; `wr_full_o` loops back to the controller as `byte_ovf_i`, so a write attempted while full is known to have been dropped and poisons the operation's result. A ten-bit-wide occupancy tap, `wr_level_o`, feeds the diagnostics: the binary write pointer minus the Gray-synchronized read pointer, conservative-high (a pop shows up only after its pointer crosses the synchronizer), sized to hold the 0..512 range. The read side (`rd_clk_i`, `rd_rst_i`, `rd_en_i`, `rd_data_o`, `rd_empty_o`) belongs to the drive domain, where `fdc1772.v` drains it at its existing DRQ (data request) pacing — one presented byte per 32 µs byte time.
@@ -1878,6 +1935,17 @@ The reset discipline around the production instance deserves respect: both sides
 Section A Chapter 15 explains why quarantine — not streaming — is the right delivery model here, and Chapter 16 the CDC reasoning; B3.1 covers the consumer.
 
 #### B2.4 physical_1581_diag.vhd
+
+```
+ controller state, results,  ┌──────────────────────────┐
+ counters, decoder and     ─▶│    physical_1581_diag    │◀── QNICE reads:
+ quantiser taps (same        │    50 MHz (QNICE clock)  │    device 0x0108,
+ domain, purely additive)    │                          │    word N at 0x7000+N
+                             │  writes: ignored         │
+ fdc1772 event toggles     ─▶│  reads: combinational,   │──▶ one 16-bit word
+ (pre-synchronized in        │  zero side effects       │
+ main.vhd)                   └──────────────────────────┘
+```
 
 The MEGA65 has no logic analyzer on its internal floppy bus, so entity `physical_1581_diag` is the only on-hardware window into the physical read path: a strictly read-only diagnostic register bank that the QNICE helper CPU can inspect at any time, described conceptually in Section A Chapter 17. It drives nothing back into the controller, it has no write side (writes are simply ignored), and reads are a purely combinational multiplexer with no wait state — by construction it cannot perturb the machinery it observes.
 
@@ -1896,6 +1964,20 @@ Beyond debugging, two words carry an operational duty: the Shell (the QNICE menu
 The four files in this chapter are the 1581 as the MiSTer project built it: a complete Commodore drive computer — CPU, memory, I/O chips, and a model of the floppy disk controller (FDC) — that we adopted, repaired, and then taught to talk to real magnetics. They form a strict hierarchy. `fdc1772.v` models the WD1772, the Western Digital floppy disk controller chip at the heart of the 1581; `c1581_drv.sv` assembles one whole drive around it; `c1581_multi.sv` replicates that drive up to four times around a shared ROM (read-only memory); and `iec_drive.sv` is the top of the stack, deciding whether the 1541 or the 1581 engine owns the bus. We read them bottom-up.
 
 #### B3.1 fdc1772.v
+
+```
+ drive CPU (2 MHz):       ┌─────────────────────────────┐  image path (QNICE
+ the four WD registers, ◀▶│           fdc1772           │◀▶ clock): mount info,
+ DRQ and INTRQ            │  core clock; WD timebase =  │   block transfers via
+                          │  the 8 MHz enable           │   vdrives (sd_*)
+ drive control: side,     │                             │
+ motor, step — to the   ◀▶│  parameters: sector size    │  physical path (50 MHz
+ rotation model (image)   │  and base, drive count,     │◀▶ side): step + read
+ or the controller        │  chip model, ext. motor     │   requests out as
+ (physical)               │                             │   toggles + tags; done,
+ busy → activity LED    ─▶│                             │   result, FIFO bytes in
+                          └─────────────────────────────┘
+```
 
 This file is the register-level model of the WD1772 — the chip the 1581's drive computer programs to move the head and transfer sectors. Written by Till Harbaum in 2015 for the MiST Atari ST core and reused across many FPGA targets, it models the chip as software sees it: four registers, four command classes, a status byte, and two handshake lines. In our port it is the most heavily modified file of the drive stack. It gained a second clock domain so its storage interface could talk to the M2M framework's `vdrives.vhd`, and — for the physical internal drive of issue #90 — an entire second media backend that lets the same register machine command the real mechanism instead of a disk image. Chapter 4, the floppy disk controller, teaches what the real chip does; Chapter 15, delivery: the WD boundary, explains the design this file's physical half implements.
 
@@ -1946,9 +2028,25 @@ Two subtleties deserve their own sentences. `PHYS_T1_MIN_TICKS = 12000` ticks (�
 | Restore bound (physical) | 255 steps | then seek error |
 | CRC polynomial / seed | 0x1021 / 0xB230 | Read Address reply checksum |
 
+**The same Read Sector, seen from the registers.** The drive CPU writes `$80` — Read Sector — to the command register: busy sets, the data-request flag clears, and, in physical mode, the request toggle leaves for the controller carrying the current tag. Then nothing happens for many milliseconds, and that is the design: the WD model neither paces nor watches the search; it waits for a completion whose tag matches. When the done toggle crosses the synchronizer and settles, the result is clean, so presentation opens: one byte from the quarantine every 252 ticks of the 8 MHz enable — 32 microseconds — each raising the data-request flag, and the ROM's polling loop collects every one inside its 47 percent margin. After the last byte the FIFO reads empty, the pace timer runs one final byte-time — busy outliving the final data request, exactly as the busy-first polling loop requires — then busy falls, the interrupt line pulses, and the status byte assembles with no error bits set. The DOS reads it, runs it through the result table of Chapter 8, and files the sector as good.
+
 How this delivery design was reached — and the regression that taught us to keep the two data-register expressions apart — is an Appendix C2 story. Chapter 11 walks the image path end to end, Chapter 12 the physical path; Chapter 14 describes the controller that answers these requests, and B2.3 the quarantine FIFO itself.
 
 #### B3.2 c1581_drv.sv
+
+```
+ IEC bus: ATN, CLK,     ┌──────────────────────────────┐  image blocks (QNICE
+ DATA (+ dormant      ◀▶│          c1581_drv           │◀▶ clock): sd_lba, rd/wr,
+ fast-serial pair)      │  one complete 1581:          │   ack, buffer bytes
+                        │  T65 6502 + 8 KB RAM +       │
+ parallel port (VIA) ◀─▶│  8520 CIA + 6522 VIA +       │  physical bundle
+ DOS ROM window:        │  WD1772 model + address      │◀▶ (1:1 pass-through
+ 15-bit address out,  ◀▶│  decoder                     │   from fdc1772, gated
+ byte back              │                              │   on phys_mode)
+ device number, LEDs,   │  clocks: 16 MHz ce → 2 MHz   │
+ mount/write-protect  ─▶│  CPU phases, 8 MHz WD enable │
+                        └──────────────────────────────┘
+```
 
 This file is one complete 1581: the drive computer of Chapter 5 rendered in SystemVerilog by Alexey Melnikov (2021), wired chip for chip like the real printed circuit board. Everything the DOS ROM expects to find — a 6502, 8 KB of RAM, an 8520 CIA (Complex Interface Adapter), a 6522 VIA (Versatile Interface Adapter), and the WD1772 — is instantiated and address-decoded here; the disk itself is elsewhere, behind the FDC's two media backends.
 
@@ -1960,9 +2058,24 @@ The CIA's ports are where the drive senses its world, and where image mode and p
 
 The disk-change latch earns a close look. `disk_chng_n` asserts on a mount, on reset, and — a MEGA65 addition — on any edge of `phys_mode`. The mode edge is the source-switch disk change: switching from the physical drive back to a still-mounted image does not reset the drive, and without this term the DOS would keep the previous medium's cached BAM (block availability map) — a silent media swap. The DOS then clears the latch the way it always does, by stepping. The opposite switch is covered by the controller re-arming its own latch. Only two controller levels are synchronized in this file (`phys_change`, `phys_wprot`) — everything else crosses inside `fdc1772`.
 
+**An ATN command, arriving.** The C64 pulls the attention line low. The CIA's FLAG input sees the falling edge, latches its interrupt bit, and the interrupt line drops the T65 into the ROM's bus handler within microseconds — the 2 MHz CPU's real-time job. The handler reads port B: attention asserted, clock and data in their handshake states. Bit by bit the drive clocks in the command bytes — LISTEN for device 8, OPEN channel 0, then the filename — acknowledging each through the wired-AND data line. The DOS parses the name, decides it needs the directory, and queues a job; the job layer translates logical track 40 into cylinder, side and record, and writes the WD1772's registers through the address decoder's `$6000` window — from where the story continues in B3.1's walk. Every chip on the card above has taken part: the CIA for the bus, CPU and ROM for the protocol, the address decoder for the chip selects, and the WD1772 only at the very end.
+
 Why the CIA senses had to become mode-aware, and how the LED change was found, are Appendix C2 material. Chapter 6 gives the anatomy this file mirrors; Chapter 8 the ROM that runs on it; B4.1 and B4.2 cover the two I/O chips.
 
 #### B3.3 c1581_multi.sv
+
+```
+ IEC lines of up to four  ┌───────────────────────────┐
+ drives, wired-AND      ◀▶│        c1581_multi        │◀▶ per-drive image
+ combined onto one bus    │  the fleet builder:       │   block buses (sd_*)
+                          │  4 × c1581_drv around     │
+ one shared DOS ROM     ◀▶│  one shared ROM (stock +  │◀▶ physical bundle —
+ port (QNICE-writable     │  custom slots), time-     │   exported for drive 0
+ custom-DOS slot)         │  multiplexed per CPU      │   only; drives 1..3
+ drive numbers, LEDs,   ─▶│  cycle; makes ph2_r/f     │   are always virtual
+ resets                   │  and wd_ce from 16 MHz ce │
+                          └───────────────────────────┘
+```
 
 This file turns one drive into a fleet: up to four `c1581_drv` instances sharing a single DOS ROM, one clock-enable generator, and one set of open-collector bus wires. (The header comment still says "C1541 multi-drive" — an honest copy-paste trace of its origin.) Our core instantiates the stack with `DRIVES = 1`, so in practice one 1581 exists — device 8 — but the machinery is generic.
 
@@ -1975,6 +2088,19 @@ Four drives share one ROM port by time multiplexing: a three-bit state counter, 
 Chapter 16 covers the clocking scheme this file's enable ladder belongs to; B5.2 and B5.3 describe the QNICE side of the ROM-loading path; B4.4 contrasts the 1541 equivalent.
 
 #### B3.4 iec_drive.sv
+
+```
+ C64 core: IEC bus,       ┌────────────────────────────┐
+ per-drive reset, mount ◀▶│         iec_drive          │◀▶ vdrives (QNICE clock):
+ info, image type,        │  top of the drive stack:   │   doubled LBA, block
+ physical-mode bit        │  a 1541 engine and a 1581  │   count, rd/wr strobes,
+                          │  engine — never more than  │   buffer bytes
+ QNICE ROM port         ◀▶│  one out of reset; image   │
+ (address bit 15 picks    │  type picks the engine,    │◀▶ physical bundle
+ 1541 or 1581 ROM)        │  physical mode forces the  │   (threaded to drive 0)
+                          │  1581                      │
+                          └────────────────────────────┘
+```
 
 This is the top of the drive stack — the module `main.vhd` instantiates as `iec_drive_inst` — and its job is arbitration: per drive, decide whether the 1541 or the 1581 engine answers on the bus, adapt each engine's storage geometry to `vdrives.vhd`, split one ROM address space between two DOS ROMs, and thread the physical-mode bundle down to the 1581. It exists because a Commodore user does not mount "a 1541" or "a 1581"; they mount a file, and the file's type must pick the machine.
 
@@ -1991,6 +2117,19 @@ The `dtype` clock fix and the choice to gate engines by reset rather than multip
 The B3 chapters covered the drive proper — the WD1772 (Western Digital floppy-disk controller) model and the 1581 structure built around it. This group covers the supporting cast: the 8520 CIA that is the drive computer's face to the outside world (B4.1), the 6522 VIA that exists only to host a parallel-port extension (B4.2), the virtual spindle that gives the image-backed drive its sense of rotation (B4.3), and finally a structural look across the aisle at the 1541, whose radically different anatomy explains, by contrast, why the 1581 model is shaped the way it is (B4.4). None of the three peripheral models carries MEGA65-specific modifications; every 1581-specific adaptation lives in the instantiating files of B3.
 
 #### B4.1 iecdrv_mos8520.v
+
+```
+ drive-CPU bus: phi2,     ┌──────────────────────────┐
+ register select, data, ◀▶│      iecdrv_mos8520      │◀▶ port A, 8 pins with
+ chip select, R/W,        │  a generic 8520 CIA —    │   direction registers
+ interrupt out            │  two ports, two timers,  │◀▶ port B, 8 pins
+                          │  a 24-bit counter, a     │
+ FLAG input             ─▶│  serial engine. What     │◀▶ CNT + SP: the fast-
+ (edge → interrupt)       │  each pin MEANS is       │   serial pair (dormant
+ TOD tick input         ─▶│  decided by the          │   in this core)
+                          │  instantiation (B3.2)    │
+                          └──────────────────────────┘
+```
 
 The 8520 CIA (Complex Interface Adapter) is the one general-purpose input/output chip in a real 1581, and so also in ours. Everything the drive computer says or hears passes through it: the IEC serial bus lines it senses and pulls, the ATN (Attention) edge that interrupts the drive's 6502, the motor and LED outputs, the media senses — ready, disk change, write protect — the device-number jumpers, and the timebase the DOS (Disk Operating System, the drive firmware) uses to measure time. Yet `iecdrv_mos8520.v` knows none of this: it is a **generic** model of the chip, and every 1581-specific meaning of a port bit is assigned by the instantiation in `c1581_drv.sv` (B3.2). The 8520 is the Amiga-family variant of the C64's 6526; the two differ in exactly one programmer-visible respect: the TOD (time-of-day) circuit is a 24-bit binary counter instead of a BCD (binary-coded-decimal) wall clock counting tenths, seconds, minutes and hours. The file header states its pedigree: a 6526 model by Rayne, timers and interrupts rewritten by slingshot ("Passes all Lorenz CIA Timer tests", and all VICE CIA tests except dd0dtest), converted to the 8520 by Sorgelig. We carry it unmodified from upstream MiSTer.
 
@@ -2019,6 +2158,19 @@ Worth knowing when reading DOS listings against this model: register `B` reads `
 
 #### B4.2 iecdrv_via6522.vhd
 
+```
+ drive-CPU bus: clock    ┌───────────────────────────┐
+ with phi-2 enables,   ◀▶│      iecdrv_via6522       │◀▶ port A and port B —
+ 4-bit register select,  │  a generic 6522 VIA:      │   each pin an explicit
+ data, read/write        │  two ports, two timers,   │   driven-value /
+ strobes, interrupt      │  shift register,          │   direction / sense
+                         │  handshake pins           │   triple
+                         │  (CA1/CA2, CB1/CB2)       │
+                         │  — in the 1581: only the  │
+                         │  parallel-port extension  │
+                         └───────────────────────────┘
+```
+
 This file models the MOS 6522 VIA (Versatile Interface Adapter), the 6502-family input/output companion that predates the CIA. It is Gideon Zweijtzer's model — the header notes "A LOT OF REVERSE ENGINEERING", with refinements credited to gyurco, and the architecture is fittingly named `Gideon` — and we carry it unmodified. In this repository the VIA's real home is the 1541, which carries two of them (B4.4). Inside the 1581 model a single instance appears for one reason only: **to host a parallel-port extension that no stock 1581 ever had.** A real 1581 contains one 8520 and a WD1772 and no VIA at all.
 
 The entity (`iecdrv_via6522`, no generics) takes `clock` with `rising`/`falling` phi-2 enables and `reset`; a four-bit `addr` with `wen`/`ren` and `data_in`/`data_out`; and a `phi2_ref` output mirroring the reconstructed phase. Its pin model differs instructively from the 8520 file: instead of the wired-AND convention, every port is an explicit triple — `_o` (driven value), `_t` (direction), `_i` (pin sense) — for ports A and B, and likewise for the handshake pins CA2, CB1 and CB2, with CA1 input-only. The `irq` output is active-high; `c1581_drv.sv` folds it into the CPU interrupt as `cia_irq_n & ~via_irq`.
@@ -2028,6 +2180,17 @@ Structurally the VIA is a different dialect of the same idea as the CIA, and the
 In the 1581 instantiation the VIA sits at `$2000` (`ls193` decode, one below the CIA). Port A carries the parallel data in both directions, CA2 drives the outgoing strobe, CB1 senses the incoming strobe, CA1 is tied high, and port B simply loops back on itself. This mirrors the DolphinDOS-style parallel cable of a modified 1541 — data plus two strobes — so the same fabric plumbing (`par_*`, wire-ANDed up through `c1581_multi.sv` and `iec_drive.sv`, B3.3/B3.4) serves both drive types, and software ecosystems built around parallel-cabled drives find the same hardware shape here. Section A Chapter 5 gives the background on drive-side I/O chips; B4.4 shows this same entity doing its original job, twice, in the 1541.
 
 #### B4.3 floppy.v
+
+```
+ select, motor ─────────▶ ┌─────────────────────┐──▶ ready (spinning at rate)
+ step pulses + direction  │       floppy        │──▶ index (active-low, 5 ms
+ (from the WD model)    ─▶│  the virtual        │    pulse per 200 ms turn)
+                          │  spindle: a 300 RPM │──▶ current track number
+                          │  rotation and       │──▶ sector now under the head
+                          │  geometry model for │──▶ dclk_en: the 32 µs
+                          │  image mode only    │    byte tick
+                          └─────────────────────┘
+```
 
 `floppy.v` is the virtual spindle of the image-backed drive: a model of rotation, index and track geometry, written by Till Harbaum in 2015 for the MiST project (an earlier FPGA — field-programmable gate array — retro platform; the commented-out Acorn Archimedes and Atari ST defaults are still in the file). It is best understood as **a clock, not a data path**. It never touches a byte of disk data; it continuously answers one question — *if this were a real spinning disk, what would be under the head right now?* — and the WD1772 model paces all of its data movement off the answers, which is why loading from a D81 (the 800 KB 1581 disk-image format) takes realistic time. It serves **image mode only**: in physical mode, `fdc1772.v` switches its ready and index sources over to the real mechanism (the `floppy_ready` and `fd_index_eff` multiplexers, B3.1), and the virtual spindle's answers go unused.
 
@@ -2146,6 +2309,17 @@ That uniformity is the point worth stating plainly: the physical-1581 path is no
 One neighboring wire deserves a mention because readers often look for it here: the drive LED. `MEGA65_Core` outputs `main_drive_led` and its RGB color, the top hands both to the framework, and the framework drives the MEGA65 keyboard's floppy LED — so the green/yellow cache semantics described in Chapter B5.1 end at a real light above a real drive slot. Section A Chapter 12 describes the read-only milestone this pinout serves; Chapter 18 discusses the safety reasoning; the Appendix records when writing is expected to arrive.
 
 #### B5.5 M2M/vhdl/vdrives.vhd
+
+```
+ QNICE (the Shell):        ┌────────────────────────┐  the drive (fdc1772 via
+ register window — mount ◀▶│        vdrives         │◀▶ iec_drive): mount pulse
+ strobes, image size and   │  the virtual-drive     │   + size + type out;
+ type, block serving,      │  engine: MiSTer's      │   block requests (LBA,
+ cache-dirty flags,        │  host protocol, played │   count, rd/wr) in;
+ flush timing              │  by the Shell instead  │   buffer bytes both ways
+                           │  of an ARM processor   │
+                           └────────────────────────┘
+```
 
 `M2M/vhdl/vdrives.vhd` exists because MiSTer cores are written against a host they do not have here. On the DE10-Nano, an ARM processor (the "HPS") mounts disk images and serves blocks over a private protocol; the drive RTL (register-transfer level — its synthesizable hardware description) just raises `sd_rd` and expects sectors to appear. `vdrives` is the hardware half of that host, re-implemented as a register file that the QNICE Shell operates — the drive never learns that its "SD card" is firmware.
 
