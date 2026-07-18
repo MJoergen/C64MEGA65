@@ -206,31 +206,65 @@ the middle of the cell. The clock is always there — and half the disk's
 capacity is spent on it.
 
 **MFM** (modified frequency modulation), the scheme all our disks use, is the
-elegant refinement. The rule: a 1-bit always writes a transition at the center
-of its bit cell; a clock transition is written at the *boundary* between two
-cells only if *both* neighboring bits are 0. That single rule guarantees the
-gap between any two consecutive transitions is never shorter than one full bit
-cell and never longer than two — enough density for the clock to stay
-recoverable, no wasted transitions. MFM stores twice as much as FM on the same
-disk, which is why FM is also called single density and MFM **double density
-(DD)**.
+elegant refinement. Its rule has two halves: a 1-bit always writes a
+transition at the *center* of its bit cell; and a clock transition is written
+at the *boundary* between two cells only if the bits on both sides are 0 —
+just enough clock to fill the longest silences, and not a transition more.
+MFM stores twice as much as FM on the same disk, which is why FM is also
+called single density and MFM **double density (DD)**.
 
-It is worth working the arithmetic once, because the whole physical decoder in
-Part III lives inside these numbers. Our disks record at 250 kilobits per
-second: a data bit cell is 4 microseconds long. It is convenient to cut the
-cell in half and speak of the **half-cell** of 2 microseconds — the grid on
-which transitions may occur (cell centers and cell boundaries are each half a
-cell apart). The MFM rule then says: between two consecutive transitions there
-are exactly **2, 3, or 4 half-cells** — 4, 6, or 8 microseconds — and nothing
-else, ever. Which of the three occurs depends on the data:
+Rather than reason about the rule in the abstract, watch it store the very
+sequence this chapter opened with — `1 0 1 1 0 0 1`. The numbers that fall
+out are the ones the whole physical decoder of Part III lives inside. Our
+disks record 250,000 bits per second, so each bit cell is 4 microseconds
+wide. In the ruler below, `|` marks the cell boundaries and `+` marks the
+cell centers:
+
+```
+data bits:     1     0     1     1     0     0     1
+            |--+--|--+--|--+--|--+--|--+--|--+--|--+--|
+flux:          ▲           ▲     ▲        ▲        ▲
+gaps:          └───8 µs────┘     └──6 µs──┘
+                           └─4µs─┘        └──6 µs──┘
+```
+
+Walk the flux row against the rule. Every 1 fired a transition at its cell
+center — four of the five marks stand under a `+`. The zeros wrote nothing of
+their own, except in one place: between the two *adjacent* 0s the boundary
+half of the rule kicked in and produced the fifth mark, standing under a
+`|` — a **boundary clock**. Now read off what a drive will see when this
+passes under the head again: five transitions, spaced 8, 4, 6, and 6
+microseconds apart. That spacing sequence *is* the recording; nothing else
+survives on the disk.
+
+And look where the marks stand: always on a center or on a boundary, never
+in between. Centers and boundaries alternate every 2 microseconds, so every
+transition lives on a single, uniform 2-microsecond grid. That grid unit is
+worth naming: a **half-cell** is 2 microseconds — half a bit cell — and from
+here on the book measures every flux interval in half-cells. In those units
+the example's gaps are 4, 2, 3, and 3 half-cells, and that is no accident of
+this particular bit string. Between two consecutive transitions there are
+always exactly **2, 3, or 4 half-cells** — 4, 6, or 8 microseconds — and
+every case traces back to one of five bit neighborhoods:
 
 ```
 data bits      transition spacing
 1 1            2 half-cells (4 µs)   cell center to cell center
 0 0 0 ...      2 half-cells (4 µs)   boundary clock to boundary clock
 1 0 0          3 half-cells (6 µs)   cell center to boundary clock
+0 0 1          3 half-cells (6 µs)   boundary clock to cell center
 1 0 1          4 half-cells (8 µs)   center, skipped middle, center
 ```
+
+Four of the five rows appear in the worked example above; the remaining one
+is just a longer run of zeros, which repeats its boundary clock once per bit
+cell. And the two edges of this little alphabet are forced by the rule
+itself, not decreed. Nothing *shorter* than 2 half-cells can ever occur: that
+would take a cell center and an adjacent boundary firing together, but the
+boundary only fires between two 0s, and a firing center *is* a 1. Nothing
+*longer* than 4 can occur either: the only way to stay silent past one
+skipped center (`1 0 1`) is a run of zeros — and a run of zeros clocks every
+boundary it contains.
 
 A decoder therefore has a beautifully small job description: measure each
 **gap** (the time from one transition to the next), classify it as
