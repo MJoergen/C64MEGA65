@@ -1585,7 +1585,37 @@ core (B5), and the test suites (B6).
 
 ### B1 — The decode chain (CORE/vhdl/physical_1581/)
 
-The seven files in this group form the read side of the physical 1581 drive: raw flux pulses from the mechanism's read head go in, decoded and checksum-verified sector IDs and data bytes come out. Four small pipeline stages transform the signal step by step — flux edges to gaps, gaps to classes, classes to bits, bits to bytes — while a cyclic redundancy check (CRC) engine runs alongside and a decoder wraps all of them in the qualification logic that decides when a byte boundary can be trusted. A shared package supplies every timing constant. Everything in this group lives in a single clock domain, the 50 MHz QNICE-domain clock `c64_clk_sd_i` (QNICE is the 16-bit helper CPU of the MiSTer2MEGA65 (M2M) framework; its clock simply happens to be the convenient 50 MHz source). Section A Chapter 13, the adaptive MFM decoder, teaches the algorithm these files implement as one continuous story; the entries below describe what each file contributes to it. MFM — Modified Frequency Modulation, the line code that stores data in the spacing of flux transitions — and the rest of the magnetic vocabulary are developed from scratch in Section A Chapters 1 through 3.
+The seven files in this group form the read side of the physical 1581 drive: raw flux pulses from the mechanism's read head go in, decoded and checksum-verified sector IDs and data bytes come out. Four small pipeline stages transform the signal step by step, a cyclic redundancy check (CRC) engine runs alongside, a decoder wraps all of them in the qualification logic that decides when a byte boundary can be trusted, and a shared package supplies every timing constant. Here is the whole group as one picture — the map that the seven entries below unfold, station by station:
+
+```
+flux from the mechanism: f_rdata, one pulse per transition (conditioned by B2.2)
+     │
+  ┌──┼──────────────────── B1.6  physical_1581_mfm_decoder ───────────────────┐
+  │  ▼                                                                        │
+  │  B1.2  mfm_gaps             measures the time between two transitions —   │
+  │  │                          one gap; merges electrical runts away         │
+  │  ▼                                                                        │
+  │  B1.3  mfm_quantise         classifies each gap short / medium / long     │
+  │  │                          against the adaptive half-cell estimate       │
+  │  ▼                                                                        │
+  │  B1.4  mfm_gaps_to_bits     unfolds classes into data bits; fires an      │
+  │  │                          A1 candidate on the long-med-long-med tail    │
+  │  ▼                                                                        │
+  │  B1.5  mfm_bits_to_bytes    assembles bits into bytes, realigning the     │
+  │  │                          byte boundary at every sync                   │
+  │  ▼                                                                        │
+  │  field parser (B1.6 itself) qualifies A1 trains, enforces the record      │
+  │  │            ▲             grammar, walks the ID/data field states       │
+  │  │            └─ B1.7  crc  renders the CRC-16 verdict on every field     │
+  │  ▼                                                                        │
+  └──┼────────────────────────────────────────────────────────────────────────┘
+     ▼
+qualified fields — ID bytes, data bytes, CRC verdicts — to the controller (B2.1)
+
+      every stage reads its timing constants from B1.1  physical_1581_pkg
+```
+
+The outer box is literal: `physical_1581_mfm_decoder` instantiates the four stages and the CRC engine, which is why B1.6 is both a station in the chain and the roof over all of it — and why this group reads bottom-up so naturally, foundation first (B1.1), then the stations in signal order, then the roof. Everything in this group lives in a single clock domain, the 50 MHz QNICE-domain clock `c64_clk_sd_i` (QNICE is the 16-bit helper CPU of the MiSTer2MEGA65 (M2M) framework; its clock simply happens to be the convenient 50 MHz source). Section A Chapter 13, the adaptive MFM decoder, teaches the algorithm these files implement as one continuous story; the entries below describe what each file contributes to it. MFM — Modified Frequency Modulation, the line code that stores data in the spacing of flux transitions — and the rest of the magnetic vocabulary are developed from scratch in Section A Chapters 1 through 3.
 
 #### B1.1 physical_1581_pkg.vhd
 
