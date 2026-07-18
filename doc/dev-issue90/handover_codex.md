@@ -1176,6 +1176,93 @@ Therefore the disk content, program, physical/WD path and normal IEC transfer
 are good, while the earlier crash is isolated to application memory/IRQ state.
 No further fresh-media read testing is needed for this milestone.
 
+## 2026-07-18 addendum: restore strict image/physical isolation
+
+### Corrected diagnosis
+
+An image-backed D81 mounted but `LOAD"$",8` could remain forever at
+`SEARCHING FOR $`; D64 continued to work because it uses the separate 1541
+engine. The governing issue-90 invariant is stricter than merely making this
+specific command complete: with physical mode off, the proven simulated-D81
+path must behave exactly as it did before the physical-drive work.
+
+The first attempted repair generalized the physical-only minimum Type-I BUSY
+timer to image mode. That repair was rejected and fully reverted because it
+changed image timing instead of restoring isolation.
+
+A historical differential test then located the actual image-visible branch
+delta. Early physical commit `88c09d2` retains the old image expression
+`data_out <= data_in` on a WD data-register write. Commit `b2bd629` changed it
+unconditionally to `data_out <= cpu_din` for the physical ROM startup test.
+That physical fix was correct but its missing mode gate altered simulated-D81
+register behavior too.
+
+The controls are exact:
+
+- `tb_fdc1772_image.sv` compiled against `88c09d2` passes;
+- the same test compiled against `b2bd629` fails only the data-register
+  compatibility check (`5A` observed instead of legacy `A5`);
+- unmodified branch HEAD fails identically; and
+- Read Address, all ten directory sectors, all ten LBAs and all 5,120 payload
+  bytes pass in every case, isolating the regression from image-sector DMA.
+
+Direct source comparison also confirms that `data_out <= data_in` is the
+pre-physical `develop` (`1377b8d`) expression. The executable differential uses
+`88c09d2` because `1377b8d` still relies on declaration-after-use constructs
+accepted by Vivado but rejected by Icarus; `88c09d2` made that source strictly
+elaboratable before the first image-visible behavior change.
+
+### Isolation fix
+
+`fdc1772.v` now uses:
+
+`data_out <= phys_mode ? cpu_din : data_in;`
+
+Therefore image mode executes the exact pre-change expression, while physical
+mode executes the exact already-qualified current-value readback expression.
+The physical-only Type-I timer remains physical-only.
+
+A complete comparison against pre-physical `develop` (`1377b8d`) confirmed
+that the existing `pa_out[6] | fdc_busy` LED expression predates issue 90 and
+is part of the legacy image behavior; it must therefore remain unchanged. All
+other shared-path changes either sit inside `if (phys_mode)` or select their
+old expression explicitly when `phys_mode=0`. The deliberate source-switch
+disk-change indication remains the one transition-specific exception; it is
+needed to prevent stale BAM state when changing media backends.
+
+### Permanent image regression
+
+New self-checking test
+`CORE/C64_MiSTerMEGA65/rtl/iec_drive/tb_fdc1772_image.sv` holds
+`phys_mode=0` and checks:
+
+- the legacy WD data-register contract from `88c09d2`;
+- six-byte Read Address;
+- directory-login order `7,8,9,10,1,2,3,4,5,6` at cylinder 39;
+- exact D81 LBAs and all 5,120 bytes through the real dual-clock FDC RAM and
+  `clk_sys` SD request state machine; and
+- inactive SD-write and physical-controller outputs.
+
+Fixed RTL and `88c09d2` produce byte-identical passing transcripts with SHA-256
+`896991a5265fdff23ec3c4881688a654d563394b49a1c6a855c1748f9644f64e`.
+
+### Physical-read non-regression evidence
+
+For `phys_mode=1`, the changed WD assignment reduces exactly to the unmodified
+branch expression `data_out <= cpu_din`; no other product expression changed.
+Fixed and unmodified-HEAD physical WD benches pass and produce byte-identical
+transcripts with SHA-256
+`28695e37d2898a4a6ff7a448783c115ddd3d7d5f68bc991ff738be35f5c8a1d3`.
+The already completed physical VHDL/controller and genuine-ROM proof suites are
+unaffected because no physical-mode expression or physical controller source
+changed.
+
+This establishes two-sided source-level isolation plus behavioral controls.
+The final release gate remains a newly synthesized R3 hardware run: image-mode
+`LOAD"$",8` plus a program, followed by the qualified physical sequence (cold
+preinserted directory/program, stopped-motor repeat, eject/reinsert). Simulation
+cannot certify synthesis, a particular board or a particular disk.
+
 ## Next-instance continuation: community stock-media gate, then write milestone
 
 The implemented milestone is deliberately **read-only**. R3 hardware is fully

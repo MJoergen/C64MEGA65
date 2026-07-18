@@ -49,7 +49,12 @@ must all build (R3/R4/R5/R6; functional read testing is on R3):
 * Image-mode regression, MUST be unaffected: with "Use internal 1581" OFF, the
   existing `*.d64` (1541) and `*.d81` (1581) disk-image mount / directory / load
   / write / flush / power-cycle behaviour is exactly as before - the physical
-  path must be completely transparent when it is not selected
+  path must be completely transparent when it is not selected. Automated gate:
+  `CORE/C64_MiSTerMEGA65/rtl/iec_drive/tb_fdc1772_image.sv` holds
+  `phys_mode=0`, locks shared WD register behavior to early reference commit
+  `88c09d2`, and reads all ten directory-track sectors in ROM order through the
+  real image/SD buffer crossing. Reference and fixed transcripts must match;
+  the `b2bd629`/unfixed-HEAD negative control must fail the image readback check
 * Idle-gate (symmetric): toggling "Use internal 1581" is ignored in BOTH
   directions while drive 8 is busy - switching to image mode is blocked while
   the physical drive reads/steps/spins, and switching to the internal drive is

@@ -733,3 +733,37 @@ No RTL or testbench was changed during checkpoint 11.
   `doc/dev-issue90/f011_reference_notes.md`, all completely. No active RTL work
   remains; wait for community evidence or explicit user authorization for the
   write milestone.
+
+## 2026-07-18 checkpoint 25: strict image-mode isolation restored
+
+- Rejected and reverted the first attempted fix, which generalized the
+  physical-only Type-I BUSY timer to image mode. The issue-90 invariant is that
+  physical work must not change the established simulated-D81 path.
+- Historical differential narrowed the first image-visible regression exactly:
+  `88c09d2` passes the new image compatibility test; `b2bd629` and current HEAD
+  fail only because the WD data-register write mirror changed unconditionally
+  from legacy `data_in` to physical-required `cpu_din`. All ten directory
+  sectors and 5,120 bytes pass, so image DMA is exonerated. Source comparison
+  confirms `data_in` is also the pre-physical `develop` (`1377b8d`) expression;
+  the executable control starts at `88c09d2` because the older file uses
+  Vivado-accepted forward declarations that strict Icarus cannot elaborate.
+- Fix in `fdc1772.v`: `data_out <= phys_mode ? cpu_din : data_in`. With
+  `phys_mode=0` this is the exact early expression; with `phys_mode=1` this is
+  the exact currently qualified hardware expression. The physical Type-I timer
+  remains gated by `phys_mode`.
+- A full comparison against pre-physical `develop` (`1377b8d`) confirmed that
+  the existing `pa_out[6] | fdc_busy` LED expression predates issue 90 and is
+  part of the legacy image baseline, so it remains unchanged. Other shared
+  changes reduce to the old path when `phys_mode=0`; source-switch disk-change
+  signaling is the intentional transition-specific exception.
+- Added permanent `tb_fdc1772_image.sv`: legacy register contract, Read Address,
+  ten genuine-order cylinder-39 directory sectors, exact LBAs/bytes and
+  physical-output inactivity. Fixed and `88c09d2` logs are byte-identical,
+  SHA-256 `896991a5265fdff23ec3c4881688a654d563394b49a1c6a855c1748f9644f64e`.
+- Fixed and unmodified-HEAD physical WD logs are byte-identical and pass,
+  SHA-256 `28695e37d2898a4a6ff7a448783c115ddd3d7d5f68bc991ff738be35f5c8a1d3`.
+  No physical-mode expression, controller, decoder, FIFO, mechanics or pin
+  behavior changed.
+- Final release qualification: newly synthesize R3, test image D81 directory +
+  program, then repeat the already qualified physical cold/stopped/eject cases.
+  This is the remaining bitstream/board gate, not an unresolved RTL ambiguity.
