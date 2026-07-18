@@ -332,16 +332,37 @@ signal for a clock-recovery circuit to lock onto. The preamble is a runway: by t
 reader's timing is synchronized.
 
 **The sync mark.** After the preamble come three bytes of `0xA1` — but not
-ordinary `0xA1`. The writer deliberately *omits one clock transition* that the
-MFM rule demands (the clock between bits 4 and 5). The resulting raw
-transition pattern, `0x4489` when written out as the 16 half-cell slots of the
-byte, can never occur in legal data — omitted clock included, it reads as gap
-lengths of long, medium, long, medium where data `0xA1` would read otherwise.
-This is the **A1 sync mark**: a byte-aligned, unmistakable "a field starts
-here" flag, findable from cold, mid-track, with no context. Three in a row
-(the **A1 train**) make the flag robust; a reader demands all three before
-believing it. The next byte after the train tells *what kind* of field
-follows; that byte is called the **address mark**.
+ordinary `0xA1`. To see the trick, write a byte the way the disk sees it:
+sixteen **slots** on Chapter 2's half-cell grid, a clock slot then a data
+slot for each bit, where a 1 in a slot means "a transition here". Here is
+`0xA1` (data bits `1 0 1 0 0 0 0 1`, following a preamble zero) encoded
+twice — once honestly, and once as the formatter actually writes it, with
+one clock transition *deliberately omitted*:
+
+```
+data bits:    1    0    1    0    0    0    0    1
+data 0xA1:   0 1  0 0  0 1  0 0  1 0  1 0  1 0  0 1   reads: L M S S M
+sync 0xA1:   0 1  0 0  0 1  0 0  1 0  0 0  1 0  0 1   reads: L M L M
+                                      ▲
+                               the omitted clock
+```
+
+Read each slot row as flux — every 1 is a transition — and measure the gaps
+between them. Honest `0xA1` (raw word `0x44A9`) reads long, medium, short,
+short, medium. The doctored byte (raw word `0x4489`) reads **long, medium,
+long, medium** — and that four-gap tail is the whole point, because legal
+data can never produce it. Chapter 2's rule makes the argument short: a
+long gap only ever runs cell center to cell center (`1 0 1`), and a medium
+gap leaving a center always lands on a boundary clock (`1 0 0`) — so after
+*long, medium* the stream is necessarily sitting on a cell boundary, and
+from a boundary the very next transition is at most a medium away (`0 0 1`).
+*Long, medium, long* is therefore impossible in data; the omitted clock is
+precisely what manufactures it. This is the **A1 sync mark**: a
+byte-aligned, unmistakable "a field starts here" flag, findable from cold,
+mid-track, with no context. Three in a row (the **A1 train**) make the flag
+robust; a reader demands all three before believing it. The next byte after
+the train tells *what kind* of field follows; that byte is called the
+**address mark**.
 
 **Fields.** The grammar defines two. An **ID field** is the sector's label:
 address mark `0xFE`, then four bytes — cylinder, head, sector number, and a
@@ -594,9 +615,22 @@ Commodore's DOS, however, predates this format and thinks in its own units:
 bytes, numbered 0 through 39**. The two views describe the same bytes through
 a fixed mapping: logical track T is cylinder T−1; logical sectors 0–19 live
 on side 0 and 20–39 on side 1; and each physical 512-byte sector carries two
-consecutive logical sectors, first half and second half. The DOS never
-notices — its job layer asks for logical track and sector, and a thin
-translation in the firmware picks cylinder, side, physical sector, and half.
+consecutive logical sectors, first half and second half. One worked example
+makes the whole translation concrete — here is the first directory block,
+the single most-read block on any 1581 disk:
+
+```
+the DOS asks for:  logical track 40, sector 3
+   cylinder 39            track − 1
+   side 0                 sector 3 is in 0–19  (20–39 would be side 1)
+   physical sector 2      two logical per physical: 0,1 → 1;  2,3 → 2; …
+   second 256-byte half   odd logical sector number
+```
+
+(For sectors 20–39 the same arithmetic applies after subtracting 20, on
+side 1.) The DOS never notices any of this — its job layer asks for logical
+track and sector, and a thin translation in the firmware picks cylinder,
+side, physical sector, and half.
 
 A **D81 file** — the `.d81` disk image our image-backed drive mounts — is
 nothing more than the logical view serialized: track 1 sector 0 through track
@@ -657,13 +691,24 @@ loop drops one — with consequences described next.
 
 **The status epilogue** (at `$CD3F`, indexing a table at `$CD5A`): when a job
 finishes, this code maps the WD1772 status byte to a job result by table
-lookup — and the table has a hole. A status with *both* the CRC-error and
-record-not-found bits set lands on an entry of `0x00`: job *success*. On a
-real drive that combination is vanishingly rare — it takes a search that both
-stumbled over a corrupted ID field and then exhausted its whole budget — so
-the hole never mattered in practice. But an emulated controller that sets
-both flags on a failure —
-a perfectly reasonable "belt and suspenders" instinct — sails through this
+lookup — it shifts and masks the status so that the CRC-error and
+record-not-found bits become the low bits of a table index. Lay out the four
+possible combinations and the hole becomes visible:
+
+```
+WD status flags            table verdict         what the DOS then does
+neither CRC nor RNF        job OK                accepts the data
+RNF only                   job error             read error, retries
+CRC only                   job error 5           "23, READ ERROR", retries
+CRC and RNF together       0x00 = job OK  (!)    accepts corrupt data
+```
+
+The last row is the hole: both failure flags at once index an entry the
+table's authors left at zero — *success*. On a real drive that combination
+is vanishingly rare — it takes a search that both stumbled over a corrupted
+ID field and then exhausted its whole budget — so the hole never mattered in
+practice. But an emulated controller that sets both flags on a failure — a
+perfectly reasonable "belt and suspenders" instinct — sails through this
 hole and delivers corrupt sectors as good ones, silently. Our controller
 therefore enforces the invariant *CRC error and record-not-found are never
 raised together* (Chapter 14).
@@ -1012,7 +1057,17 @@ with 1/16-cycle resolution, clamped to ±10% of nominal (90 to 110 cycles).
 A gap of length G is classified by nearest multiple: the class windows are
 "is G closer to 2, 3, or 4 estimates?", with boundaries at 2.5 and 3.5
 estimates, and an outer acceptance limit of half an estimate beyond each
-class center. Critically, the windows *touch*: there are **no dead bands**,
+class center. On a number line (everything in units of the estimate):
+
+```
+          │← short →│← medium →│←  long  →│
+    ──────┼────┼────┼────┼─────┼────┼─────┼──────
+         1.5   2   2.5   3    3.5   4    4.5
+   invalid     ▲          ▲          ▲     invalid
+             center     center     center
+```
+
+Critically, the windows *touch*: there are **no dead bands**,
 no forbidden zones between classes. The first shipped decoder had classical
 windows with guard bands between them, and real inner tracks refuted it:
 peak shift parked gap after gap inside the guard bands, classification
@@ -1025,11 +1080,26 @@ the observation — up if the gap ran long for its class, down if short. The
 step is deliberately sign-based, not proportional. A proportional tracker (a
 conventional averaging filter) seems more natural but was refuted by
 measurement: peak shift is *asymmetric* — short gaps only ever lengthen,
-long gaps only ever shrink — so magnitude-weighted averaging acquires a
-systematic bias, and under strong peak shift it dragged the estimate to its
-clamp and began misclassifying. The fixed sign-step seeks the *median* of
-the timing error instead, anchored by the unshifted majority of gaps —
-robust by construction against exactly the distortion floppy media exhibit.
+long gaps only ever shrink — so the per-gap timing errors are not centered
+noise. Picture their distribution:
+
+```
+per-gap error vs. the true half-cell length (strong peak shift):
+
+   shifted long gaps      unshifted majority      shifted short gaps
+   ●●●●●─────────────────────●●●●●●●●●●●●●●●─────────────────────●●●●●
+   read short                exactly on time                  read long
+                                    ▲                    ▲
+                              median: here        mean: dragged right
+```
+
+An averaging filter chases the *mean* of that lopsided cloud — a biased
+equilibrium; under strong peak shift it dragged the estimate to its clamp
+and began misclassifying. The fixed sign-step chases the *median* instead:
+each accepted gap moves the estimate one small step up or down regardless
+of how far off it was, so the estimate settles where half the gaps read
+fast and half slow — pinned to the unshifted majority, robust by
+construction against exactly the distortion floppy media exhibit.
 
 A gap that fits no class (outside every window) is declared **invalid** —
 the pipeline's loud failure symbol, historically "class 11". It aborts any
@@ -1052,20 +1122,37 @@ disks. The decoder therefore stops asking "does this gap look right?" and
 starts asking "does the *whole structure* look right?" — three escalating
 checks:
 
-**The span check.** A real A1's four defining gaps sum to 14 half-cells —
-1,400 cycles at nominal — and peak shift largely *cancels* over the whole
-word, since it moves internal transitions in opposing directions. The
-splice's counterfeit ran 446+344+446+344 = 1,580 cycles: every part
-plausible, the whole impossible. Each candidate must total 14 estimates
-within half an estimate, judged on the raw gap lengths, not the classes.
+**The span check.** Look back at the sync byte's slot diagram in Chapter 3:
+its four defining gaps read long, medium, long, medium — 4+3+4+3 = **14
+half-cells**, 1,400 cycles at the nominal 100 cycles per half-cell. Peak
+shift largely *cancels* over that total, because every interior transition
+ends one gap and begins the next: whatever its displacement adds to one gap
+it subtracts from its neighbor, and only the two outermost transitions can
+move the sum. The splice's counterfeit ran 446+344+446+344 = 1,580 cycles —
+every single gap within tolerance of its class, the four-gap total
+impossible. So each candidate must total 14 estimates within half an
+estimate, judged on the raw gap lengths, not the classes.
 
-**The spacing check.** In a genuine train, consecutive A1s produce
-candidates exactly five classified gaps apart — a deterministic consequence
-of the raw pattern. The first candidate is held *provisional*; only
-candidates arriving at exactly the five-gap cadence extend the train; a
-wrong-spaced candidate restarts it. Overlapping splice candidates, arriving
-every two gaps, can never assemble three in cadence. Only a completed
-three-candidate train — the full `A1 A1 A1` — arms the parser at all.
+**The spacing check.** Now string the three sync bytes of a real train
+together and read their gap stream. Each byte contributes its
+long-medium-long-medium signature, and the hop from one byte's final
+transition to the next byte's first is a single short gap:
+
+```
+gaps:        L M L M   S L M L M   S L M L M
+                   ▲           ▲           ▲
+candidate fires    1           2           3
+```
+
+The detector fires a candidate whenever the last four gap classes read
+long, medium, long, medium — that is, at the end of each sync byte — so in
+a genuine train, consecutive candidates arrive exactly **five gaps apart**:
+the bridging short plus the next byte's four. The first candidate is held
+*provisional*; only candidates at exactly the five-gap cadence extend the
+train; a wrong-spaced candidate restarts it. The splice's overlapping
+counterfeits, firing every two gaps, can never assemble three in cadence.
+Only a completed three-candidate train — the full `A1 A1 A1` — arms the
+parser at all.
 
 **The record grammar.** The deepest defense assumes the worst: splice flux
 that passes both timing checks (the Appendix documents a disk that
@@ -1082,9 +1169,15 @@ formatter on earth obeys, because the WD1772's own operation depends on it:
   label — so an unarmed data mark is parsed past and discarded. Arming is
   consumed by use: one valid ID licenses at most one data field.
 - A data mark must additionally carry the **zero-run credential**: its sync
-  train must have begun on the heels of a preamble run of zeros (at least
-  sixteen consecutive shortest-class gaps — two bytes' worth — ending
-  within six gaps of the train's first candidate). Here the F011 asymmetry
+  train must have begun on the heels of a preamble run of zeros. The
+  numbers are Chapter 2's arithmetic: in a run of `0x00` bytes every cell
+  boundary clocks, so one byte is eight shortest-class gaps, and the
+  demanded run of at least sixteen is two bytes' worth — a deliberately
+  modest slice of the twelve bytes every formatter writes. The run must
+  have ended within six gaps of the train's first candidate, which is
+  exactly as far back as the sync byte itself reaches: one bridging gap
+  into it plus its four signature gaps stand between the last preamble gap
+  and the candidate, with one gap to spare. Here the F011 asymmetry
   of Chapter 9 becomes decisive: *both* dialects write twelve zero bytes
   before every data field, but F011 ID fields have no preamble at all — so
   the zero-run requirement applies to data marks *only*. Demanding it for
@@ -1170,9 +1263,9 @@ watchdogs (1.3 seconds of search, 1.1 seconds awaiting readiness) so that
 no hardware state, however pathological, can wedge an operation forever.
 Completions carry one inviolable rule, inherited from Chapter 8's status
 epilogue: **a CRC failure never reports record-not-found at the same
-time.** The `$CD5A` table hole in the DOS maps that combination to
-"success"; the controller's result codes are designed so the combination
-cannot be emitted.
+time.** Chapter 8's four-row status table shows where that combination
+lands — the `$CD5A` hole that reads as success; the controller's result
+codes are designed so the combination cannot be emitted.
 
 #### Motion
 
@@ -1207,24 +1300,60 @@ the change latch cleared by stepping) leaves no room for approximation.
 The controller synthesizes both, and each synthesis carries a contract
 refined on hardware:
 
-**Readiness** is motor-on plus *proven rotation*: two qualified index
-edges — one full revolution witnessed edge to edge — before `/READY`
-asserts, for a cold, changed, or newly enabled disk. But two edges can cost
-up to two revolutions, 400 milliseconds, plus motor spin-up — and Chapter
-8's readiness exam allows roughly 0.7 seconds, once, with no retry. A
-drive that misses the window doesn't get a second chance; the command
-fails with error 74 while the disk spins innocently underneath. The
-controller therefore keeps a memory, `rotation_confirmed`: once an
+**Readiness** is motor-on plus *proven rotation*: the controller asserts
+`/READY` only after it has witnessed index edges from an actually spinning
+disk. The tension is between how much proof to demand and how long the DOS
+will wait — Chapter 8's readiness exam samples once, roughly 0.7 seconds
+after motor-on, with no retry. Put the two cases on a timeline against
+that deadline:
+
+```
+cold, changed, or newly enabled medium — demand a full witnessed revolution:
+
+  motor on ──spin-up──▶ edge 1 ──── one revolution ────▶ edge 2 ► READY
+                                                     worst case: spin-up
+                                                     + up to 2 revolutions
+
+same medium again after an ordinary motor stop — one fresh edge suffices:
+
+  motor on ──spin-up──▶ edge 1 ► READY
+
+  DOS deadline: one /READY sample at ~0.7 s ─── miss it once = error 74
+```
+
+Two edges — one full revolution witnessed edge to edge — is the honest
+proof for a disk the controller knows nothing about. But spin-up plus up
+to two revolutions (an index edge can be anywhere on the circle, so the
+first edge alone may cost a whole turn) brushes right against the DOS's
+deadline; a drive that misses it doesn't get a second chance, and the
+command fails with error 74 while the disk spins innocently underneath.
+The controller therefore keeps a memory, `rotation_confirmed`: once an
 unchanged medium has passed the full two-edge qualification, an ordinary
 motor stop does not revoke it, and the next spin-up asserts readiness
-after a *single* fresh index edge — saving one revolution, landing
-comfortably inside the DOS's window. The memory is guarded jealously:
-reset, feature disable, any disk-change assertion, or a stalled index
-*after rotation has begun* all revoke it (a stall *before* the first edge
-of a spin-up must not — spindle acceleration can legitimately outlast the
-staleness deadline, and the eject case is already covered because a real
-eject always asserts the disk-change line, which is authoritative at all
-times). Every clause in that sentence corresponds to a failure observed or
+after a *single* fresh index edge — one revolution saved, comfortably
+inside the window.
+
+That memory is guarded jealously, and each guard answers a specific
+question:
+
+- *What earns it?* The second clean index edge of a motor-on interval,
+  with no disk-change indication — the full cold qualification.
+- *What revokes it?* Reset or disabling the feature; any assertion of the
+  disk-change line, ever; and a stalled index — no edge for half a
+  second with the motor commanded on — once the current spin-up has
+  produced at least one edge (a disk that rotated and went silent is a
+  disk to distrust).
+- *Why not a stall before the first edge?* Because spindle acceleration
+  can legitimately take longer than the staleness deadline, and revoking
+  there would demote an innocent slow start back to the two-edge path —
+  the exact deadline-miss the memory exists to prevent. The eject case
+  loses nothing: a real eject always asserts the disk-change line, which
+  is authoritative at every moment, first edge or not.
+- *And whatever the history says,* readiness itself always waits for a
+  fresh edge from the current spin-up — remembered rotation is never a
+  substitute for present rotation.
+
+Every one of those clauses corresponds to a failure observed or
 constructed; the Appendix (era 5) tells them in order.
 
 **Disk change** is a latch, as the mechanism defines it: set by eject,
@@ -1500,7 +1629,7 @@ The entity `physical_1581_mfm_quantise` takes three generics: `G_TOL_ACQ_SHR` an
 
 The whole stage owns one register: `est_q`, the live half-cell length in Q8.4, seeded to nominal 100.0 cycles and clamped to 90.0..110.0. Per valid gap, all in sixteenths of a cycle: the gap is classified to the nearest class by comparing it against the midpoints `2.5*est` and `3.5*est` (an exact midpoint goes to the higher class); the error `e = G - n*est` against the chosen class center is then tested against a tolerance of `est/2` (the shift selected by `field_i`). With a half-estimate tolerance the acceptance windows touch at the midpoints: every gap between `1.5*est` and `4.5*est` — nominally 150 to 450 cycles, 3 to 9 µs — receives a class, and there are no dead-bands at all. On acceptance the estimate adapts by a fixed step of one eighth of a cycle in the sign of the error (zero error, no step) and is hard-clamped. On rejection the stage emits class 11, loss of lock, and re-seeds the estimate to nominal — as loud a failure as the old fixed windows ever produced. Since the decoder resets this stage at every operation start, idling and re-searching re-seed too.
 
-The sign-based step is the file's quiet masterstroke, and its header explains why at length: under peak shift, short gaps only ever lengthen and long gaps only ever shrink, so a proportional estimator averaging magnitudes has a biased equilibrium — the A/B margin harness (the testbench that races algorithm variants over synthetic gap streams; B6.2) showed it dragged to the +10 % clamp and then lost to the fixed windows it was meant to beat. A uniform step converges instead to the median of the per-gap error, which the unshifted majority of gaps anchors at the true motor speed. Convergence is quick: one eighth of a cycle per accepted gap reaches either clamp from nominal in 80 gaps.
+The sign-based step is the file's quiet masterstroke, and its header explains why at length: under peak shift, short gaps only ever lengthen and long gaps only ever shrink, so a proportional estimator averaging magnitudes has a biased equilibrium (Chapter 13 draws the lopsided error distribution that makes the bias visible) — the A/B margin harness (the testbench that races algorithm variants over synthetic gap streams; B6.2) showed it dragged to the +10% clamp and then lost to the fixed windows it was meant to beat. A uniform step converges instead to the median of the per-gap error, which the unshifted majority of gaps anchors at the true motor speed. Convergence is quick: one eighth of a cycle per accepted gap reaches either clamp from nominal in 80 gaps.
 
 Details worth knowing. First, a consequence the header states explicitly: with production generics — both tolerance generics equal and `G_HUNT_ADAPT_ALL` true — `field_i` has no behavioral effect whatsoever. The hunting-versus-in-field machinery is real, wired, and currently inert; it exists so the harness can instantiate the refuted tight-acquisition variant (`G_TOL_ACQ_SHR = 2`, a quarter-estimate window) and the superseded shorts-only adaptation rule as permanent regression columns. Second, the no-dead-band design still rejects genuine noise: a stable 126-cycle artifact measured on the test disk falls below `1.5*est` for every legal estimate (135 cycles at the lowest clamp) and classifies as a loud class 11. Third, lineage: this stage replaces a fixed-window classifier adapted from mega65-core's `mfm_quantise_gaps.vhdl` at `a9158930`; the old architecture survives verbatim as the reference entity `ref_mfm_quantise_fixed.vhd` in the codec testbench (B6.1).
 
@@ -1551,7 +1680,7 @@ The entity `physical_1581_mfm_decoder` takes six generics, all of them test-only
 
 The ports fall into three groups. The decoded-ID group: `id_valid_o` pulses once per completed ID field, with `id_c_o`/`id_h_o`/`id_r_o`/`id_n_o` (Cylinder, Head, Record and size-code Number — the four bytes of an ID field), `id_crc_ok_o`, and `id_crc_stored_o`, the CRC as stored on disk, first byte in bits 15..8. The decoded-data group: `data_start_o` pulses when a data address mark (DAM) is accepted, `data_byte_o`/`data_byte_valid_o` stream each payload byte, and `data_end_o` closes the field with `data_crc_ok_o` and `data_deleted_o`. The status and diagnostics group: `locked_o` (separator locked), plus one-cycle event pulses — `gap_error_o`, `runt_o`, `a1_candidate_o`, `a1_span_reject_o`, `a1_train_o`, `mark_fe_o`, `mark_dam_o`, `dam_unarmed_o` — and the taps `last_gap_o` (raw length of the last gap), `crc_value_o` (the live CRC register), and `est_o` (the quantiser estimate). The diagnostic device counts the pulses and exposes the taps (B2.4; Section A Chapter 17).
 
-Three qualification layers stand between a stage-three sync pulse and an open field. Layer one is the aggregate span check: alongside the quantiser's classes, the decoder retains the raw lengths of the last four gaps (`a1_gap_0..3`), because the class detector alone loses their combined timing. A combinational process compares their sum against the expected span of a complete raw A1 — 14 half-cells, `C_QUANT_A1_CELLS`, at the current estimate — within a tolerance of half the estimate. The tolerance is deliberately broad for individual jitter yet lethal to coherent junk: legitimate peak shift moves transitions substantially but its internal movements cancel end to end, whereas splice residue such as the 446/344/446/344 pattern passes every per-gap window and still totals 1580 cycles against a nominal 1400 — rejected structurally. A failed span not only discards the candidate; it clears any provisional train and pulses `a1_span_reject_o`.
+Three qualification layers stand between a stage-three sync pulse and an open field. Layer one is the aggregate span check: alongside the quantiser's classes, the decoder retains the raw lengths of the last four gaps (`a1_gap_0..3`), because the class detector alone loses their combined timing. A combinational process compares their sum against the expected span of a complete raw A1 — 14 half-cells, `C_QUANT_A1_CELLS`, at the current estimate — within a tolerance of half the estimate. The tolerance is deliberately broad for individual jitter yet lethal to coherent junk: legitimate peak shift moves transitions substantially but its internal movements cancel end to end, whereas splice residue such as the 446/344/446/344 pattern passes every per-gap window and still totals 1580 cycles against a nominal 1400 — that is, 14 half-cells at the 100-cycle nominal estimate, with the half-estimate tolerance accepting 1350 to 1450, so 1580 misses by a wide margin and is rejected structurally (Chapter 13 draws the complete word). A failed span not only discards the candidate; it clears any provisional train and pulses `a1_span_reject_o`.
 
 Layer two is exact train spacing. Consecutive A1 bytes in a genuine A1 A1 A1 train produce candidates exactly `C_QUANT_A1_SPACING = 5` quantised gap events apart — one short bridging gap plus the four gaps of the next A1's tail. The decoder counts gaps since the last candidate in `sync_gap_age` (saturating at 15, meaning "no preceding candidate"). The first surviving candidate is provisional: the CRC is preset and fed an A1 in the same cycle, `sync_cnt` becomes one, but `locked_o` stays low. Each following candidate joins the train only if it arrives at exactly five gaps; the third member raises `locked_o` and pulses `a1_train_o`. Any other spacing restarts the train with this candidate as a new provisional first A1. This is the gate that killed the write-splice failure mode: junk chains fire overlapping candidates two gaps apart and can never reach a count of three. And unlike a preamble requirement, it tests the address-mark train itself, so it is formatter-independent — stock 1581 tracks and MEGA65 F011-formatted tracks differ in their lead-ins but must both contain the same three A1s.
 
@@ -1600,11 +1729,30 @@ Everything time-shaped is a generic, with the production defaults expressed in 5
 
 **Enable and the pins.** `en` is `G_CAPABLE` and the synchronized `phys_active_i`; when disabled, every output drives the deasserted high level and the FSMs sit in the same cleared state as under reset. Enabled, drive select asserts unconditionally, the motor pin follows the CIA motor level, and `f_density_o` stays at the double-density-safe level. The side mapping was determined empirically from real media: `f_side1_o` equals PA0 of the drive computer's CIA (`not side_s`), exactly as the original 1581 wires PA0 straight to the mechanism's SIDE line — the surface selected by a low pin carries the sector IDs with `H = 0`, the D81 first half. A change of side loads the 100 µs side-settle timer and resets the decoder.
 
-**Media readiness.** `media_ready` models the RDY line of the original mechanism (Chinon FB-354): the motor is on and real index pulses prove a disk is spinning plausibly. It is deliberately independent of the disk-change latch, because the stock 1581 ROM (read-only memory) waits for RDY on CIA PA1 *before* running the disk job whose seek steps would clear the change latch — gating one on the other deadlocks the Disk Operating System (DOS). Cold qualification demands two motor-on index edges. Once a medium has passed that test with no change indication, the sticky flag `rotation_confirmed` remembers it across motor-off intervals, and a restart may reassert RDY after a single fresh edge — this closes the stock ROM's finite spin-up window, which can expire before a worst-phase second edge. The history is revoked by reset or disable, by any raw disk-change assertion, or by index staleness: no edge for `2 * G_PERIOD_MAX_CYC` (500 ms) with the motor on drops readiness, and additionally clears `rotation_confirmed` if this motor-on interval had already produced an edge (before the first edge, spindle acceleration may legitimately be slow; raw disk-change remains the authoritative pre-first-edge eject signal). The change latch itself, `change_latched`, is set by the raw pin and — importantly — on reset *and on plain disable*: while the controller is off, drive 8 is served from a disk image, so a switch back to physical mode must present as a disk change and force the DOS to revalidate. It clears only when a completed step's recovery ends with media present, matching how the latch clears in a real drive.
+**Media readiness.** `media_ready` models the RDY line of the original mechanism (Chinon FB-354): the motor is on and real index pulses prove a disk is spinning plausibly. It is deliberately independent of the disk-change latch, because the stock 1581 ROM (read-only memory) waits for RDY on CIA PA1 *before* running the disk job whose seek steps would clear the change latch — gating one on the other deadlocks the Disk Operating System (DOS). Cold qualification demands two motor-on index edges. Once a medium has passed that test with no change indication, the sticky flag `rotation_confirmed` remembers it across motor-off intervals, and a restart may reassert RDY after a single fresh edge — Chapter 14's timelines show why: the cold worst case of spin-up plus up to two revolutions brushes the stock ROM's one-shot readiness deadline, and the remembered revolution buys the margin back. The history is revoked by reset or disable, by any raw disk-change assertion, or by index staleness: no edge for `2 * G_PERIOD_MAX_CYC` (500 ms) with the motor on drops readiness immediately. Staleness clears `rotation_confirmed` as well, but only once the current motor-on interval has produced an edge — before the first edge, spindle acceleration may legitimately be slow, and raw disk-change remains the authoritative eject signal there. The change latch itself, `change_latched`, is set by the raw pin and — importantly — on reset *and on plain disable*: while the controller is off, drive 8 is served from a disk image, so a switch back to physical mode must present as a disk change and force the DOS to revalidate. It clears only when a completed step's recovery ends with media present, matching how the latch clears in a real drive.
 
 **The step engine** walks `SI_IDLE → SI_SETUP → SI_LOW → SI_REC`: latch the direction, wait the 24 µs direction setup, pulse STEP low for 4 µs, move the head-cylinder estimate at the trailing edge, start the 18 ms settle timer, then wait the 3 ms (or 4 ms reversal) recovery before toggling the acknowledge. Accepting a step clears `head_settled` and also kills any still-running settle timer from the previous step, which would otherwise expire mid-flight and reassert the flag early. If an outward step ends with the track 0 sensor active, the estimate anchors to zero and `head_valid` is set. Two subtleties matter: `head_settled` is `'1'` at rest and after reset or disable — starting at `'0'` would wedge the WD1772 (Western Digital floppy-disk controller) front end whenever a verify needs zero steps, such as Restore with the head already home — and the settle timer runs independently of the FSM, so it guards reads without delaying further step requests. On plain disable the head estimate survives; only a real reset clears it.
 
-**The read engine** walks `RD_IDLE → RD_WAIT → RD_SEARCH → {RD_DAM → RD_STREAM | RD_ADDR}`. A cancel edge or a raw disk change aborts any non-idle state immediately (`RES_CANCELLED`, or `RES_DISK_CHANGED` with RNF). `RD_IDLE` accepts a live request edge or serves the *pending latch*: a request that arrives while the engine is busy is latched with its parameters resampled at the edge — latest edge wins, a cancel clears it — instead of being lost, which once was the path's one silent-desynchronization channel (stale data delivered under a newer command's clean status). Every done toggle also writes `rd_done_seq_o` with the tag of the operation being completed, on that cycle only, so the tag is stable between dones by construction; and every done arms an eight-cycle spacing counter (`C_DONE_GAP = 8`) during which nothing is accepted into an abortable state, because two done toggles a couple of cycles apart could be swallowed whole by the drive-side synchronizer. `RD_WAIT` holds until media-ready, head-settled, and side-settled, resets the decoder for a fresh start, and gives up after 1.10 s with `RES_NOT_READY`. `RD_SEARCH` then watches decoded ID fields against two budgets, five index edges or 1.30 s. Read Address takes the next ID whose record number lies in 1..10 — out-of-range IDs are ignored because the MEGA65's F011 auto-formatter can squeeze a CRC-valid sector-11 ID in front of the index splice, and exposing it can derail a login sequence (Commodore DOS jargon: the drive validating a newly inserted disk before its first job) — and completes even with a bad ID CRC (cyclic redundancy check), delivering the six reply bytes plus the error. Verify matches on cylinder alone and completes without bytes. Read Sector matches cylinder and record, rejects any size code other than `C_SIZECODE_512` (`RES_UNSUPPORTED_SIZE`), and arms the 43-byte-time DAM window; a matching cylinder with a bad CRC sets a flag and keeps searching. On exhaustion the result is `RES_ID_CRC_ERROR` if such a flagged ID was seen, else `RES_RECORD_NOT_FOUND` — and the CRC and RNF flags are *never* reported together, because the genuine 318045-02 DOS job epilogue at `$CD3F` indexes its result table at `$CD5A` such that the combination lands in a hole that reads as job *success*; CRC-only maps to an error the DOS retries. That rule is enforced at every error site in the file. `RD_DAM` waits for the data field to open (sampling the deleted-data flag, which the decoder registered at the previous field's end — a one-field lag that is harmless on D81 media, where every data address mark (DAM) is the normal FB); another ID or the local timeout resumes the search inside the same budgets, and budget exhaustion yields `RES_MISSING_DAM`. `RD_STREAM` pushes each payload byte into the FIFO and keeps the absolute watchdog running so a flux dropout mid-field cannot park the FSM forever; on field end the result is `RES_OK` only if the data CRC checked out *and* no byte was ever dropped against a full FIFO — a truncated stream is reported as `RES_DATA_CRC_ERROR`, the analog of the real WD1772's LOST DATA. `RD_ADDR` streams the six Read Address bytes (C, H, R, N, stored CRC high and low) one per cycle with the same never-complete-silently discipline. One documented, accepted hole remains: a QNICE-domain-only reset mid-operation would idle the FSM without a done toggle, but in the M2M framework that reset never occurs without the core reset that also clears the drive side.
+**The read engine** is a five-state machine. Sketched with its budgets and
+exits:
+
+```
+request ──▶ RD_WAIT ──ready──▶ RD_SEARCH ──ID match──▶ RD_DAM ──DAM──▶ RD_STREAM ──▶ done
+(RD_IDLE)   │ 1.10 s           │ 5 index edges         │ 43 byte-times        │
+            ▼ RES_NOT_READY    ▼ or 1.30 s: RNF        ▼ RES_MISSING_DAM      ▼ RES_OK or
+                                                                                RES_DATA_CRC_ERROR
+            (a Read Address exits RD_SEARCH via RD_ADDR instead: six ID bytes)
+     a cancel edge or a raw disk change aborts any non-idle state immediately
+     (RES_CANCELLED, or RES_DISK_CHANGED with RNF)
+```
+
+`RD_IDLE` accepts a live request edge or serves the *pending latch*: a request that arrives while the engine is busy is latched with its parameters resampled at the edge — latest edge wins, a cancel clears it — instead of being lost, which once was the path's one silent-desynchronization channel (stale data delivered under a newer command's clean status). Every done toggle also writes `rd_done_seq_o` with the tag of the operation being completed, on that cycle only, so the tag is stable between dones by construction; and every done arms an eight-cycle spacing counter (`C_DONE_GAP = 8`) during which nothing is accepted into an abortable state, because two done toggles a couple of cycles apart could be swallowed whole by the drive-side synchronizer.
+
+`RD_WAIT` holds until media-ready, head-settled, and side-settled, resets the decoder for a fresh start, and gives up after 1.10 s with `RES_NOT_READY`. `RD_SEARCH` then watches decoded ID fields against two budgets, five index edges or 1.30 s. Read Address takes the next ID whose record number lies in 1..10 — out-of-range IDs are ignored because the MEGA65's F011 auto-formatter can squeeze a CRC-valid sector-11 ID in front of the index splice, and exposing it can derail a login sequence (Commodore DOS jargon: the drive validating a newly inserted disk before its first job) — and completes even with a bad ID CRC (cyclic redundancy check), delivering the six reply bytes plus the error. Verify matches on cylinder alone and completes without bytes. Read Sector matches cylinder and record, rejects any size code other than `C_SIZECODE_512` (`RES_UNSUPPORTED_SIZE`), and arms the 43-byte-time DAM window; a matching cylinder with a bad CRC sets a flag and keeps searching.
+
+On exhaustion the result is `RES_ID_CRC_ERROR` if such a flagged ID was seen, else `RES_RECORD_NOT_FOUND` — and the CRC and RNF flags are *never* reported together: Chapter 8's four-row status table shows the hole in the genuine DOS's `$CD5A` result lookup that the combination falls through. That rule is enforced at every error site in the file.
+
+`RD_DAM` waits for the data field to open (sampling the deleted-data flag, which the decoder registered at the previous field's end — a one-field lag that is harmless on D81 media, where every data address mark (DAM) is the normal FB); another ID or the local timeout resumes the search inside the same budgets, and budget exhaustion yields `RES_MISSING_DAM`. `RD_STREAM` pushes each payload byte into the FIFO and keeps the absolute watchdog running so a flux dropout mid-field cannot park the FSM forever; on field end the result is `RES_OK` only if the data CRC checked out *and* no byte was ever dropped against a full FIFO — a truncated stream is reported as `RES_DATA_CRC_ERROR`, the analog of the real WD1772's LOST DATA. `RD_ADDR` streams the six Read Address bytes (C, H, R, N, stored CRC high and low) one per cycle with the same never-complete-silently discipline. One documented, accepted hole remains: a QNICE-domain-only reset mid-operation would idle the FSM without a done toggle, but in the M2M framework that reset never occurs without the core reset that also clears the drive side.
 
 Nearly every rule in this file — the two-edge/one-edge readiness contract, the `$CD5A` flag discipline, the sector-11 filter, the pending latch, the done spacing — was forced by hardware sessions or by the genuine DOS ROM in the loop; Appendix C2 tells those stories in order. Section A Chapter 14 explains the media-state model, Chapter 15 the delivery contract, and Chapter 13 the decoder this file commands; B3.1 describes the `fdc1772.v` front end on the other side of the handshakes.
 
@@ -1658,7 +1806,7 @@ The file contains two modules. `fdc1772_dpram` is a small true dual-clock, dual-
 
 **The register and command model.** Address 0 is the command register on write and the status register on read; addresses 1, 2, 3 are track, sector, and data. Commands divide into the chip's four classes: Type I (bit 7 clear) covers Restore, Seek, and the Step family — head motion, with a step rate chosen by the two low command bits (6, 12, 2, or 3 ms for the WD1772); Type II (`10` in the top bits) is Read and Write Sector; Type III is Read Address, Read Track, and Write Track; Type IV is Force Interrupt. INTRQ (the interrupt request, output `irq`) sets when a command completes and clears on reset or on any access that opens register 0. DRQ (data request) is a clear-dominant set/clear flip-flop: set once per byte moved through the data register, cleared by reset, by a data-register read, or — in physical mode only — by command acceptance. `busy` spans a whole command; status bit meanings shift with the command class, the classic WD trait: bit 5 is spin-up-done during Type I but the deleted data address mark (DAM) after a read, bit 2 is track-zero during Type I but "lost data" otherwise, bit 1 is the index pulse during Type I but DRQ otherwise.
 
-**The image-backed sector path.** In image mode a `floppy` instance (B4.3) per drive simulates the spinning disk: it produces index pulses, tracks head position, reports which sector is currently under the head, and emits `dclk_en`, the 32 µs byte-rate enable of a double-density (DD) disk. Geometry is derived from `img_size` when a mount pulse arrives: an 819,200-byte D81 (the 1581 disk-image format) yields 1600 sectors, hence double-sided, 800 per side, ten sectors per track, 107 gap bytes. A Read Sector then runs in two phases. First the storage phase: a request toggle crosses into the `clk_sys` domain, where a small state machine asserts `sd_rd`, latches the logical block address (LBA) — for 512-byte sectors, `((spt × track) << doubleside) + (side ? 0 : spt) + sector − 1` — and lets `vdrives.vhd` stream 512 bytes into the dual-clock buffer; a completion toggle crosses back. Then the rotation phase: the model waits until the simulated disk brings the requested sector under the head, and the transfer engine plays the buffer into the data register one byte per `dclk_en`, raising DRQ each time and setting "lost data" if the previous byte was never consumed. The transfer counter loads `SECTOR_SIZE + 1`, so busy outlives the last DRQ by one byte-time — a real-chip shape the DOS (Disk Operating System) relies on. Write Sector is the mirror image, with DRQ raised early to prefill the data register; the multi-sector flag increments the sector register and loops. Read Address returns track, side, sector, and size code followed by a genuine CRC — cyclic redundancy check, polynomial 0x1021 — seeded with 0xB230, the checksum state after the three `A1` sync marks plus the `FE` ID address mark.
+**The image-backed sector path.** In image mode a `floppy` instance (B4.3) per drive simulates the spinning disk: it produces index pulses, tracks head position, reports which sector is currently under the head, and emits `dclk_en`, the 32 µs byte-rate enable of a double-density (DD) disk. Geometry is derived from `img_size` when a mount pulse arrives: an 819,200-byte D81 (the 1581 disk-image format) yields 1600 sectors, hence double-sided, 800 per side, ten sectors per track, 107 gap bytes. A Read Sector then runs in two phases. First the storage phase: a request toggle crosses into the `clk_sys` domain, where a small state machine asserts `sd_rd`, latches the logical block address (LBA) — for 512-byte sectors, `((spt × track) << doubleside) + (side ? 0 : spt) + sector − 1` — and lets `vdrives.vhd` stream 512 bytes into the dual-clock buffer; a completion toggle crosses back. One worked example pins the formula down: on a D81 (ten sectors per track, double-sided), cylinder 39, sector 3 on the head whose ternary term contributes 0 gives `(10 × 39) << 1` = 780, plus 0, plus `3 − 1` — LBA 782. `iec_drive.sv` doubles that into 256-byte units, and blocks 1564 and 1565 are precisely where the image stores logical track 40's sectors 4 and 5 — the directory track of Chapter 7, arrived at from the other end. Then the rotation phase: the model waits until the simulated disk brings the requested sector under the head, and the transfer engine plays the buffer into the data register one byte per `dclk_en`, raising DRQ each time and setting "lost data" if the previous byte was never consumed. The transfer counter loads `SECTOR_SIZE + 1`, so busy outlives the last DRQ by one byte-time — a real-chip shape the DOS (Disk Operating System) relies on. Write Sector is the mirror image, with DRQ raised early to prefill the data register; the multi-sector flag increments the sector register and loops. Read Address returns track, side, sector, and size code followed by a genuine CRC — cyclic redundancy check, polynomial 0x1021 — seeded with 0xB230, the checksum state after the three `A1` sync marks plus the `FE` ID address mark.
 
 Several behaviors of the real chip are faked here, and it is worth being plain about which. Type-I verify reads no ID field at all: it is a flat 3 ms delay. Read Track and Write Track complete immediately, transferring nothing. Status bit 3 (CRC error) is constant zero — a disk image is assumed clean. A request for a nonexistent sector waits a fixed second (five simulated revolutions) before reporting RNF, the record-not-found error. Spin-up is six index pulses; the motor stops after ten idle ones.
 
@@ -1675,7 +1823,19 @@ wire phys_present_now = phys_mode && phys_reading
                         && !phys_cpu_rd_data_open && !cpu_rw_data;
 ```
 
-Once released, bytes present at disk pace: `PHYS_PACE_TICKS = 252` ticks of the nominally 8 MHz enable, one DD byte-time of 32 µs. Presentation never waits for consumption — if DRQ is still high, the old byte is overwritten and the real chip's LOST DATA flag sets. The last two terms are the presentation exclusion windows: never present into an open drive-CPU read of the data register (the T65 — the soft 6502 CPU core the drive computer runs on — holds its select for a whole 2 MHz bus cycle and latches at the closing tick, so a mid-read presentation would corrupt and duplicate a byte, have its DRQ swallowed by the clear-dominant flip-flop, or raise false LOST DATA), and never in the cycle where the registered read pulse clears DRQ. The deferral is bounded by the bus cycle — about 0.5 µs against a 32 µs pace — so completion stays disk-time-shaped, never consumption-coupled. On an error done the bytes drain: popped and discarded without ever raising DRQ; the drain also runs whenever no operation is delivering, which structurally removes a class of stuck-busy failures. Finalization requires done-and-tag-matched, FIFO empty, and the pace expired once more — busy outlives the last DRQ by at least one byte-time, which the DOS transfer loops depend on — the sector transfer loop at `$C969` (the loop Chapter 8 teaches) and the Read Address reply loop at `$CD17`, both of which poll busy first, DRQ second.
+Once released, bytes present at disk pace: `PHYS_PACE_TICKS = 252` ticks of the nominally 8 MHz enable, one DD byte-time of 32 µs. Presentation never waits for consumption — if DRQ is still high, the old byte is overwritten and the real chip's LOST DATA flag sets. The last two terms are the presentation exclusion windows: never present into an open drive-CPU read of the data register, and never in the cycle where the registered read pulse clears DRQ. The reason lives in the bus timing — the T65 (the soft 6502 CPU core the drive computer runs on) holds its select for a whole 2 MHz bus cycle and takes the value only at the closing tick:
+
+```
+one drive-CPU read of the data register (a full 2 MHz bus cycle, ~500 ns):
+
+  select      ──╔═══════ register open ═══════╗──
+  CPU latch                                   ▲     value taken at the closing tick
+  DRQ clear                                    ╔╗   registered pulse, one clock wide
+  present?    ───────────── deferred ────────────▶  the byte lands after the window,
+                                                    whole, and with a fresh DRQ
+```
+
+A byte presented inside that window would be read half-old, half-new by the closing latch, or have its fresh DRQ eaten by the clear pulse and then be counted as lost — so presentation simply defers past it. The deferral is bounded by the bus cycle — about 0.5 µs against a 32 µs pace — so completion stays disk-time-shaped, never consumption-coupled. On an error done the bytes drain: popped and discarded without ever raising DRQ; the drain also runs whenever no operation is delivering, which structurally removes a class of stuck-busy failures. Finalization requires done-and-tag-matched, FIFO empty, and the pace expired once more — busy outlives the last DRQ by at least one byte-time, which the DOS transfer loops depend on — the sector transfer loop at `$C969` (the loop Chapter 8 teaches) and the Read Address reply loop at `$CD17`, both of which poll busy first, DRQ second.
 
 Two subtleties deserve their own sentences. `PHYS_T1_MIN_TICKS = 12000` ticks (≈1.5 ms) is the minimum Type-I busy time: a zero-step seek would otherwise clear busy in under 400 ns, invisible to the DOS's wait-for-busy poll at `$CBFA`, hanging the drive — observed on hardware. And on a data-register write, `data_out <= phys_mode ? cpu_din : data_in`: the real chip has one data register and the genuine 1581 ROM's startup test requires reading back the value just written, but image mode must keep the previous-value expression its proven engine depends on — the one time the two backends could not share a wire. In status, RNF is suppressed while the CRC bit is set, because the DOS job epilogue at `$CD3F` indexes its result table in a way that would silently accept a corrupt sector if both bits appeared together.
 
@@ -2048,7 +2208,11 @@ The same day, the maintainer made the decision that shaped the whole project: **
 
 #### Era 2 — Bring-up: rounds 1 through 11 (July 12–14)
 
-The implementation itself took one evening. Commit `00f5bb8` (July 12) delivered phases R0 through R5: the design freeze, the complete decode chain in `CORE/vhdl/physical_1581/`, the physical branch inside `fdc1772.v` (the WD1772 model — the Western Digital floppy-disk controller at the heart of every 1581), the threading through four board tops, the On-Screen Menu (OSM) item, and the diagnostic device. All of it was verified in simulation — a GHDL closed-loop bench with a behavioral mechanism model, plus Icarus Verilog on the drive side — before the first synthesis. That first synthesis promptly failed timing by a worst negative slack of −5.051 ns across 83 endpoints, 71 of them the brand-new clock-domain crossings (CDC) with no timing exceptions declared; session 2 (`87d65f0`, July 13) closed timing, and then absorbed two waves of findings before the bring-up rounds proper. The first wave came from the maintainer simply *enabling the feature with no disk image mounted*: five distinct root causes conspired to produce a dead drive, the deepest being a genuine deadlock — the WD1772 model rejected Type-I commands (seeks and restores) while the media was not ready, but becoming ready requires stepping, and steps *are* Type-I commands. The real WD1772 has no READY input at all; the model was made to match. The second wave was a 43-agent adversarial review — seven review dimensions, each attacked by independent refuter agents — which confirmed eight further defects, headlined by the read FIFO's (first-in-first-out buffer's) one-sided reset, a Gray-pointer desynchronization that would have produced CRC-clean *shifted* sector data after any mid-read reset, and by an off-by-one-bus-phase bug: the WD model popped the next byte at the *start* of the drive CPU's data-register access while the T65 (the 6502 core of the FPGA — the field-programmable gate array the whole system lives in) latches at the *end*.
+The implementation itself took one evening. Commit `00f5bb8` (July 12) delivered phases R0 through R5: the design freeze, the complete decode chain in `CORE/vhdl/physical_1581/`, the physical branch inside `fdc1772.v` (the WD1772 model — the Western Digital floppy-disk controller at the heart of every 1581), the threading through four board tops, the On-Screen Menu (OSM) item, and the diagnostic device. All of it was verified in simulation — a GHDL closed-loop bench with a behavioral mechanism model, plus Icarus Verilog on the drive side — before the first synthesis. That first synthesis promptly failed timing by a worst negative slack of −5.051 ns across 83 endpoints, 71 of them the brand-new clock-domain crossings (CDC) with no timing exceptions declared; session 2 (`87d65f0`, July 13) closed timing, and then absorbed two waves of findings before the bring-up rounds proper.
+
+The first wave came from the maintainer simply *enabling the feature with no disk image mounted*: five distinct root causes conspired to produce a dead drive, the deepest being a genuine deadlock — the WD1772 model rejected Type-I commands (seeks and restores) while the media was not ready, but becoming ready requires stepping, and steps *are* Type-I commands. The real WD1772 has no READY input at all; the model was made to match.
+
+The second wave was a 43-agent adversarial review — seven review dimensions, each attacked by independent refuter agents — which confirmed eight further defects, headlined by the read FIFO's (first-in-first-out buffer's) one-sided reset, a Gray-pointer desynchronization that would have produced CRC-clean *shifted* sector data after any mid-read reset, and by an off-by-one-bus-phase bug: the WD model popped the next byte at the *start* of the drive CPU's data-register access while the T65 (the 6502 core of the FPGA — the field-programmable gate array the whole system lives in) latches at the *end*.
 
 Then came the hardware, and with it the rounds. The loop was always the same: the maintainer flashes board revision R3, runs a load, hits a failure, dumps the diagnostic device; the dump is analyzed against the 1581's ROM (read-only memory — here the genuine Commodore DOS (Disk Operating System) ROM, 318045-02); a fix is designed, simulated, reviewed, rebuilt. Round 1 re-derived readiness from the drive's schematic behavior after the disk-change latch deadlocked the DOS's ready-before-job wait. Round 2 was pivotal in a quiet way: the diagnostics proved the entire magnetic stack healthy — 300 revolutions per minute, about 10.9 ID fields decoded per revolution, six of six read operations clean — *and yet the DOS never even seeked*. The instrument had run out of resolution, so the instrument grew: a 32-entry trace ring recording every WD1772 command and status handed across the boundary, precisely to reconstruct the DOS↔WD conversation (diagnostic map v3).
 
