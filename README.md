@@ -64,6 +64,7 @@ images). It supports the following hardware ports of the MEGA65:
   cartridges, GeoRAM, multi-function flash cartridges, etc.
 * IEC port so that you can attach real 1541 & 1581 drives as well as
   printers, plotters or modern devices such as the SD2IEC
+* Use the MEGA65's built-in floppy drive as 1581 (read-only)
 
 Additionally, the C64 for MEGA65 core can simulate a 1750 REU with 512KB
 of RAM, it can simulate cartridges (by loading `*.crt` files) and it offers
