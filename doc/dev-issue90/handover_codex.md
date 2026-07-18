@@ -1048,12 +1048,12 @@ all hardware gates described below subsequently passed.
 
 ## Working tree at final hardware handoff
 
-Repository HEAD is the pushed maintainer commit `bdd457b` (`Fix slow physical
-1581 restart qualification (#90)`), containing the controller refinement,
-focused contract, Fable 5 notes, and checkpoints through the pre-build handoff.
-There are no generated simulator artifacts. Only this handover and
-`doc/dev-issue90/plan_codex.md` are modified after that commit, recording the
-four successful final hardware checkpoints below.
+Repository HEAD is the pushed maintainer commit `aa6b70f` (`Document final R3
+physical 1581 qualification (#90)`). Its parent `bdd457b` contains the final
+controller RTL and focused contract; `aa6b70f` is documentation-only and
+records all four successful final hardware checkpoints below. There are no
+generated simulator artifacts. Before the final next-instance addendum at the
+end of this file, the working tree was clean.
 
 ## Second R3 hardware: varied-pause restart qualification passes
 
@@ -1175,3 +1175,68 @@ reset, no SID player, normal C64ANABALT reload and start. The game ran normally.
 Therefore the disk content, program, physical/WD path and normal IEC transfer
 are good, while the earlier crash is isolated to application memory/IRQ state.
 No further fresh-media read testing is needed for this milestone.
+
+## Next-instance continuation: community stock-media gate, then write milestone
+
+The implemented milestone is deliberately **read-only**. R3 hardware is fully
+qualified with a fresh MEGA65/F011-written DD disk, and source-derived tests
+exercise the exact genuine 318045-02 stock formatter layout byte-exactly. A
+physical disk formatted and written by a genuine Commodore 1581 has not yet
+been available locally. Confidence is high because stock ID fields have the
+conventional zero preamble (easier than the F011 no-preamble ID case), use
+sectors 1..10 (unaffected by the Read Address filter), and share the same DD
+MFM/index/readiness path. This remains strong evidence, not hardware proof.
+
+The immediate external gate is Discord/community testing, not new RTL:
+
+1. Distribute the R3 bitstream built from production commit `bdd457b`
+   (`aa6b70f` differs only in documentation). State prominently that the
+   physical write gate and write-data pins remain inactive.
+2. Prefer a backed-up or sacrificial genuine DD disk formatted/written by an
+   actual 1581 and verified in that drive immediately before testing. Record
+   the source drive, disk/media provenance, MEGA65 board revision and whether
+   the known file ran on the genuine machine.
+3. On MEGA65, run a cold `LOAD"$",8`, load one known program, let the motor
+   stop and repeat one load. Capture the BASIC result, error channel and map-v7
+   `0x7000..0x707F` dump before ejecting. An optional same-session
+   eject/reinsert directory test covers `/DSKCHG` again.
+4. A pass requires correct directory/program behavior, exact request/result
+   trace pairing, `LAST_PRESENT=512`, and zero RNF/CRC/LOST/delivery/DAM-miss
+   counters. Do not retune the decoder from one aged-disk failure: first prove
+   the disk still reads on its genuine 1581, reproduce it, and compare several
+   independently written disks if available.
+
+If that gate passes, freeze/merge the read-only milestone without further
+decoder changes. If a verified stock disk reproducibly fails, diagnose from
+map v7 before choosing any acquisition change; marginal-media work remains a
+separate evidence-driven branch.
+
+The next implementation milestone after read qualification is physical
+**write and format support**, and must start as a new safety-scoped plan:
+
+1. Add an explicit write-capability generic/interlock that defaults off; retain
+   inactive WGATE/WDATA on unsupported builds and honor write-protect, eject,
+   reset, cancel, underrun and motor/readiness safety on every path.
+2. Implement physical WD1772 Write Sector first: drive-CPU byte ingestion,
+   reverse-direction buffering, MFM encoder, sync/mark generation, CRC, exact
+   byte pacing and bounded abort/finalization. Read behavior must remain
+   unchanged when write capability is false.
+3. Prove normal and adversarial writes in simulation with a writable mechanism
+   model, including write-protect, starvation, reset/eject mid-command and
+   byte-exact read-after-write. Do not enable physical WGATE before these gates
+   pass.
+4. Qualify on sacrificial DD media with SAVE, overwrite, SCRATCH/VALIDATE and
+   power-cycle readback, checking the disk both in MEGA65 and another reader.
+5. Add WD1772 Write Track/stock-1581 format only after sector writes are safe;
+   verify formatter gaps, address/data marks, CRCs and interoperability with a
+   genuine 1581. Then qualify other MEGA65 board revisions separately.
+
+Do not begin this implementation merely by continuing the current read patch.
+The user must explicitly open the write milestone because it changes the core
+from magnetically incapable of writing to intentionally energizing WGATE.
+
+For a fresh Codex instance, read in this order: repository `AGENTS.md`, this
+file completely, `doc/dev-issue90/plan_codex.md` completely, and Fable-owned
+`doc/dev-issue90/f011_reference_notes.md` completely. Preserve the Fable file
+unless Fable updates it. Current engineering state: no active RTL task; wait
+for community stock-disk evidence or explicit authorization to plan writes.

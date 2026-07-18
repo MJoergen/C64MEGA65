@@ -701,3 +701,35 @@ No RTL or testbench was changed during checkpoint 11.
   path and normal IEC load are good. The prior crash was application-state
   interference, while the concurrent command still exposed no physical-drive
   delivery weakness. No further fresh-media read qualification is required.
+
+## Next-instance plan after `aa6b70f`
+
+- **Current repository state:** pushed HEAD `aa6b70f`; final production RTL is
+  parent commit `bdd457b`, while `aa6b70f` is documentation-only. The tree was
+  clean before this next-instance addendum. No simulator artifacts remain.
+- **Fresh F011-media read milestone:** DONE in simulation, genuine-ROM model
+  and all prescribed R3 hardware classes. Do not reopen PA1, R=11, decoder,
+  quarantine or delivery work without new contradictory evidence.
+- **Genuine stock-media hardware gate:** PENDING EXTERNAL COMMUNITY EVIDENCE.
+  Exact genuine-ROM stock-format vectors pass byte-exact in the permanent
+  matrix, but no locally available disk was both written by and recently
+  verified in a real Commodore 1581. Community testers should use production
+  commit `bdd457b`, verify the disk on its source 1581, run directory + known
+  program + stopped-motor repeat, and provide error channel plus map-v7 dump
+  before eject. Record board, source drive and media provenance. One failing
+  30-year-old disk is not sufficient evidence for decoder retuning.
+- **Decision after community results:** if independently credible stock media
+  passes, freeze/merge the read milestone. If a verified stock disk fails
+  reproducibly, use map-v7 evidence to separate alignment/media aging from a
+  format-neutral decoder defect before changing RTL.
+- **Next coding milestone (not authorized yet):** physical write support,
+  staged as default-off safety interlock -> Write Sector data path/MFM/CRC ->
+  writable-model adversarial and read-after-write proofs -> sacrificial-disk
+  SAVE/overwrite/SCRATCH qualification -> Write Track/stock format -> genuine
+  1581 interoperability and per-board qualification. WGATE/WDATA must remain
+  physically inactive until the simulation and safety gates pass.
+- **Fresh-instance reading order:** repository `AGENTS.md`,
+  `doc/dev-issue90/handover_codex.md`, this file, then Fable-owned
+  `doc/dev-issue90/f011_reference_notes.md`, all completely. No active RTL work
+  remains; wait for community evidence or explicit user authorization for the
+  write milestone.
