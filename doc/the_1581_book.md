@@ -1651,8 +1651,9 @@ three conventions serve that. First, nontrivial entries begin with an
 **anatomy card** — a small diagram of the entity as a box, its connections
 grouped by role, its clock domain named — so that when the prose later
 says "the request toggle" or "the image path", you have already seen where
-that lives. (The B1 decode stages are the exception: they share the
-group's chain map instead of carrying individual cards.) Second, the files with real machinery inside get a short
+that lives. (The one exception is B1.1, a package of constants with no
+ports; the B1 group's chain map additionally shows how its six stages
+connect.) Second, the files with real machinery inside get a short
 **walked example**: one concrete operation traced through the file, so the
 mechanism is seen running once before it is described at rest. Third, the
 entries are layered by altitude: each one moves from role to mechanism to
@@ -1725,9 +1726,17 @@ The remainder is bookkeeping shared across the physical path: the 5-bit backend 
 
 #### B1.2 physical_1581_mfm_gaps.vhd
 
+```
+ synchronized flux ─────▶ ┌─────────────────────────┐──▶ gap: one valid pulse +
+ (active-low, from        │ physical_1581_mfm_gaps  │    16-bit length in cycles
+ the B2.2 conditioner)    │  50 MHz (QNICE clock)   │──▶ runt: one pulse per
+                          │  no generics            │    merged glitch (to diag)
+                          └─────────────────────────┘
+```
+
 Stage one of the read pipeline turns the electrical view of the disk — a train of active-low pulses on the RDATA line, one per flux transition — into the decoder's raw datum: the gap, the measured interval between two successive transitions. This is the only stage that touches time directly; everything downstream reasons about gap lengths, never about the clock.
 
-The entity `physical_1581_mfm_gaps` has no generics. In: `clk_i`, a synchronous `rst_i`, and `f_rdata_i`, the active-low flux signal, which the file assumes has already been two-flip-flop synchronized into this clock domain upstream. Out: `gap_valid_o` with `gap_len_o` (a 16-bit unsigned length in cycles), and `runt_o`, a one-cycle pulse per filtered glitch, which travels up through the decoder to the diagnostics.
+The card is nearly the whole interface. Two facts complete it: the flux input must arrive already two-flip-flop synchronized — the B2.2 conditioner guarantees that — and the runt pulse is pure bookkeeping, traveling up through the decoder to the diagnostics without influencing anything.
 
 The mechanism is a free-running counter (integer, saturating at 65535 — about 1.31 ms — rather than wrapping) that increments every clock. A two-stage register pipeline on `f_rdata_i` detects the start of a pulse as `last_rdata = '0' and last_last_rdata = '1'`; on that edge the accumulated count is emitted as one gap and the counter restarts. The edge-detection timing is kept bit-for-bit from the file's ancestor, `mfm_gaps.vhdl` in mega65-core (the MEGA65 project's own code base for its system FPGA — field-programmable gate array), by Paul Gardner-Stephen, under the GNU Lesser General Public License v3 (LGPLv3), at commit `a9158930`.
 
@@ -1737,9 +1746,20 @@ The threshold's own history — introduced at 120 cycles, retuned to 16 after a 
 
 #### B1.3 physical_1581_mfm_quantise.vhd
 
+```
+ gap stream (valid + ───▶ ┌────────────────────────────┐──▶ classified gap: valid
+ 16-bit length)           │ physical_1581_mfm_quantise │    + 2-bit class (short /
+ in-field hint ─────────▶ │    50 MHz (QNICE clock)    │    medium / long, or the
+ (inert in production)    │                            │    loud invalid, 11)
+                          │  generics: two tolerance   │──▶ the live estimate,
+                          │  tiers + adaptation switch │    Q8.4 — a diagnostic
+                          │  — A/B-harness knobs       │    tap only
+                          └────────────────────────────┘
+```
+
 Stage two answers the central question of MFM clock recovery: is this gap two, three, or four half-cells long? On paper the answer is a pair of comparisons; on a real disk, where motor speed drifts and peak shift smears every transition, it is the heart of the whole design. This file is the adaptive quantiser — the component that replaced the fixed windows of B1.1's legacy block and the single biggest reason the physical path reads far cylinders reliably. It plays the role a phase-locked loop (PLL) data separator plays in a classical floppy interface, implemented as pure digital arithmetic.
 
-The entity `physical_1581_mfm_quantise` takes three generics: `G_TOL_ACQ_SHR` and `G_TOL_FIELD_SHR`, the acceptance shifts used while hunting for a sync and while inside a field respectively (both default to the production `C_QUANT_TOL_SHR = 1`), and `G_HUNT_ADAPT_ALL` (default true), which selects whether every accepted gap adapts the estimate or, in the preserved historical variant, only short-class gaps do while hunting. Ports: in, the clock, a synchronous reset (which re-seeds the estimate), `field_i` from the decoder (raised once a complete A1 train has qualified and while the field finite state machine (FSM) is inside a field), and the `gap_valid_i`/`gap_len_i` pair from stage one. Out: `gap_valid_o` (a registered copy of the input valid — every gap produces exactly one classification event downstream, accepted or not), `gap_class_o` (two bits: `"00"` short, `"01"` medium, `"10"` long, `"11"` invalid), and `est_o`, a read-only Q8.4 diagnostic tap of the live estimate, threaded through the decoder and controller to the diagnostic device's word 0x36 and never read back into any behavior.
+Beyond the card, four semantics matter. The generics set the acceptance tolerance while hunting for a sync, the tolerance inside a field, and whether every accepted gap adapts the estimate — at the production defaults the two tolerances are equal and adaptation is unconditional, which is exactly why the card calls the in-field hint inert. The reset re-seeds the estimate. Every incoming gap produces exactly one classification event downstream, accepted or not. And the estimate output is a one-way street: threaded through decoder and controller to the diagnostic device's word 0x36, never read back into any behavior.
 
 The whole stage owns one register: `est_q`, the live half-cell length in Q8.4, seeded to nominal 100.0 cycles and clamped to 90.0..110.0. Per valid gap, all in sixteenths of a cycle: the gap is classified to the nearest class by comparing it against the midpoints `2.5*est` and `3.5*est` (an exact midpoint goes to the higher class); the error `e = G - n*est` against the chosen class center is then tested against a tolerance of `est/2` (the shift selected by `field_i`). With a half-estimate tolerance the acceptance windows touch at the midpoints: every gap between `1.5*est` and `4.5*est` — nominally 150 to 450 cycles, 3 to 9 µs — receives a class, and there are no dead-bands at all. On acceptance the estimate adapts by a fixed step of one eighth of a cycle in the sign of the error (zero error, no step) and is hard-clamped. On rejection the stage emits class 11, loss of lock, and re-seeds the estimate to nominal — as loud a failure as the old fixed windows ever produced. Since the decoder resets this stage at every operation start, idling and re-searching re-seed too.
 
@@ -1751,9 +1771,18 @@ The estimator bake-off and the refutation of the tight acquisition tier are two 
 
 #### B1.4 physical_1581_mfm_gaps_to_bits.vhd
 
+```
+ classified gaps ─────▶ ┌────────────────────────────────┐──▶ data bits: bit value
+ (valid + class)        │ physical_1581_mfm_gaps_to_bits │    + valid pulse
+                        │     50 MHz (QNICE clock)       │──▶ sync pulse: the last
+                        │     no generics                │    four classes matched
+                        │                                │    the A1 fingerprint
+                        └────────────────────────────────┘
+```
+
 Stage three converts classified gaps into two things the byte layer needs: decoded data bits, and the sync pulse that says "an A1 sync mark just ended here." It performs both jobs from the same input stream, independently, every time a new gap class arrives.
 
-The entity `physical_1581_mfm_gaps_to_bits` has no generics. In: clock, synchronous reset, and the `gap_valid_i`/`gap_class_i` pair from the quantiser. Out: `bit_valid_o` with `bit_o` — the decoded data bits, emitted one per clock when queued — and `sync_o`, a one-cycle pulse per detected A1 candidate. Stage four consumes the bits; the decoder additionally consumes `sync_o` directly for its train qualification (B1.6).
+The card leaves only one routing fact untold: the bits feed stage four, but the sync pulse is consumed by the decoder directly for its train qualification (B1.6) — an A1 candidate bypasses the byte layer entirely.
 
 Sync detection first. The last four gap classes are kept in an 8-bit shift history, `recent_gaps`, shifted left by two per gap; a candidate fires when the history equals the constant `sync_gaps = "10011001"` — reading oldest to newest, long, medium, long, medium. That is precisely the tail of the raw A1 word 0x4489: written out in binary as flux positions, its transitions sit 4, 3, 4, and 3 half-cells apart (the file's header phrases the same lengths as 2.0, 1.5, 2.0, 1.5 full cells — the same thing in different units). On a match the stage pulses `sync_o`, flushes any pending bits from the queue, and forces its `last_bit` state to '1', because an A1 ends in a one and the following bits are decoded relative to it.
 
@@ -1776,11 +1805,18 @@ A candidate from this stage is necessary but not sufficient evidence of a real A
 
 #### B1.5 physical_1581_mfm_bits_to_bytes.vhd
 
+```
+ bits + valid ────────▶ ┌─────────────────────────────────┐──▶ assembled byte +
+ sync pulse (realigns ─▶│ physical_1581_mfm_bits_to_bytes │    valid pulse
+ the byte boundary)     │      50 MHz (QNICE clock)       │──▶ sync out: "an A1
+                        │      no generics                │    stands here" — an
+                        │                                 │    event, not a byte
+                        └─────────────────────────────────┘
+```
+
 Stage four is the shortest file in the chain, and its brevity is the lesson: on floppy media, byte alignment is not something you compute — it is something the sync marks tell you. A raw bit stream has no self-evident byte boundaries; the only authority is the A1 sync mark, whose position defines where bytes begin. This stage does nothing more than obey that authority.
 
-The entity `physical_1581_mfm_bits_to_bytes` has no generics. In: clock, synchronous reset, and `sync_i`, `bit_i`, `bit_valid_i` from stage three. Out: `sync_o`, `byte_o` (eight bits), and `byte_valid_o`, into the decoder's field FSM.
-
-On `sync_i` the stage emits the literal byte 0xA1 on `byte_o` together with `sync_o`, and resets its bit counter to zero, re-aligning the byte boundary to the end of the sync mark. Note what it does not do: it does not assert `byte_valid_o` for a sync. Sync marks travel on their own strobe, deliberately kept apart from the data-byte stream — the decoder must never confuse a sync's 0xA1 with an ordinary data byte that happens to be 0xA1, because only the former carries the missing-clock violation that makes it unmistakable on the medium. (In practice the decoder does not even consume this stage's `sync_o`; its A1 accounting hangs off stage three's pulse directly, and the 0xA1 it feeds to the CRC engine is synthesized in the decoder itself. The mirrored strobe keeps the stage's interface complete and self-describing.)
+On the sync pulse the stage emits the literal byte 0xA1 on `byte_o` together with `sync_o`, and resets its bit counter to zero, re-aligning the byte boundary to the end of the sync mark. Note what it does not do: it does not assert `byte_valid_o` for a sync. Sync marks travel on their own strobe, deliberately kept apart from the data-byte stream — the decoder must never confuse a sync's 0xA1 with an ordinary data byte that happens to be 0xA1, because only the former carries the missing-clock violation that makes it unmistakable on the medium. (In practice the decoder does not even consume this stage's `sync_o`; its A1 accounting hangs off stage three's pulse directly, and the 0xA1 it feeds to the CRC engine is synthesized in the decoder itself. The mirrored strobe keeps the stage's interface complete and self-describing.)
 
 Otherwise the stage shifts `bit_i` most-significant-bit-first (MSB-first) through the 7-bit `partial_byte` register; on the eighth bit it assembles the full byte and pulses `byte_valid_o` for one cycle. That is the whole mechanism. The framing logic is kept bit-for-bit from mega65-core's `mfm_bits_to_bytes.vhdl` at `a9158930` (Paul Gardner-Stephen, LGPLv3), with the project's usual adaptations: ports renamed to the `_i`/`_o` convention, simulation-only debug machinery removed, and an explicit synchronous reset added.
 
@@ -1788,7 +1824,20 @@ Section A Chapter 3 explains why the track format sprinkles sync marks before ev
 
 #### B1.6 physical_1581_mfm_decoder.vhd
 
-This file is where the pipeline becomes a decoder. It instantiates the four stages of B1.2 through B1.5 and the CRC engine of B1.7, and adds the two things the naive chain cannot provide on its own: proof that a sync is really a sync, and a field FSM that parses the qualified byte stream into ID fields and data fields. It is deliberately ignorant of sectors and operations — matching a decoded ID against the wanted sector, budgeting revolutions, and reporting results are the controller's job (B2.1). The decoder's contract is simpler: every time a well-formed field passes under the head, report it, with its CRC verdict, exactly once.
+```
+ synchronized flux ───▶ ┌───────────────────────────────┐──▶ ID group: valid pulse,
+ (the whole chain       │  physical_1581_mfm_decoder    │    C/H/R/N, CRC-ok flag
+ lives inside this      │     50 MHz (QNICE clock)      │──▶ data group: start,
+ box — see the B1       │                               │    byte stream, end,
+ chain map)             │  generics: six A/B-harness    │    CRC-ok, deleted flag
+                        │  knobs that resurrect each    │──▶ status: lock, loud gap
+                        │  superseded design;           │    error, A1/span/DAM
+                        │  production runs defaults     │    event pulses, CRC and
+                        │                               │    estimate taps
+                        └───────────────────────────────┘
+```
+
+This file is where the pipeline becomes a decoder. It instantiates the four stages of B1.2 through B1.5 and the CRC engine of B1.7, and adds the two things the naive chain cannot provide on its own: proof that a sync is really a sync, and a field FSM (finite state machine) that parses the qualified byte stream into ID fields and data fields. It is deliberately ignorant of sectors and operations — matching a decoded ID against the wanted sector, budgeting revolutions, and reporting results are the controller's job (B2.1). The decoder's contract is simpler: every time a well-formed field passes under the head, report it, with its CRC verdict, exactly once.
 
 The entity `physical_1581_mfm_decoder` takes six generics, all of them test-only knobs for the A/B margin harness; production instantiates the defaults everywhere. `G_SYNC_GATE` (default true) set false restores the original adaptive-quantiser behavior in which every stage-three sync pulse counts immediately. `G_SYNC_PREAMBLE_GATE` (default false) set true selects the superseded preceding-run-of-shorts rule as a permanent regression column. `G_SYNC_SPAN_GATE` (default true) set false preserves spacing-only acquisition (the behavior of commit `3803152`), and `G_RECORD_SEQUENCE_GATE` (default true) set false preserves pre-record-grammar behavior (commit `0ab9f92`). `G_QUANT_TOL_ACQ_SHR` and `G_QUANT_HUNT_ADAPT_ALL` pass through to the quantiser — note that the quantiser's field-tier tolerance generic is not passed through and always keeps its production default. These generics are how the refuted designs recorded in B1.1's comment blocks stay executable: the harness (B6.2) instantiates seven decoder variants side by side and races them, so every design claim in the comments remains a running experiment rather than folklore.
 
@@ -1808,9 +1857,18 @@ Details worth knowing. `field_active`, the signal driving the quantiser's `field
 
 #### B1.7 physical_1581_crc.vhd
 
+```
+ byte + feed pulse ───▶ ┌──────────────────────────┐──▶ running CRC-16 value
+ preset pulse ────────▶ │    physical_1581_crc     │    (residue 0x0000 = a
+ (loads 0xFFFF at       │   50 MHz (QNICE clock)   │    good field, checked
+ each sync train)       │   bit-serial: 8 clocks   │    after both stored bytes)
+                        │   per byte, 1-byte queue │──▶ ready flag (idle; wired
+                        └──────────────────────────┘    but unused by B1.6)
+```
+
 Every ID field and every data field on an MFM track ends in a 16-bit checksum, and this file is the engine that computes it: the variant commonly named CRC-16/CCITT-FALSE — polynomial 0x1021, initial value 0xFFFF, MSB-first, no bit reflection, no final inversion. It serves the decoder as a checker on the read path, and its design leans on the checksum's most elegant property: if you feed the engine the protected bytes and then the two stored CRC bytes as well, a correct field leaves the register at exactly 0x0000. "CRC good" is therefore a single compare against zero — no second computation, no byte-order pitfalls.
 
-The entity `physical_1581_crc` has no generics. In: `clk_i`, the byte interface `crc_byte_i` with the strobe `crc_feed_i` (one pulse feeds one byte), and `crc_reset_i`, which presets the register to 0xFFFF. Out: `crc_ready_o` (high when idle and the value is valid) and `crc_value_o`, the live 16-bit register. Only the decoder's field FSM drives it.
+The card is the interface; the one ownership fact to add is that only the decoder drives this engine — one feed pulse delivers one byte, and the preset pulse belongs to the start of each sync train.
 
 The implementation is bit-serial with a one-byte buffer. A fed byte lands in `buffered_byte`; when the engine is idle and a byte is pending, it loads the shift register and processes eight clocks, one bit per clock. Each shifting clock moves the register left and XORs the feedback — the incoming most significant bit XORed with the register's bit 15 — into bits 12, 5, and 0, which is precisely the polynomial `x^16 + x^12 + x^5 + 1` in hardware. `crc_ready_o` drops for the eight shift clocks. Both outputs are registered one cycle behind the internal state, mirroring the upstream original.
 
