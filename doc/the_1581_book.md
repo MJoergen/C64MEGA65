@@ -473,7 +473,19 @@ microseconds — one per byte-time at double density — whether or not the host
 is ready. The WD1772 gives the host exactly one byte-time to collect each
 byte from the data register. Too slow, and the next byte overwrites it; the
 controller raises LOST DATA and the transfer is ruined. There is no
-flow control on a spinning disk. This single fact shapes drive firmware
+flow control on a spinning disk. One Read Sector, as the drive's CPU
+experiences it:
+
+```
+BUSY   ──╔═══ find the ID field ═══╦══════ 512 data bytes ══════╗─────
+DRQ                                ╹     ╹     ╹     ╹  …  ╹
+                                   └32 µs┘ collect each byte before
+                                           the next one lands
+INTRQ                                                           ╹
+                                                     command complete
+```
+
+This single fact shapes drive firmware
 (tight, disciplined polling loops), and it shaped our implementation more
 than any other constraint: Chapter 15 is essentially the story of honoring
 this timing contract from an FPGA.
@@ -504,7 +516,14 @@ computer pulls to open a command phase, **CLK** and **DATA**, which clock
 bits across. Every line is **wired-AND**: electrically, any device on the bus
 can pull a line low, and the line is high only when everyone releases it —
 which is how several devices share the bus without bus fights, and why an
-FPGA implementation models each line as "the AND of everyone's output".
+FPGA implementation models each line as "the AND of everyone's output":
+
+```
+  C64 output ────┐    drive 8 output ────┐    drive 9 output ────┐
+                 └──────────┬────────────┴────────────────────────┘
+                     one bus line = the AND of all outputs:
+              low if anyone pulls low, high only when all release
+```
 Devices have numbers — drives conventionally start at **device 8** — and
 within a device, communication runs over numbered **channels** (channel 0 is
 "load a program", channel 15 is the command/error channel — the one you read
@@ -593,6 +612,19 @@ transitions). The MEGA65's own internal 3.5-inch mechanism exposes exactly
 this interface, which is the physical fact that makes this whole project
 possible: the FPGA can drive these lines directly and *be* the 1581's
 electronics.
+
+Assembled, the four principals form a computer with a memory map — the
+1581 as its own CPU sees it:
+
+```
+   IEC bus ◀──▶  8520 CIA    ($4000) ──┐
+                                       │
+                 8 KB RAM    ($0000) ──┤
+                                       ├──  6502 CPU (2 MHz)
+                 32 KB DOS ROM ($8000)─┤
+                                       │
+ mechanism ◀──▶  WD1772 FDC  ($6000) ──┘
+```
 
 One architectural footnote completes the anatomy. Our drive model also
 contains a 6522 **VIA** (Versatile Interface Adapter) at `$2000` — a chip the
@@ -776,6 +808,20 @@ that a decoder must care about:
   complete: the track genuinely contains a CRC-valid ID field announcing
   "sector 11" — a sector that has no data field and, per the format's
   ten-sector arithmetic, should not exist.
+
+Side by side, one sector of each dialect (and the F011's two specials):
+
+```
+stock 1581:
+ …4E gap │ 00 ×12 │ A1 A1 A1  FE id CRC │ 4E ×22 │ 00 ×12 │ A1 A1 A1  FB data CRC │…
+           preamble before EVERY sync train                              (ten sectors)
+
+F011:
+ TIB │ …4E gap │ A1 A1 A1  FE id CRC │ 4E ×23 │ 00 ×12 │ A1 A1 A1  FB data CRC │…
+  ▲              ▲ no preamble before ID fields — data fields keep theirs
+  track info                    … │ A1 A1 A1  FE sector-11 id CRC │ ✂ index splice
+  block                             the eleventh ID, its sector cut off mid-write
+```
 
 Why devote a chapter to another controller's formatting habits? Because
 F011-formatted disks are the *native media* of the physical drive this
@@ -1394,6 +1440,16 @@ CRC failure, record-not-found, abort — closes the path instead, and the
 buffer drains internally, unseen: no byte, no DRQ, no trace. The DOS
 observes only the honest outcome: an error status with an empty transfer.
 
+```
+decoder ──bytes, as they arrive──▶ ┌──────────────────────┐
+                                   │   quarantine FIFO    │
+                                   │ 512 bytes = 1 sector │
+controller verdict (tag-matched):  └──────────┬───────────┘
+                                              │
+  clean ──────────────────────────▶ present at 32 µs pace, one DRQ per byte
+  CRC error / not found / abort ──▶ drain internally — no byte, no DRQ
+```
+
 The cost is latency: a full sector waits its own read time again — about
 16 milliseconds — before replay begins. The trade was accepted with eyes
 open. Chapter 8's transfer loop has no deadline between BUSY set and the
@@ -1453,6 +1509,17 @@ make the 32 microsecond byte pace — are calibrated in that unit.)
 
 **The QNICE/Shell side** also owns SD-card access and the mount buffer —
 in image mode, the vdrives engine hands blocks across this same border.
+
+```
+50 MHz domain (QNICE clock)                     core clock domain (~31.53 MHz)
+                                                (drive at a 16 MHz enable; CPU
+  input conditioner                             2 MHz, WD1772 model 8 MHz)
+  decode chain            ──── toggles ─────▶
+  controller              ◀─── + 2-bit tags ──    WD1772 model · T65 6502
+  diagnostic device       ─ quasi-static     ─    8520 CIA · ROM · RAM · IEC
+                             levels (2-FF sync)
+  quarantine write side   ══ Gray-coded FIFO ═▶   quarantine read side
+```
 
 Signals crossing between the 50 MHz and core domains use the standard
 toolkit, chosen per signal. Levels and quasi-static values (operation
@@ -2041,7 +2108,19 @@ The drive-related device IDs are:
 | `C_DEV_C64_KERNAL_C1581` | `0x0107` | custom DOS ROM, simulated 1581 (32 KB) |
 | `C_DEV_C64_PHYS1581` | `0x0108` | physical-1581 read-only diagnostic bank |
 
-The HyperRAM map is expressed in windows of 4 kilowords (8 kB). `C_HMAP_M2M = 0x0000` reserves 4 MB for the framework; `C_HMAP_CRT = 0x0200` stages software cartridges; `C_HMAP_VD0 = 0x035A` is the drive-8 image staging area — 100 windows, 819,200 bytes, exactly one D81, ending at `0x03BD`; `C_HMAP_VD0_GUARD = 0x03BE` is an 8 kB guard window; `C_HMAP_REU = 0x03BF` holds the simulated REU, with the final window of the 8 MB again a guard. Each region is followed by slack or an explicit guard so a spurious write one window past a boundary cannot corrupt its neighbor (the guard concept traces to the open research issue #218). The maximum cartridge size is not a literal but derived — `C_CRT_MAX_SIZE` equals the CRT-to-VD0 distance in bytes (2,834,432) — and `make_rom.sh` exports it to the Shell, so an oversized cartridge can never stream into the D81 buffer and the two sides cannot drift apart on a map retune.
+The HyperRAM map is expressed in windows of 4 kilowords (8 kB):
+
+```
+window     region
+0x0000 ─┬─ M2M framework           4 MB (ascal frame buffer, QNICE)
+0x0200 ─┼─ cartridge staging       up to 2,834,432 bytes (C_CRT_MAX_SIZE)
+0x035A ─┼─ D81 mount buffer        100 windows = 819,200 bytes: one D81
+0x03BE ─┼─ guard                   8 kB, absorbs a one-past-the-end write
+0x03BF ─┼─ simulated REU           512 KB
+0x03FF ─┴─ guard                   final window of the 8 MB
+```
+
+`C_HMAP_M2M = 0x0000` reserves the framework region; `C_HMAP_CRT = 0x0200` stages software cartridges; `C_HMAP_VD0 = 0x035A` is the drive-8 image staging area, ending at `0x03BD`; `C_HMAP_VD0_GUARD = 0x03BE` and the final window are guards; `C_HMAP_REU = 0x03BF` holds the simulated REU. Each region is followed by slack or an explicit guard so a spurious write one window past a boundary cannot corrupt its neighbor (the guard concept traces to the open research issue #218). The maximum cartridge size is not a literal but derived — `C_CRT_MAX_SIZE` equals the CRT-to-VD0 distance in bytes (2,834,432) — and `make_rom.sh` exports it to the Shell, so an oversized cartridge can never stream into the D81 buffer and the two sides cannot drift apart on a map retune.
 
 The virtual-drive roster is minimal: `C_VDNUM = 1` — exactly one virtual drive, C64 device 8 — with `C_VD_DEVICE = C_DEV_C64_VDRIVES` and a `C_VD_BUFFER` array of one buffer device (`C_DEV_C64_MOUNT`), terminated by `0xEEEE`. The Shell reads this roster at boot (`VD_INIT`), so adding a drive 9 one day is a constants-and-menu change, not a firmware rewrite.
 
