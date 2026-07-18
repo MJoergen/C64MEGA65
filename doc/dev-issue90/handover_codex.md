@@ -912,3 +912,162 @@ are adopted. Three secondary claims need narrower wording in future summaries:
 - The head estimate is anchored and valid in the stopped-motor test-2 flow.
   That resolves the cosmetic concern for this normal restore/seek path, not for
   every possible enable/insertion history.
+
+## Repaired R3 hardware: stopped-motor PA1 boundary passes
+
+The rebuilt candidate (branch `mh_implement_90`, repository HEAD `b13d99e` at
+report time) passed the exact sequence that failed before the repair. The disk
+was out during power-up, JTAG and `Use internal 1581` activation. After startup
+activity ended, the fresh F011-written disk was inserted. All three commands
+succeeded:
+
+1. cold `LOAD"$",8`;
+2. immediate warm `LOAD"SHADES",8,1`; and
+3. the same SHADES load after the motor audibly stopped plus a one-second wait.
+
+The post-test map-v7 dump is internally exact:
+
+- index period `0x00985187` = 199.647 ms and width `0x00024F0E` = 3.026 ms;
+- 388 raw and motor-qualified revolutions, 4,251 IDs = 10.96/revolution;
+- 81 completed steps and 103 completed read operations;
+- `TRC_CNT=287 = 81 + 2 * 103`, so every event is accounted for;
+- 80 matching IDs, final clean C/R=62/6 and `LAST_PRESENT=512`;
+- zero RNF, CRC error, cancel, LOST, drain, stale completion, ignored busy
+  command, runt, span reject or DAM miss;
+- `EST=0x063E` = 99.875 cycles and disk-change raw/conditioned/latch clear;
+- `CNT_A1_CAND=26236`, exactly one more than `3 * CNT_A1_TRAIN=26235`, and one
+  unarmed DAM was safely ignored; and
+- the retained trace contains successful cylinder-61/62 reads plus normal
+  Read Address replies R=3,5,6. No retained result is R=11, consistent with the
+  RTL rule that cannot present it to the ROM.
+
+This first pass proved that the same-medium first-index shortcut can land
+inside the real 1581-ROM window and preserve clean delivery. It did not yet
+prove that every spindle-start phase reaches the first index before the
+controller's separate running-media staleness deadline. It also gave repeated
+natural opportunities to the R=11 normalizer, although a passing trace cannot
+reveal an R=11 that was correctly skipped internally.
+
+The planned eject/reinsert test was postponed after a later same-session motor
+restart failed. Use the refined RTL and second rebuilt bitstream described
+below before resuming any hardware matrix.
+
+## Follow-up PA1 failure: pre-first-index staleness must preserve history
+
+Without ejecting, toggling the feature, resetting or JTAG-loading again, the
+maintainer next ran another `LOAD"$",8`, which succeeded, followed by
+`LOAD"C64ANABALT",8,1`, which returned `FILE NOT FOUND` and error channel
+`74 DRIVE NOT READY 41 0`. The motor probably stopped before C64ANABALT, but
+that detail was not observed with certainty. `41` is the requested DOS track,
+not a distinct error class.
+
+The new dump compared with the prior successful-SHADES dump proves where the
+failure occurred:
+
+- steps rose from 81 to 104: delta 23;
+- completed reads rose from 103 to 129: delta 26;
+- trace count rose from 287 to 362: delta 75, exactly
+  `23 + 2 * 26 = 75`;
+- requested-ID matches rose from 80 to 100 and `LAST_PRESENT` remains 512;
+- every physical error counter remains zero and the index period remains
+  healthy at approximately 199.64 ms;
+- `CNT_CHANGE` remains zero and raw, conditioned and sticky disk-change state
+  is clear; and
+- the newest retained trace is entirely clean cylinder-39 directory traffic,
+  with no cylinder-41 request.
+
+The successful directory therefore accounts for every new physical operation.
+The later C64ANABALT command again died on PA1 before issuing a WD request. It
+cannot be an R=11, decoder, FIFO, media-change or delivery failure.
+
+RTL review exposed a deterministic hole capable of producing this intermittent
+result. The first repair preserved `rotation_confirmed` across motor-off, but
+the commanded-motor `idx_gap_cnt` path unconditionally erased it after two
+maximum periods (500 ms), even if no index had yet arrived on that restart. A
+slow or worst-phase spindle start could therefore lose same-medium history
+before its first edge, making that edge cold edge 1 and forcing the ROM to wait
+for edge 2 again.
+
+The refined rule in `physical_1581_controller.vhd` is deliberately narrow:
+
+- readiness always remains low until a fresh edge;
+- the staleness deadline always resets the current edge count;
+- before the first edge of a motor-on interval, it preserves the prior
+  `rotation_confirmed` proof; raw `/DSKCHG` remains authoritative for eject or
+  replacement;
+- once at least one index has occurred, later index staleness clears history,
+  so a stalled/removed running disk must requalify with two edges; and
+- reset, disable and raw `/DSKCHG` still clear history unconditionally.
+
+The complete state/assignment audit has no uncovered transition:
+
+- reset or `en=0` forces count 0, ready 0, confirmation 0 and change latch 1;
+- cold start advances 0 -> 1 -> 2 indexes, asserting ready only after edge 2;
+- confirmed motor-off preserves only confirmation, while count and ready are 0;
+- fast or delayed restart keeps ready 0 until edge 1, then uses confirmation;
+- a stall after any current-run edge sees the old nonzero count on the clock
+  edge, clears confirmation and count together, and returns to cold state;
+- raw change clears confirmation and sets the latch even if it coincides with
+  index/staleness processing; the second-index set condition is explicitly
+  blocked while change is asserted or latched; and
+- a Type-I step may clear the latch once the sensor is inactive, but it cannot
+  restore confirmation. In the qualified eject flow, motor-off/absence also
+  resets the live edge count, so the replacement requires two new indexes.
+
+VHDL signal-assignment semantics are important in the staleness branch:
+`idx_motor_cnt > 0` is evaluated from the pre-clock value, so the simultaneous
+`idx_motor_cnt <= 0` cannot hide evidence that this interval had already
+rotated. There are only four assignments to `rotation_confirmed`: clear on
+reset/disable, clear on asserted change, set on the second clean index, and
+clear on post-index staleness. Type-I handling contains no `media_ready` gate.
+
+The focused media-contract regression now waits 41 ms with a scaled 40-ms
+staleness deadline before delivering the first restart edge. The committed RTL
+fails at 42.20575 ms with `confirmed unchanged medium lost history before
+delayed first index`; the refined RTL passes. The following independent check
+still withholds index after readiness and proves that post-index staleness
+clears history and requires two fresh edges. Raw-change, disable/re-enable
+cold qualification and R=11-to-R1 tests also pass. Genuine-ROM
+`run_proofs.py` remains `RESULT: ALL PROOFS PASS`.
+
+The refinement is regression-complete and ready for a second R3 build:
+
+- focused media-state/Read-Address contract: all tests pass, including delayed
+  first edge and disable/re-enable;
+- genuine 318045-02 ROM proofs: `RESULT: ALL PROOFS PASS`;
+- full closed-loop controller/mechanism test: cold ready at 398.2 ms, Type-I,
+  byte-exact cylinder 0/1 reads, Read Address, Verify, RNF, pending requests,
+  change-abort spacing and recovery all pass; and
+- tiny-FIFO overflow/quarantine test: CRC-only failure, RNF clear and no silent
+  success.
+
+Decoder, quantizer, input, diagnostic and SystemVerilog production sources are
+unchanged from `b13d99e`; their already-green full matrices remain applicable.
+The uncommitted production change is confined to the controller condition and
+its focused test. Build the second candidate and first repeat several
+stopped-motor starts in one unchanged-media session. Only then run the deferred
+eject/reinsert test and the final fresh power/JTAG session with the disk already
+inserted.
+
+## Working tree at refined-build handoff
+
+Repository HEAD remains the maintainer commit `b13d99e`. There are no generated
+simulator artifacts. The intended uncommitted refinement is:
+
+- `CORE/vhdl/physical_1581/physical_1581_controller.vhd`;
+- `CORE/vhdl/test/tb_physical_1581_controller/tb_physical_1581_media_contract.vhd`;
+- this handover and `doc/dev-issue90/plan_codex.md`; and
+- `doc/dev-issue90/f011_reference_notes.md`, updated independently by Fable 5
+  with the same guard audit and pending hardware gates. Preserve that file; it
+  is advisory-reviewer-owned.
+
+Suggested maintainer commit:
+
+```text
+Fix slow physical 1581 restart qualification (#90)
+
+Preserve confirmed rotation across pre-first-index spin-up timeouts while
+keeping post-index staleness, disk change, reset and disable invalidation.
+
+Extend the media contract for delayed first index and disable/re-enable.
+```

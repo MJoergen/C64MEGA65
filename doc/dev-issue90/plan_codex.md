@@ -356,12 +356,18 @@ separate from Fable's `PLAN.md`.
     `RA=[5,10,11]`, job 02 and zero sector reads becomes `RA=[5,10,1]`, job 00,
     ten sector reads and a byte-exact fill. Normalization is confined to
     physical Read Address; Read Sector and decoder diagnostics are unchanged.
-29. **DONE in RTL/simulation; TODO on repaired R3 hardware — make the smallest
-    justified change.** Implement the change-qualified one-index resume and
-    physical Read Address R=1..10 filter. The complete decoder, controller, WD
-    dialogue, genuine-ROM, FIFO, diagnostic and mechanism suites pass. Map v7
-    is retained. The stopped-motor and eject/reinsert cases now qualify the
-    repaired bitstream.
+29. **DONE in refined RTL/simulation; another R3 rebuild and hardware
+    qualification are required.** Implement the
+    change-qualified one-index resume and physical Read Address R=1..10 filter.
+    The first rebuilt candidate passed one stopped-motor restart, then failed a
+    later same-session restart before issuing any physical request. The cause
+    is a real RTL corner: the 500-ms running-media staleness timer could erase
+    remembered rotation before a slow first spin-up index arrived. Preserve
+    history until the current motor-on interval has produced at least one
+    index; raw `/DSKCHG` remains authoritative before that edge. All impacted
+    controller, overflow/quarantine and genuine-ROM regressions pass. Rebuild,
+    repeat stopped-motor starts, then qualify eject/reinsert and the original
+    preinserted-cold class. Map v7 is retained.
 
 No RTL or testbench was changed during checkpoints 8 through 10.
 
@@ -529,3 +535,66 @@ No RTL or testbench was changed during checkpoint 11.
   failures are independently pinned, and the broad upstream window would
   accept the observed 126-cycle artifact. Keep that experiment for a future
   marginal-media stress campaign.
+
+## 2026-07-18 checkpoint 19: repaired stopped-motor PA1 test passes
+
+- The R3 candidate was rebuilt on branch `mh_implement_90` (repository HEAD at
+  report time `b13d99e`). The disk was absent for power-up, JTAG and feature
+  activation; after the bounded startup activity stopped, the fresh F011 disk
+  was inserted.
+- `LOAD"$",8`, immediate warm `LOAD"SHADES",8,1`, and a second SHADES after
+  motor spin-down plus one additional second all succeeded. This is the exact
+  formerly failing A/B, so the same-medium one-index PA1 repair is now proven
+  on hardware.
+- Map v7 is wholly clean: 103 completed reads, 80 requested-ID matches,
+  `LAST_PRESENT=512`, zero RNF/CRC/LOST/drain/stale/busy/runt/DAM-miss, and
+  exact trace accounting `287 = 81 steps + 2 * 103 reads`.
+- Rotation is healthy at `0x00985187` = 199.647 ms; 4,251 IDs over 388
+  motor-qualified revolutions = 10.96/rev. The estimate is 99.875 cycles and
+  disk change is clear.
+- The trace ring contains successful cylinder-61/62 work and in-range Read
+  Address replies R=3,5,6. One extra A1 candidate and one unarmed DAM were
+  safely ignored; there are zero span rejects and zero DAM misses.
+- Next, without power-cycle or JTAG, eject/reinsert the disk and run one
+  directory load. Dump before another eject. This qualifies that raw
+  `/DSKCHG` clears the remembered rotation and the replacement medium returns
+  to cold two-index qualification.
+
+## 2026-07-18 checkpoint 20: repeated restart exposes delayed-first-index hole
+
+- Before eject/reinsert qualification, the same FPGA/media session ran another
+  `LOAD"$",8` successfully and then `LOAD"C64ANABALT",8,1` returned
+  `FILE NOT FOUND` / `74 DRIVE NOT READY 41 0`. There was no eject, feature
+  toggle, reset or JTAG between commands; the motor likely stopped, although
+  that was not observed with certainty. The `41` is the requested DOS track,
+  not a new status class.
+- The dump-to-dump deltas are exact: 23 steps, 26 completed reads and 75 trace
+  events, where `75 = 23 + 2 * 26`. The retained newest trace contains only
+  clean track-39 directory work and no track-41 request. Thus the successful
+  directory accounts for all new physical activity; C64ANABALT again failed
+  on the ROM-visible PA1 path before the WD/controller boundary.
+- Media and decoding remained healthy: no disk-change event, approximately
+  199.64-ms index period, 129 total clean reads, 100 matches,
+  `LAST_PRESENT=512`, and zero RNF/CRC/LOST/drain/stale/busy/runt/DAM-miss
+  counters. This is not R=11, decoder or media failure.
+- RTL inspection found an intermittent timing hole in the first repair.
+  `idx_gap_cnt` cleared `rotation_confirmed` after 500 ms with the motor
+  commanded even when the current start had seen zero index edges. A slow or
+  worst-phase first edge therefore demoted an unchanged disk to the cold
+  two-edge path just before the edge arrived.
+- The minimum refinement keeps readiness low and resets the live edge count at
+  the staleness deadline, but clears `rotation_confirmed` only when
+  `idx_motor_cnt > 0`. Before the first edge, raw `/DSKCHG` is the authoritative
+  media-change signal; after any edge, a subsequent index stall still destroys
+  history and requires two-edge requalification.
+- The focused contract now delays the first restart index beyond the staleness
+  interval and proves it still yields one-edge readiness. It separately proves
+  that staleness after rotation has begun clears history, raw change restores
+  two-edge qualification, and disable/re-enable re-arms disk change without
+  retaining confirmation. The old RTL fails the new delayed-first-index
+  assertion at 42.20575 ms; the refined RTL passes the entire focused test.
+  Genuine-ROM proofs also remain fully green. The long closed-loop controller
+  loop passes cold ready at 398.2 ms, Type-I, byte-exact cylinder 0/1 reads,
+  Read Address, Verify, RNF, pending delivery, change abort and recovery. The
+  tiny-FIFO overflow bench also passes CRC-only quarantine with RNF clear. The
+  refinement is ready for commit and a second R3 build.

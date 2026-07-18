@@ -224,9 +224,11 @@ architecture rtl of physical_1581_controller is
   -- Sticky proof that this same, unchanged medium previously completed a
   -- two-index rotation qualification.  Preserve it across ordinary motor-off
   -- intervals so a restart may assert RDY after the first fresh index; clear
-  -- it on reset/disable, raw disk change, or index staleness while commanded
-  -- on.  This closes the stock 1581 ROM's finite PA1 spin-up window without
-  -- weakening cold-start/eject qualification.
+  -- it on reset/disable, raw disk change, or index staleness after a commanded
+  -- motor interval has begun producing index edges.  A delayed first edge must
+  -- not invalidate the previous proof before the spindle can accelerate.  This
+  -- closes the stock 1581 ROM's finite PA1 spin-up window without weakening
+  -- cold-start/eject qualification.
   signal rotation_confirmed : std_logic := '0';
   signal change_latched: std_logic := '0';
   signal motor_on_act  : std_logic := '0';
@@ -598,14 +600,18 @@ begin
           elsif idx_gap_cnt < to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then
             idx_gap_cnt <= idx_gap_cnt + 1;
           else
-            -- no index edge for two maximum periods while the motor is on:
-            -- the disk was removed or stopped -- drop readiness and
-            -- re-qualify from scratch (spin-up itself is unaffected:
-            -- media_ready is still 0 then and the counters restart cleanly)
+            -- No index edge for two maximum periods while the motor is on.
+            -- Always drop readiness and restart the current edge count.  Only
+            -- invalidate the same-medium history once this motor-on interval
+            -- has produced an index: before its first edge, spindle acceleration
+            -- can legitimately exceed this running-media deadline.  Raw
+            -- /DSKCHG remains the authoritative pre-first-edge eject signal.
             media_ready   <= '0';
             idx_motor_cnt <= 0;
             idx_gap_cnt   <= (others => '0');
-            rotation_confirmed <= '0';
+            if idx_motor_cnt > 0 then
+              rotation_confirmed <= '0';
+            end if;
           end if;
         end if;
 

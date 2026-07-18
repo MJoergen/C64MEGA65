@@ -413,7 +413,13 @@ is the right shape; codex's emulator already models it):
 
 1. Eject safety rests on two invariants: a mechanical eject *always*
    asserts `/DSKCHG`, and index staleness must clear `rotation_confirmed`
-   (a stall must not leave stale confidence behind).
+   *once the current motor-on interval has produced an index edge*. Before
+   the first edge, spindle acceleration can legitimately exceed the
+   staleness deadline, so raw `/DSKCHG` alone is the authoritative eject
+   signal there — this is safe because ready still requires a fresh edge,
+   so a stalled disk keeps ready low no matter what history says. (A
+   blanket "staleness always clears confirmation" rule is wrong: it was
+   exactly the delayed-first-index `74` failure of 2026-07-18.)
 2. Verify the budget arithmetic, not just the test: warm worst case =
    spin-up + one index edge and must land clearly inside the ROM's ~0.7 s
    window with the emulator's measured timings; the cold path (empirically
@@ -421,6 +427,27 @@ is the right shape; codex's emulator already models it):
 3. Regression gates: the round-4 cold-start class, round-1's rule that
    ready must never gate Type-I commands, and the one-variable ROM proofs
    (`media_log`) codex added.
+
+**Status 2026-07-18:** both repairs (change-qualified one-index resume +
+physical Read Address `R=1..10` filter) shipped in `b13d99e` and the
+rebuilt R3 **passed the exact formerly-failing A/B on hardware** — cold
+directory, warm SHADES, and post-spin-down SHADES all clean (103 reads,
+80 ID matches, zero error counters, trace arithmetic exact, far-cylinder
+61/62 reads in the trace, no `R=11` reaching the ROM). An improvised
+follow-up (directory → uncertain pause → `LOAD"C64ANABALT"`) then exposed
+one residual PA1 corner: a motor restart whose *first* index edge arrives
+after the 500 ms staleness deadline had its `rotation_confirmed` history
+erased, defeating the one-index shortcut → `74` with zero physical
+requests. Codex reproduced it as a red regression against the committed
+RTL, applied the minimal guard (staleness invalidates history only after
+the current motor interval has produced an edge; `idx_motor_cnt > 0`),
+and re-greened the focused contract plus the genuine-ROM proof suite; the
+long closed-loop bench and the wider suites run next. Pending after that:
+maintainer commit, rebuild, and hardware qualification of (a) the exact
+C64ANABALT pause sequence with varied pause lengths, (b) **eject/reinsert
+— now the load-bearing test**, since the refined rule leans fully on
+`/DSKCHG` authority before the first edge, (c) the disk-inserted-cold
+JTAG case.
 Testing continues on the new disk. What carries over unchanged: the new
 disk is again F011-auto-formatted from the same image, so it has the same
 content layout (directory at cylinder 39/40, SHADES at 61–62) *and* the

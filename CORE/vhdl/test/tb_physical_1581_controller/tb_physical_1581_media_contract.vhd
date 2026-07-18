@@ -5,6 +5,7 @@
 --   * cold/new media requires two index edges, but a previously confirmed and
 --     unchanged medium becomes ready after the first edge on motor restart;
 --   * disk change clears that history, restoring the two-edge requirement;
+--   * disable/re-enable also clears history and restores cold qualification;
 --   * physical Read Address ignores the F011 formatter's CRC-valid sector-11
 --     ID and returns the following stock-compatible sector 1.
 --
@@ -161,13 +162,18 @@ begin
     pulse_index;
     assert media_ready = '1' report "cold medium not ready after two indexes" severity error;
 
-    -- Same unchanged medium: motor restart needs only one fresh edge.
+    -- Same unchanged medium: motor restart needs only one fresh edge, even if
+    -- spindle acceleration delays that first edge beyond the running-media
+    -- staleness interval.  Before the first edge there is no new rotation to
+    -- declare stale; /DSKCHG remains the authoritative media-change signal.
     cia_motor_on <= '0'; wait for 2 us;
     assert media_ready = '0' report "ready remained set with motor off" severity error;
-    cia_motor_on <= '1'; wait for 2 us;
+    cia_motor_on <= '1'; wait for 41 ms;
+    assert media_ready = '0'
+      report "ready asserted before the delayed first index" severity error;
     pulse_index;
     assert media_ready = '1'
-      report "confirmed unchanged medium did not resume after first index" severity error;
+      report "confirmed unchanged medium lost history before delayed first index" severity error;
 
     -- If the motor remains commanded but index disappears, the controller
     -- treats the old rotation proof as stale.  Readiness drops and the next
@@ -196,6 +202,22 @@ begin
       report "changed medium incorrectly reused one-index history" severity error;
     pulse_index;
     assert media_ready = '1' report "changed medium not ready after two indexes" severity error;
+
+    -- Disabling the physical path must never carry rotation confidence through
+    -- an image/internal source switch.  Re-enable starts conservatively, with
+    -- the change latch armed and a fresh two-index qualification required.
+    phys_active <= '0'; wait for 2 us;
+    assert media_ready = '0' report "ready remained set while disabled" severity error;
+    assert change_latched = '1' report "disable did not re-arm disk change" severity error;
+    phys_active <= '1'; wait for 2 us;
+    do_step;
+    assert change_latched = '0' report "step did not clear re-enable change latch" severity error;
+    pulse_index;
+    assert media_ready = '0'
+      report "re-enabled controller incorrectly reused rotation history" severity error;
+    pulse_index;
+    assert media_ready = '1'
+      report "re-enabled controller did not qualify after two indexes" severity error;
 
     -- Issue Read Address, then put a valid F011 sector-11 ID followed by a
     -- normal sector-1 ID on the wire.  Production must ignore 11 and return 1.
