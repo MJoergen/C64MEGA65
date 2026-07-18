@@ -88,7 +88,7 @@ V6_MENU = [
     (" C64 for MEGA65",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 8:%s",                    "MOUNT_8", ["MOUNT_DRV", "START"]),
-    (" Use internal 1581",       "INT1581", ["SINGLESEL"]),
+    (" Use internal 1581      ", "INT1581", ["SINGLESEL"]),
     (" PRG:%s",                  "LOAD_PRG", ["LOAD_ROM"]),
     ("",                         None, ["LINE"]),
     (" Expansion Port",          None, ["HEADLINE"]),

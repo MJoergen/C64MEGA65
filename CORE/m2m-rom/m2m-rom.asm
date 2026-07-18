@@ -36,7 +36,8 @@
 ; Firmware: Main Code
 ; ----------------------------------------------------------------------------
 
-START_FIRMWARE  RBRA    START_SHELL, 1
+START_FIRMWARE  RSUB    P1581_OSM_INIT, 1
+                RBRA    START_SHELL, 1
 
 ; ----------------------------------------------------------------------------
 ; Core specific callback functions: Submenus
@@ -672,6 +673,153 @@ _RC_DELAY       SUB     1, R1                   ; cycles after the 2-FF CDC
                 DECRB
                 RET
 
+; HANDLE_CORE_IO callback function:
+;
+; Called from HANDLE_IO in every iteration of the main loop and of all
+; blocking wait loops - see the M2M-UPSTREAM core-io-hook contract in
+; M2M/rom/shell.asm.
+;
+; Input/Output: none; all registers are preserved
+HANDLE_CORE_IO  SYSCALL(enter, 1)
+
+                ; HANDLE_IO is also called while the OSM is closed and from
+                ; browser/help wait loops. Keep those common paths cheap and
+                ; never paint over a sub-activity or a submenu. Invalidating
+                ; the cached state makes the first main-menu poll repaint the
+                ; freshly copied static menu text when needed.
+                MOVE    M2M$CSR, R0
+                MOVE    @R0, R0
+                AND     M2M$CSR_OSM, R0
+                RBRA    _HCIO_1581_HIDE, Z      ; OSM closed: usual fast path
+                MOVE    OPTM_STRUCT, R0
+                CMP     0, @R0                  ; options menu running?
+                RBRA    _HCIO_1581_HIDE, Z
+                MOVE    OSM_SUB_ACTIVE, R0
+                CMP     0, @R0                  ; browser/help running inside it?
+                RBRA    _HCIO_1581_HIDE, !Z
+                MOVE    OPTM_MENULEVEL, R0
+                CMP     0, @R0                  ; physical-drive line visible?
+                RBRA    _HCIO_1581_HIDE, !Z
+
+                ; The selected-state array is ordinary QNICE RAM and cheaper
+                ; than reading M2M$CFM_DATA. When image mode is selected, the
+                ; static label is already correct and no diagnostic MMIO poll
+                ; is needed.
+                MOVE    OPTM_DATA, R0
+                MOVE    @R0, R0
+                ADD     OPTM_IR_STDSEL, R0
+                MOVE    @R0, R0
+                ADD     C64_OSM_INTERNAL_1581, R0
+                CMP     0, @R0
+                RBRA    _HCIO_1581_OFF, Z
+
+                ; IO$CYC_MID advances at about 763 Hz. Poll once per eight
+                ; changes, about 95 Hz. The invalid state bypasses the timer so
+                ; opening or returning to the main menu updates immediately.
+                MOVE    P1581_OSM_LAST, R0
+                CMP     P1581_OS_INVALID, @R0
+                RBRA    _HCIO_1581_POLL, Z
+                MOVE    IO$CYC_MID, R0
+                MOVE    @R0, R1
+                MOVE    P1581_OSM_TICK, R0
+                CMP     @R0, R1
+                RBRA    _HCIO_1581_RET, Z       ; same 1.3 ms timer slice
+                MOVE    R1, @R0
+                AND     P1581_OSM_POLL_MASK, R1
+                RBRA    _HCIO_1581_RET, !Z
+
+_HCIO_1581_POLL MOVE    IO$CYC_MID, R0
+                MOVE    @R0, R1
+                MOVE    P1581_OSM_TICK, R0
+                MOVE    R1, @R0
+
+                ; One diagnostic-device selection and two word reads. The pure
+                ; classifier gives read precedence over head movement, then
+                ; motor, and finally the defensive image-busy state.
+                MOVE    M2M$RAMROM_DEV, R0
+                MOVE    P1581_DIAG_DEV, @R0
+                MOVE    M2M$RAMROM_4KWIN, R0
+                MOVE    0, @R0
+                MOVE    M2M$RAMROM_DATA, R0
+                ADD     P1581_RM_CTRL, R0
+                MOVE    @R0, R8
+                MOVE    M2M$RAMROM_DATA, R0
+                ADD     P1581_RM_IMGBSY, R0
+                MOVE    @R0, R9
+                RSUB    P1581_CLASSIFY, 1
+                RBRA    _HCIO_1581_UPDATE, 1
+
+_HCIO_1581_OFF  MOVE    P1581_OSM_LAST, R0
+                CMP     P1581_OS_IDLE, @R0
+                RBRA    _HCIO_1581_RET, Z       ; already shows normal label
+                CMP     P1581_OS_INVALID, @R0
+                RBRA    _HCIO_1581_OFF_INIT, Z  ; fresh copy is already normal
+                MOVE    P1581_OS_IDLE, R8
+                RBRA    _HCIO_1581_UPDATE, 1
+_HCIO_1581_OFF_INIT
+                MOVE    P1581_OS_IDLE, @R0
+                RBRA    _HCIO_1581_RET, 1
+
+_HCIO_1581_UPDATE
+                MOVE    P1581_OSM_LAST, R0
+                CMP     @R0, R8                 ; coarse state unchanged?
+                RBRA    _HCIO_1581_RET, Z
+                MOVE    R8, @R0
+                RSUB    P1581_STATUS_STR, 1     ; R8: fixed-width label
+                MOVE    R8, R6
+
+                ; Patch the heap copy first so any later framework redraw keeps
+                ; the live label. The config line reserves exactly 23 words
+                ; behind its selection marker for this purpose.
+                RSUB    P1581_OSM_LABEL_PTR, 1  ; R8: heap label destination
+                CMP     0, R8                   ; defensive malformed-menu guard
+                RBRA    _HCIO_1581_RET, Z
+                MOVE    R8, R9
+                MOVE    R6, R8
+                MOVE    P1581_OSM_LABEL_LEN, R10
+                SYSCALL(memcpy, 1)
+
+                ; Paint only the characters behind the selection marker. This
+                ; leaves selector and highlight attributes untouched and avoids
+                ; the much larger timing cost of OPTM_SHOW inside HANDLE_IO.
+                MOVE    C64_OSM_INTERNAL_1581, R8
+                MOVE    OPTM_F_MS_SLCT, R9
+                RSUB    _OPTM_R_F2M_O, 1
+                RBRA    _HCIO_1581_RET, C
+                MOVE    OPTM_Y, R10
+                MOVE    @R10, R10
+                ADD     R8, R10
+                ADD     1, R10                  ; frame offset
+                MOVE    OPTM_X, R9
+                MOVE    @R9, R9
+                ADD     2, R9                   ; frame + selection marker
+                MOVE    R6, R8
+                RSUB    SCR$PRINTSTRXY, 1
+                RBRA    _HCIO_1581_RET, 1
+
+_HCIO_1581_HIDE MOVE    P1581_OSM_LAST, R0
+                CMP     P1581_OS_INVALID, @R0
+                RBRA    _HCIO_1581_RET, Z
+                MOVE    P1581_OS_INVALID, @R0
+
+_HCIO_1581_RET
+                SYSCALL(leave, 1)
+                RET
+
+; Initialize state used by HANDLE_CORE_IO before START_SHELL reaches any wait
+; loop that polls HANDLE_IO.
+P1581_OSM_INIT  INCRB
+                MOVE    P1581_OSM_LAST, R0
+                MOVE    P1581_OS_INVALID, @R0
+                MOVE    P1581_OSM_TICK, R0
+                MOVE    IO$CYC_MID, R1
+                MOVE    @R1, R2
+                MOVE    R2, @R0
+                MOVE    OSM_SUB_ACTIVE, R0
+                MOVE    0, @R0
+                DECRB
+                RET
+
 ; OSM_SEL_POST callback function:
 ;
 ; Called each time the user selects something in the on-screen-menu (OSM),
@@ -694,6 +842,13 @@ _RC_DELAY       SUB     1, R1                   ; cycles after the 2-FF CDC
 ;   R8: 0=OK, else pointer to string with error message
 ;   R9: 0=OK, else error code
 OSM_SEL_POST    INCRB
+
+                ; HANDLE_CORE_IO must not paint while a menu selection is
+                ; running a browser or help viewer. OSM_SEL_PRE raises this
+                ; flag before the framework action; every normal return reaches
+                ; this callback and clears it again.
+                MOVE    OSM_SUB_ACTIVE, R0
+                MOVE    0, @R0
 
                 ; HDMI Filter selection changed: re-push the matching (H, V)
                 ; coefficient pair into the ascal polyphase RAM. NO core
@@ -753,11 +908,7 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; Image -> Internal, because the image drive can WRITE and a switch mid-write
 ; or with a dirty cache would lose data (maintainer decision 2026-07-12: the
 ; idle-gate must be symmetric).
-P1581_DIAG_DEV  .EQU    0x0108                  ; C_DEV_C64_PHYS1581
-P1581_RM_CTRL   .EQU    0x0004                  ; RM_CTRL_STATE word offset
-P1581_BUSY_MASK .EQU    0xFC08                  ; read-phase | step-phase | motor
-P1581_RM_IMGBSY .EQU    0x0028                  ; RM_IMG_DRIVE word offset
-P1581_IMGBSY_MSK .EQU   0x0001                  ; bit 0: image drive busy or dirty
+#include "physical_1581_osm.asm"
 
 ; OSM_SEL_PRE callback function:
 ;
@@ -765,6 +916,12 @@ P1581_IMGBSY_MSK .EQU   0x0001                  ; bit 0: image drive busy or dir
 ; called before the functionality and semantics associated with a certain
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
+
+                ; Bracket framework sub-activities that poll HANDLE_IO so the
+                ; live-status painter never writes over browser/help screens.
+                ; OSM_SEL_POST clears the flag after the action returns.
+                MOVE    OSM_SUB_ACTIVE, R0
+                MOVE    1, @R0
 
                 ; Symmetric idle-gate for "Use internal 1581" (issue #90):
                 ; ignore an attempt to switch drive 8 between disk image and
@@ -1086,6 +1243,11 @@ SS_LINE_LEN     .EQU 32                         ; capacity of SS_LINE (words)
 SS_VALUE        .BLOCK SS_VALUE_LEN             ; built %s value, e.g. "PAL C128 2x"
 SS_LINE         .BLOCK SS_LINE_LEN              ; full custom line "Model: PAL C128 2x"
 
+; Live internal-1581 OSM status state used by HANDLE_CORE_IO.
+P1581_OSM_LAST  .BLOCK 1                        ; last displayed coarse state
+P1581_OSM_TICK  .BLOCK 1                        ; last IO$CYC_MID value observed
+OSM_SUB_ACTIVE  .BLOCK 1                        ; browser/help selection active
+
 ; ----------------------------------------------------------------------------
 ; Heap and Stack: Need to be located in RAM after the variables
 ; ----------------------------------------------------------------------------
@@ -1124,9 +1286,9 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x8220 (the SS_VALUE/SS_LINE buffers above sit just before it)
-; and subtract the result from 0xFEE0. This yields currently a stack size of
-; 1728, which is more than 1.5k words, and therefore sufficient for this program.
+; is currently 0x8229 (the core-specific buffers and status words above sit
+; just before it) and subtract the result from 0xFEE0. This yields currently a
+; stack size of 1719, which is more than 1.5k words and therefore sufficient.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation
 #endif

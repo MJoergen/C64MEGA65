@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A18X2";
+constant CORE_VERSION : string := "WIP-V6-A18X3";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -412,7 +412,7 @@ constant OPTM_ITEMS        : string :=
    " C64 for MEGA65\n"          &
    "\n"                         &
    " 8:%s\n"                    &  -- %s will be replaced by OPTM_S_MOUNT when not mounted and by the filename when mounted
-   " Use internal 1581\n"       &  -- back C64 drive 8 with the internal MEGA65 3.5" drive (issue #90); default Off = disk image
+   " Use internal 1581      \n" &  -- fixed-width label: HANDLE_CORE_IO shows live physical-drive status in the trailing field
    " PRG:%s\n"                  &
    "\n"                         &
    " Expansion Port\n"          &

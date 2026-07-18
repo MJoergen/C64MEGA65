@@ -933,8 +933,22 @@ HANDLE_IO       SYSCALL(enter, 1)
                 MOVE    R1, @R0                 ; remember new status
                 MOVE    1, @R2                  ; set "changed" flag
 
+                ; M2M-UPSTREAM core-io-hook: HANDLE_CORE_IO is a mandatory
+                ; callback function (like SUBMENU_SUMMARY, PREP_START, etc.)
+                ; that gives the core-specific firmware a time slice in every
+                ; HANDLE_IO iteration - i.e. in the Shell main loop AND in
+                ; all blocking wait loops that poll HANDLE_IO (OSM, file
+                ; browser, help screens). Meant for background tasks such as
+                ; write-back caches of core-specific storage devices that
+                ; live outside the vdrives system. Contract: preserve all
+                ; registers (SYSCALL enter/leave); return quickly, this is
+                ; cooperative multitasking; may change the active RAMROM
+                ; device/window (like HANDLE_IO itself does); called after
+                ; the SD-card-change detection above, so SD_CHANGED is fresh.
+_HANDLE_IO_0    RSUB    HANDLE_CORE_IO, 1
+
                 ; Loop through all VDRIVES (if any) and check for requests
-_HANDLE_IO_0    XOR     R0, R0                  ; R0: number of virtual drive
+                XOR     R0, R0                  ; R0: number of virtual drive
                 MOVE    VDRIVES_NUM, R1
                 MOVE    @R1, R1                 ; R1: amount of vdrives
                 RBRA    _HANDLE_IO_RET, Z       ; skip, if no VDRIVES
