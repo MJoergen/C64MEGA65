@@ -181,7 +181,8 @@ architecture rtl of rrnet is
   signal   rx_rxtx_wrdat : std_logic_vector(15 downto 0)               := (others => '0');
 
   -- cs_d is used to detect rising edge of the Chip Select.
-  signal   cs_d : std_logic                                            := '0';
+  signal   cs_d  : std_logic                                           := '0';
+  signal   cs_dd : std_logic                                           := '0';
 
   ----------------------------------------------------------
   -- PacketPage RAM initialisation
@@ -543,6 +544,7 @@ begin
       pp_we             <= (others => '0');
       rx_frame_consumed <= '0';
       cs_d              <= cs_i;
+      cs_dd             <= cs_d;
 
       -- End-of-frame byte address for autoincrement detection: header
       -- occupies $0400..$0403, payload starts at $0404, ends at
@@ -560,8 +562,10 @@ begin
       end if;
 
       -- Since Chip Select may be asserted for several consecutive clock
-      -- cycles, we only react on the first beat with CS asserted.
-      if cs_d = '0' and cs_i = '1' then
+      -- cycles, we only react on the second beat with CS asserted.
+      -- We use the second (and not the first) beat because we need to
+      -- wait for rxtx_rddat to be driven.
+      if cs_dd = '0' and cs_d = '1' and cs_i = '1' then
         if we_i = '1' then
           if G_DEBUG then
             report "RRNET: WRITE " & to_hstring(wr_data_i) & " TO $DE" & to_hstring(addr_i);
@@ -734,6 +738,7 @@ begin
       -- Synchronous reset overrides above logic.
       if rst_i = '1' then
         cs_d              <= '0';
+        cs_dd             <= '0';
         pp_we             <= (others => '0');
         reg_pp_ptr        <= (others => '0');
         reg_tx_cmd        <= (others => '0');
