@@ -35,5 +35,10 @@ OPTM_SSMS       .BLOCK 1
 ; ptr to the _OPTM_STRUCT menu struct. (only valid while OPTM_RUN is running)
 OPTM_STRUCT     .BLOCK 1
 
+; 1 while the options menu owns the visible surface and background updates may
+; paint it directly; 0 while the menu is closed or a selection callback may be
+; showing a browser, help page or another temporary surface
+OPTM_FOREGROUND .BLOCK 1
+
 ; temporary variable
 OPTM_TEMP       .BLOCK 1

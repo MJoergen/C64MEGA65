@@ -682,21 +682,14 @@ _RC_DELAY       SUB     1, R1                   ; cycles after the 2-FF CDC
 ; Input/Output: none; all registers are preserved
 HANDLE_CORE_IO  SYSCALL(enter, 1)
 
-                ; HANDLE_IO is also called while the OSM is closed and from
+                ; HANDLE_IO is also called while the menu is closed and from
                 ; browser/help wait loops. Keep those common paths cheap and
-                ; never paint over a sub-activity or a submenu. Invalidating
-                ; the cached state makes the first main-menu poll repaint the
-                ; freshly copied static menu text when needed.
-                MOVE    M2M$CSR, R0
-                MOVE    @R0, R0
-                AND     M2M$CSR_OSM, R0
-                RBRA    _HCIO_1581_HIDE, Z      ; OSM closed: usual fast path
-                MOVE    OPTM_STRUCT, R0
-                CMP     0, @R0                  ; options menu running?
+                ; never poll diagnostics when the live line cannot be seen.
+                ; Invalidating the cached state makes the first visible poll
+                ; repaint the freshly copied static menu text when needed.
+                MOVE    OPTM_FOREGROUND, R0
+                CMP     0, @R0                  ; options menu owns surface?
                 RBRA    _HCIO_1581_HIDE, Z
-                MOVE    OSM_SUB_ACTIVE, R0
-                CMP     0, @R0                  ; browser/help running inside it?
-                RBRA    _HCIO_1581_HIDE, !Z
                 MOVE    OPTM_MENULEVEL, R0
                 CMP     0, @R0                  ; physical-drive line visible?
                 RBRA    _HCIO_1581_HIDE, !Z
@@ -768,34 +761,14 @@ _HCIO_1581_UPDATE
                 RSUB    P1581_STATUS_STR, 1     ; R8: fixed-width label
                 MOVE    R8, R6
 
-                ; Patch the heap copy first so any later framework redraw keeps
-                ; the live label. The config line reserves exactly 23 words
-                ; behind its selection marker for this purpose.
-                RSUB    P1581_OSM_LABEL_PTR, 1  ; R8: heap label destination
-                CMP     0, R8                   ; defensive malformed-menu guard
-                RBRA    _HCIO_1581_RET, Z
-                MOVE    R8, R9
-                MOVE    R6, R8
-                MOVE    P1581_OSM_LABEL_LEN, R10
-                SYSCALL(memcpy, 1)
-
-                ; Paint only the characters behind the selection marker. This
-                ; leaves selector and highlight attributes untouched and avoids
-                ; the much larger timing cost of OPTM_SHOW inside HANDLE_IO.
+                ; Patch and paint only the fixed-width label behind the
+                ; selection marker. OPTM_LIVE_TEXT preserves the heap copy,
+                ; selector and highlight attributes without a full redraw.
                 MOVE    C64_OSM_INTERNAL_1581, R8
-                MOVE    OPTM_F_MS_SLCT, R9
-                RSUB    _OPTM_R_F2M_O, 1
-                RBRA    _HCIO_1581_RET, C
-                MOVE    OPTM_Y, R10
-                MOVE    @R10, R10
-                ADD     R8, R10
-                ADD     1, R10                  ; frame offset
-                MOVE    OPTM_X, R9
-                MOVE    @R9, R9
-                ADD     2, R9                   ; frame + selection marker
-                MOVE    R6, R8
-                RSUB    SCR$PRINTSTRXY, 1
-                RBRA    _HCIO_1581_RET, 1
+                MOVE    1, R9                   ; skip selection marker
+                MOVE    R6, R10
+                MOVE    P1581_OSM_LABEL_LEN, R11
+                RSUB    OPTM_LIVE_TEXT, 1
 
 _HCIO_1581_HIDE MOVE    P1581_OSM_LAST, R0
                 CMP     P1581_OS_INVALID, @R0
@@ -815,8 +788,6 @@ P1581_OSM_INIT  INCRB
                 MOVE    IO$CYC_MID, R1
                 MOVE    @R1, R2
                 MOVE    R2, @R0
-                MOVE    OSM_SUB_ACTIVE, R0
-                MOVE    0, @R0
                 DECRB
                 RET
 
@@ -842,13 +813,6 @@ P1581_OSM_INIT  INCRB
 ;   R8: 0=OK, else pointer to string with error message
 ;   R9: 0=OK, else error code
 OSM_SEL_POST    INCRB
-
-                ; HANDLE_CORE_IO must not paint while a menu selection is
-                ; running a browser or help viewer. OSM_SEL_PRE raises this
-                ; flag before the framework action; every normal return reaches
-                ; this callback and clears it again.
-                MOVE    OSM_SUB_ACTIVE, R0
-                MOVE    0, @R0
 
                 ; HDMI Filter selection changed: re-push the matching (H, V)
                 ; coefficient pair into the ascal polyphase RAM. NO core
@@ -908,7 +872,73 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; Image -> Internal, because the image drive can WRITE and a switch mid-write
 ; or with a dirty cache would lose data (maintainer decision 2026-07-12: the
 ; idle-gate must be symmetric).
-#include "physical_1581_osm.asm"
+
+P1581_DIAG_DEV       .EQU 0x0108                ; C_DEV_C64_PHYS1581
+P1581_RM_CTRL        .EQU 0x0004                ; RM_CTRL_STATE word offset
+P1581_BUSY_MASK      .EQU 0xFC08                ; read | step | motor
+P1581_RM_IMGBSY      .EQU 0x0028                ; RM_IMG_DRIVE word offset
+P1581_IMGBSY_MSK     .EQU 0x0001                ; image drive busy or dirty
+
+P1581_OS_IDLE        .EQU 0
+P1581_OS_MOTOR       .EQU 1
+P1581_OS_HEAD        .EQU 2
+P1581_OS_READING     .EQU 3
+P1581_OS_BUSY        .EQU 4                     ; defensive image-side activity
+P1581_OS_INVALID     .EQU 0xFFFF
+
+P1581_OSM_POLL_MASK  .EQU 0x0007                ; 763 Hz / 8 = about 95 Hz
+P1581_OSM_LABEL_LEN  .EQU 23                    ; characters after marker
+
+; Classify the two words used by the symmetric idle gate. Physical activity
+; has priority so that the label explains what the internal mechanism does.
+;
+; Input:  R8 = RM_CTRL_STATE, R9 = RM_IMG_DRIVE
+; Output: R8 = P1581_OS_* state, R9 unchanged
+P1581_CLASSIFY INCRB
+                MOVE    R8, R0
+                AND     0xF000, R0              ; read FSM active?
+                RBRA    _P1581_C_READ, !Z
+                MOVE    R8, R0
+                AND     0x0C00, R0              ; step FSM active?
+                RBRA    _P1581_C_HEAD, !Z
+                MOVE    R8, R0
+                AND     0x0008, R0              ; motor on?
+                RBRA    _P1581_C_MOTOR, !Z
+                MOVE    R9, R0
+                AND     P1581_IMGBSY_MSK, R0
+                RBRA    _P1581_C_BUSY, !Z
+                MOVE    P1581_OS_IDLE, R8
+                RBRA    _P1581_C_RET, 1
+_P1581_C_MOTOR MOVE    P1581_OS_MOTOR, R8
+                RBRA    _P1581_C_RET, 1
+_P1581_C_HEAD  MOVE    P1581_OS_HEAD, R8
+                RBRA    _P1581_C_RET, 1
+_P1581_C_READ  MOVE    P1581_OS_READING, R8
+                RBRA    _P1581_C_RET, 1
+_P1581_C_BUSY  MOVE    P1581_OS_BUSY, R8
+_P1581_C_RET   DECRB
+                RET
+
+; Map a valid P1581_OS_* state to its zero-terminated, 23-character label.
+;
+; Input/Output: R8 = state / string pointer
+P1581_STATUS_STR
+                INCRB
+                MOVE    P1581_OSM_STRINGS, R0
+                ADD     R8, R0
+                MOVE    @R0, R8
+                DECRB
+                RET
+
+P1581_OSM_STRINGS
+                .DW P1581_OSM_IDLE, P1581_OSM_MOTOR, P1581_OSM_HEAD
+                .DW P1581_OSM_READING, P1581_OSM_BUSY
+
+P1581_OSM_IDLE    .ASCII_W "Use internal 1581      "
+P1581_OSM_MOTOR   .ASCII_W "Internal 1581 <Motor>  "
+P1581_OSM_HEAD    .ASCII_W "Internal 1581 <Head>   "
+P1581_OSM_READING .ASCII_W "Internal 1581 <Reading>"
+P1581_OSM_BUSY    .ASCII_W "Internal 1581 <Busy>   "
 
 ; OSM_SEL_PRE callback function:
 ;
@@ -916,12 +946,6 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; called before the functionality and semantics associated with a certain
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
-
-                ; Bracket framework sub-activities that poll HANDLE_IO so the
-                ; live-status painter never writes over browser/help screens.
-                ; OSM_SEL_POST clears the flag after the action returns.
-                MOVE    OSM_SUB_ACTIVE, R0
-                MOVE    1, @R0
 
                 ; Symmetric idle-gate for "Use internal 1581" (issue #90):
                 ; ignore an attempt to switch drive 8 between disk image and
@@ -1246,7 +1270,6 @@ SS_LINE         .BLOCK SS_LINE_LEN              ; full custom line "Model: PAL C
 ; Live internal-1581 OSM status state used by HANDLE_CORE_IO.
 P1581_OSM_LAST  .BLOCK 1                        ; last displayed coarse state
 P1581_OSM_TICK  .BLOCK 1                        ; last IO$CYC_MID value observed
-OSM_SUB_ACTIVE  .BLOCK 1                        ; browser/help selection active
 
 ; ----------------------------------------------------------------------------
 ; Heap and Stack: Need to be located in RAM after the variables

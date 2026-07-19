@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Golden model, fixture generator and headless test runner for the M2M menu
-structure algorithms (menu_struct.asm + menu.asm submenu state machine).
+structure algorithms, submenu state machine and live-text API.
 
 Run it from anywhere; the script locates the repository relative to itself
 (it lives in M2M/rom/tests/). See the README.md in this folder for the full
@@ -1838,6 +1838,11 @@ def verify():
 # ---------------------------------------------------------------------------
 
 
+def expect_live():
+    return ("VISIBLE OK\nINVALID OK\nHIDDEN OK\n"
+            "CALLBACK OK\nFOREGROUND OK\nINACTIVE OK\nDONE\n")
+
+
 def gen():
     emit_fixtures_asm(os.path.join(HERE, "menu_test_fixtures.asm"))
     emit_equiv_asm(os.path.join(HERE, "menu_equiv_fixtures.asm"))
@@ -1846,7 +1851,8 @@ def gen():
     for name, content in [("menu_struct_test.exp", expect_struct()),
                           ("menu_equiv_test.exp", expect_equiv()),
                           ("menu_nav_test.exp", expect_nav()),
-                          ("optm_deps_test.exp", expect_deps())]:
+                          ("optm_deps_test.exp", expect_deps()),
+                          ("optm_live_test.exp", expect_live())]:
         with open(os.path.join(HERE, name), "w") as f:
             f.write(content)
     print("generated fixtures and expected outputs")
@@ -1859,7 +1865,7 @@ def run():
     mon = os.path.join(REPO, "M2M/QNICE/monitor/monitor.out")
     fails = 0
     for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test",
-               "optm_deps_test"):
+               "optm_deps_test", "optm_live_test"):
         r = subprocess.run([asm, tb + ".asm"], cwd=HERE,
                            capture_output=True, text=True, timeout=120)
         listing = os.path.join(HERE, tb + ".out")
