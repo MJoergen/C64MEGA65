@@ -175,10 +175,10 @@ architecture rtl of rrnet is
   signal   rxtx_rddat : std_logic_vector(15 downto 0)                  := (others => '0');
 
   -- Per-process port-B drivers; multiplexed to rxtx_* below.
-  signal   tx_rxtx_addr  : unsigned(11 downto 0)                       := (others => '0');
-  signal   rx_rxtx_addr  : unsigned(11 downto 0)                       := (others => '0');
-  signal   rx_rxtx_we    : std_logic_vector( 1 downto 0)               := (others => '0');
-  signal   rx_rxtx_wrdat : std_logic_vector(15 downto 0)               := (others => '0');
+  signal   tx_addr  : unsigned(11 downto 0)                            := (others => '0');
+  signal   rx_addr  : unsigned(11 downto 0)                            := (others => '0');
+  signal   rx_we    : std_logic_vector( 1 downto 0)                    := (others => '0');
+  signal   rx_wrdat : std_logic_vector(15 downto 0)                    := (others => '0');
 
   -- cs_d is used to detect rising edge of the Chip Select.
   signal   cs_d  : std_logic                                           := '0';
@@ -211,6 +211,7 @@ architecture rtl of rrnet is
       ret_v(8 * i + 7 downto 8 * i)                        := ram_v(i)(7 downto 0);
       ret_v(8 * i + 7 + 2048 * 8 downto 8 * i + 2048 * 8 ) := ram_v(i)(15 downto 8);
     end loop;
+
     return ret_v;
   end function get_packet_page_init;
 
@@ -289,9 +290,9 @@ begin
   -- Port-B arbitration
   --
   -- Three users, mutually exclusive under normal driver flow:
-  --   * Tx-read : driven by tx_proc (tx_rxtx_addr); active when
+  --   * Tx-read : driven by tx_proc (tx_addr); active when
   --               tx_state = BUSY_ST or reg_tx_start = '1'.
-  --   * Rx-write: driven by rx_proc (rx_rxtx_addr / _wrdat / _we);
+  --   * Rx-write: driven by rx_proc (rx_addr / _wrdat / _we);
   --               active when tx_state = IDLE_ST (and Rx has a frame
   --               in progress).
   --   * Rx-read : driven by fsm_proc via reg_rx_ptr; active while a
@@ -304,14 +305,14 @@ begin
   -- port B to the Rx-write path.
   ----------------------------------------------------------
 
-  rxtx_addr      <= tx_rxtx_addr when tx_state = BUSY_ST or reg_tx_start = '1' else
+  rxtx_addr      <= tx_addr when tx_state = BUSY_ST or reg_tx_start = '1' else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
                       unsigned(addr_i) = C_RXTX_REG_0 + 1) else
-                    rx_rxtx_addr;
-  rxtx_we        <= rx_rxtx_we when tx_state = IDLE_ST else
+                    rx_addr;
+  rxtx_we        <= rx_we when tx_state = IDLE_ST else
                     (others => '0');
-  rxtx_wrdat     <= rx_rxtx_wrdat;
+  rxtx_wrdat     <= rx_wrdat;
 
   ----------------------------------------------------------
   -- Tx process
@@ -334,15 +335,15 @@ begin
 
         when BUSY_ST =>
           if eth_tx_ready_i = '1' then
-            if tx_rxtx_addr(0) = '0' then
+            if tx_addr(0) = '0' then
               eth_tx_data_o <= rxtx_rddat(7 downto 0);
             else
               eth_tx_data_o <= rxtx_rddat(15 downto 8);
             end if;
             eth_tx_valid_o <= '1';
-            tx_rxtx_addr   <= tx_rxtx_addr + 1;
-            if tx_rxtx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
-              tx_rxtx_addr  <= C_TX_BUF_START;
+            tx_addr        <= tx_addr + 1;
+            if tx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
+              tx_addr       <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
               tx_state      <= IDLE_ST;
             end if;
@@ -351,7 +352,7 @@ begin
       end case;
 
       if rst_i = '1' then
-        tx_rxtx_addr   <= C_TX_BUF_START;
+        tx_addr        <= C_TX_BUF_START;
         eth_tx_valid_o <= '0';
         eth_tx_last_o  <= '0';
         eth_tx_data_o  <= (others => '0');
@@ -375,25 +376,25 @@ begin
   begin
     if rising_edge(clk_i) then
       -- Default: no port-B write this cycle.
-      rx_rxtx_we <= (others => '0');
+      rx_we <= (others => '0');
 
       case rx_state is
 
         when RX_IDLE_ST =>
           -- Point at the first payload word ($0404) for the next arrival.
-          rx_wr_addr   <= C_RX_BUF_START + 4;
-          rx_byte_cnt  <= (others => '0');
-          rx_rxtx_addr <= C_RX_BUF_START + 4;
+          rx_wr_addr  <= C_RX_BUF_START + 4;
+          rx_byte_cnt <= (others => '0');
+          rx_addr     <= C_RX_BUF_START + 4;
 
           if eth_rx_valid_i = '1' and rx_accept = '1' then
             -- First byte of a new frame lands in the low half of the word
             -- at $0404 (byte address bit 0 = '0').
-            rx_rxtx_addr  <= C_RX_BUF_START + 4;
-            rx_rxtx_wrdat <= eth_rx_data_i & eth_rx_data_i;
-            rx_rxtx_we    <= "01";
-            rx_wr_addr    <= C_RX_BUF_START + 5;
-            rx_byte_cnt   <= to_unsigned(1, rx_byte_cnt'length);
-            rx_state      <= RX_DATA_ST;
+            rx_addr     <= C_RX_BUF_START + 4;
+            rx_wrdat    <= eth_rx_data_i & eth_rx_data_i;
+            rx_we       <= "01";
+            rx_wr_addr  <= C_RX_BUF_START + 5;
+            rx_byte_cnt <= to_unsigned(1, rx_byte_cnt'length);
+            rx_state    <= RX_DATA_ST;
 
             -- Pathological single-byte frame: end-of-frame on the very
             -- first byte. Latch length and fall through to header write.
@@ -409,12 +410,12 @@ begin
           if eth_rx_valid_i = '1' then
             -- Byte-lane selection follows the LSB of the write address,
             -- same convention used on the Tx read side.
-            rx_rxtx_addr  <= rx_wr_addr;
-            rx_rxtx_wrdat <= eth_rx_data_i & eth_rx_data_i;
+            rx_addr  <= rx_wr_addr;
+            rx_wrdat <= eth_rx_data_i & eth_rx_data_i;
             if rx_wr_addr(0) = '0' then
-              rx_rxtx_we <= "01";
+              rx_we <= "01";
             else
-              rx_rxtx_we <= "10";
+              rx_we <= "10";
             end if;
 
             rx_wr_addr  <= rx_wr_addr + 1;
@@ -432,17 +433,17 @@ begin
           -- Two clocks: first write RxStatus at $0400, then RxLength at $0402.
           -- rx_byte_cnt(0) is used as a 1-bit sub-state.
           if rx_byte_cnt(0) = '0' then
-            rx_rxtx_addr   <= C_RX_BUF_START;                       -- $0400
+            rx_addr        <= C_RX_BUF_START;                       -- $0400
             -- RxStatus: bit 8 = RxOK. All other bits zero for now
             -- (extend here to expose more per-frame status bits).
-            rx_rxtx_wrdat  <= "0000000" & rx_ok & x"00";
-            rx_rxtx_we     <= "11";
+            rx_wrdat       <= "0000000" & rx_ok & x"00";
+            rx_we          <= "11";
             rx_byte_cnt(0) <= '1';
           else
-            rx_rxtx_addr  <= C_RX_BUF_START + 2;                    -- $0402
-            rx_rxtx_wrdat <= std_logic_vector(rx_length);
-            rx_rxtx_we    <= "11";
-            rx_state      <= RX_READY_ST;
+            rx_addr  <= C_RX_BUF_START + 2;                         -- $0402
+            rx_wrdat <= std_logic_vector(rx_length);
+            rx_we    <= "11";
+            rx_state <= RX_READY_ST;
           end if;
 
         when RX_READY_ST =>
@@ -460,7 +461,7 @@ begin
         rx_byte_cnt <= (others => '0');
         rx_length   <= (others => '0');
         rx_ok       <= '0';
-        rx_rxtx_we  <= (others => '0');
+        rx_we       <= (others => '0');
       end if;
     end if;
   end process rx_proc;
