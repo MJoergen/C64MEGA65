@@ -68,7 +68,9 @@ entity rrnet is
   );
   port (
     -- CPU interface @ 32 MHz.
-    -- It is assumed that CS is deasserted between each single transaction.
+    -- It is assumed that cs_i is deasserted between each single transaction.
+    -- It is further assumed that cs_i is asserted for at least two consecutive clock cycles,
+    -- and that addr_i, we_i, and wr_data_i do not change while cs_i is asserted.
     clk_i          : in    std_logic;
     rst_i          : in    std_logic;
     cs_i           : in    std_logic;                    -- Chip Select. Connect to IO1 ($DExx)
@@ -78,8 +80,7 @@ entity rrnet is
     rd_data_o      : out   std_logic_vector(7 downto 0);
 
     -- Ethernet interface (byte streaming, same clock domain as CPU interface)
-    -- Bytes arrive at the frequency of 100 / 8 = 12.5 Mbytes per second.
-    -- Byte-oriented interface to an RMII Ethernet PHY.
+    -- Bytes are transferred at the frequency of 100 / 8 = 12.5 Mbytes per second.
     --
     -- Rx contract : * eth_rx_valid_i pulses high for 1 clock cycle per byte (byte strobe).
     --               * eth_rx_last_i marks the last byte of a frame (client-visible payload;
@@ -305,7 +306,8 @@ begin
   -- port B to the Rx-write path.
   ----------------------------------------------------------
 
-  rxtx_addr      <= tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
+  rxtx_addr      <= tx_addr + 1 when tx_state = TX_BUSY_ST and eth_tx_ready_i = '1' and eth_tx_valid_o = '1' else
+                    tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
                       unsigned(addr_i) = C_RXTX_REG_0 + 1) else
@@ -342,7 +344,7 @@ begin
             end if;
             eth_tx_valid_o <= '1';
             tx_addr        <= tx_addr + 1;
-            if tx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
+            if tx_addr >= C_TX_BUF_START + reg_tx_length then
               tx_addr       <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
               tx_state      <= TX_IDLE_ST;
@@ -619,6 +621,11 @@ begin
               pp_wrdat   <= wr_data_i & wr_data_i;
               pp_we      <= "10";
               if reg_tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
+                -- Minimum frame length is 60 bytes
+                -- Here we append the frame with extra random bytes. They will be ignored by receiver.
+                if reg_tx_length < 60 then
+                  reg_tx_length <= to_unsigned(60, 16);
+                end if;
                 reg_tx_start <= '1';
               end if;
 
