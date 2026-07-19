@@ -50,7 +50,7 @@
 -- all share port B of the PacketPage RAM. They are naturally mutually
 -- exclusive under normal driver flow:
 --   * Rx-write is only active while rx_state = RX_DATA_ST/RX_HEADER_ST.
---   * Tx-read is only active while tx_state = BUSY_ST.
+--   * Tx-read is only active while tx_state = TX_BUSY_ST.
 --   * Rx-window-read is only meaningful while rx_state = RX_READY_ST.
 -- Drivers must not initiate a Tx transaction while draining an Rx frame
 -- via $DE08/09, or the Rx read will observe Tx-buffer data. The FSM
@@ -222,8 +222,8 @@ architecture rtl of rrnet is
   ----------------------------------------------------------
   -- Tx path state
   ----------------------------------------------------------
-  type     tx_state_type is (IDLE_ST, BUSY_ST);
-  signal   tx_state : tx_state_type                                    := IDLE_ST;
+  type     tx_state_type is (TX_IDLE_ST, TX_BUSY_ST);
+  signal   tx_state : tx_state_type                                    := TX_IDLE_ST;
 
   -- Live "buffer ready" flag exposed to software as the Rdy4TxNOW bit of
   -- the CS8900A Bus Status register at PP offset $0138 (bit 8).
@@ -273,7 +273,7 @@ begin
   -- Live status flags (concurrent)
   ----------------------------------------------------------
 
-  rdy_4_tx_now   <= '1' when tx_state = IDLE_ST else
+  rdy_4_tx_now   <= '1' when tx_state = TX_IDLE_ST else
                     '0';
   rx_frame_ready <= '1' when rx_state = RX_READY_ST else
                     '0';
@@ -282,7 +282,7 @@ begin
   -- frame has been consumed. Note that RX_DATA_ST and RX_HEADER_ST are
   -- also considered "accepting" states; the gate exists mainly to arbitrate
   -- port B and to enforce the single-buffer contract from RX_IDLE_ST.
-  rx_accept      <= '1' when tx_state = IDLE_ST and
+  rx_accept      <= '1' when tx_state = TX_IDLE_ST and
                              rx_state /= RX_READY_ST else
                     '0';
 
@@ -291,9 +291,9 @@ begin
   --
   -- Three users, mutually exclusive under normal driver flow:
   --   * Tx-read : driven by tx_proc (tx_addr); active when
-  --               tx_state = BUSY_ST or reg_tx_start = '1'.
+  --               tx_state = TX_BUSY_ST or reg_tx_start = '1'.
   --   * Rx-write: driven by rx_proc (rx_addr / _wrdat / _we);
-  --               active when tx_state = IDLE_ST (and Rx has a frame
+  --               active when tx_state = TX_IDLE_ST (and Rx has a frame
   --               in progress).
   --   * Rx-read : driven by fsm_proc via reg_rx_ptr; active while a
   --               CPU access to $DE08/09 is being processed and
@@ -305,12 +305,12 @@ begin
   -- port B to the Rx-write path.
   ----------------------------------------------------------
 
-  rxtx_addr      <= tx_addr when tx_state = BUSY_ST or reg_tx_start = '1' else
+  rxtx_addr      <= tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
                       unsigned(addr_i) = C_RXTX_REG_0 + 1) else
                     rx_addr;
-  rxtx_we        <= rx_we when tx_state = IDLE_ST else
+  rxtx_we        <= rx_we when tx_state = TX_IDLE_ST else
                     (others => '0');
   rxtx_wrdat     <= rx_wrdat;
 
@@ -328,12 +328,12 @@ begin
 
       case tx_state is
 
-        when IDLE_ST =>
+        when TX_IDLE_ST =>
           if reg_tx_start = '1' then
-            tx_state <= BUSY_ST;
+            tx_state <= TX_BUSY_ST;
           end if;
 
-        when BUSY_ST =>
+        when TX_BUSY_ST =>
           if eth_tx_ready_i = '1' then
             if tx_addr(0) = '0' then
               eth_tx_data_o <= rxtx_rddat(7 downto 0);
@@ -345,7 +345,7 @@ begin
             if tx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
               tx_addr       <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
-              tx_state      <= IDLE_ST;
+              tx_state      <= TX_IDLE_ST;
             end if;
           end if;
 
@@ -356,7 +356,7 @@ begin
         eth_tx_valid_o <= '0';
         eth_tx_last_o  <= '0';
         eth_tx_data_o  <= (others => '0');
-        tx_state       <= IDLE_ST;
+        tx_state       <= TX_IDLE_ST;
       end if;
     end if;
   end process tx_proc;
@@ -525,7 +525,7 @@ begin
       -- Sanity assertion: catch drivers that write to the Tx buffer while
       -- transmission is still in progress (they should have polled Rdy4TxNOW
       -- first). This is a driver bug, not a hardware one.
-      assert not (tx_state = BUSY_ST and cs_d = '0' and cs_i = '1' and we_i = '1'
+      assert not (tx_state = TX_BUSY_ST and cs_d = '0' and cs_i = '1' and we_i = '1'
                   and (unsigned(addr_i) = C_RXTX_REG_0 or unsigned(addr_i) = C_RXTX_REG_0 + 1))
         report "rrnet: CPU write to Tx buffer while Tx is in progress"
         severity failure;
@@ -534,7 +534,7 @@ begin
       -- for Rx purposes while a Tx is in progress. This would return
       -- Tx-buffer data instead of Rx-buffer data because port B is
       -- arbitrated to Tx-read.
-      assert not (tx_state = BUSY_ST and rx_state = RX_READY_ST and
+      assert not (tx_state = TX_BUSY_ST and rx_state = RX_READY_ST and
                   cs_d = '0' and cs_i = '1' and we_i = '0' and
                   (unsigned(addr_i) = C_RXTX_REG_0 or unsigned(addr_i) = C_RXTX_REG_0 + 1))
         report "rrnet: CPU read from Rx window while Tx is in progress"
