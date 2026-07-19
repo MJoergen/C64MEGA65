@@ -324,6 +324,17 @@ begin
                      -- corrupting the buffer.  The threshold check here
                      -- ensures the slide fires on the very next cycle
                      -- instead, once the buffer is fully committed.
+                     --
+                     -- HACK: We need the extra condition on
+                     -- "s_avm_byteenable_i(G_DATA_SIZE / 8 - 1) = '1'"
+                     -- because we should only slide the window when the *entire*
+                     -- current word has been read. We are here *assuming* that
+                     -- reads are byte-sized and sequential (starting from LSB
+                     -- to MSB). The extra guard therefore assumes when
+                     -- reading the MSB that all the other bytes have been (or
+                     -- are being) read. Without the guard, single byte reads
+                     -- would slide the window before the entire word has been
+                     -- read.
                      --------------------------------------------------------
                      if unsigned(cache_offset_s) >= G_CACHE_SIZE / 2 - 1
                         and s_avm_byteenable_i(G_DATA_SIZE / 8 - 1) = '1' then
