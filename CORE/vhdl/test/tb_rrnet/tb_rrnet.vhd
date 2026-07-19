@@ -22,6 +22,7 @@ architecture tb of tb_rrnet is
   signal   clk : std_logic          := '1';
   signal   rst : std_logic          := '1';
   signal   ce  : std_logic          := '1';
+  signal   ce_cnt : natural range 0 to 2 := 0;
 
   signal   cpu_addr      : std_logic_vector(15 downto 0);
   signal   cpu_wr_en     : std_logic;
@@ -54,10 +55,21 @@ architecture tb of tb_rrnet is
 
 begin
 
+  ce_proc : process (clk)
+  begin
+    if rising_edge(clk) then
+      if ce_cnt > 0 then
+        ce_cnt <= ce_cnt - 1;
+      else
+        ce_cnt <= 2;
+      end if;
+    end if;
+  end process ce_proc;
+
   -- Clock, reset, and clock enable
   clk <= not clk after 5 ns;
   rst <= '1', '0' after 100 ns;
-  ce  <= not ce when rising_edge(clk);
+  ce  <= '1' when ce_cnt = 0 else '0';
 
   fifo_ready_proc : process (clk)
   begin
