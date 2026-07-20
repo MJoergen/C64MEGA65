@@ -33,6 +33,10 @@ cpu_reset:
         .byte $02
 
 :
+        ; ----------------------------------------------------
+        ; TEST 1 : Send one frame, receive one frame, verify
+        ; ----------------------------------------------------
+        ;
         ; Testbench: Block loopback fifo
         lda #$00
         sta $DF00
@@ -54,22 +58,43 @@ cpu_reset:
         lda #$01
         sta $DF00
 
-        lda #<rxbuf1
-        ldx #>rxbuf1
+        lda #<rxbuf
+        ldx #>rxbuf
         sta eth+driver::bufaddr
         stx eth+driver::bufaddr+1
-        lda #<rxlen1
-        ldx #>rxlen1
+        lda #<rxlen
+        ldx #>rxlen
         sta eth+driver::bufsize
         stx eth+driver::bufsize+1
 :       jsr eth+driver::poll
         bcs :-
 
+        ; Verify packet length
+        cmp #<txlen1
+        beq :+
+        ; Invalid instruction signals a failure
+err1:   .byte $02
+:       cpx #>txlen1
+        bne err1
+        ; Verify packet data
+        ldy #0
+:       lda rxbuf,y
+        cmp txbuf1,y
+        bne err1
+        iny
+        cpy #<txlen1
+        bne :-
+
+
+        ; ----------------------------------------------------
+        ; TEST 2 : Send two frames, receive only first frame, verify
+        ; ----------------------------------------------------
+        ;
         ; Testbench: Block loopback fifo
         lda #$00
         sta $DF00
 
-        ; Send second packet
+        ; Send first packet
         lda #<txbuf2
         ldx #>txbuf2
         sta eth+driver::bufaddr
@@ -82,57 +107,104 @@ cpu_reset:
         ldx #$00
 :       dex
         bne :-
-        ; Testbench: Enable loopback fifo
-        lda #$01
-        sta $DF00
-        ; Wait until frame is received
+
+        ; Send second packet
+        lda #<txbuf3
+        ldx #>txbuf3
+        sta eth+driver::bufaddr
+        stx eth+driver::bufaddr+1
+        lda #<txlen3
+        ldx #>txlen3
+        jsr eth+driver::send
+
+        ; Wait until frame is transmitted
         ldx #$00
 :       dex
         bne :-
 
-        lda #<rxbuf1
-        ldx #>rxbuf1
+        ; Testbench: Enable loopback fifo
+        lda #$01
+        sta $DF00
+
+        ; Wait until frames are received
+        ldx #$00
+:       dex
+        bne :-
+
+        lda #<rxbuf
+        ldx #>rxbuf
         sta eth+driver::bufaddr
         stx eth+driver::bufaddr+1
-        lda #<rxlen1
-        ldx #>rxlen1
+        lda #<rxlen
+        ldx #>rxlen
         sta eth+driver::bufsize
         stx eth+driver::bufsize+1
 :       jsr eth+driver::poll
         bcs :-
 
-        ; Finished
-:       jmp :-
+        ; Verify packet length
+        cmp #<txlen2
+        beq :+
+        ; Invalid instruction signals a failure
+err2:   .byte $02
+:       cpx #>txlen2
+        bne err2
+        ; Verify packet data
+        ldy #0
+:       lda rxbuf,y
+        cmp txbuf2,y
+        bne err2
+        iny
+        cpy #<txlen2
+        bne :-
 
+        ; No more packets
+        jsr eth+driver::poll
+        bcc err2
+
+        ; Finished
         ; Infinite loop signals a success
 ok:     jmp ok
+
 
 .segment "RODATA"
 txbuf1: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
         .byte $11, $22, $33, $44, $55, $66 ; Source MAC address
         .byte $08, $00                     ; Type
-        .repeat 200
-          .byte $55, $AA
+        .repeat 50
+          .byte $55, $66, $99, $AA         ; Random packet data
         .endrep
-        .asciiz "This is a test packet"
+        .byte $11                          ; Specific last byte
 txlen1 = * - txbuf1
 
 txbuf2: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
         .byte $99, $88, $77, $66, $55, $44 ; Source MAC address
         .byte $08, $00                     ; Type
-        .repeat 200
-          .byte $66, $99
+        .repeat 50
+          .byte $23, $34, $45, $56         ; Random packet data
         .endrep
-        .asciiz "Here is another packet with an odd length."
+        .byte $DD, $EE                     ; Specific last bytes
 txlen2 = * - txbuf2
 
-.segment "BSS"
-rxlen1 = 2000
-rxbuf1: .res rxlen1
+txbuf3: .byte $FF, $FF, $FF, $FF, $FF, $FF ; Destination MAC address
+        .byte $91, $82, $73, $64, $55, $46 ; Source MAC address
+        .byte $08, $00                     ; Type
+        .repeat 50
+          .byte $31, $42, $53, $64         ; Random packet data
+        .endrep
+        .byte $CC                          ; Specific last byte
+txlen3 = * - txbuf3
 
+
+.segment "BSS"
+rxlen = 2000
+rxbuf: .res rxlen
+
+
+; CPU initialization vectors - placed at $FFFA
 .segment "VECTORS"
 
 .addr 0
 .addr cpu_reset
-.byte $32, $43
+.addr 0
 

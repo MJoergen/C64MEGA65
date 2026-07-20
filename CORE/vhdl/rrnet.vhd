@@ -279,12 +279,10 @@ begin
   rx_frame_ready <= '1' when rx_state = RX_READY_ST else
                     '0';
 
-  -- Rx accepts new bytes only when the Tx path is idle AND the previous
-  -- frame has been consumed. Note that RX_DATA_ST and RX_HEADER_ST are
-  -- also considered "accepting" states; the gate exists mainly to arbitrate
+  -- Rx accepts new bytes only when the Tx path is idle;
+  -- the gate exists mainly to arbitrate
   -- port B and to enforce the single-buffer contract from RX_IDLE_ST.
-  rx_accept      <= '1' when tx_state = TX_IDLE_ST and
-                             rx_state /= RX_READY_ST else
+  rx_accept      <= '1' when tx_state = TX_IDLE_ST else
                     '0';
 
   ----------------------------------------------------------
@@ -344,7 +342,7 @@ begin
             end if;
             eth_tx_valid_o <= '1';
             tx_addr        <= tx_addr + 1;
-            if tx_addr >= C_TX_BUF_START + reg_tx_length then
+            if tx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
               tx_addr       <= C_TX_BUF_START;
               eth_tx_last_o <= '1';
               tx_state      <= TX_IDLE_ST;
@@ -700,9 +698,17 @@ begin
               -- reg_rx_ptr; that fires on the high-byte access only.
               if rx_state = RX_READY_ST then
                 rd_data_o <= rxtx_rddat(7 downto 0);
+                if reg_rx_ptr < C_RX_BUF_START + 4 then
+                  reg_rx_ptr <= reg_rx_ptr + 2;
+
+                  if (reg_rx_ptr + 2) >= rx_end_ptr_v then
+                    rx_frame_consumed <= '1';
+                    reg_rx_ptr        <= (others => '0');
+                  end if;
+                end if;
               else
-                -- No frame available: return all-ones (idle bus behaviour).
-                rd_data_o <= X"FF";
+                -- No frame available: return zero (idle bus behaviour).
+                rd_data_o <= X"00";
               end if;
 
             when C_RXTX_REG_0 + 1 =>
@@ -713,14 +719,16 @@ begin
               -- receiver is re-armed.
               if rx_state = RX_READY_ST then
                 rd_data_o  <= rxtx_rddat(15 downto 8);
-                reg_rx_ptr <= reg_rx_ptr + 2;
+                if reg_rx_ptr >= C_RX_BUF_START + 4 then
+                  reg_rx_ptr <= reg_rx_ptr + 2;
 
-                if (reg_rx_ptr + 2) >= rx_end_ptr_v then
-                  rx_frame_consumed <= '1';
-                  reg_rx_ptr        <= (others => '0');
+                  if (reg_rx_ptr + 2) >= rx_end_ptr_v then
+                    rx_frame_consumed <= '1';
+                    reg_rx_ptr        <= (others => '0');
+                  end if;
                 end if;
               else
-                rd_data_o <= X"FF";
+                rd_data_o <= X"00";
               end if;
 
             when C_TX_CMD =>

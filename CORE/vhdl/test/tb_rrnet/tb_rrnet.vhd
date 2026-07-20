@@ -152,7 +152,7 @@ begin
                   '0';
   rom_cs       <= '1' when cpu_addr >= x"F800" else
                   '0';
-  ram_cs       <= '1' when cpu_addr < x"0800" else
+  ram_cs       <= '1' when cpu_addr < x"1000" else
                   '0';
 
   cpu_rd_data  <= rrnet_rd_data when rrnet_cs = '1' else
@@ -163,7 +163,7 @@ begin
   -- Instantiate RAM @ 0000
   tdp_ram_inst : entity work.tdp_ram
     generic map (
-      ADDR_WIDTH   => 11,
+      ADDR_WIDTH   => 12,
       DATA_WIDTH   => 8,
       ROM_PRELOAD  => false,
       ROM_FILE     => "",
@@ -172,7 +172,7 @@ begin
     port map (
       clock_a   => clk,
       clen_a    => '1',
-      address_a => cpu_addr(10 downto 0),
+      address_a => cpu_addr(11 downto 0),
       data_a    => cpu_wr_data,
       wren_a    => ram_cs and cpu_wr_en,
       q_a       => ram_rd_data,
