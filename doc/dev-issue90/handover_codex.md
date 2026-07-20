@@ -1320,6 +1320,32 @@ and community feedback over the following days and weeks supplies the wider
 platform observation. Keep the Alpha label and record the board revision,
 operation, media provenance and exact symptoms with each report.
 
+### WIP-V6-A18X2 R3 JiffyDOS compatibility pass
+
+Discord tester **Mike351** reported at 13:36 on 2026-07-20: “I can confirm
+JiffyDOS works on the latest X2 alpha on my R3 board. Also tested JD with the
+internal 1581 and that worked without issue too.” This is the first community
+report with explicit build and board provenance for JiffyDOS through the
+physical internal-1581 path: WIP-V6-A18X2 on R3.
+
+The result is architecturally credible. Physical mode retains the same emulated
+1581 CPU, RAM, CIA, VIA, IEC logic and selected stock/custom DOS ROM; it changes
+the WD1772 media backend from a D81 image to the internal physical mechanism.
+JiffyDOS runs over the ordinary IEC CLK/DATA protocol above that boundary, not
+over the unavailable C128 burst channel. The physical mechanism therefore has
+no inherent conflict with JiffyDOS, although seek and rotational latency still
+exist.
+
+Evidence scope: this report confirms operational JiffyDOS selection together
+with the physical internal drive. It proves that the JiffyDOS 1581 drive-ROM
+acceleration path itself was active only if Mike351 had a valid
+`/c64/jd-c1581.bin` loaded. Without that file, the custom 1581 ROM slot safely
+falls back to stock DOS and the JiffyDOS C64 side remains protocol-compatible.
+The OSM summary (`JiffyDOS 1581` or `Jiffy 1541+1581`), the boot-console ROM
+status, or a same-file stock-versus-Jiffy timing comparison would remove that
+last ambiguity. Do not weaken the confirmed compatibility result merely because
+the acceleration subcase was not stated explicitly.
+
 ## Next-instance continuation: stock-media baseline passed, then write milestone
 
 The implemented milestone is deliberately **read-only**. R3 hardware is fully
@@ -1330,7 +1356,8 @@ media: correct directory plus a successful PRG load from the test/demo disk,
 followed by successful demo execution from a second 1581-formatted floppy. The
 independent dejavu4u2 result adds a successful load from a third, GEOS 1581
 disk. The nobruinfo partition concern was traced to command syntax and corrupt
-on-disk linkage, not the reader.
+on-disk linkage, not the reader. Mike351 also confirms that JiffyDOS selection
+works without issue with the internal physical 1581 on WIP-V6-A18X2/R3.
 
 The baseline external stock-media gate has passed. Further Discord/community
 testing broadens media and drive coverage and should follow this protocol:
@@ -1364,12 +1391,12 @@ For strict release bookkeeping, one controlled run should still use a freshly
 synthesized current R3 bitstream to load a directory and program from a
 simulated D81, then perform a short physical directory/program smoke test on
 the same bitstream. This is the post-synthesis confirmation left by checkpoint
-25; the subsequent multi-user physical reports strongly de-risk its hardware
-half but do not identify the exact bitstream or provide the full diagnostic
-sequence. The WIP-V6-A18X2 R3/R4/R5/R6 artifact matrix is complete; functional
-qualification across revisions is now the community Alpha observation phase.
-These are release qualification and provenance tasks, not reasons to reopen the
-RTL.
+25. The Mike351 JiffyDOS report now identifies WIP-V6-A18X2 and R3 explicitly,
+while the earlier reports and this one do not provide the complete controlled
+diagnostic sequence. The WIP-V6-A18X2 R3/R4/R5/R6 artifact matrix is complete;
+functional qualification across revisions is now the community Alpha
+observation phase. These are release qualification and provenance tasks, not
+reasons to reopen the RTL.
 
 The next implementation milestone after read qualification is physical
 **write and format support**, and must start as a new safety-scoped plan:

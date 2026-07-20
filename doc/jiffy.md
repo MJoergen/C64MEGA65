@@ -57,6 +57,13 @@ This describes the **simulated** drives. A **real** disk drive that you attach
 to the MEGA65 IEC port runs JiffyDOS only if a JiffyDOS ROM is installed in that
 physical drive, which is independent of the `jd-*.bin` files on the SD card.
 
+The MEGA65 **internal physical floppy** option is different from an external IEC
+drive: the core still supplies the complete simulated 1581 electronics and DOS
+ROM, while the real mechanism supplies the magnetic medium. Therefore
+`jd-c1581.bin` also selects JiffyDOS for the internal physical 1581. The
+JiffyDOS protocol uses the ordinary IEC CLK/DATA lines; this does not add C128
+burst-mode support.
+
 ### C64 Kernal ROM: `jd-c64.bin`
 
 1. Download the C64 BASIC ROM [`basic.901226-01.bin` from zimmers.net](http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin)

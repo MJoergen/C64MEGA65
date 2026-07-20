@@ -833,3 +833,24 @@ No RTL or testbench was changed during checkpoint 11.
 - Repository HEAD while recording this release checkpoint is the
   documentation-only commit `98a82c4`; the released Alpha remains rooted at
   `d94fa73`, so there is no reader-RTL difference to reconcile.
+
+## 2026-07-20 checkpoint 28: JiffyDOS passes on X2/R3 internal 1581
+
+- Discord tester **Mike351** explicitly confirmed that JiffyDOS works on
+  WIP-V6-A18X2 on his R3 and that he also tested it with the internal 1581
+  without issue. This supplies exact version/board provenance for a positive
+  physical-drive compatibility result.
+- The result is expected from the architecture: physical mode preserves the
+  emulated 1581 CPU/RAM/CIA/VIA/IEC and selected DOS-ROM layers and replaces
+  only the WD1772 media backend. JiffyDOS uses normal IEC CLK/DATA here; this is
+  not a claim of C128 burst-mode support.
+- Classify **JiffyDOS-selected C64 plus internal physical 1581 compatibility**
+  as PASS on X2/R3. Do not yet classify the accelerated JiffyDOS-1581 drive-ROM
+  subcase separately: the report does not state whether `jd-c1581.bin` loaded.
+  The custom slot falls back to stock 1581 DOS when it is absent, which remains
+  compatible with the C64-side JiffyDOS environment.
+- To close only that narrow provenance gap, ask for the OSM Kernal summary
+  (`JiffyDOS 1581` or `Jiffy 1541+1581`), the boot-console component status, or
+  a same-file stock-versus-Jiffy timing comparison. No RTL change is indicated.
+- Repository HEAD at this checkpoint is the documentation-only `fc54621`; the
+  released X2 reader remains `d94fa73` plus submodule `71f4cd7`.

@@ -15,6 +15,10 @@ identified Alpha build.
   produced and distributed
 * R3 reader qualification: PASS in the controlled simulation/hardware campaign,
   with additional positive community reports covering three physical 1581 disks
+* R3 JiffyDOS/internal-1581 compatibility: PASS; Mike351 reported JiffyDOS and
+  the internal physical 1581 working without issue on WIP-V6-A18X2. The report
+  did not state whether `jd-c1581.bin` was loaded, so stock-ROM fallback versus
+  accelerated JiffyDOS-1581 remains to be distinguished if that detail matters
 * R4/R5/R6 functional reader qualification: PENDING community feedback over the
   following days and weeks; artifact availability alone is not a functional pass
 * Physical disk writes remain deliberately unsupported in this Alpha
