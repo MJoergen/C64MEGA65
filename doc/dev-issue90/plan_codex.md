@@ -704,24 +704,24 @@ No RTL or testbench was changed during checkpoint 11.
 
 ## Next-instance plan after `aa6b70f`
 
-- **Current repository state:** pushed HEAD `aa6b70f`; final production RTL is
-  parent commit `bdd457b`, while `aa6b70f` is documentation-only. The tree was
-  clean before this next-instance addendum. No simulator artifacts remain.
+- **Repository state at that checkpoint:** pushed HEAD `aa6b70f`; its parent
+  `bdd457b` contains the final physical-reader RTL, while `aa6b70f` is
+  documentation-only. The tree was clean before this next-instance addendum.
+  No simulator artifacts remain.
 - **Fresh F011-media read milestone:** DONE in simulation, genuine-ROM model
   and all prescribed R3 hardware classes. Do not reopen PA1, R=11, decoder,
   quarantine or delivery work without new contradictory evidence.
-- **Genuine stock-media hardware gate:** PENDING EXTERNAL COMMUNITY EVIDENCE.
-  Exact genuine-ROM stock-format vectors pass byte-exact in the permanent
-  matrix, but no locally available disk was both written by and recently
-  verified in a real Commodore 1581. Community testers should use production
-  commit `bdd457b`, verify the disk on its source 1581, run directory + known
-  program + stopped-motor repeat, and provide error channel plus map-v7 dump
-  before eject. Record board, source drive and media provenance. One failing
-  30-year-old disk is not sufficient evidence for decoder retuning.
-- **Decision after community results:** if independently credible stock media
-  passes, freeze/merge the read milestone. If a verified stock disk fails
-  reproducibly, use map-v7 evidence to separate alignment/media aging from a
-  format-neutral decoder defect before changing RTL.
+- **Genuine stock-media hardware gate (status at `aa6b70f`):** this was pending
+  at that checkpoint and is now superseded by checkpoint 26 below. Two
+  independent testers subsequently reported positive results from three
+  physical 1581 disks, including genuine-1581-origin media and a GEOS disk.
+  The stopped-motor, error-channel and map-v7 checks remain useful extended
+  coverage rather than baseline blockers. One failing 30-year-old disk is not
+  sufficient evidence for decoder retuning.
+- **Decision after community results:** the gate passed; freeze/merge the read
+  milestone. If a verified stock disk later fails reproducibly, use map-v7
+  evidence to separate alignment/media aging from a format-neutral decoder
+  defect before changing RTL.
 - **Next coding milestone (not authorized yet):** physical write support,
   staged as default-off safety interlock -> Write Sector data path/MFM/CRC ->
   writable-model adversarial and read-after-write proofs -> sacrificial-disk
@@ -731,8 +731,8 @@ No RTL or testbench was changed during checkpoint 11.
 - **Fresh-instance reading order:** repository `AGENTS.md`,
   `doc/dev-issue90/handover_codex.md`, this file, then Fable-owned
   `doc/dev-issue90/f011_reference_notes.md`, all completely. No active RTL work
-  remains; wait for community evidence or explicit user authorization for the
-  write milestone.
+  remains; collect broader media coverage without retuning, or wait for
+  explicit user authorization for the write milestone.
 
 ## 2026-07-18 checkpoint 25: strict image-mode isolation restored
 
@@ -767,3 +767,43 @@ No RTL or testbench was changed during checkpoint 11.
 - Final release qualification: newly synthesize R3, test image D81 directory +
   program, then repeat the already qualified physical cold/stopped/eject cases.
   This is the remaining bitstream/board gate, not an unresolved RTL ambiguity.
+
+## 2026-07-20 checkpoint 26: genuine-1581 media baseline passes independently
+
+- Discord tester **Mike351** reported finding disks formatted when he got his
+  genuine Commodore 1581. On the 1581 test/demo disk, the issue-90 hardware
+  reader displayed the directory correctly and successfully loaded the one PRG
+  he had time to test. He subsequently tried another 1581-formatted floppy with
+  the latest C64 core and reported that a demo ran from it and “works great.”
+- A second Discord tester, **dejavu4u2**, independently reported loading a GEOS
+  1581 disk from a physical 3.5-inch floppy in the internal drive: “Winning!”
+- Mike351 supplied the first hardware evidence from genuine-1581-origin media.
+  Previous physical tests used the maintainer DD disk written by the
+  MEGA65/F011 from `C64.D81`; source-derived stock-format vectors were exact but
+  were not a substitute for this interoperability result.
+- Mark the baseline stock-media gate PASS across two independent testers and
+  three disks for directory, program/demo loading and execution, plus a GEOS
+  disk load. A stopped-motor repeat, eject/reinsert, map-v7 dump and recent
+  source-drive readback were not part of these community reports and remain
+  worthwhile extended coverage, not a reason to withhold the demonstrated
+  compatibility result.
+- Discord tester **nobruinfo** retracted the apparent CBM-subpartition problem
+  as a core issue. The initial test used the wrong DOS Wedge command; the BASIC
+  command-channel example behaved as expected. His DD disk also contained an
+  invalid track/sector chain leading to the partition, caused by an unrelated
+  problem under repair. This is neither evidence of read-only drive RAM nor a
+  reader defect. Future partition reports should start with correct command
+  syntax, the DOS error channel and validation of the on-disk link chain.
+- No RTL change is motivated by this evidence. Keep the qualified read decoder
+  frozen; investigate any future verified-media failure from diagnostics before
+  considering retuning. Physical write/format support remains a separate,
+  explicitly authorized safety milestone.
+- Remaining release bookkeeping is unchanged: on one freshly synthesized
+  current R3 bitstream, run simulated-D81 directory/program followed by a short
+  physical directory/program smoke test, and complete the R3/R4/R5/R6 build
+  matrix. The community reports strongly de-risk the physical smoke test but do
+  not carry exact bitstream provenance or the full diagnostic sequence.
+- Repository state while recording this checkpoint: root HEAD `26c0178`,
+  MiSTer submodule `71f4cd7`; the simulated-D81 isolation fix entered the root
+  at `d94fa73`. Later root commits changed documentation and OSM/Shell behavior,
+  not the submodule reader implementation.

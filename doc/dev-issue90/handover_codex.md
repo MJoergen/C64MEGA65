@@ -1263,22 +1263,69 @@ The final release gate remains a newly synthesized R3 hardware run: image-mode
 preinserted directory/program, stopped-motor repeat, eject/reinsert). Simulation
 cannot certify synthesis, a particular board or a particular disk.
 
-## Next-instance continuation: community stock-media gate, then write milestone
+## 2026-07-20 addendum: external genuine-1581 media interoperability passes
+
+Discord tester **Mike351** reported on 2026-07-19 that he found disks formatted
+when he got his genuine Commodore 1581. Using the issue-90 hardware reader, the
+directory of the 1581 test/demo disk displayed correctly and the one PRG he had
+time to try loaded successfully. He then tested another 1581-formatted floppy
+with the latest C64 core and reported that a demo ran from it and “works great.”
+
+On 2026-07-20 a second Discord tester, **dejavu4u2**, independently reported
+successfully loading a GEOS 1581 disk from a physical 3.5-inch floppy in the
+internal drive, calling the result “Winning!” This adds a third disk, a second
+tester and a GEOS workload to the positive external results.
+
+Mike351's report is the first external hardware evidence from media originating
+with a real 1581, rather than the maintainer test disk written by the
+MEGA65/F011 from `C64.D81`. Together, the two reports confirm the baseline
+stock-format interoperability claim across two independent testers and three
+disks: directory parsing, complete program/demo loading and execution, and a
+successful GEOS 1581 disk load. The reports do not include a map-v7 diagnostic
+dump, stopped-motor repeat, eject/reinsert test or recent readback in the source
+1581, so retain those as useful extended qualification; they are no longer
+prerequisites for saying that physical 1581-formatted media has worked
+successfully.
+
+### CBM subpartition report closed as a non-core issue
+
+Discord tester **nobruinfo** withdrew the apparent CBM-subpartition problem
+after retesting. The first attempt used the wrong DOS Wedge command, and the
+absence of drive-LED activity after that invalid command was misleading; the
+provided BASIC command-channel example behaved as expected. He also found that
+his DD disk's subpartition link contained an invalid track/sector chain caused
+by an unrelated problem being repaired in Discord channel/thread
+`1183097316211687576`. He explicitly confirmed that neither cause is related to
+the C64 core.
+
+This report therefore provides no evidence of read-only 1581 RAM or a partition
+navigation defect. The implementation's deliberate read-only boundary is the
+physical medium write path (`WGATE`/`WDATA` remain inactive), not the emulated
+1581 drive RAM. For any future partition report, first verify the command syntax,
+read the DOS error channel, and validate the partition track/sector chain before
+changing RTL.
+
+## Next-instance continuation: stock-media baseline passed, then write milestone
 
 The implemented milestone is deliberately **read-only**. R3 hardware is fully
 qualified with a fresh MEGA65/F011-written DD disk, and source-derived tests
-exercise the exact genuine 318045-02 stock formatter layout byte-exactly. A
-physical disk formatted and written by a genuine Commodore 1581 has not yet
-been available locally. Confidence is high because stock ID fields have the
-conventional zero preamble (easier than the F011 no-preamble ID case), use
-sectors 1..10 (unaffected by the Read Address filter), and share the same DD
-MFM/index/readiness path. This remains strong evidence, not hardware proof.
+exercise the exact genuine 318045-02 stock formatter layout byte-exactly. The
+Mike351 result above now adds independent hardware proof from genuine-1581
+media: correct directory plus a successful PRG load from the test/demo disk,
+followed by successful demo execution from a second 1581-formatted floppy. The
+independent dejavu4u2 result adds a successful load from a third, GEOS 1581
+disk. The nobruinfo partition concern was traced to command syntax and corrupt
+on-disk linkage, not the reader.
 
-The immediate external gate is Discord/community testing, not new RTL:
+The baseline external stock-media gate has passed. Further Discord/community
+testing broadens media and drive coverage and should follow this protocol:
 
-1. Distribute the R3 bitstream built from production commit `bdd457b`
-   (`aa6b70f` differs only in documentation). State prominently that the
-   physical write gate and write-data pins remain inactive.
+1. Use a build at or after root commit `d94fa73`, with MiSTer submodule
+   `71f4cd7`, so it contains both the qualified physical reader and the strict
+   simulated-D81 isolation fix. At the time of this record the root HEAD is
+   `26c0178`; later commits after `d94fa73` did not change the submodule reader.
+   Record the exact build commit and state prominently that the physical write
+   gate and write-data pins remain inactive.
 2. Prefer a backed-up or sacrificial genuine DD disk formatted/written by an
    actual 1581 and verified in that drive immediately before testing. Record
    the source drive, disk/media provenance, MEGA65 board revision and whether
@@ -1293,10 +1340,19 @@ The immediate external gate is Discord/community testing, not new RTL:
    the disk still reads on its genuine 1581, reproduce it, and compare several
    independently written disks if available.
 
-If that gate passes, freeze/merge the read-only milestone without further
-decoder changes. If a verified stock disk reproducibly fails, diagnose from
-map v7 before choosing any acquisition change; marginal-media work remains a
-separate evidence-driven branch.
+Freeze/merge the read-only milestone without further decoder changes. If a
+verified stock disk later fails reproducibly, diagnose from map v7 before
+choosing any acquisition change; marginal-media work remains a separate
+evidence-driven branch.
+
+For strict release bookkeeping, one controlled run should still use a freshly
+synthesized current R3 bitstream to load a directory and program from a
+simulated D81, then perform a short physical directory/program smoke test on
+the same bitstream. This is the post-synthesis confirmation left by checkpoint
+25; the subsequent multi-user physical reports strongly de-risk its hardware
+half but do not identify the exact bitstream or provide the full diagnostic
+sequence. Also complete the planned R3/R4/R5/R6 build matrix. These are release
+qualification and provenance tasks, not reasons to reopen the RTL.
 
 The next implementation milestone after read qualification is physical
 **write and format support**, and must start as a new safety-scoped plan:
@@ -1325,5 +1381,8 @@ from magnetically incapable of writing to intentionally energizing WGATE.
 For a fresh Codex instance, read in this order: repository `AGENTS.md`, this
 file completely, `doc/dev-issue90/plan_codex.md` completely, and Fable-owned
 `doc/dev-issue90/f011_reference_notes.md` completely. Preserve the Fable file
-unless Fable updates it. Current engineering state: no active RTL task; wait
-for community stock-disk evidence or explicit authorization to plan writes.
+unless Fable updates it. Current engineering state: the read-only RTL milestone
+is complete and frozen, with no active defect indicated by the community
+reports. Finish the controlled post-fix release smoke/build matrix, collect
+broader media coverage only if useful, or wait for explicit authorization to
+plan writes.

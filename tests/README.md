@@ -10,11 +10,17 @@ Version WIP-V6-A18X1 - TBD
 
 @TODO: Test the experimental read-only internal-1581 read path (#90). This is
 the first hardware bring-up of the MEGA65's internal 3.5" drive as a physical
-Commodore 1581 behind drive 8; so far it has only been verified in simulation
-(the GHDL closed-loop controller test plus the codec/controller/inputs
-testbenches), so ALL of the following must be exercised on real hardware, on a
-genuine double-density (DD) 1581-formatted disk, and the four board bitstreams
-must all build (R3/R4/R5/R6; functional read testing is on R3):
+Commodore 1581 behind drive 8. Simulation and extensive R3 testing have passed;
+on 2026-07-19 Discord tester Mike351 additionally reported a correct directory
+and successful PRG load from a test/demo disk originating with his genuine
+1581, followed by successful demo execution from a second 1581-formatted
+floppy. On 2026-07-20 a second tester, dejavu4u2, independently reported loading
+a GEOS 1581 disk from another physical 3.5-inch floppy in the internal drive.
+A separate CBM-subpartition concern from nobruinfo was withdrawn after he found
+an incorrect Wedge command and a malformed on-disk partition track/sector chain;
+the BASIC command-channel test behaved as expected, so this was not a core
+defect. Complete the remaining items below and ensure all four board bitstreams
+build (R3/R4/R5/R6; functional read testing is on R3):
 
 * Source select: with a DD disk in the internal drive, switch on "Use internal
   1581" in the disk-mount menu and confirm drive 8 now talks to the physical
