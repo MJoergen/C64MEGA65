@@ -798,12 +798,38 @@ No RTL or testbench was changed during checkpoint 11.
   frozen; investigate any future verified-media failure from diagnostics before
   considering retuning. Physical write/format support remains a separate,
   explicitly authorized safety milestone.
-- Remaining release bookkeeping is unchanged: on one freshly synthesized
+- Remaining release bookkeeping at this checkpoint: on one freshly synthesized
   current R3 bitstream, run simulated-D81 directory/program followed by a short
   physical directory/program smoke test, and complete the R3/R4/R5/R6 build
   matrix. The community reports strongly de-risk the physical smoke test but do
-  not carry exact bitstream provenance or the full diagnostic sequence.
+  not carry exact bitstream provenance or the full diagnostic sequence. The
+  build-matrix item is superseded by checkpoint 27 below.
 - Repository state while recording this checkpoint: root HEAD `26c0178`,
   MiSTer submodule `71f4cd7`; the simulated-D81 isolation fix entered the root
   at `d94fa73`. Later root commits changed documentation and OSM/Shell behavior,
   not the submodule reader implementation.
+
+## 2026-07-20 checkpoint 27: WIP-V6-A18X2 community Alpha released
+
+- The maintainer released **WIP-V6-A18X2** to the community and explicitly
+  identified it as an Alpha build. Separate artifacts were produced for R3,
+  R4, R5 and R6.
+- `doc/inofficial.md` maps WIP-V6-A18X2 to root commit `d94fa73`, which selects
+  MiSTer submodule `71f4cd7`. This is the exact build line containing the
+  simulated-D81 isolation fix while preserving the qualified physical reader.
+- The four-board synthesis/package matrix is therefore COMPLETE for the Alpha.
+  Functional internal-drive qualification is extensive on R3; functional
+  behavior on R4/R5/R6 is now an observation campaign driven by community
+  feedback over the following days and weeks. Do not turn artifact availability
+  or an absence of reports into an inferred functional pass.
+- Keep the read RTL frozen unless a reproducible, verified-media report supplies
+  contradictory evidence. Record version, board revision, image/physical mode,
+  disk provenance, command/error channel and diagnostics for each report.
+- The one controlled release-provenance check still worth completing is
+  simulated-D81 directory/program followed by a short physical
+  directory/program smoke test on the same WIP-V6-A18X2 R3 bitstream. Broader
+  per-board results are welcome Alpha qualification, not a prerequisite for
+  reopening the already closed reader implementation milestone.
+- Repository HEAD while recording this release checkpoint is the
+  documentation-only commit `98a82c4`; the released Alpha remains rooted at
+  `d94fa73`, so there is no reader-RTL difference to reconcile.

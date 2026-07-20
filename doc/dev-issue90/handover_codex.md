@@ -1305,6 +1305,21 @@ physical medium write path (`WGATE`/`WDATA` remain inactive), not the emulated
 read the DOS error channel, and validate the partition track/sector chain before
 changing RTL.
 
+### WIP-V6-A18X2 community alpha released for all boards
+
+The maintainer confirmed on 2026-07-20 that **WIP-V6-A18X2** was released to
+the community, explicitly labeled as an Alpha build, with R3, R4, R5 and R6
+artifacts. `doc/inofficial.md` maps this version to root commit `d94fa73`; that
+commit selects MiSTer submodule `71f4cd7`, containing the strict image/physical
+WD1772 isolation fix.
+
+This closes the four-board synthesis/package availability item for this Alpha.
+It does not yet mean that the internal physical drive has been functionally
+qualified on every board revision: extensive controlled testing remains R3,
+and community feedback over the following days and weeks supplies the wider
+platform observation. Keep the Alpha label and record the board revision,
+operation, media provenance and exact symptoms with each report.
+
 ## Next-instance continuation: stock-media baseline passed, then write milestone
 
 The implemented milestone is deliberately **read-only**. R3 hardware is fully
@@ -1320,12 +1335,12 @@ on-disk linkage, not the reader.
 The baseline external stock-media gate has passed. Further Discord/community
 testing broadens media and drive coverage and should follow this protocol:
 
-1. Use a build at or after root commit `d94fa73`, with MiSTer submodule
-   `71f4cd7`, so it contains both the qualified physical reader and the strict
-   simulated-D81 isolation fix. At the time of this record the root HEAD is
-   `26c0178`; later commits after `d94fa73` did not change the submodule reader.
-   Record the exact build commit and state prominently that the physical write
-   gate and write-data pins remain inactive.
+1. Use the community **WIP-V6-A18X2** Alpha (`d94fa73`, MiSTer submodule
+   `71f4cd7`) for the present qualification campaign. It contains both the
+   qualified physical reader and the strict simulated-D81 isolation fix.
+   State prominently that the physical write gate and write-data pins remain
+   inactive. At this checkpoint root HEAD is the documentation-only `98a82c4`;
+   root commits after `d94fa73` did not change the submodule reader.
 2. Prefer a backed-up or sacrificial genuine DD disk formatted/written by an
    actual 1581 and verified in that drive immediately before testing. Record
    the source drive, disk/media provenance, MEGA65 board revision and whether
@@ -1351,8 +1366,10 @@ simulated D81, then perform a short physical directory/program smoke test on
 the same bitstream. This is the post-synthesis confirmation left by checkpoint
 25; the subsequent multi-user physical reports strongly de-risk its hardware
 half but do not identify the exact bitstream or provide the full diagnostic
-sequence. Also complete the planned R3/R4/R5/R6 build matrix. These are release
-qualification and provenance tasks, not reasons to reopen the RTL.
+sequence. The WIP-V6-A18X2 R3/R4/R5/R6 artifact matrix is complete; functional
+qualification across revisions is now the community Alpha observation phase.
+These are release qualification and provenance tasks, not reasons to reopen the
+RTL.
 
 The next implementation milestone after read qualification is physical
 **write and format support**, and must start as a new safety-scoped plan:
@@ -1383,6 +1400,6 @@ file completely, `doc/dev-issue90/plan_codex.md` completely, and Fable-owned
 `doc/dev-issue90/f011_reference_notes.md` completely. Preserve the Fable file
 unless Fable updates it. Current engineering state: the read-only RTL milestone
 is complete and frozen, with no active defect indicated by the community
-reports. Finish the controlled post-fix release smoke/build matrix, collect
-broader media coverage only if useful, or wait for explicit authorization to
-plan writes.
+reports. Finish the controlled WIP-V6-A18X2 R3 smoke test, monitor per-board
+Alpha feedback, collect broader media coverage only if useful, or wait for
+explicit authorization to plan writes.

@@ -5,6 +5,20 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A18X2 - 2026-07-18
+---------------------------------
+
+WIP-V6-A18X2 (`d94fa73`) was released to the community as an explicitly
+identified Alpha build.
+
+* Build availability: PASS for R3, R4, R5 and R6; all four artifacts were
+  produced and distributed
+* R3 reader qualification: PASS in the controlled simulation/hardware campaign,
+  with additional positive community reports covering three physical 1581 disks
+* R4/R5/R6 functional reader qualification: PENDING community feedback over the
+  following days and weeks; artifact availability alone is not a functional pass
+* Physical disk writes remain deliberately unsupported in this Alpha
+
 Version WIP-V6-A18X1 - TBD
 --------------------------
 
