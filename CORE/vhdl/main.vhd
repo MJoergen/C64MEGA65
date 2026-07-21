@@ -149,6 +149,31 @@ entity main is
     iec_srq_n_i            : in    std_logic;
     iec_srq_n_o            : out   std_logic;
 
+    -- MEGA65 physical internal 1581 (issue #90): drive 8 backed by the real
+    -- internal 3.5" DD floppy (read-only milestone). The physical controller
+    -- runs in the QNICE 50 MHz clock domain (c64_clk_sd_i); c64_rst_sd_i is its
+    -- reset. The f_* pins connect ONLY to the controller.
+    phys_1581_en_i         : in    std_logic;                    -- 1 = drive 8 uses the physical internal 1581
+    c64_rst_sd_i           : in    std_logic;                    -- QNICE-domain (50 MHz) reset for the physical controller
+    f_rdata_i              : in    std_logic;                    -- raw read flux from the drive
+    f_index_i              : in    std_logic;
+    f_track0_i             : in    std_logic;
+    f_writeprotect_i       : in    std_logic;
+    f_diskchanged_i        : in    std_logic;
+    f_motora_o             : out   std_logic;
+    f_selecta_o            : out   std_logic;
+    f_side1_o              : out   std_logic;
+    f_stepdir_o            : out   std_logic;
+    f_step_o               : out   std_logic;
+    f_density_o            : out   std_logic;
+
+    -- Physical internal 1581 read-only QNICE diagnostic device (issue #90;
+    -- C_DEV_C64_PHYS1581 = 0x0108). Same QNICE 50 MHz domain (c64_clk_sd_i) as
+    -- the controller, so no CDC. Read-only: writes are ignored, no wait-state.
+    phys_diag_ce_i         : in    std_logic;
+    phys_diag_addr_i       : in    std_logic_vector(7 downto 0);
+    phys_diag_data_o       : out   std_logic_vector(15 downto 0);
+
     -- C64 Expansion Port (aka Cartridge Port)
     cart_en_o              : out   std_logic;                    -- Enable port, active high
     cart_phi2_o            : out   std_logic;
@@ -355,6 +380,29 @@ architecture synthesis of main is
   signal   vdrives_mounted  : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   cache_dirty      : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   prevent_reset    : std_logic;
+
+  -- Image-drive busy/dirty flag for the symmetric source-toggle idle-gate (issue #90):
+  -- drive LED (activity of the 1541 and 1581 image engines, incl. WD1772 command-busy)
+  -- OR any dirty write-back cache. Generated in the main clock domain, 2-FF-synced into
+  -- the 50 MHz diag domain (c64_clk_sd_i) where the QNICE Shell reads it as a level.
+  signal   img_drive_busy   : std_logic;
+  signal   img_busy_sd_m    : std_logic;
+  signal   img_busy_sd_s    : std_logic;
+
+  -- Read-side reset for the physical-1581 read FIFO: the SAME reset event as the
+  -- write side (c64_rst_sd_i = QNICE/framework reset), 2-FF-synchronized into the
+  -- read clock domain (clk_main_i). Both Gray-pointer pairs of an async FIFO must
+  -- reset from ONE common event or the pointers desynchronize permanently; a
+  -- core-only reset (reset_core_n) must NOT reset either side -- residual bytes
+  -- after an aborted operation are drained by the WD front end (fdc1772) instead.
+  signal   p1581_fiforst_m  : std_logic := '1';
+  signal   p1581_fiforst_s  : std_logic := '1';
+
+  attribute async_reg : string;
+  attribute async_reg of img_busy_sd_m : signal is "true";
+  attribute async_reg of img_busy_sd_s : signal is "true";
+  attribute async_reg of p1581_fiforst_m : signal is "true";
+  attribute async_reg of p1581_fiforst_s : signal is "true";
   signal   cart_soft_reset  : std_logic;
 
   signal   iec_sd_lba          : vd_vec_array(G_VDNUM - 1 downto 0)(31 downto 0);
@@ -370,6 +418,127 @@ architecture synthesis of main is
   signal   iec_par_stb_out     : std_logic;
   signal   iec_par_data_in     : std_logic_vector(7 downto 0);
   signal   iec_par_data_out    : std_logic_vector(7 downto 0);
+
+  --------------------------------------------------------------------------------------------------
+  -- Physical internal 1581 ABI (issue #90)
+  --------------------------------------------------------------------------------------------------
+  -- Intermediate signals bridging the SystemVerilog iec_drive (all ports appear
+  -- as std_logic / std_logic_vector on the VHDL side) with the VHDL
+  -- physical_1581_controller (numeric_std.unsigned data buses) and the dual-clock
+  -- read FIFO. Each signal is typed to match its DRIVER, so the only type
+  -- conversions needed are on the CONSUMER (input-side) associations.
+  -- iec_drive OUTPUTS -> controller / rdfifo:
+  signal   p1581_active        : std_logic;
+  signal   p1581_cia_motor_on  : std_logic;
+  signal   p1581_cia_side      : std_logic;
+  signal   p1581_step_req_tgl  : std_logic;
+  signal   p1581_step_outward  : std_logic;
+  signal   p1581_rd_req_tgl    : std_logic;
+  signal   p1581_rd_op         : std_logic_vector(2 downto 0);
+  signal   p1581_rd_track      : std_logic_vector(7 downto 0);
+  signal   p1581_rd_side       : std_logic;
+  signal   p1581_rd_sector     : std_logic_vector(7 downto 0);
+  signal   p1581_rd_cancel_tgl : std_logic;
+  signal   p1581_rd_seq        : std_logic_vector(1 downto 0);
+  signal   p1581_byte_rd_en    : std_logic;
+  -- controller / rdfifo OUTPUTS -> iec_drive:
+  signal   p1581_step_ack_tgl  : std_logic;
+  signal   p1581_rd_done_tgl   : std_logic;
+  signal   p1581_rd_done_seq   : std_logic_vector(1 downto 0);
+  signal   p1581_rd_result     : std_logic_vector(4 downto 0);
+  signal   p1581_rd_crc_err    : std_logic;
+  signal   p1581_rd_rnf        : std_logic;
+  signal   p1581_rd_deleted    : std_logic;
+  signal   p1581_rd_c          : unsigned(7 downto 0);
+  signal   p1581_rd_h          : unsigned(7 downto 0);
+  signal   p1581_rd_r          : unsigned(7 downto 0);
+  signal   p1581_rd_n          : unsigned(7 downto 0);
+  signal   p1581_media_ready   : std_logic;
+  signal   p1581_index         : std_logic;
+  signal   p1581_track0        : std_logic;
+  signal   p1581_wprot         : std_logic;
+  signal   p1581_change        : std_logic;
+  signal   p1581_motor_on      : std_logic;
+  signal   p1581_head_settled  : std_logic;
+  -- read-byte FIFO data path:
+  signal   p1581_fifo_wr_data  : unsigned(7 downto 0);   -- controller byte_data_o -> rdfifo wr_data_i
+  signal   p1581_fifo_wr_en    : std_logic;              -- controller byte_wr_o   -> rdfifo wr_en_i
+  signal   p1581_fifo_wr_full  : std_logic;              -- rdfifo wr_full_o        -> controller byte_ovf_i
+  signal   p1581_byte_data     : unsigned(7 downto 0);   -- rdfifo rd_data_o        -> iec_drive phys_byte_data
+  signal   p1581_byte_empty    : std_logic;              -- rdfifo rd_empty_o       -> iec_drive phys_byte_empty
+
+  -- fdc1772 delivery-v2 diagnostic taps (issue #90 round 10). The five event
+  -- toggles are generated in the drive clock domain (clk_main_i) and 2-FF-synced
+  -- below into the 50 MHz diag domain (c64_clk_sd_i), same precedent as
+  -- img_drive_busy: a toggle is a slow, quasi-static level, so a plain 2-FF sync
+  -- is sufficient and each edge marks exactly one event. p1581_dbg_pres_cnt is
+  -- NOT synced: it is quasi-static long before (and after) its fin toggle and is
+  -- captured inside physical_1581_diag on the synced fin edge.
+  signal   p1581_dbg_lost_tgl      : std_logic;
+  signal   p1581_dbg_drain_tgl     : std_logic;
+  signal   p1581_dbg_staledone_tgl : std_logic;
+  signal   p1581_dbg_busycmd_tgl   : std_logic;
+  signal   p1581_dbg_fin_tgl       : std_logic;
+  signal   p1581_dbg_pres_cnt      : std_logic_vector(10 downto 0);
+  signal   p1581_dbg_lost_sd_m      : std_logic;
+  signal   p1581_dbg_lost_sd_s      : std_logic;
+  signal   p1581_dbg_drain_sd_m     : std_logic;
+  signal   p1581_dbg_drain_sd_s     : std_logic;
+  signal   p1581_dbg_staledone_sd_m : std_logic;
+  signal   p1581_dbg_staledone_sd_s : std_logic;
+  signal   p1581_dbg_busycmd_sd_m   : std_logic;
+  signal   p1581_dbg_busycmd_sd_s   : std_logic;
+  signal   p1581_dbg_fin_sd_m       : std_logic;
+  signal   p1581_dbg_fin_sd_s       : std_logic;
+  attribute async_reg of p1581_dbg_lost_sd_m      : signal is "true";
+  attribute async_reg of p1581_dbg_lost_sd_s      : signal is "true";
+  attribute async_reg of p1581_dbg_drain_sd_m     : signal is "true";
+  attribute async_reg of p1581_dbg_drain_sd_s     : signal is "true";
+  attribute async_reg of p1581_dbg_staledone_sd_m : signal is "true";
+  attribute async_reg of p1581_dbg_staledone_sd_s : signal is "true";
+  attribute async_reg of p1581_dbg_busycmd_sd_m   : signal is "true";
+  attribute async_reg of p1581_dbg_busycmd_sd_s   : signal is "true";
+  attribute async_reg of p1581_dbg_fin_sd_m       : signal is "true";
+  attribute async_reg of p1581_dbg_fin_sd_s       : signal is "true";
+
+  -- physical_1581 read-only diagnostics (issue #90): controller diag_* taps and
+  -- the two previously-open st_* outputs, fed to physical_1581_diag (device 0x0108).
+  signal   p1581_head_cyl        : unsigned(7 downto 0);
+  signal   p1581_locked          : std_logic;
+  signal   p1581_diag_in_bits    : std_logic_vector(15 downto 0);
+  signal   p1581_diag_out_bits   : std_logic_vector(15 downto 0);
+  signal   p1581_diag_idx_period : unsigned(31 downto 0);
+  signal   p1581_diag_idx_width  : unsigned(31 downto 0);
+  signal   p1581_diag_last_gap   : unsigned(15 downto 0);
+  signal   p1581_diag_calc_crc   : unsigned(15 downto 0);
+  signal   p1581_diag_stored_crc : unsigned(15 downto 0);
+  signal   p1581_diag_index_edge : std_logic;
+  signal   p1581_diag_index_qual : std_logic;
+  signal   p1581_diag_id_valid   : std_logic;
+  signal   p1581_diag_id_crc_ok  : std_logic;
+  signal   p1581_diag_data_end   : std_logic;
+  signal   p1581_diag_data_crc_ok: std_logic;
+  signal   p1581_diag_gap_error  : std_logic;
+  signal   p1581_diag_rd_phase   : std_logic_vector(3 downto 0);
+  signal   p1581_diag_step_phase : std_logic_vector(1 downto 0);
+  signal   p1581_diag_head_valid : std_logic;
+  signal   p1581_diag_head_dir   : std_logic;
+  signal   p1581_diag_rd_req     : std_logic;
+  signal   p1581_diag_rd_req_op  : std_logic_vector(2 downto 0);
+  signal   p1581_diag_rd_req_trk : unsigned(7 downto 0);
+  signal   p1581_diag_rd_req_sec : unsigned(7 downto 0);
+  signal   p1581_diag_rd_req_side: std_logic;
+  signal   p1581_diag_runt       : std_logic;             -- controller diag_runt_o -> diag runt_i (both 50 MHz)
+  signal   p1581_diag_est        : unsigned(11 downto 0); -- adaptive quantiser half-cell estimate, Q8.4 (round 12)
+  signal   p1581_diag_a1_candidate : std_logic;
+  signal   p1581_diag_a1_reject    : std_logic;
+  signal   p1581_diag_a1_train     : std_logic;
+  signal   p1581_diag_mark_fe      : std_logic;
+  signal   p1581_diag_mark_dam     : std_logic;
+  signal   p1581_diag_dam_unarmed  : std_logic;
+  signal   p1581_diag_match_id     : std_logic;
+  signal   p1581_diag_dam_miss     : std_logic;
+  signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- unprocessed video output of the C64 core
   signal   vga_hs    : std_logic;
@@ -627,6 +796,53 @@ begin
   -- or if the dirty cache is dirty and/or currently being flushed to the SD card
   drive_led_o     <= c64_drive_led when unsigned(cache_dirty) = 0 else
                      '1';
+
+  -- "Image drive 8 is busy or holds unsaved data" for the symmetric idle-gate (issue #90):
+  -- consulted by the QNICE Shell (via the phys-1581 diag device) before it allows switching
+  -- drive 8 from disk image to the internal 1581. The LED covers live drive activity of both
+  -- image engines; prevent_reset covers dirty write caches awaiting SD flush. While the
+  -- INTERNAL drive is the active source the LED reflects PHYSICAL activity (the 1581 DOS
+  -- drives it, e.g. the blinking error indicator), which the physical busy word already
+  -- covers -- so mask the LED with the mode bit, otherwise an Internal->Image switch would
+  -- be spuriously blocked whenever the toggle lands in a blink-ON phase. It is a slow,
+  -- quasi-static level, so a plain 2-FF sync into the diag clock domain is sufficient.
+  img_drive_busy <= (c64_drive_led and not phys_1581_en_i) or prevent_reset;
+
+  img_busy_sync_proc : process (c64_clk_sd_i)
+  begin
+    if rising_edge(c64_clk_sd_i) then
+      img_busy_sd_m <= img_drive_busy;
+      img_busy_sd_s <= img_busy_sd_m;
+    end if;
+  end process img_busy_sync_proc;
+
+  -- common-event FIFO read-side reset (see the signal declaration comment)
+  p1581_fiforst_sync_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      p1581_fiforst_m <= c64_rst_sd_i;
+      p1581_fiforst_s <= p1581_fiforst_m;
+    end if;
+  end process p1581_fiforst_sync_proc;
+
+  -- 2-FF sync of the fdc1772 delivery-v2 diagnostic event toggles (drive clock
+  -- domain) into the 50 MHz diag domain; edge detection and counting happen
+  -- inside physical_1581_diag (see the signal declaration comment)
+  p1581_dbg_sync_proc : process (c64_clk_sd_i)
+  begin
+    if rising_edge(c64_clk_sd_i) then
+      p1581_dbg_lost_sd_m      <= p1581_dbg_lost_tgl;
+      p1581_dbg_lost_sd_s      <= p1581_dbg_lost_sd_m;
+      p1581_dbg_drain_sd_m     <= p1581_dbg_drain_tgl;
+      p1581_dbg_drain_sd_s     <= p1581_dbg_drain_sd_m;
+      p1581_dbg_staledone_sd_m <= p1581_dbg_staledone_tgl;
+      p1581_dbg_staledone_sd_s <= p1581_dbg_staledone_sd_m;
+      p1581_dbg_busycmd_sd_m   <= p1581_dbg_busycmd_tgl;
+      p1581_dbg_busycmd_sd_s   <= p1581_dbg_busycmd_sd_m;
+      p1581_dbg_fin_sd_m       <= p1581_dbg_fin_tgl;
+      p1581_dbg_fin_sd_s       <= p1581_dbg_fin_sd_m;
+    end if;
+  end process p1581_dbg_sync_proc;
 
   --------------------------------------------------------------------------------------------------
   -- Hard reset
@@ -1569,13 +1785,20 @@ begin
   iec_par_stb_in  <= '0';
   iec_par_data_in <= (others => '0');
 
-  -- Drive is held to reset if the core is held to reset or if the drive is not mounted, yet
+  -- Drive is held to reset if the core is held to reset or if the drive is not mounted, yet.
+  -- Exception (issue #90): while "Use internal 1581" is active, drive 8 is backed by the REAL
+  -- internal mechanism, so there is no disk image to mount -- the drive must run unmounted.
+  -- Without this exception the whole drive (and with it the forced-active 1581 engine inside
+  -- iec_drive.sv) would stay in reset until a D81 image is mounted, making the physical drive
+  -- dead unless the user mounts an unrelated image first. phys_1581_en_i is in the main clock
+  -- domain (CDC-d OSM bit), like everything else in this equation.
   -- @TODO: MiSTer also allows these options when it comes to drive-enable:
   --        "P2oPQ,Enable Drive #8,If Mounted,Always,Never;"
   --        "P2oNO,Enable Drive #9,If Mounted,Always,Never;"
   --        This code currently only implements the "If Mounted" option
 
-  iec_drv_reset_gen : for i in 0 to G_VDNUM - 1 generate
+  iec_drives_reset(0) <= (not reset_core_n) or ((not vdrives_mounted(0)) and (not phys_1581_en_i));
+  iec_drv_reset_gen : for i in 1 to G_VDNUM - 1 generate
     iec_drives_reset(i) <= (not reset_core_n) or (not vdrives_mounted(i));
   end generate iec_drv_reset_gen;
 
@@ -1631,8 +1854,293 @@ begin
       rom_addr_i   => c1541rom_addr_i,
       rom_data_i   => c1541rom_data_i,
       rom_wr_i     => c1541rom_we_i,
-      rom_data_o   => c1541rom_data_o
+      rom_data_o   => c1541rom_data_o,
+
+      -- MEGA65 physical internal 1581 (issue #90): drive-0 ABI to the VHDL
+      -- physical_1581_controller + rdfifo (both in the c64_clk_sd_i 50 MHz domain).
+      -- Inert unless physical_mode=1, so image-mode behavior is unchanged.
+      physical_mode      => phys_1581_en_i,
+
+      -- phys OUTPUTS (iec_drive -> controller / rdfifo)
+      phys_active        => p1581_active,
+      phys_cia_motor_on  => p1581_cia_motor_on,
+      phys_cia_side      => p1581_cia_side,
+      phys_step_req_tgl  => p1581_step_req_tgl,
+      phys_step_outward  => p1581_step_outward,
+      phys_rd_req_tgl    => p1581_rd_req_tgl,
+      phys_rd_op         => p1581_rd_op,
+      phys_rd_track      => p1581_rd_track,
+      phys_rd_side       => p1581_rd_side,
+      phys_rd_sector     => p1581_rd_sector,
+      phys_rd_cancel_tgl => p1581_rd_cancel_tgl,
+      phys_rd_seq        => p1581_rd_seq,
+      phys_byte_ovf      => open,          -- fdc1772 ties this 0; unused here
+      phys_byte_rd_en    => p1581_byte_rd_en,
+
+      -- phys INPUTS (controller / rdfifo -> iec_drive)
+      phys_step_ack_tgl  => p1581_step_ack_tgl,
+      phys_rd_done_tgl   => p1581_rd_done_tgl,
+      phys_rd_done_seq   => p1581_rd_done_seq,
+      phys_rd_result     => p1581_rd_result,
+      phys_rd_crc_err    => p1581_rd_crc_err,
+      phys_rd_rnf        => p1581_rd_rnf,
+      phys_rd_deleted    => p1581_rd_deleted,
+      phys_rd_c          => std_logic_vector(p1581_rd_c),
+      phys_rd_h          => std_logic_vector(p1581_rd_h),
+      phys_rd_r          => std_logic_vector(p1581_rd_r),
+      phys_rd_n          => std_logic_vector(p1581_rd_n),
+      phys_byte_data     => std_logic_vector(p1581_byte_data),
+      phys_byte_empty    => p1581_byte_empty,
+      phys_media_ready   => p1581_media_ready,
+      phys_index         => p1581_index,
+      phys_track0        => p1581_track0,
+      phys_wprot         => p1581_wprot,
+      phys_change        => p1581_change,
+      phys_motor_on      => p1581_motor_on,
+      phys_head_settled  => p1581_head_settled,
+
+      -- fdc1772 delivery-v2 diagnostic taps (drive clock; synced/captured above
+      -- and inside physical_1581_diag, see the p1581_dbg_* declarations)
+      phys_dbg_lost_tgl      => p1581_dbg_lost_tgl,
+      phys_dbg_drain_tgl     => p1581_dbg_drain_tgl,
+      phys_dbg_staledone_tgl => p1581_dbg_staledone_tgl,
+      phys_dbg_busycmd_tgl   => p1581_dbg_busycmd_tgl,
+      phys_dbg_fin_tgl       => p1581_dbg_fin_tgl,
+      phys_dbg_pres_cnt      => p1581_dbg_pres_cnt
     ); -- iec_drive_inst
+
+  --------------------------------------------------------------------------------------------------
+  -- Physical internal 1581 controller + read-byte FIFO (issue #90)
+  --------------------------------------------------------------------------------------------------
+  -- The controller lives in the QNICE 50 MHz domain (c64_clk_sd_i); its reset is
+  -- c64_rst_sd_i (== qnice_rst one level up). The f_* mechanism pins connect ONLY
+  -- here. The read-byte stream crosses back to the drive clock (clk_main_i) through
+  -- the dual-clock rdfifo. G_CAPABLE=true on every board (feature gated by the OSM
+  -- bit phys_1581_en_i, not by synthesis).
+  i_physical_1581_controller : entity work.physical_1581_controller
+    generic map (
+      G_CAPABLE => true
+    )
+    port map (
+      clk_i            => c64_clk_sd_i,
+      rst_i            => c64_rst_sd_i,
+
+      -- physical mechanism pins (straight through to the MEGA65_Core ports)
+      f_rdata_i        => f_rdata_i,
+      f_index_i        => f_index_i,
+      f_track0_i       => f_track0_i,
+      f_writeprotect_i => f_writeprotect_i,
+      f_diskchanged_i  => f_diskchanged_i,
+      f_motora_o       => f_motora_o,
+      f_selecta_o      => f_selecta_o,
+      f_side1_o        => f_side1_o,
+      f_stepdir_o      => f_stepdir_o,
+      f_step_o         => f_step_o,
+      f_density_o      => f_density_o,
+
+      -- mode + maintained mechanics requests (from iec_drive)
+      phys_active_i    => p1581_active,
+      cia_motor_on_i   => p1581_cia_motor_on,
+      cia_side_i       => p1581_cia_side,
+
+      -- Type-I step request (toggle handshake)
+      step_req_tgl_i   => p1581_step_req_tgl,
+      step_outward_i   => p1581_step_outward,
+      step_ack_tgl_o   => p1581_step_ack_tgl,
+
+      -- read operation request (toggle handshake)
+      rd_req_tgl_i     => p1581_rd_req_tgl,
+      rd_op_i          => p1581_rd_op,
+      rd_track_i       => unsigned(p1581_rd_track),
+      rd_side_i        => p1581_rd_side,
+      rd_sector_i      => unsigned(p1581_rd_sector),
+      rd_seq_i         => p1581_rd_seq,
+      rd_cancel_tgl_i  => p1581_rd_cancel_tgl,
+      rd_done_tgl_o    => p1581_rd_done_tgl,
+      rd_done_seq_o    => p1581_rd_done_seq,
+      rd_result_o      => p1581_rd_result,
+      rd_crc_err_o     => p1581_rd_crc_err,
+      rd_rnf_o         => p1581_rd_rnf,
+      rd_deleted_o     => p1581_rd_deleted,
+      rd_c_o           => p1581_rd_c,
+      rd_h_o           => p1581_rd_h,
+      rd_r_o           => p1581_rd_r,
+      rd_n_o           => p1581_rd_n,
+
+      -- read-byte stream to the external dual-clock FIFO (50 MHz write side)
+      byte_data_o      => p1581_fifo_wr_data,
+      byte_wr_o        => p1581_fifo_wr_en,
+      byte_ovf_i       => p1581_fifo_wr_full,
+
+      -- live normalized state to the drive domain
+      st_media_ready_o => p1581_media_ready,
+      st_index_o       => p1581_index,
+      st_track0_o      => p1581_track0,
+      st_wprot_o       => p1581_wprot,
+      st_change_o      => p1581_change,
+      st_motor_on_o    => p1581_motor_on,
+      st_head_settled_o => p1581_head_settled,
+      st_head_cyl_o    => p1581_head_cyl,
+      st_locked_o      => p1581_locked,
+
+      -- read-only diagnostic taps -> physical_1581_diag
+      diag_index_period_o => p1581_diag_idx_period,
+      diag_index_width_o  => p1581_diag_idx_width,
+      diag_index_edge_o   => p1581_diag_index_edge,
+      diag_index_qual_o   => p1581_diag_index_qual,
+      diag_last_gap_o     => p1581_diag_last_gap,
+      diag_calc_crc_o     => p1581_diag_calc_crc,
+      diag_stored_crc_o   => p1581_diag_stored_crc,
+      diag_id_valid_o     => p1581_diag_id_valid,
+      diag_id_crc_ok_o    => p1581_diag_id_crc_ok,
+      diag_data_end_o     => p1581_diag_data_end,
+      diag_data_crc_ok_o  => p1581_diag_data_crc_ok,
+      diag_gap_error_o    => p1581_diag_gap_error,
+      diag_runt_o         => p1581_diag_runt,
+      diag_a1_candidate_o => p1581_diag_a1_candidate,
+      diag_a1_reject_o    => p1581_diag_a1_reject,
+      diag_a1_train_o     => p1581_diag_a1_train,
+      diag_mark_fe_o      => p1581_diag_mark_fe,
+      diag_mark_dam_o     => p1581_diag_mark_dam,
+      diag_dam_unarmed_o  => p1581_diag_dam_unarmed,
+      diag_match_id_o     => p1581_diag_match_id,
+      diag_dam_miss_o     => p1581_diag_dam_miss,
+      diag_est_o          => p1581_diag_est,
+      diag_rd_phase_o     => p1581_diag_rd_phase,
+      diag_step_phase_o   => p1581_diag_step_phase,
+      diag_head_valid_o   => p1581_diag_head_valid,
+      diag_head_dir_out_o => p1581_diag_head_dir,
+      diag_rd_req_o        => p1581_diag_rd_req,
+      diag_rd_req_op_o     => p1581_diag_rd_req_op,
+      diag_rd_req_track_o  => p1581_diag_rd_req_trk,
+      diag_rd_req_sector_o => p1581_diag_rd_req_sec,
+      diag_rd_req_side_o   => p1581_diag_rd_req_side,
+      diag_in_bits_o      => p1581_diag_in_bits,
+      diag_out_bits_o     => p1581_diag_out_bits
+    ); -- i_physical_1581_controller
+
+  i_physical_1581_rdfifo : entity work.physical_1581_rdfifo
+    generic map (
+      -- Depth = 512 = one full physical sector. The FIFO is a CRC quarantine:
+      -- the controller can capture a complete field without any drive-CPU
+      -- consumption, then fdc1772 releases it only after a clean result (or
+      -- drains it unseen on error). The controller additionally reports any
+      -- write-while-full as a data error so a drop can never be silent.
+      G_AW => 9
+    )
+    port map (
+      -- write side: controller, 50 MHz (c64_clk_sd_i)
+      wr_clk_i   => c64_clk_sd_i,
+      wr_rst_i   => c64_rst_sd_i,
+      wr_en_i    => p1581_fifo_wr_en,
+      wr_data_i  => p1581_fifo_wr_data,
+      wr_full_o  => p1581_fifo_wr_full,
+      wr_level_o => p1581_fifo_level,
+      -- read side: drive clock, clk_main_i (fdc1772 drains at its DRQ cadence).
+      -- Reset by the SAME event as the write side (QNICE reset, synced into this
+      -- domain) -- never by reset_core_n alone: a one-sided reset would zero the
+      -- read Gray pointer against a live write pointer and permanently
+      -- desynchronize the FIFO (stale/shifted CRC-clean sector data). Leftover
+      -- bytes after a core reset are drained by fdc1772 while no op is delivering.
+      rd_clk_i   => clk_main_i,
+      rd_rst_i   => p1581_fiforst_s,
+      rd_en_i    => p1581_byte_rd_en,
+      rd_data_o  => p1581_byte_data,
+      rd_empty_o => p1581_byte_empty
+    ); -- i_physical_1581_rdfifo
+
+  --------------------------------------------------------------------------------------------------
+  -- Physical internal 1581 read-only QNICE diagnostic register bank (issue #90)
+  --------------------------------------------------------------------------------------------------
+  -- Device C_DEV_C64_PHYS1581 = 0x0108. Runs on c64_clk_sd_i (== QNICE clock ==
+  -- controller clock), so it observes the controller with zero CDC. Strictly
+  -- observational: it drives nothing back into the read path. See
+  -- doc/1581_dd_debug_device.md for the register map and how to read it from QNICE.
+  i_physical_1581_diag : entity work.physical_1581_diag
+    port map (
+      clk_i             => c64_clk_sd_i,
+      rst_i             => c64_rst_sd_i,
+
+      -- live controller state (existing st_* outputs)
+      st_media_ready_i  => p1581_media_ready,
+      st_index_i        => p1581_index,
+      st_track0_i       => p1581_track0,
+      st_wprot_i        => p1581_wprot,
+      st_change_i       => p1581_change,
+      st_motor_on_i     => p1581_motor_on,
+      st_head_settled_i => p1581_head_settled,
+      st_locked_i       => p1581_locked,
+      st_head_cyl_i     => p1581_head_cyl,
+
+      -- read result (latched on rd_done edge inside diag) + step handshake
+      rd_done_tgl_i     => p1581_rd_done_tgl,
+      rd_result_i       => p1581_rd_result,
+      rd_crc_err_i      => p1581_rd_crc_err,
+      rd_rnf_i          => p1581_rd_rnf,
+      rd_deleted_i      => p1581_rd_deleted,
+      rd_c_i            => p1581_rd_c,
+      rd_h_i            => p1581_rd_h,
+      rd_r_i            => p1581_rd_r,
+      rd_n_i            => p1581_rd_n,
+      step_ack_tgl_i    => p1581_step_ack_tgl,
+
+      -- controller diagnostic observation taps
+      diag_in_bits_i      => p1581_diag_in_bits,
+      diag_out_bits_i     => p1581_diag_out_bits,
+      diag_index_period_i => p1581_diag_idx_period,
+      diag_index_width_i  => p1581_diag_idx_width,
+      diag_last_gap_i     => p1581_diag_last_gap,
+      diag_calc_crc_i     => p1581_diag_calc_crc,
+      diag_stored_crc_i   => p1581_diag_stored_crc,
+      diag_index_edge_i   => p1581_diag_index_edge,
+      diag_index_qual_i   => p1581_diag_index_qual,
+      diag_id_valid_i     => p1581_diag_id_valid,
+      diag_id_crc_ok_i    => p1581_diag_id_crc_ok,
+      diag_data_end_i     => p1581_diag_data_end,
+      diag_data_crc_ok_i  => p1581_diag_data_crc_ok,
+      diag_gap_error_i    => p1581_diag_gap_error,
+      diag_est_i          => p1581_diag_est,
+      diag_rd_phase_i     => p1581_diag_rd_phase,
+      diag_step_phase_i   => p1581_diag_step_phase,
+      diag_head_valid_i   => p1581_diag_head_valid,
+      diag_head_dir_out_i => p1581_diag_head_dir,
+
+      -- image-drive busy/dirty (main clock domain, 2-FF-synced above; issue #90 idle-gate)
+      img_drive_busy_i    => img_busy_sd_s,
+
+      -- WD-dialogue trace taps (issue #90 bring-up)
+      rd_req_evt_i        => p1581_diag_rd_req,
+      rd_req_op_i         => p1581_diag_rd_req_op,
+      rd_req_track_i      => p1581_diag_rd_req_trk,
+      rd_req_sector_i     => p1581_diag_rd_req_sec,
+      rd_req_side_i       => p1581_diag_rd_req_side,
+
+      -- delivery-v2 observability (map v4, issue #90 round 10): the five event
+      -- toggles are 2-FF-synced above (p1581_dbg_sync_proc); pres_cnt crosses
+      -- unsynced as a quasi-static bus captured inside on the synced fin edge;
+      -- fifo level and runt pulse are native 50 MHz
+      dbg_lost_i          => p1581_dbg_lost_sd_s,
+      dbg_drain_i         => p1581_dbg_drain_sd_s,
+      dbg_staledone_i     => p1581_dbg_staledone_sd_s,
+      dbg_busycmd_i       => p1581_dbg_busycmd_sd_s,
+      dbg_fin_i           => p1581_dbg_fin_sd_s,
+      dbg_pres_cnt_i      => unsigned(p1581_dbg_pres_cnt),
+      fifo_level_i        => p1581_fifo_level,
+      runt_i              => p1581_diag_runt,
+      a1_candidate_i      => p1581_diag_a1_candidate,
+      a1_span_reject_i    => p1581_diag_a1_reject,
+      a1_train_i          => p1581_diag_a1_train,
+      mark_fe_i           => p1581_diag_mark_fe,
+      mark_dam_i          => p1581_diag_mark_dam,
+      dam_unarmed_i       => p1581_diag_dam_unarmed,
+      match_id_i          => p1581_diag_match_id,
+      dam_miss_i          => p1581_diag_dam_miss,
+
+      -- QNICE read interface (from mega65.vhd core_specific_devices decode)
+      qnice_ce_i        => phys_diag_ce_i,
+      qnice_addr_i      => phys_diag_addr_i,
+      qnice_data_o      => phys_diag_data_o
+    ); -- i_physical_1581_diag
 
   -- 16 MHz chip enable for the IEC drives, so that ph2_r and ph2_f can be 1 MHz (C1541's CPU runs with 1 MHz)
   -- Uses a counter to compensate for clock drift, because the input clock is not exactly at 32 MHz
@@ -1800,4 +2308,3 @@ begin
   cass_rtc <= not (rtcf83_sda and cass_motor);
 
 end architecture synthesis;
-

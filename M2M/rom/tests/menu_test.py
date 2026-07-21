@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Golden model, fixture generator and headless test runner for the M2M menu
-structure algorithms (menu_struct.asm + menu.asm submenu state machine).
+structure algorithms, submenu state machine and live-text API.
 
 Run it from anywhere; the script locates the repository relative to itself
 (it lives in M2M/rom/tests/). See the README.md in this folder for the full
@@ -76,7 +76,7 @@ G = dict(
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
-    RTC_GEOS=29, VICII_MODEL=30,
+    RTC_GEOS=29, VICII_MODEL=30, INT1581=31,
 )
 
 OPEN = ("SUBMENU",)
@@ -88,6 +88,7 @@ V6_MENU = [
     (" C64 for MEGA65",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 8:%s",                    "MOUNT_8", ["MOUNT_DRV", "START"]),
+    (" Use internal 1581      ", "INT1581", ["SINGLESEL"]),
     (" PRG:%s",                  "LOAD_PRG", ["LOAD_ROM"]),
     ("",                         None, ["LINE"]),
     (" Expansion Port",          None, ["HEADLINE"]),
@@ -265,11 +266,11 @@ def dep_value(gid, item):
 # flat index -> (mother group name, item index); the dependent lines of the V6
 # menu (the PAL/NTSC HDMI variants and the two flicker-free twins + Raw 50.1)
 V6_DEPS = {
-    36: ("MACHINE_MODE", 0), 37: ("MACHINE_MODE", 1),
-    38: ("MACHINE_MODE", 0), 39: ("MACHINE_MODE", 1),
-    40: ("MACHINE_MODE", 0), 41: ("MACHINE_MODE", 1),
-    43: ("MACHINE_MODE", 0), 44: ("MACHINE_MODE", 1),
-    60: ("MACHINE_MODE", 0),
+    37: ("MACHINE_MODE", 0), 38: ("MACHINE_MODE", 1),
+    39: ("MACHINE_MODE", 0), 40: ("MACHINE_MODE", 1),
+    41: ("MACHINE_MODE", 0), 42: ("MACHINE_MODE", 1),
+    44: ("MACHINE_MODE", 0), 45: ("MACHINE_MODE", 1),
+    61: ("MACHINE_MODE", 0),
 }
 
 
@@ -977,7 +978,7 @@ def struct_fixtures():
     fx.append(("START on plain line inside region", 1, [O, 5, C]))
     fx.append(("START on closer", 0, [1, O, 5, C]))
     fx.append(("START on depth-1 opener", 0, [O, 5, C]))
-    fx.append(("V6 menu with START on nested opener", 130,
+    fx.append(("V6 menu with START on nested opener", 131,
                menu_masked(V6_MENU)))
     return fx
 
@@ -993,16 +994,16 @@ def summ_fixtures():
         return s
 
     fx = []
-    # heading 33 (HDMI): nothing selected of its own; child skipped; the
-    # selected line 54 inside the child must NOT leak: ends at own closer
-    fx.append(("HDMI region empty -> own closer", 33, v6g,
-               sel(i36=0, i37=0, i43=0, i44=0)))
-    # heading 33 with 4:3 PAL selected -> found 38
-    fx.append(("HDMI region finds 4:3 PAL", 33, v6g, sel(i36=0, i38=1)))
-    # heading 126 (Advanced): no radio group of its own at all
-    fx.append(("Advanced has no own radio group", 126, v6g, base))
-    # heading 130 (OSM scaling): default -> 133
-    fx.append(("OSM scaling default", 130, v6g, base))
+    # heading 34 (HDMI): nothing selected of its own; child skipped; the
+    # selected line 55 inside the child must NOT leak: ends at own closer
+    fx.append(("HDMI region empty -> own closer", 34, v6g,
+               sel(i37=0, i38=0, i44=0, i45=0)))
+    # heading 34 with 4:3 PAL selected -> found 39
+    fx.append(("HDMI region finds 4:3 PAL", 34, v6g, sel(i37=0, i39=1)))
+    # heading 127 (Advanced): no radio group of its own at all
+    fx.append(("Advanced has no own radio group", 127, v6g, base))
+    # heading 131 (OSM scaling): default -> 134
+    fx.append(("OSM scaling default", 131, v6g, base))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1159,53 +1160,53 @@ def nav_script():
                labels=[t for t, _, _ in V6_MENU])
 
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (158)
-    assert s.cursor == 158
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (159)
+    assert s.cursor == 159
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
-    s.until(KEY_DOWN, 14)           # to "Model: %s"
+    s.until(KEY_DOWN, 15)           # to "Model: %s"
     s.feed(KEY_SELECT)              # enter region 1
-    assert (s.level, s.cursor) == (1, 17)
+    assert (s.level, s.cursor) == (1, 18)
     s.feed(KEY_DOWN)                # NTSC
     s.feed(KEY_SELALT)              # radio-select NTSC via Space
     s.feed(KEY_MENUUP)              # pop to main, cursor on the opener
-    assert (s.level, s.cursor) == (0, 14)
-    s.until(KEY_DOWN, 33)           # to "HDMI: %s"
+    assert (s.level, s.cursor) == (0, 15)
+    s.until(KEY_DOWN, 34)           # to "HDMI: %s"
     s.feed(KEY_SELECT)              # enter region 2
-    assert (s.level, s.cursor) == (2, 36)
+    assert (s.level, s.cursor) == (2, 37)
     s.feed(0x8000 | KEY_DOWN)       # background redraw + down
-    s.until(KEY_DOWN, 46)           # to nested "HDMI: %s" (filter)
+    s.until(KEY_DOWN, 47)           # to nested "HDMI: %s" (filter)
     s.feed(KEY_SELECT)              # enter region 3 (depth 2)
-    assert (s.level, s.cursor) == (3, 49)
-    s.until(KEY_DOWN, 58)           # to the " Back" closer line
+    assert (s.level, s.cursor) == (3, 50)
+    s.until(KEY_DOWN, 59)           # to the " Back" closer line
     s.feed(KEY_SELECT)              # leave via the closer
-    assert (s.level, s.cursor) == (2, 46)
+    assert (s.level, s.cursor) == (2, 47)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 33)
-    s.until(KEY_DOWN, 110)          # to "Volume: %s" - entering this region
+    assert (s.level, s.cursor) == (0, 34)
+    s.until(KEY_DOWN, 111)          # to "Volume: %s" - entering this region
     s.feed(KEY_SELECT)              # is the regression case for the percent-
-    assert (s.level, s.cursor) == (7, 113)   # terminated-label scanner bug
+    assert (s.level, s.cursor) == (7, 114)   # terminated-label scanner bug
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
-    assert (s.level, s.cursor) == (0, 110)
-    s.until(KEY_DOWN, 126)          # to "Advanced Settings"
+    assert (s.level, s.cursor) == (0, 111)
+    s.until(KEY_DOWN, 127)          # to "Advanced Settings"
     s.feed(KEY_SELECT)              # enter region 8
-    assert (s.level, s.cursor) == (8, 129)
+    assert (s.level, s.cursor) == (8, 130)
     s.feed(KEY_SELECT)              # single-select RTC for GEOS on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 145)          # to "VIC-II: %s"
+    s.until(KEY_DOWN, 146)          # to "VIC-II: %s"
     s.feed(KEY_SELECT)              # enter region 10 (depth 2)
-    assert (s.level, s.cursor) == (10, 148)
+    assert (s.level, s.cursor) == (10, 149)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 152          # lands on the closer line
+    assert s.cursor == 153          # lands on the closer line
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (10, 152)
+    assert (s.level, s.cursor) == (10, 153)
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 8
-    assert (s.level, s.cursor) == (8, 145)
+    assert (s.level, s.cursor) == (8, 146)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 126)
+    assert (s.level, s.cursor) == (0, 127)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -1450,6 +1451,7 @@ C_MENU = [
     ("C_MENU_EXP_PORT_HW",  "EXP_PORT", 0),
     ("C_MENU_SIM_CRT",      "EXP_PORT", 1),
     ("C_MENU_SIM_REU",      "REU", 0),
+    ("C_MENU_INTERNAL_1581", "INT1581", 0),
     ("C_MENU_FLIP_JOYS",    "FLIP_JOYS", 0),
     ("C_MENU_MONO_6581",    "SID_SETUP", 0),
     ("C_MENU_MONO_8580",    "SID_SETUP", 1),
@@ -1836,6 +1838,11 @@ def verify():
 # ---------------------------------------------------------------------------
 
 
+def expect_live():
+    return ("VISIBLE OK\nINVALID OK\nHIDDEN OK\n"
+            "CALLBACK OK\nFOREGROUND OK\nINACTIVE OK\nDONE\n")
+
+
 def gen():
     emit_fixtures_asm(os.path.join(HERE, "menu_test_fixtures.asm"))
     emit_equiv_asm(os.path.join(HERE, "menu_equiv_fixtures.asm"))
@@ -1844,7 +1851,8 @@ def gen():
     for name, content in [("menu_struct_test.exp", expect_struct()),
                           ("menu_equiv_test.exp", expect_equiv()),
                           ("menu_nav_test.exp", expect_nav()),
-                          ("optm_deps_test.exp", expect_deps())]:
+                          ("optm_deps_test.exp", expect_deps()),
+                          ("optm_live_test.exp", expect_live())]:
         with open(os.path.join(HERE, name), "w") as f:
             f.write(content)
     print("generated fixtures and expected outputs")
@@ -1857,7 +1865,7 @@ def run():
     mon = os.path.join(REPO, "M2M/QNICE/monitor/monitor.out")
     fails = 0
     for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test",
-               "optm_deps_test"):
+               "optm_deps_test", "optm_live_test"):
         r = subprocess.run([asm, tb + ".asm"], cwd=HERE,
                            capture_output=True, text=True, timeout=120)
         listing = os.path.join(HERE, tb + ".out")

@@ -115,6 +115,17 @@ read_vhdl -vhdl2008 { \
       vhdl/globals.vhd \
       vhdl/keyboard.vhd \
       vhdl/main.vhd \
+      vhdl/physical_1581/physical_1581_pkg.vhd \
+      vhdl/physical_1581/physical_1581_crc.vhd \
+      vhdl/physical_1581/physical_1581_mfm_gaps.vhd \
+      vhdl/physical_1581/physical_1581_mfm_quantise.vhd \
+      vhdl/physical_1581/physical_1581_mfm_gaps_to_bits.vhd \
+      vhdl/physical_1581/physical_1581_mfm_bits_to_bytes.vhd \
+      vhdl/physical_1581/physical_1581_inputs.vhd \
+      vhdl/physical_1581/physical_1581_mfm_decoder.vhd \
+      vhdl/physical_1581/physical_1581_controller.vhd \
+      vhdl/physical_1581/physical_1581_rdfifo.vhd \
+      vhdl/physical_1581/physical_1581_diag.vhd \
       vhdl/mega65.vhd \
       vhdl/prg_loader.vhd \
       vhdl/reu_mapper.vhd \      vhdl/mount_buf_wrapper.vhd \
@@ -153,10 +164,12 @@ read_verilog -sv {
       ../M2M/vhdl/controllers/MiSTer/video_freezer.sv \
       ../M2M/vhdl/controllers/MiSTer/video_mixer.sv }
 
+# XDC order matters and must match the .xpr constraints fileset: CORE.xdc references
+# qnice_clk, which is created in common.xdc, so CORE.xdc has to be read LAST.
 read_xdc { \
-      CORE.xdc \
+      ../M2M/MEGA65-R3.xdc \
       ../M2M/common.xdc \
-      ../M2M/MEGA65-R3.xdc }
+      CORE.xdc }
 
 cd m2m-rom
 exec ./make_rom.sh <@stdin >@stdout 2>@stderr

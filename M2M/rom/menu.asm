@@ -222,6 +222,8 @@ OPTM_INIT       INCRB
                 MOVE    0, @R0
                 MOVE    OPTM_STRUCT, R0
                 MOVE    0, @R0
+                MOVE    OPTM_FOREGROUND, R0
+                MOVE    0, @R0
 
                 DECRB
                 RET
@@ -620,6 +622,8 @@ OPTM_RUN        SYSCALL(enter, 1)
                 MOVE    R9, @--SP               ; size of (sub)men at (SP+0)
                 MOVE    OPTM_STRUCT, R7         ; remember pointer to struct.
                 MOVE    SP, @R7
+                MOVE    OPTM_FOREGROUND, R7     ; the menu now owns the surface
+                MOVE    1, @R7
 
                 ; Main loop
 _OPTM_RUN_SEL   MOVE    SP, R8                  ; update (SP+1), i.e. update..
@@ -820,8 +824,7 @@ _OPTM_RUN_6C    MOVE    R8, R11                 ; R11: remember selection key
                 MOVE    R12, R8                 ; restore group id
                 XOR     R9, R9
                 MOVE    R11, R10                ; selection key
-                MOVE    OPTM_CLBK_SEL, R7       ; call callback
-                RSUB    _OPTM_CALL, 1
+                RSUB    _OPTM_CALL_SEL, 1       ; call selection callback
 
                 MOVE    R12, R8                 ; R12: group word just toggled
                 RSUB    OPTM_DEPS_AFFECTS, 1    ; toggled a dependency mother?
@@ -951,8 +954,7 @@ _OPTM_RUN_14    MOVE    R6, R8                  ; R8: return selected group
                 MOVE    1, R9                   ; ..R9 to 1
 _OPTM_RUN_15    DECRB                
                 MOVE    R11, R10                ; R10: selection key
-                MOVE    OPTM_CLBK_SEL, R7       ; call callback
-                RSUB    _OPTM_CALL, 1
+                RSUB    _OPTM_CALL_SEL, 1       ; call selection callback
 
                 CMP     OPTM_CLOSE, R6          ; Close?
                 RBRA    _OPTM_RUN_SCHG, !Z      ; no: check for structure change
@@ -970,7 +972,9 @@ _OPTM_RUN_SCHG  MOVE    R6, R8                  ; R6: group word just changed
                 RBRA    _OPTM_RUN_SM_4, C       ; mother changed: redraw level
                 RBRA    _OPTM_RUN_SEL, 1        ; otherwise continue menu loop
 
-_OPTM_RUN_RET   MOVE    OPTM_STRUCT, R7         ; important to reset to zero..
+_OPTM_RUN_RET   MOVE    OPTM_FOREGROUND, R7     ; menu no longer owns surface
+                MOVE    0, @R7
+                MOVE    OPTM_STRUCT, R7         ; important to reset to zero..
                 MOVE    0, @R7                  ; b/c it is also used as flag
 
                 ADD     R0, SP                  ; restore SP / free memory
@@ -1274,6 +1278,196 @@ _OPTM_SET_RR    DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
+; OPTM_LIVE_TEXT
+;
+; Replace a fixed-width part of one menu item in the live OPTM_IR_ITEMS copy
+; and repaint only those characters when that item is currently visible.
+; This is intended for short real-time status updates. It does not clear or
+; redraw the menu, its frame, selection marker or attributes.
+;
+; Input:
+;   R8:  flat menu item index, counting every OPTM_ITEMS line from zero
+;   R9:  character offset from the beginning of that menu item
+;   R10: pointer to the fixed-width replacement string
+;   R11: exact number of characters to replace
+; Output:
+;   None; all registers are preserved
+;
+; Contract:
+;   * OPTM_IR_ITEMS must point to a writable live copy, as it does in the M2M
+;     Shell while the options menu is open.
+;   * The destination range must already exist inside one menu item. It may not
+;     cross the literal backslash-n line separator or the final terminator.
+;   * The replacement string must contain exactly R11 characters followed by a
+;     terminator and may not contain a line separator. Pad shorter status text
+;     with spaces so old characters are always erased.
+;   * The backing copy is updated even when the item is hidden or the menu does
+;     not own the visible surface. A later OPTM_SHOW will therefore use the new
+;     text. Direct painting only happens while OPTM_FOREGROUND is set and the
+;     item belongs to the currently active menu level.
+;   * Invalid input is ignored. The routine never invokes the fatal callback.
+; ----------------------------------------------------------------------------
+
+OPTM_LIVE_TEXT  SYSCALL(enter, 1)
+
+                MOVE    R8, R0                  ; flat menu item index
+                MOVE    R9, R1                  ; character offset
+                MOVE    R10, R2                 ; replacement string
+                MOVE    R11, R3                 ; replacement length
+
+                CMP     0, R3                   ; empty updates are no-ops
+                RBRA    _OPTM_LT_RET, Z
+                CMP     0, R2                   ; null replacement pointer
+                RBRA    _OPTM_LT_RET, Z
+
+                MOVE    OPTM_DATA, R4           ; active initialization record
+                MOVE    @R4, R4
+                CMP     0, R4
+                RBRA    _OPTM_LT_RET, Z
+                ADD     OPTM_IR_ITEMS, R4        ; writable OPTM_ITEMS pointer
+                MOVE    @R4, R4
+                CMP     0, R4
+                RBRA    _OPTM_LT_RET, Z
+
+                ; Find the beginning of flat menu item R0. Only a literal
+                ; backslash followed by lower-case n is a line separator.
+                MOVE    R0, R5
+_OPTM_LT_ITEM   CMP     0, R5
+                RBRA    _OPTM_LT_OFFSET, Z
+_OPTM_LT_SCAN   CMP     0, @R4
+                RBRA    _OPTM_LT_RET, Z
+                CMP     0x005C, @R4             ; possible backslash-n
+                RBRA    _OPTM_LT_NEXTC, !Z
+                MOVE    R4, R6
+                ADD     1, R6
+                CMP     'n', @R6
+                RBRA    _OPTM_LT_NEXTC, !Z
+                ADD     2, R4                   ; next menu item
+                SUB     1, R5
+                RBRA    _OPTM_LT_ITEM, 1
+_OPTM_LT_NEXTC  ADD     1, R4
+                RBRA    _OPTM_LT_SCAN, 1
+
+                ; Move to the requested character offset without crossing the
+                ; end of this menu item.
+_OPTM_LT_OFFSET MOVE    R1, R5
+_OPTM_LT_OFFL   CMP     0, R5
+                RBRA    _OPTM_LT_DSTCHK, Z
+                RSUB    _OPTM_LT_ISEND, 1
+                RBRA    _OPTM_LT_RET, C
+                ADD     1, R4
+                SUB     1, R5
+                RBRA    _OPTM_LT_OFFL, 1
+
+                ; Validate that the complete destination range stays inside
+                ; the selected menu item.
+_OPTM_LT_DSTCHK MOVE    R4, R6
+                MOVE    R3, R5
+_OPTM_LT_DSTL   RSUB    _OPTM_LT_ISEND, 1
+                RBRA    _OPTM_LT_RET, C
+                ADD     1, R6
+                MOVE    R6, R4
+                SUB     1, R5
+                RBRA    _OPTM_LT_DSTL, !Z
+                SUB     R3, R4                  ; restore destination pointer
+
+                ; Validate the fixed-width source including the terminator.
+                MOVE    R2, R6
+                MOVE    R3, R5
+_OPTM_LT_SRCL   CMP     0, @R6
+                RBRA    _OPTM_LT_RET, Z
+                CMP     0x005C, @R6             ; reject a line separator
+                RBRA    _OPTM_LT_SRCN, !Z
+                MOVE    R6, R7
+                ADD     1, R7
+                CMP     'n', @R7
+                RBRA    _OPTM_LT_RET, Z
+_OPTM_LT_SRCN   ADD     1, R6
+                SUB     1, R5
+                RBRA    _OPTM_LT_SRCL, !Z
+                CMP     0, @R6                  ; exactly R3 characters?
+                RBRA    _OPTM_LT_RET, !Z
+
+                ; Update the backing text first so later full redraws remain
+                ; coherent with the directly painted characters.
+                MOVE    R2, R8
+                MOVE    R4, R9
+                MOVE    R3, R10
+                SYSCALL(memcpy, 1)
+
+                ; A selection callback may temporarily show a browser or help
+                ; page while OPTM_RUN and its structure are still alive. Never
+                ; paint over such a foreground surface.
+                MOVE    OPTM_FOREGROUND, R5
+                CMP     0, @R5
+                RBRA    _OPTM_LT_RET, Z
+                MOVE    OPTM_STRUCT, R5
+                CMP     0, @R5
+                RBRA    _OPTM_LT_RET, Z
+
+                ; Convert the flat item index to its position in the current
+                ; menu level. Read the structure directly so malformed live
+                ; update input can never enter the fatal menu error path.
+                MOVE    OPTM_STRUCT, R5
+                MOVE    @R5, R5
+                ADD     2, R5                  ; structure size word
+                MOVE    @R5++, R4              ; number of flat menu items
+                XOR     R6, R6                  ; relative visible position
+                XOR     R7, R7                  ; flat position
+_OPTM_LT_MAP    CMP     R7, R4                  ; target outside structure?
+                RBRA    _OPTM_LT_RET, Z
+                CMP     R7, R0                  ; target reached?
+                RBRA    _OPTM_LT_TARGET, Z
+                MOVE    @R5, R8
+                SHL     1, R8                  ; bit 15 marks a visible item
+                RBRA    _OPTM_LT_MAPN, !C
+                ADD     1, R6
+_OPTM_LT_MAPN   ADD     1, R5
+                ADD     1, R7
+                RBRA    _OPTM_LT_MAP, 1
+
+_OPTM_LT_TARGET MOVE    @R5, R8
+                SHL     1, R8
+                RBRA    _OPTM_LT_RET, !C       ; hidden at the current level
+
+                MOVE    OPTM_Y, R10             ; screen y = frame + item
+                MOVE    @R10, R10
+                ADD     R6, R10
+                ADD     1, R10
+                MOVE    OPTM_X, R9              ; screen x = frame + offset
+                MOVE    @R9, R9
+                ADD     1, R9
+                ADD     R1, R9
+                MOVE    R2, R8                  ; replacement text
+                MOVE    OPTM_MENULEVEL, R11
+                MOVE    @R11, R11
+                MOVE    OPTM_FP_PRINTXY, R7
+                RSUB    _OPTM_CALL, 1
+
+_OPTM_LT_RET    SYSCALL(leave, 1)
+                RET
+
+; Return Carry=1 when the character at R4 ends the current menu item, either
+; through the final terminator or through a literal backslash-n separator.
+; R4 and all other registers are preserved.
+_OPTM_LT_ISEND
+                MOVE    R0, @--SP
+                CMP     0, @R4
+                RBRA    _OPTM_LT_END, Z
+                CMP     0x005C, @R4
+                RBRA    _OPTM_LT_NOTEND, !Z
+                MOVE    R4, R0
+                ADD     1, R0
+                CMP     'n', @R0
+                RBRA    _OPTM_LT_END, Z
+_OPTM_LT_NOTEND MOVE    @SP++, R0
+                AND     0xFFFB, SR              ; clear Carry
+                RET
+_OPTM_LT_END    MOVE    @SP++, R0
+                OR      0x0004, SR              ; set Carry
+                RET
+
+; ----------------------------------------------------------------------------
 ; Internal helper functions
 ; ----------------------------------------------------------------------------                
 
@@ -1290,6 +1484,17 @@ _OPTM_CALL      MOVE    R7, @--SP               ; save R7 for usage & restore
                 ASUB    R7, 1                   ; call function
 
                 MOVE    @SP++, R7               ; restore R7
+                RET
+
+; Call the selection callback while marking the menu as not owning the visible
+; surface. Selection callbacks may enter blocking browser or help loops which
+; continue to poll HANDLE_IO and therefore core-specific background handlers.
+_OPTM_CALL_SEL  MOVE    OPTM_FOREGROUND, R7
+                MOVE    0, @R7
+                MOVE    OPTM_CLBK_SEL, R7
+                RSUB    _OPTM_CALL, 1
+                MOVE    OPTM_FOREGROUND, R7
+                MOVE    1, @R7
                 RET
 
 ; Create an array that represents the menu structure: The lower 15-bits (i.e.

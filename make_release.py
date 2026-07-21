@@ -46,10 +46,11 @@ MAKE_CONFIG_SH = Path("M2M") / "tools" / "make_config.sh"
 VERSIONS_MD = Path("VERSIONS.md")
 INOFFICIAL_MD = Path("doc") / "inofficial.md"
 
-# Regex for the three accepted version conventions.
+# Regex for the four accepted version conventions.
 RE_MAJOR = re.compile(r"^V(\d+)$")
 RE_MINOR = re.compile(r"^V(\d+)\.(\d+)$")
 RE_ALPHA = re.compile(r"^WIP-V(\d+)-A(\d+)(?:X([1-9]\d*))?$")
+RE_BETA = re.compile(r"^WIP-V(\d+)-B(\d+)(?:X([1-9]\d*))?$")
 
 POLICIES = ("required", "optional", "skip")
 VERSION_CHECKS = ("core_version_constant", "regex", "none")
@@ -382,18 +383,21 @@ def run_hook(hooks, name: str, ctx: HookContext):
 # ---------------------------------------------------------------------------
 
 def classify_version(name: str) -> str:
-    """Return one of 'major', 'minor', 'alpha' or raise ValueError."""
+    """Return one of 'major', 'minor', 'alpha', 'beta' or raise ValueError."""
     if RE_MAJOR.match(name):
         return "major"
     if RE_MINOR.match(name):
         return "minor"
     if RE_ALPHA.match(name):
         return "alpha"
+    if RE_BETA.match(name):
+        return "beta"
     raise ValueError(
         f"'{name}' is not a valid version. Expected one of:\n"
         f"  Major  : V<n>          (e.g. V6)\n"
         f"  Minor  : V<n>.<m>      (e.g. V6.1)\n"
         f"  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V6-A6, WIP-V6-A13X1)\n"
+        f"  Beta   : WIP-V<n>-B<m>[X<k>] (e.g. WIP-V6-B1, WIP-V6-B2X1)\n"
         f"  Or pass -i / --ignore for an ad-hoc name that is already present "
         f"in config.vhd."
     )
@@ -475,20 +479,20 @@ def check_config_vhd(repo: Path, cfg: ReleaseConfig, version: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Alpha-release checks
+# Alpha/beta-release checks
 # ---------------------------------------------------------------------------
 
 def check_inofficial_md(repo: Path, version: str, policy: str) -> Optional[str]:
-    """Verify the alpha is listed in doc/inofficial.md and return its commit."""
+    """Verify the alpha/beta is listed in doc/inofficial.md and return its commit."""
     if policy == "skip":
-        info("Alpha release row check disabled by release.toml.")
+        info("Alpha/beta release row check disabled by release.toml.")
         return None
 
     path = repo / INOFFICIAL_MD
     if not path.is_file():
         msg = f"{INOFFICIAL_MD} not found."
         if policy == "optional":
-            warn(msg + " Skipping alpha release row check.")
+            warn(msg + " Skipping alpha/beta release row check.")
             return None
         die(msg)
 
@@ -509,7 +513,7 @@ def check_inofficial_md(repo: Path, version: str, policy: str) -> Optional[str]:
                f"(date {date}, commit {commit}).")
             return commit
 
-    msg = f"Alpha release '{version}' is not listed in {INOFFICIAL_MD}."
+    msg = f"Alpha/beta release '{version}' is not listed in {INOFFICIAL_MD}."
     if policy == "optional":
         warn(msg + " Skipping git release-row check.")
         return None
@@ -523,7 +527,7 @@ def check_git_commit(repo: Path, commit: str, version: str) -> None:
             capture_output=True, text=True, check=False,
         )
     except FileNotFoundError:
-        die("git executable not found in PATH (needed for alpha-release verification).")
+        die("git executable not found in PATH (needed for alpha/beta-release verification).")
 
     if result.returncode != 0:
         die(f"Commit '{commit}' from {INOFFICIAL_MD} (row '{version}') "
@@ -933,6 +937,7 @@ def build_parser(cfg: ReleaseConfig) -> argparse.ArgumentParser:
             "  Major  : V<n>          (e.g. V1)\n"
             "  Minor  : V<n>.<m>      (e.g. V1.1)\n"
             "  Alpha  : WIP-V<n>-A<m>[X<k>] (e.g. WIP-V1-A6, WIP-V1-A13X1)\n"
+            "  Beta   : WIP-V<n>-B<m>[X<k>] (e.g. WIP-V1-B1, WIP-V1-B2X1)\n"
             "  Ignore : pass -i / --ignore to package an ad-hoc version name.\n"
             "           Unless version.check is 'none', the name still must\n"
             "           match the configured version source.\n\n"
@@ -952,6 +957,7 @@ def build_parser(cfg: ReleaseConfig) -> argparse.ArgumentParser:
             "  make_release.py V1 ~/Desktop\n"
             "  make_release.py WIP-V1-A6 /tmp/builds\n"
             "  make_release.py WIP-V1-A13X1 /tmp/builds R6\n"
+            "  make_release.py WIP-V1-B1 /tmp/builds\n"
             "  make_release.py A15test1 /tmp/builds R6 --ignore\n"
             "  make_release.py V1.1 ./out R3,R6\n"
             "  make_release.py V1.1 ./out R3,R6 --force\n"
@@ -960,7 +966,7 @@ def build_parser(cfg: ReleaseConfig) -> argparse.ArgumentParser:
     )
     parser.add_argument("version",
                         help="Release name, e.g. V1, V1.1, WIP-V1-A6 or "
-                             "WIP-V1-A13X1")
+                             "WIP-V1-B1")
     parser.add_argument("output_folder",
                         help=f"Parent folder. The script creates a subfolder "
                              f"named {cfg.file_base}-<version> inside it and "
@@ -978,7 +984,7 @@ def build_parser(cfg: ReleaseConfig) -> argparse.ArgumentParser:
                              "refuses to clobber an existing release.")
     parser.add_argument("-i", "--ignore", action="store_true",
                         help="Ignore the standard version-name grammar and "
-                             "skip the alpha-release row check. The version "
+                             "skip the alpha/beta-release row check. The version "
                              "string is still checked against the configured "
                              "version source unless version.check is 'none'.")
     parser.add_argument("-v", "--verbatim", action="store_true",
@@ -1011,7 +1017,8 @@ def main() -> None:
 
         info({"major": "Major release detected.",
               "minor": "Minor release detected.",
-              "alpha": "Alpha release detected."}[kind])
+              "alpha": "Alpha release detected.",
+              "beta": "Beta release detected."}[kind])
 
     info(f"Repository root: {repo}")
     info(f"Core: {cfg.display_name} ({cfg.file_base})")
@@ -1022,13 +1029,13 @@ def main() -> None:
     # 3) Cross-check config.vhd or the configured replacement.
     check_config_vhd(repo, cfg, args.version)
 
-    # 4) Alpha releases: cross-check inofficial.md and git history.
-    if kind == "alpha":
+    # 4) Alpha and beta releases: cross-check inofficial.md and git history.
+    if kind in ("alpha", "beta"):
         commit = check_inofficial_md(repo, args.version, cfg.inofficial_md_policy)
         if commit is not None:
             check_git_commit(repo, commit, args.version)
     elif kind == "ignored":
-        info("--ignore was passed; skipping alpha release-row checks.")
+        info("--ignore was passed; skipping alpha/beta release-row checks.")
 
     # 5) Resolve target boards.
     if args.targets is None:
@@ -1079,7 +1086,7 @@ def main() -> None:
              f"overwriting: {out}")
     out.mkdir(parents=True, exist_ok=True)
 
-    if kind != "alpha":
+    if kind not in ("alpha", "beta"):
         stale_inofficial = out / INOFFICIAL_MD.name
         if stale_inofficial.is_file() or stale_inofficial.is_symlink():
             stale_inofficial.unlink()
@@ -1125,14 +1132,14 @@ def main() -> None:
     else:
         info("Shell config generation disabled by release.toml.")
 
-    # 10) Ship release notes and alpha notes according to policy.
+    # 10) Ship release notes and alpha/beta notes according to policy.
     info("Copying VERSIONS.md into the release folder")
     vmd = copy_policy_file(repo, out, VERSIONS_MD, cfg.versions_md_policy)
     if vmd is not None:
         ok(f"{vmd.name} ({vmd.stat().st_size:,} bytes)")
 
     imd = None
-    if kind == "alpha":
+    if kind in ("alpha", "beta"):
         info("Copying doc/inofficial.md into the release folder")
         imd = copy_policy_file(repo, out, INOFFICIAL_MD, cfg.inofficial_md_policy)
         if imd is not None:

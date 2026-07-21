@@ -4,14 +4,14 @@ Version 6 - MONTH DAY, 2026
 @TODO: ENSURE README.MD AND FAQ.MD are up-to-date regarding V6
 @TODO: ENSURE README.MDs Video and Audio section is up-to-date re NTSC
 @TODO: ENSURE README.MDs demo pics (OSM!) are up-to-date
+@TODO: ENSURE ROADMAP.MD is up-to-date
 @TODO: Document increased compatibility due to the resolved RTC regression
 @TODO: Document correct BA signal which should also increase compatibility
 
 ## New Features
 
-* Full DMA support for hardware cartridges such as hardware REUs (for example
-  REU Grande), Sidekick64, TeensyROM and more.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
+* The built-in floppy drive can be used as an 1581.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/90)
 
 * Virtual drive 8 can now mount `*.d81` disk images on a simulated Commodore
   1581 drive, in addition to the existing `*.d64` images. Just go to the disk
@@ -21,6 +21,10 @@ Version 6 - MONTH DAY, 2026
   JiffyDOS on the simulated 1541, the simulated 1581, or both, depending on
   which drive ROMs you install.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/91)
+
+* Full DMA support for hardware cartridges such as hardware REUs (for example
+  REU Grande), Sidekick64, TeensyROM and more.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
 
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)

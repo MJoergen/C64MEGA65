@@ -5,6 +5,89 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A18X2 - 2026-07-18
+---------------------------------
+
+WIP-V6-A18X2 (`d94fa73`) was released to the community as an explicitly
+identified Alpha build.
+
+* Build availability: PASS for R3, R4, R5 and R6; all four artifacts were
+  produced and distributed
+* R3 reader qualification: PASS in the controlled simulation/hardware campaign,
+  with additional positive community reports covering three physical 1581 disks
+* R3 JiffyDOS/internal-1581 compatibility: PASS; Mike351 reported JiffyDOS and
+  the internal physical 1581 working without issue on WIP-V6-A18X2. The report
+  did not state whether `jd-c1581.bin` was loaded, so stock-ROM fallback versus
+  accelerated JiffyDOS-1581 remains to be distinguished if that detail matters
+* R4/R5/R6 functional reader qualification: PENDING community feedback over the
+  following days and weeks; artifact availability alone is not a functional pass
+* Physical disk writes remain deliberately unsupported in this Alpha
+
+Version WIP-V6-A18X1 - TBD
+--------------------------
+
+@TODO: Test the experimental read-only internal-1581 read path (#90). This is
+the first hardware bring-up of the MEGA65's internal 3.5" drive as a physical
+Commodore 1581 behind drive 8. Simulation and extensive R3 testing have passed;
+on 2026-07-19 Discord tester Mike351 additionally reported a correct directory
+and successful PRG load from a test/demo disk originating with his genuine
+1581, followed by successful demo execution from a second 1581-formatted
+floppy. On 2026-07-20 a second tester, dejavu4u2, independently reported loading
+a GEOS 1581 disk from another physical 3.5-inch floppy in the internal drive.
+A separate CBM-subpartition concern from nobruinfo was withdrawn after he found
+an incorrect Wedge command and a malformed on-disk partition track/sector chain;
+the BASIC command-channel test behaved as expected, so this was not a core
+defect. Complete the remaining items below and ensure all four board bitstreams
+build (R3/R4/R5/R6; functional read testing is on R3):
+
+* Source select: with a DD disk in the internal drive, switch on "Use internal
+  1581" in the disk-mount menu and confirm drive 8 now talks to the physical
+  drive (motor spins up, drive responds); switch it off again and confirm
+  drive 8 is served from the mounted disk image once more (the previously
+  mounted image is preserved across the switch)
+* Source select WITHOUT a mounted image: from a fresh boot with no disk image
+  mounted at all, switch on "Use internal 1581" and confirm drive 8 comes
+  alive and reads the physical disk (the drive must NOT stay in the
+  held-in-reset state that unmounted image drives normally have); switching it
+  off again with nothing mounted returns drive 8 to "device not present"
+* Media revalidation on source switch: with a D81 mounted, load the directory
+  from the image, switch to the internal drive and `LOAD"$",8` again - the
+  REAL disk's directory must appear (not a stale copy of the image's); switch
+  back and confirm the image's directory returns likewise
+* Read directory: `LOAD"$",8` then `LIST` returns the real disk's directory
+* Load a program: `LOAD"<name>",8` (and `,8,1`) loads and runs a program off
+  the physical disk
+* Record-not-found: reading a file or sector that is not present, or a track
+  the head cannot find, fails cleanly with a DOS error instead of hanging, and
+  the drive recovers for the next access
+* Disk-change and write-protect sensing: ejecting and re-inserting a disk is
+  noticed (the next access reads the new disk, not a stale one) and a
+  write-protected disk is reported as protected; confirm the assumed pin
+  polarities on R3 (see the change_o / write-protect NOTEs in
+  physical_1581_inputs.vhd)
+* QNICE `0x0108` diagnostic device: follow doc/1581_dd_debug_device.md to read
+  the register bank from the QNICE monitor - SIGNATURE reads `0x1581`, the index
+  period settles near one revolution while the motor is on, CNT_READOP climbs on
+  each load and LAST_RESULT is `0x0000` after a clean read; use CNT_RNF,
+  CNT_CRCERR, GAP_MIN and GAP_MAX to triage any read trouble
+* Image-mode regression, MUST be unaffected: with "Use internal 1581" OFF, the
+  existing `*.d64` (1541) and `*.d81` (1581) disk-image mount / directory / load
+  / write / flush / power-cycle behaviour is exactly as before - the physical
+  path must be completely transparent when it is not selected. Automated gate:
+  `CORE/C64_MiSTerMEGA65/rtl/iec_drive/tb_fdc1772_image.sv` holds
+  `phys_mode=0`, locks shared WD register behavior to early reference commit
+  `88c09d2`, and reads all ten directory-track sectors in ROM order through the
+  real image/SD buffer crossing. Reference and fixed transcripts must match;
+  the `b2bd629`/unfixed-HEAD negative control must fail the image readback check
+* Idle-gate (symmetric): toggling "Use internal 1581" is ignored in BOTH
+  directions while drive 8 is busy - switching to image mode is blocked while
+  the physical drive reads/steps/spins, and switching to the internal drive is
+  blocked while the image drive is active or its write cache is still being
+  flushed (yellow drive led); once the drive is quiet the toggle works again
+* Not expected to work yet (this is the read-only milestone): writing, saving,
+  scratch/rename and formatting to the internal drive - these are the next
+  milestone
+
 Version 6.0 - TBD
 -----------------
 

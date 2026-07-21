@@ -64,6 +64,7 @@ images). It supports the following hardware ports of the MEGA65:
   cartridges, GeoRAM, multi-function flash cartridges, etc.
 * IEC port so that you can attach real 1541 & 1581 drives as well as
   printers, plotters or modern devices such as the SD2IEC
+* Use the MEGA65's built-in floppy drive as 1581 (read-only)
 
 Additionally, the C64 for MEGA65 core can simulate a 1750 REU with 512KB
 of RAM, it can simulate cartridges (by loading `*.crt` files) and it offers
@@ -131,7 +132,6 @@ often than not, that the core is recognized as real hardware by software.
 Yet, at this moment, our MEGA65 version of the MiSTer core is still lacking
 some nice features such as:
 
-* Use the MEGA65's physical drive as a C1581
 * Mounting tapes (`*.tap`)
 * Supporting G64 disk images (`*.g64`)
 * Formatting disk images (`*.d64` and `*.g64`)

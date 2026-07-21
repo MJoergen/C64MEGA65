@@ -15,7 +15,6 @@ Feature Roadmap
 * Offer an SD2IEC compatible IEC device that browses the SD card and that
   you can for example use to flash the EF1CR cartridge without the need of
   splitting large CRTs into multiple D64 disks using EasySplit
-* Use the MEGA65's built-in disk drive as a C1581
 * GCR encoded disk images (`*.g64`)
 * Improved C1541 compatibility due to real internal GCR handling of `*.d64`
   images instead of simulated handling leads to games like "Seven Cities of
@@ -53,7 +52,6 @@ particular order:
   which exclusively uses GCR internally (c1541_direct_gcr.sv instead of
   c1541_gcr.sv). `*.D64` images are converted to/from GCR when reading/writing
   from SD card.
-* Clarify: Line 65 in fdc1772.v: back to 2 or work with generic?
 * Implement a remote-control mechanism via Serial/JTAG (similar to what
   already works on the MEGA65 core) that allows us to remote-control the
   C64 core so that we can for example run whole test suites remotely.

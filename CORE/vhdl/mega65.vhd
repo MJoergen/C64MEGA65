@@ -177,6 +177,21 @@ port (
    iec_srq_n_i             : in  std_logic;
    iec_srq_n_o             : out std_logic;
 
+   -- MEGA65 physical internal 1581 (issue #90): board floppy pins routed to the
+   -- physical_1581_controller inside main.vhd. Read-only milestone: the write
+   -- pins (f_wgate/f_wdata) and drive-B pins stay tied inactive at the top level.
+   f_rdata_i               : in  std_logic;
+   f_index_i               : in  std_logic;
+   f_track0_i              : in  std_logic;
+   f_writeprotect_i        : in  std_logic;
+   f_diskchanged_i         : in  std_logic;
+   f_motora_o              : out std_logic;
+   f_selecta_o             : out std_logic;
+   f_side1_o               : out std_logic;
+   f_stepdir_o             : out std_logic;
+   f_step_o                : out std_logic;
+   f_density_o             : out std_logic;
+
    -- C64 Expansion Port (aka Cartridge Port)
    cart_en_o               : out std_logic;  -- Enable port, active high
    cart_phi2_o             : out std_logic;
@@ -234,6 +249,7 @@ signal c64_clock_speed            : natural;                 -- clock speed depe
 signal c64_exp_port_mode          : std_logic_vector(1 downto 0);
                                                              -- bit 0: Simulate cartridge (.CRT file)
                                                              -- bit 1: Simulate REU
+signal phys_1581_en               : std_logic;               -- 1 = drive 8 backed by the physical internal 1581 (issue #90)
 
 -- C64 config settings
 signal sid_setup                  : std_logic_vector(1 downto 0);
@@ -344,82 +360,83 @@ signal hr_hdmi_ff                 : std_logic;
 -- (flat index, see config.vhd). The values below are machine-checked
 -- against the menu structure: run "python3 M2M/rom/tests/menu_test.py verify"
 -- after every menu change.
-constant C_MENU_EXP_PORT_HW   : natural := 7;
-constant C_MENU_SIM_CRT       : natural := 8;
-constant C_MENU_SIM_REU       : natural := 10;
+constant C_MENU_INTERNAL_1581 : natural := 3;   -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
+constant C_MENU_EXP_PORT_HW   : natural := 8;
+constant C_MENU_SIM_CRT       : natural := 9;
+constant C_MENU_SIM_REU       : natural := 11;
 -- Model submenu: machine mode and turbo are not yet wired, see #181
 -- C_MENU_MODEL is the flat index of the " Model: %s" submenu opener; the
 -- custom SUBMENU_SUMMARY callback in m2m-rom.asm uses it to recognize that line
-constant C_MENU_MODEL         : natural := 14;
-constant C_MENU_MACHINE_PAL   : natural := 17;
-constant C_MENU_MACHINE_NTSC  : natural := 18;
-constant C_MENU_TURBO_OFF     : natural := 22;
-constant C_MENU_TURBO_C128    : natural := 23;
-constant C_MENU_TURBO_SMART   : natural := 24;
-constant C_MENU_TURBO_2X      : natural := 27;
-constant C_MENU_TURBO_3X      : natural := 28;
-constant C_MENU_TURBO_4X      : natural := 29;
-constant C_MENU_FLIP_JOYS     : natural := 32;
+constant C_MENU_MODEL         : natural := 15;
+constant C_MENU_MACHINE_PAL   : natural := 18;
+constant C_MENU_MACHINE_NTSC  : natural := 19;
+constant C_MENU_TURBO_OFF     : natural := 23;
+constant C_MENU_TURBO_C128    : natural := 24;
+constant C_MENU_TURBO_SMART   : natural := 25;
+constant C_MENU_TURBO_2X      : natural := 28;
+constant C_MENU_TURBO_3X      : natural := 29;
+constant C_MENU_TURBO_4X      : natural := 30;
+constant C_MENU_FLIP_JOYS     : natural := 33;
 -- HDMI submenu; the NTSC display modes (59.94 Hz) and the NTSC
 -- flicker-free twin are not yet wired, see #181/#105, neither is raw
 -- 50.1 Hz
-constant C_MENU_HDMI_16_9_50  : natural := 36;
-constant C_MENU_HDMI_16_9_5994 : natural := 37;
-constant C_MENU_HDMI_4_3_50   : natural := 38;
-constant C_MENU_HDMI_4_3_5994 : natural := 39;
-constant C_MENU_HDMI_5_4_50   : natural := 40;
-constant C_MENU_HDMI_5_4_5994 : natural := 41;
-constant C_MENU_HDMI_FF       : natural := 43;
-constant C_MENU_HDMI_FF_NTSC  : natural := 44;
-constant C_MENU_HDMI_DVI      : natural := 45;
+constant C_MENU_HDMI_16_9_50  : natural := 37;
+constant C_MENU_HDMI_16_9_5994 : natural := 38;
+constant C_MENU_HDMI_4_3_50   : natural := 39;
+constant C_MENU_HDMI_4_3_5994 : natural := 40;
+constant C_MENU_HDMI_5_4_50   : natural := 41;
+constant C_MENU_HDMI_5_4_5994 : natural := 42;
+constant C_MENU_HDMI_FF       : natural := 44;
+constant C_MENU_HDMI_FF_NTSC  : natural := 45;
+constant C_MENU_HDMI_DVI      : natural := 46;
 -- HDMI Filter submenu (nested inside the HDMI submenu; replaces V1's CRT
 -- emulation single-toggle). The selection is interpreted entirely by the
 -- core's m2m-rom.asm (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for
 -- native modes and loads the matching (H, V) coefficient pair via
 -- M2M$LOAD_POLYPHASE for polyphase modes. ASCAL_USAGE=1 in config.vhd
 -- routes mode control to QNICE directly.
-constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 49;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
-constant C_MENU_HDMI_FLT_SHARP         : natural := 50;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
-constant C_MENU_HDMI_FLT_BICUBIC       : natural := 51;  -- ascal native BICUBIC
-constant C_MENU_HDMI_FLT_SMOOTH        : natural := 52;
-constant C_MENU_HDMI_FLT_LANCZOS       : natural := 53;
-constant C_MENU_HDMI_FLT_SCANLINES     : natural := 54;  -- default; bit-identical to V1's CRT emulation
-constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 55;
-constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 56;
-constant C_MENU_HDMI_ZOOM     : natural := 59;
-constant C_MENU_HDMI_RAW50    : natural := 60;           -- not yet wired
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 50;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 51;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 52;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 53;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 54;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 55;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 56;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 57;
+constant C_MENU_HDMI_ZOOM     : natural := 60;
+constant C_MENU_HDMI_RAW50    : natural := 61;           -- not yet wired
 -- VGA submenu
-constant C_MENU_VGA_STD       : natural := 66;
-constant C_MENU_VGA_15KHZHSVS : natural := 70;
-constant C_MENU_VGA_15KHZCS   : natural := 71;
+constant C_MENU_VGA_STD       : natural := 67;
+constant C_MENU_VGA_15KHZHSVS : natural := 71;
+constant C_MENU_VGA_15KHZCS   : natural := 72;
 -- SID submenu
-constant C_MENU_MONO_6581     : natural := 79;
-constant C_MENU_MONO_8580     : natural := 80;
-constant C_MENU_STEREO_L6R6   : natural := 84;
-constant C_MENU_STEREO_L6R8   : natural := 85;
-constant C_MENU_STEREO_L8R6   : natural := 86;
-constant C_MENU_STEREO_L8R8   : natural := 87;
-constant C_MENU_STEREO_R_D420 : natural := 91;
-constant C_MENU_STEREO_R_D500 : natural := 92;
-constant C_MENU_STEREO_R_DE00 : natural := 93;
-constant C_MENU_STEREO_R_DF00 : natural := 94;
-constant C_MENU_IMPROVE_AUDIO : natural := 97;
-constant C_MENU_IEC           : natural := 100;
+constant C_MENU_MONO_6581     : natural := 80;
+constant C_MENU_MONO_8580     : natural := 81;
+constant C_MENU_STEREO_L6R6   : natural := 85;
+constant C_MENU_STEREO_L6R8   : natural := 86;
+constant C_MENU_STEREO_L8R6   : natural := 87;
+constant C_MENU_STEREO_L8R8   : natural := 88;
+constant C_MENU_STEREO_R_D420 : natural := 92;
+constant C_MENU_STEREO_R_D500 : natural := 93;
+constant C_MENU_STEREO_R_DE00 : natural := 94;
+constant C_MENU_STEREO_R_DF00 : natural := 95;
+constant C_MENU_IMPROVE_AUDIO : natural := 98;
+constant C_MENU_IEC           : natural := 101;
 -- Kernal submenu
-constant C_MENU_KERNAL        : natural := 101; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm 
-constant C_MENU_KERNAL_STD    : natural := 104;
-constant C_MENU_KERNAL_GS     : natural := 105;
-constant C_MENU_KERNAL_JAPAN  : natural := 106;
-constant C_MENU_KERNAL_JIFFY  : natural := 107;
+constant C_MENU_KERNAL        : natural := 102; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm 
+constant C_MENU_KERNAL_STD    : natural := 105;
+constant C_MENU_KERNAL_GS     : natural := 106;
+constant C_MENU_KERNAL_JAPAN  : natural := 107;
+constant C_MENU_KERNAL_JIFFY  : natural := 108;
 -- Volume submenu: not yet wired, see #85
-subtype C_MENU_VOLUME is natural range 123 downto 113;
+subtype C_MENU_VOLUME is natural range 124 downto 114;
 -- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not yet wired)
-constant C_MENU_RTC_GEOS      : natural := 129;
-subtype C_MENU_OSM_SCALING is natural range 141 downto 133;
-constant C_MENU_8521          : natural := 144;
-constant C_MENU_VICII_NMOS    : natural := 148;
-constant C_MENU_VICII_HMOS    : natural := 149;
-constant C_MENU_VICII_OLDHMOS : natural := 150;
+constant C_MENU_RTC_GEOS      : natural := 130;
+subtype C_MENU_OSM_SCALING is natural range 142 downto 134;
+constant C_MENU_8521          : natural := 145;
+constant C_MENU_VICII_NMOS    : natural := 149;
+constant C_MENU_VICII_HMOS    : natural := 150;
+constant C_MENU_VICII_OLDHMOS : natural := 151;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -438,6 +455,10 @@ signal qnice_c1541rom_we            : std_logic;
 signal qnice_c1541rom_addr          : std_logic_vector(15 downto 0);
 signal qnice_c1541rom_data_to       : std_logic_vector(7 downto 0);
 signal qnice_c1541rom_data_from	   : std_logic_vector(7 downto 0);
+
+-- Physical internal 1581 read-only diagnostic device (issue #90; C_DEV_C64_PHYS1581)
+signal phys_diag_ce                 : std_logic;
+signal phys_diag_data               : std_logic_vector(15 downto 0);
 
 -- Signals for multiplexing the C64's RAM between C_DEV_C64_RAM and C_DEV_C64_PRG
 signal qnice_c64_ramx_we            : std_logic;
@@ -582,6 +603,9 @@ begin
    -- bit 1 = 1: Simulate a 1750 REU with 512KB
    c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
    c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
+
+   -- Physical internal 1581 (issue #90): drive 8 uses the real internal floppy
+   phys_1581_en <= main_osm_control_i(C_MENU_INTERNAL_1581);
 
    -- SID version, 0=6581, 1=8580, low bit = left SID
    sid_setup <= "00" when main_osm_control_i(C_MENU_MONO_6581)    else
@@ -738,6 +762,26 @@ begin
          iec_srq_en_o           => iec_srq_en_o,
          iec_srq_n_i            => iec_srq_n_i,
          iec_srq_n_o            => iec_srq_n_o,
+
+         -- Physical internal 1581 (issue #90): mode bit, QNICE-domain reset, board pins
+         phys_1581_en_i         => phys_1581_en,
+         c64_rst_sd_i           => qnice_rst_i,
+         f_rdata_i              => f_rdata_i,
+         f_index_i              => f_index_i,
+         f_track0_i             => f_track0_i,
+         f_writeprotect_i       => f_writeprotect_i,
+         f_diskchanged_i        => f_diskchanged_i,
+         f_motora_o             => f_motora_o,
+         f_selecta_o            => f_selecta_o,
+         f_side1_o              => f_side1_o,
+         f_stepdir_o            => f_stepdir_o,
+         f_step_o               => f_step_o,
+         f_density_o            => f_density_o,
+
+         -- Physical internal 1581 read-only QNICE diagnostic device (issue #90)
+         phys_diag_ce_i         => phys_diag_ce,
+         phys_diag_addr_i       => qnice_dev_addr_i(7 downto 0),
+         phys_diag_data_o       => phys_diag_data,
 
          -- C64 Expansion Port (aka Cartridge Port)
          cart_en_o              => cart_en_o,
@@ -899,6 +943,7 @@ begin
       qnice_c1541rom_we          <= '0';
       qnice_c1541rom_addr        <= (others => '0');
       qnice_c1541rom_data_to     <= (others => '0');
+      phys_diag_ce               <= '0';
 
       case qnice_dev_id_i is
          -- C64 RAM
@@ -962,6 +1007,13 @@ begin
             qnice_c1541rom_we          <= qnice_dev_we_i;
             qnice_dev_data_o           <= x"00" & qnice_c1541rom_data_from;
             qnice_c1541rom_data_to     <= qnice_dev_data_i(7 downto 0);
+
+         -- Physical internal 1581: read-only diagnostic register bank (issue #90).
+         -- Mirrors the C_DEV_C64_RAM pattern: no wait-state, writes ignored inside
+         -- the diag bank. Its QNICE port lives in i_main (same 50 MHz domain).
+         when C_DEV_C64_PHYS1581 =>
+            phys_diag_ce               <= qnice_dev_ce_i;
+            qnice_dev_data_o           <= phys_diag_data;
 
          when others => null;
       end case;
