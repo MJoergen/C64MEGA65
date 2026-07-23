@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 160; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 170; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -533,16 +533,26 @@ constant OPTM_ITEMS        : string :=
    " Volume: %s\n"              &  -- Volume submenu
    " Volume Control\n"          &
    "\n"                         &
-   " 100%\n"                    &  -- the whole volume block is not yet wired in mega65.vhd, see #85
+   " 100%\n"                    &  -- master volume, 5% steps, perceptual: decoded in mega65.vhd, attenuated in main.vhd (C_VOL_LUT)
+   " 95%\n"                     &
    " 90%\n"                     &
+   " 85%\n"                     &
    " 80%\n"                     &
+   " 75%\n"                     &
    " 70%\n"                     &
+   " 65%\n"                     &
    " 60%\n"                     &
+   " 55%\n"                     &
    " 50%\n"                     &
+   " 45%\n"                     &
    " 40%\n"                     &
+   " 35%\n"                     &
    " 30%\n"                     &
+   " 25%\n"                     &
    " 20%\n"                     &
+   " 15%\n"                     &
    " 10%\n"                     &
+   " 5%\n"                      &
    " 0%\n"                      &
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
@@ -750,15 +760,25 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_HEADLINE,                         -- Volume Control
                                              OPTM_G_LINE,
                                              OPTM_G_VOLUME        + OPTM_G_STDSEL,    -- 100%
+                                             OPTM_G_VOLUME,                           -- 95%
                                              OPTM_G_VOLUME,                           -- 90%
+                                             OPTM_G_VOLUME,                           -- 85%
                                              OPTM_G_VOLUME,                           -- 80%
+                                             OPTM_G_VOLUME,                           -- 75%
                                              OPTM_G_VOLUME,                           -- 70%
+                                             OPTM_G_VOLUME,                           -- 65%
                                              OPTM_G_VOLUME,                           -- 60%
+                                             OPTM_G_VOLUME,                           -- 55%
                                              OPTM_G_VOLUME,                           -- 50%
+                                             OPTM_G_VOLUME,                           -- 45%
                                              OPTM_G_VOLUME,                           -- 40%
+                                             OPTM_G_VOLUME,                           -- 35%
                                              OPTM_G_VOLUME,                           -- 30%
+                                             OPTM_G_VOLUME,                           -- 25%
                                              OPTM_G_VOLUME,                           -- 20%
+                                             OPTM_G_VOLUME,                           -- 15%
                                              OPTM_G_VOLUME,                           -- 10%
+                                             OPTM_G_VOLUME,                           -- 5%
                                              OPTM_G_VOLUME,                           -- 0%
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Volume: %s"

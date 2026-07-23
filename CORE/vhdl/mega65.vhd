@@ -254,6 +254,7 @@ signal phys_1581_en               : std_logic;               -- 1 = drive 8 back
 -- C64 config settings
 signal sid_setup                  : std_logic_vector(1 downto 0);
 signal sid_port                   : natural range 0 to 4;
+signal main_volume                : natural range 0 to 20;   -- OSM "Volume" slider step: 0 = 0%/mute .. 20 = 100% (5% each)
 
 -- C64 RAM
 signal main_ram_addr              : unsigned(15 downto 0);         -- C64 address bus
@@ -428,15 +429,16 @@ constant C_MENU_KERNAL_STD    : natural := 105;
 constant C_MENU_KERNAL_GS     : natural := 106;
 constant C_MENU_KERNAL_JAPAN  : natural := 107;
 constant C_MENU_KERNAL_JIFFY  : natural := 108;
--- Volume submenu: not yet wired, see #85
-subtype C_MENU_VOLUME is natural range 124 downto 114;
+-- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
+-- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
+subtype C_MENU_VOLUME is natural range 134 downto 114;
 -- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not yet wired)
-constant C_MENU_RTC_GEOS      : natural := 130;
-subtype C_MENU_OSM_SCALING is natural range 142 downto 134;
-constant C_MENU_8521          : natural := 145;
-constant C_MENU_VICII_NMOS    : natural := 149;
-constant C_MENU_VICII_HMOS    : natural := 150;
-constant C_MENU_VICII_OLDHMOS : natural := 151;
+constant C_MENU_RTC_GEOS      : natural := 140;
+subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
+constant C_MENU_8521          : natural := 155;
+constant C_MENU_VICII_NMOS    : natural := 159;
+constant C_MENU_VICII_HMOS    : natural := 160;
+constant C_MENU_VICII_OLDHMOS : natural := 161;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -624,6 +626,22 @@ begin
                 4 when main_osm_control_i(C_MENU_STEREO_R_DF00) else
                 0;
 
+   -- Master volume: the OSM "Volume" slider (C_MENU_VOLUME) is a 21-way radio
+   -- group in 5% steps. Its lowest bit (C_MENU_VOLUME'low) is 100% and its
+   -- highest bit is 0%, so translate the one-hot selection into a 0..20 step
+   -- index (0 = 0%/mute, 20 = 100%). Default to 100% if nothing is (yet)
+   -- selected. The perceptual, loudness-linear attenuation itself is applied in
+   -- main.vhd (see C_VOL_LUT there), so it affects HDMI and analog audio alike.
+   volume_decode_proc : process (all)
+   begin
+      main_volume <= 20;                                        -- default 100%
+      for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
+         if main_osm_control_i(b) = '1' then
+            main_volume <= C_MENU_VOLUME'high - b;              -- bit 114 -> 20 (100%) .. bit 134 -> 0 (0%)
+         end if;
+      end loop;
+   end process volume_decode_proc;
+
    -- MEGA65's power led: By default, it is on and glows green when the MEGA65 is powered on.
    -- We switch it to blue when a long reset is detected and as long as the user keeps pressing the preset button
    main_power_led_o     <= '1';
@@ -672,6 +690,9 @@ begin
          c64_sid_ver_i          => sid_setup,
          c64_sid_port_i         => to_unsigned(sid_port, 3),
          c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),
+
+         -- Master volume (OSM "Volume" slider): 0..20 step index = 0%..100%
+         audio_volume_i         => main_volume,
 
          -- Mode selection for Expansion Port (aka Cartridge Port):
          -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port

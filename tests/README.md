@@ -5,6 +5,28 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A19 - TBD
+------------------------
+
+@TODO: Test the reworked master-volume control (issue #85). The OSM "Volume"
+slider went from 10% to 5% steps (21 positions, 100% down to 0%) and is now
+actually wired to the audio path with a perceptual, loudness-linear taper: each
+5% step is a 5 percentage-point change in *perceived* loudness, so 50% sounds
+half as loud as 100% (-10 dB), 25% a quarter (-20 dB) and 0% is silence.
+
+* Confirm the slider attenuates audio identically on **both** outputs: HDMI and
+  analog (VGA 3.5 mm line-out). The gain is applied once in `main.vhd` ahead of
+  the audio split in the framework, so both paths should track.
+* Confirm 100% is bit-transparent (no perceived loss versus earlier releases,
+  where the volume was effectively fixed at full scale).
+* Confirm 50% is roughly half as loud and 0% is fully muted.
+* Regression-check the OSM items whose control bits shifted by +10 when the ten
+  extra volume steps were inserted: `CIA: Use 8521`, `OSM Scaling`,
+  `RTC for GEOS` and the `VIC-II model`. Their behavior must be unchanged.
+* Config file: `OPTM_SIZE` grew from 160 to 170, so any existing saved-settings
+  config file must be regenerated with `M2M/tools/make_config.sh` or the
+  on-screen settings will no longer persist across reboots.
+
 Version WIP-V6-A18X2 - 2026-07-18
 ---------------------------------
 

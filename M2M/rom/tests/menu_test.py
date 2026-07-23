@@ -200,15 +200,25 @@ V6_MENU = [
     (" Volume Control",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 100%",                    "VOLUME", ["STDSEL"]),
+    (" 95%",                     "VOLUME", []),
     (" 90%",                     "VOLUME", []),
+    (" 85%",                     "VOLUME", []),
     (" 80%",                     "VOLUME", []),
+    (" 75%",                     "VOLUME", []),
     (" 70%",                     "VOLUME", []),
+    (" 65%",                     "VOLUME", []),
     (" 60%",                     "VOLUME", []),
+    (" 55%",                     "VOLUME", []),
     (" 50%",                     "VOLUME", []),
+    (" 45%",                     "VOLUME", []),
     (" 40%",                     "VOLUME", []),
+    (" 35%",                     "VOLUME", []),
     (" 30%",                     "VOLUME", []),
+    (" 25%",                     "VOLUME", []),
     (" 20%",                     "VOLUME", []),
+    (" 15%",                     "VOLUME", []),
     (" 10%",                     "VOLUME", []),
+    (" 5%",                      "VOLUME", []),
     (" 0%",                      "VOLUME", []),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 7
@@ -978,7 +988,7 @@ def struct_fixtures():
     fx.append(("START on plain line inside region", 1, [O, 5, C]))
     fx.append(("START on closer", 0, [1, O, 5, C]))
     fx.append(("START on depth-1 opener", 0, [O, 5, C]))
-    fx.append(("V6 menu with START on nested opener", 131,
+    fx.append(("V6 menu with START on nested opener", 141,
                menu_masked(V6_MENU)))
     return fx
 
@@ -1000,10 +1010,10 @@ def summ_fixtures():
                sel(i37=0, i38=0, i44=0, i45=0)))
     # heading 34 with 4:3 PAL selected -> found 39
     fx.append(("HDMI region finds 4:3 PAL", 34, v6g, sel(i37=0, i39=1)))
-    # heading 127 (Advanced): no radio group of its own at all
-    fx.append(("Advanced has no own radio group", 127, v6g, base))
-    # heading 131 (OSM scaling): default -> 134
-    fx.append(("OSM scaling default", 131, v6g, base))
+    # heading 137 (Advanced): no radio group of its own at all
+    fx.append(("Advanced has no own radio group", 137, v6g, base))
+    # heading 141 (OSM scaling): default -> 144
+    fx.append(("OSM scaling default", 141, v6g, base))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1160,8 +1170,8 @@ def nav_script():
                labels=[t for t, _, _ in V6_MENU])
 
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (159)
-    assert s.cursor == 159
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (169)
+    assert s.cursor == 169
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 15)           # to "Model: %s"
@@ -1188,25 +1198,25 @@ def nav_script():
     assert (s.level, s.cursor) == (7, 114)   # terminated-label scanner bug
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
     assert (s.level, s.cursor) == (0, 111)
-    s.until(KEY_DOWN, 127)          # to "Advanced Settings"
+    s.until(KEY_DOWN, 137)          # to "Advanced Settings"
     s.feed(KEY_SELECT)              # enter region 8
-    assert (s.level, s.cursor) == (8, 130)
+    assert (s.level, s.cursor) == (8, 140)
     s.feed(KEY_SELECT)              # single-select RTC for GEOS on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 146)          # to "VIC-II: %s"
+    s.until(KEY_DOWN, 156)          # to "VIC-II: %s"
     s.feed(KEY_SELECT)              # enter region 10 (depth 2)
-    assert (s.level, s.cursor) == (10, 149)
+    assert (s.level, s.cursor) == (10, 159)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 153          # lands on the closer line
+    assert s.cursor == 163          # lands on the closer line
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (10, 153)
+    assert (s.level, s.cursor) == (10, 163)
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 8
-    assert (s.level, s.cursor) == (8, 146)
+    assert (s.level, s.cursor) == (8, 156)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 127)
+    assert (s.level, s.cursor) == (0, 137)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
