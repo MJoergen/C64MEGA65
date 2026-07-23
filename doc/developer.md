@@ -58,7 +58,7 @@ Prerequisites: a `bash` shell with `vivado` on the `PATH` (source Vivado's `sett
 
 ```bash
 cd CORE
-source /opt/Xilinx/2025.1/Vivado/settings64.sh          # or wherever Vivado lives
+source /opt/Xilinx/2025.1/Vivado/settings64.sh                        # or wherever Vivado lives
 vivado -mode batch -source build_bitstream.tcl -tclargs R6            # R6, 4 jobs, release
 vivado -mode batch -source build_bitstream.tcl -tclargs R6 8          # R6, 8 jobs
 vivado -mode batch -source build_bitstream.tcl -tclargs R6 8 debug    # R6, 8 jobs, with ILA
@@ -79,7 +79,7 @@ It runs a clean synthesis (`reset_run synth_1`) followed by implementation throu
 ```bash
 cd CORE
 source /opt/Xilinx/2025.1/Vivado/settings64.sh
-nohup ./build_all.sh > build_all.out 2>&1 &     # all four boards, in the background
+nohup ./build_all.sh > build_all.out 2>&1 &      # all four boards, in the background
 ./build_all.sh R4 R6                             # only the listed boards
 JOBS=8 ./build_all.sh                            # 8 parallel Vivado jobs per board
 DEBUG=1 ./build_all.sh R6                        # R6 with an ILA (see debug builds)
