@@ -94,21 +94,37 @@ DEBUG=1 ./build_all.sh R6                        # R6 with an ILA (see debug bui
 Making a `.cor` file
 --------------------
 
-### Get `bit2core`
+### Get `coretool`
+
+`coretool` is the current tool for producing `.cor` files (it supersedes the older `bit2core`); see also the [MiSTer2MEGA65 Wiki](https://github.com/sy2002/MiSTer2MEGA65/wiki). It ships with the MEGA65 tools:
 
 * [Linux and Windows binaries](https://builder.mega65.org/job/mega65-tools/job/development/)
 * [macOS binaries](https://github.com/MEGA65/mega65-tools/releases/tag/CI-development-latest)
 * [GitHub repository](https://github.com/MEGA65/mega65-tools)
 
-### Use `bit2core`
+### Use `coretool`
 
-The C64 core can run cartridges that are inserted into the MEGA65's expansion
-port. To make sure that the MEGA65's CORE #0 core selection logic knows that
-and automatically starts the C64 core if an appropriate C64 cartridge is
-inserted, make sure that you use the correct flags for the `bit2core` tool:
+The C64 core can run cartridges that are inserted into the MEGA65's expansion port. For the MEGA65's CORE #0 core-selection logic to know this — and automatically start the C64 core when an appropriate C64 cartridge is inserted — the `.cor` file has to declare that capability. `coretool` does this via its `--flags` and `--caps` options:
 
 ```bash
-bit2core mega65r3 C64M65-WIP-V5-A23.bit "C64 for MEGA65" "WIP-V5-A23" C64M65-WIP-V5-A23.cor "=default,c64cart+c64cart"
+coretool -B C64MEGA65-WIP-V6-A15-R3.cor --bit mega65_r3.bit --target mega65r3 \
+         --bit-name "C64 for MEGA65" --bit-version "WIP-V6-A15" \
+         --flags c64cart --caps c64cart,default
+```
+
+* `--bit` — the input bitstream (from the build, e.g. `CORE/CORE-R3.runs/impl_1/mega65_r3.bit`).
+* `-B` — the output `.cor` file to write.
+* `--target` — the board revision: `mega65r3`, `mega65r4`, `mega65r5` or `mega65r6`.
+* `--bit-name` — the core name shown in the MEGA65 flash/core menu.
+* `--bit-version` — the version string (see the conventions below).
+* `--flags c64cart` and `--caps c64cart,default` — declare the C64 cartridge auto-start capability. These are the exact values C64MEGA65 ships with; leaving them out produces a core that will not auto-start on a cartridge.
+
+These are precisely the arguments `make_release.py` assembles from `CORE/release.toml`, so for an actual release you normally just run `make_release.py` and never call `coretool` by hand — the command above is what happens under the hood, handy for a quick one-off `.cor`.
+
+If `coretool` is not available, the older `bit2core` still works. It takes the same information as positional arguments, with the cartridge policy as a trailing argument:
+
+```bash
+bit2core mega65r3 mega65_r3.bit "C64 for MEGA65" "WIP-V6-A15" C64MEGA65-WIP-V6-A15-R3.cor "=default,c64cart+c64cart"
 ```
 
 Conventions for version info in `*.cor` files:
@@ -157,7 +173,11 @@ saving settings — is drawn and driven by **QNICE**, the small 16-bit helper
 CPU, not by the C64 itself. The QNICE program that does this is the **Shell**,
 and it ships as part of the M2M framework (`M2M/rom/*.asm`).
 `CORE/m2m-rom/m2m-rom.asm` is the *core-specific* top of that program: it pulls
-in the framework Shell and then customizes it for the C64.
+in the framework Shell and then customizes it for the C64. The MiSTer2MEGA65
+Wiki page
+[QNICE and the Shell ROM (m2m-rom.asm)](https://github.com/sy2002/MiSTer2MEGA65/wiki/QNICE-and-the-Shell-ROM-%28m2m-rom.asm%29)
+gives the framework-level view of all this; the rest of this section documents
+the C64-specific side.
 
 The design follows the same CORE/M2M split as the VHDL side (see the project
 guide `AGENTS.md`): the framework is core-independent, the core is
@@ -315,7 +335,7 @@ above it; the framework calls it at a specific moment. Two conventions recur:
   to mean "no custom value, use the framework default." The core only supplies
   a value when it wants to override the generic behavior.
 
-The C64 core implements seven callbacks:
+The C64 core implements eight callbacks:
 
 | Callback | The framework calls it... | Purpose (C64 core) |
 |----------|---------------------------|--------------------|
@@ -326,6 +346,7 @@ The C64 core implements seven callbacks:
 | `FILTER_FILES` | once per entry in the file browser (via a pointer, `selectfile.asm:71`) | show or hide files |
 | `PREP_LOAD_IMAGE` | after a file is picked, before it is mounted (`shell.asm:722`) | validate and type a file |
 | `CUSTOM_MSG` | when the Shell needs a user message (`selectfile.asm:522`) | override a message string |
+| `HANDLE_CORE_IO` | on every Shell main-loop / wait-loop iteration, via `HANDLE_IO` | continuous per-tick core I/O (live 1581 status) |
 
 The rest of this section walks through what each one does for the C64, which
 doubles as a tour of how the core's menu features are implemented.
@@ -400,7 +421,21 @@ C64 uses it to show a D64/D81-specific "nothing to browse" message when the
 browser finds no mountable disk image. Returning `0` keeps the framework
 default.
 
-Taken together, these seven callbacks are the whole story of how the C64's menu
+**`HANDLE_CORE_IO` — continuous per-tick core I/O.** Unlike the selection- and
+browser-driven callbacks above, this one is called *constantly*: the framework's
+`HANDLE_IO` invokes it on every iteration of the Shell main loop and of every
+blocking wait loop (menu, file browser, help screens), so it is the hook for
+work that must keep happening no matter what the user is doing. It takes no
+arguments and must preserve every register. The C64 core uses it to keep the
+*Use internal 1581* menu line's status label live: only while that line is
+actually on screen, it polls the physical-1581 diagnostic device — throttled to
+roughly 95 Hz so the common path stays cheap — and repaints just the
+fixed-width label behind the selection marker with `OPTM_LIVE_TEXT`, leaving the
+rest of the menu untouched. The framework also does its own per-tick work in
+`HANDLE_IO` (e.g. servicing the virtual drives); `HANDLE_CORE_IO` is the
+core's slot in that same poll.
+
+Taken together, these eight callbacks are the whole story of how the C64's menu
 behaves: the menu *structure* is declared in VHDL and mirrored through
 `osm_const.asm`, and its *behavior* — boot-time setup, auto-resets, summaries,
 filtering and validation — is these subroutines.
