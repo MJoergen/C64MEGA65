@@ -38,8 +38,58 @@ ls -l m2m-rom.rom
 If everything went well, then the last command will generate the expected
 output.
 
-Now use Vivado to open `CORE/CORE-R3.xpr` to synthesize, implement and
-generate the bitstream.
+### Building in the Vivado GUI
+
+Open the Vivado project for the target board revision — `CORE/CORE-R3.xpr`, `CORE-R4.xpr`, `CORE-R5.xpr` or `CORE-R6.xpr` — and run *Run Synthesis → Run Implementation → Generate Bitstream*. The bitstream is written to `CORE/CORE-R<rev>.runs/impl_1/mega65_r<rev>.bit`.
+
+### Building from the command line
+
+For headless or overnight builds, two scripts in `CORE/` drive Vivado in batch mode. Both build **directly from the `CORE-R{3,4,5,6}.xpr` projects** — the projects are the single source of truth for the source file list, the target part, the synthesis and implementation strategies, the XDC read order and the `synth_pre.tcl` firmware hook. Nothing is restated in the scripts, so a command-line build is identical to what the Vivado GUI produces and it writes the bitstream to the same location the GUI does — and that `make_release.py` and `load_bitstream.sh` expect: `CORE/CORE-R<rev>.runs/impl_1/mega65_r<rev>.bit`.
+
+Prerequisites: a `bash` shell with `vivado` on the `PATH` (source Vivado's `settings64.sh` first), and the QNICE tool chain already built once (`make-toolchain.sh`, see above) so that `monitor.rom` exists. The scripts rebuild the QNICE assembler and the Shell ROM for you on every run.
+
+**`build_bitstream.tcl` — build one board.** This is the low-level script; run it directly for a single board, or let `build_all.sh` call it. It takes up to three positional `-tclargs`:
+
+| Position | Argument | Meaning | Default |
+|----------|----------|---------|---------|
+| 1 | `board` | `R3`, `R4`, `R5` or `R6` | — (required) |
+| 2 | `jobs` | number of parallel Vivado jobs | `4` |
+| 3 | `debug` | the literal word `debug` inserts an ILA (see below); anything else, or omitted, builds a normal release | release |
+
+```bash
+cd CORE
+source /opt/Xilinx/2025.1/Vivado/settings64.sh          # or wherever Vivado lives
+vivado -mode batch -source build_bitstream.tcl -tclargs R6            # R6, 4 jobs, release
+vivado -mode batch -source build_bitstream.tcl -tclargs R6 8          # R6, 8 jobs
+vivado -mode batch -source build_bitstream.tcl -tclargs R6 8 debug    # R6, 8 jobs, with ILA
+```
+
+It runs a clean synthesis (`reset_run synth_1`) followed by implementation through `write_bitstream`, then re-opens the routed design and checks the sign-off gates (see below). It prints exactly one machine-readable result line and returns a distinct exit code per outcome:
+
+| Exit | Result line | Meaning |
+|------|-------------|---------|
+| `0` | `` `RESULT <board> OK WNS=.. WHS=.. bit=..` `` | success: timing met and all gates passed |
+| `0` | `` `RESULT <board> OK-DEBUG bit=.. probes=..` `` | debug build finished (ILA inserted) |
+| `1` | `` `RESULT <board> FAILED synth_1/impl_1: ..` `` | synthesis or implementation failed |
+| `2` | `` `RESULT <board> TIMING-FAILED WNS=.. WHS=..` `` | negative setup or hold slack |
+| `3` | `` `RESULT <board> SIGNOFF-FAILED ..` `` | a `CORE.xdc` sign-off gate failed |
+
+**`build_all.sh` — build every board, made for overnight runs.** This is the wrapper you will normally use. It rebuilds the QNICE assembler for the current OS (`make_qasm.sh`) and assembles the Shell ROM (`make_rom.sh`) once, up front — so a firmware problem aborts the run before the first multi-hour synthesis — then calls `build_bitstream.tcl` for each board, each with its own `build_<board>.log` and `build_<board>.jou`, and finally prints a one-line-per-board summary. It exits non-zero if any board failed.
+
+```bash
+cd CORE
+source /opt/Xilinx/2025.1/Vivado/settings64.sh
+nohup ./build_all.sh > build_all.out 2>&1 &     # all four boards, in the background
+./build_all.sh R4 R6                             # only the listed boards
+JOBS=8 ./build_all.sh                            # 8 parallel Vivado jobs per board
+DEBUG=1 ./build_all.sh R6                        # R6 with an ILA (see debug builds)
+```
+
+`JOBS` sets the parallel-jobs count passed to each build (default `4`); `DEBUG` with any non-empty value turns every board in the run into a debug build. Board names on the command line restrict the run to that subset; with none given it builds `R3 R4 R5 R6`.
+
+**Debug builds (ILA insertion).** Passing `debug` (or `DEBUG=1` to `build_all.sh`) inserts an Integrated Logic Analyzer on every net that carries the `mark_debug` attribute in the RTL, using the stock Xilinx helper `CORE/debug.tcl`. Mark the nets you want to capture with `attribute mark_debug of <signal> : signal is "true";` in the VHDL, rebuild with the `debug` flag, then load both the bitstream and the generated probes file into the Vivado hardware manager. The probes are written next to the bitstream as `mega65_r<rev>.ltx` (and `debug.tcl` also drops a `CORE/debug_nets.ltx`). Two caveats: a debug build drives implementation in-session, so the `.xpr` `Performance_ExtraTimingOpt` implementation strategy is **not** applied — a debug bitstream is for hardware bring-up, not for release — and it is deliberately not gated on timing, because the ILA logic often eats into slack.
+
+**The sign-off gates.** After a release build, `build_bitstream.tcl` re-opens the routed design and verifies that the load-bearing `CORE.xdc` constraints actually attached to real objects. This matters because a constraint whose target instance was renamed silently constrains nothing, and Vivado only emits a warning that is easy to miss in a long log. The gates check the flicker-free clock-selector pin (`CORE/hr_core_speed_reg[0]/Q`), the generated `main_clk` (present, and sourced from the correct MMCM leg so its period is ~31.718 ns), the `qnice_clk` clock, and a representative set of the deep IEC-drive CDC false-path pins. If any gate fails, the build is reported `SIGNOFF-FAILED` and exits `3` even though synthesis, implementation and timing all succeeded. When you add or rename hierarchy that `CORE.xdc` references, update the gate list in `build_bitstream.tcl` in the same commit.
 
 Making a `.cor` file
 --------------------

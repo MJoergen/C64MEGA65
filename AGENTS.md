@@ -823,21 +823,39 @@ cd M2M/QNICE/tools && ./make-toolchain.sh && cd ../../..
 cd CORE/m2m-rom && ./make_rom.sh && cd ../..
 # Output: CORE/m2m-rom/m2m-rom.rom (read by qnice.vhd at synthesis)
 
-# 3) Open Vivado on the project for the target MEGA65 revision.
-#    There is one Vivado project per board revision — they all share the same
-#    sources but use a different top + xdc.
-./CORE/run_vivado_r6.sh    # or _r3 / _r4 / _r5
-# In Vivado: Run Synthesis → Run Implementation → Generate Bitstream
+# 3) Build the bitstream. The per-revision CORE-R{3,4,5,6}.xpr Vivado projects
+#    are the SINGLE SOURCE OF TRUTH: file list, target part, synthesis +
+#    implementation strategy and XDC order all live in the .xpr. Two ways in,
+#    same result and same output location:
+#
+#    a) IDE (interactive): open CORE/CORE-R6.xpr in Vivado, then
+#       Run Synthesis → Run Implementation → Generate Bitstream.
+#    b) Command line / overnight (headless, reads the very same .xpr):
+cd CORE
+source /opt/Xilinx/2025.1/Vivado/settings64.sh   # or wherever Vivado is
+./build_all.sh                 # all boards; or a subset, e.g. ./build_all.sh R6
+#    One board standalone, optionally with an ILA for hardware debug:
+vivado -mode batch -source build_bitstream.tcl -tclargs R6 4         # release
+vivado -mode batch -source build_bitstream.tcl -tclargs R6 4 debug   # + ILA (debug.tcl)
+cd ..
 
 # 4) Flash / load
-#    JTAG dev loop:   m65 -q yourbitstream.bit   (mega65-tools)
-#    Distribution:    bit2core mega65rX <bit> "C64 for MEGA65" "<ver>" out.cor "=default,c64cart+c64cart"
+#    Bitstreams land in CORE/CORE-R{rev}.runs/impl_1/mega65_r{rev}.bit — IDE
+#    and command line alike — which is where load_bitstream.sh and
+#    make_release.py look for them.
+#    JTAG dev loop:   ./CORE/load_bitstream.sh          (wraps m65 -q, mega65-tools)
+#    Distribution:    python3 make_release.py           (wraps bit2core into .cor)
 ```
 
 **Per-revision Vivado projects:**
 `CORE/CORE-R{3,4,5,6}.xpr` — synth/impl/bit runs are kept under
 `CORE/CORE-R{3,4,5,6}.{cache,hw,runs,sim}/`. Don't accidentally edit the
-generated dirs; Vivado regenerates them.
+generated dirs; Vivado regenerates them. `build_all.sh` /
+`build_bitstream.tcl` build straight from these `.xpr` files (project mode),
+so a command-line build never drifts from what the IDE produces — the `.xpr`
+is the only place the file list and build strategy are defined. `debug.tcl`
+is the stock Xilinx ILA-insertion helper, invoked only by the `debug` build
+mode.
 
 **Config file (saves user menu choices to SD):**
 The framework cannot grow files on FAT32. Generate a correctly-sized

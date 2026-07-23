@@ -170,7 +170,8 @@ Full GHDL suite was re-run green after all edits (no regressions).
 
 ## 6. How to build & test (read-only)
 
-1. Build `CORE-R3` in Vivado (`./CORE/run_vivado_r3.sh` → synth/impl/bitstream).
+1. Build `CORE-R3` (open `CORE/CORE-R3.xpr` in Vivado, or headless:
+   `cd CORE && vivado -mode batch -source build_bitstream.tcl -tclargs R3`).
    The feature compiles in on all boards; it is gated at runtime.
 2. Copy the new **160-byte** `M2M/tools/c64mega65-WIP-V6-A18X1` to the SD card
    `/c64/` (old 159-byte configs are rejected → safe defaults; expected).
