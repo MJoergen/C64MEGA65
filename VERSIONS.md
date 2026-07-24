@@ -46,6 +46,9 @@ Version 6 - MONTH DAY, 2026
   compatible as it uses the built-in SDRAM instead of HyperRAM.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
+* You can adjust the audio volume via the OSM.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/85)
+
 * The C64MEGA65 config file now carries the core version in its name (for
   example `c64mega65-V6` instead of just `c64mega65`). This lets you keep
   the config files of different core versions side by side in the same
