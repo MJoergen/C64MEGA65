@@ -15,7 +15,8 @@
 #
 # Options:
 #   ./build_all.sh              build R3 R4 R5 R6
-#   ./build_all.sh R4 R6        build only the listed boards
+#   ./build_all.sh R4 R6        build only the listed boards (case-insensitive,
+#                               e.g. "r4" works too)
 #   JOBS=<n> ./build_all.sh     parallel Vivado jobs per run (default 4)
 #   DEBUG=1  ./build_all.sh R6  insert ILA cores (mark_debug nets) via debug.tcl
 #                               -- a debug build ignores the .xpr impl strategy,
@@ -37,7 +38,17 @@ fi
 ./make_qasm.sh || exit 1
 ( cd m2m-rom && ./make_rom.sh ) || exit 1
 
-if [ "$#" -gt 0 ]; then boards=("$@"); else boards=(R3 R4 R5 R6); fi
+# Normalize board names to upper case so "r4" is accepted as well as "R4":
+# build_bitstream.tcl only recognizes the upper-case R3|R4|R5|R6 and the
+# CORE-R?.xpr project files are upper-case on case-sensitive filesystems.
+if [ "$#" -gt 0 ]; then
+    boards=()
+    for board in "$@"; do
+        boards+=("$(printf '%s' "$board" | tr '[:lower:]' '[:upper:]')")
+    done
+else
+    boards=(R3 R4 R5 R6)
+fi
 jobs="${JOBS:-4}"
 dbg="${DEBUG:+debug}"      # non-empty DEBUG -> pass "debug" to build_bitstream.tcl
 failed=0
