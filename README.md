@@ -181,10 +181,11 @@ Installation
    If you want the core to remember the settings, make sure you read the
    section [Config file](https://c64.mega65.org/installation.html#config-file)
    in the user's guide. Starting with Version 6 the config file name includes
-   the core version (for example `c64mega65-V6`). When you upgrade to a core
-   with a different version, the new core does not find the old file and
-   starts from the factory defaults, so re-select your settings (for example
-   the Kernal) once and let the matching config file save them again.
+   the core version and a `.cfg` extension (for example `c64mega65-V6.cfg`).
+   When you upgrade to a core with a different version, the new core does not
+   find the old file and starts from the factory defaults, so re-select your
+   settings (for example the Kernal) once and let the matching config file
+   save them again.
 6. Optional: Install
    [JiffyDOS](https://c64.mega65.org/jiffydos-and-alternative-kernals.html)
    and install the Real-Time-Clock (RTC) [driver for GEOS](doc/RTC.md).

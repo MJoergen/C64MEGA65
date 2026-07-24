@@ -142,16 +142,16 @@ can only change data in existing files such as disk images or configuration
 files. This means the current version of the M2M framework is not able to
 create new files on an SD card and since it is also not able to change the
 length of any file (e.g. append data), you always need to make sure that
-there is a valid `c64mega65-<version>` configuration file located in the
+there is a valid `c64mega65-<version>.cfg` configuration file located in the
 `/c64` folder on the SD card, where `<version>` is the value of the
 `CORE_VERSION` constant in `CORE/vhdl/config.vhd` (e.g.
-`c64mega65-WIP-V6-A15`).
+`c64mega65-WIP-V6-A19.cfg`).
 
 This is how you create a valid configuration file that uses default
 settings:
 
 ```bash
-./make_config.sh c64mega65-WIP-V6-A15 auto
+./make_config.sh c64mega65-WIP-V6-A19.cfg auto
 ```
 
 The size of the configuration file needs to be equal to the constant

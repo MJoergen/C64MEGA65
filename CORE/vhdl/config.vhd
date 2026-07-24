@@ -237,7 +237,7 @@ constant SEL_CFG_FILE      : std_logic_vector(15 downto 0) := x"0101";
 -- START YOUR CONFIGURATION BELOW THIS LINE
 
 constant DIR_START         : string := "/c64";
-constant CFG_FILE          : string := "/c64/c64mega65-" & CORE_VERSION;
+constant CFG_FILE          : string := "/c64/c64mega65-" & CORE_VERSION & ".cfg";
 
 --------------------------------------------------------------------------------------------------------------------
 -- General configuration settings: Reset, Pause, OSD behavior, Ascal, etc. (Selector 0x0110)

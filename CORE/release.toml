@@ -16,7 +16,7 @@ coretool_caps = "c64cart,default"
 
 [shell_config]
 enabled = true
-filename = "c64mega65-{version}"
+filename = "c64mega65-{version}.cfg"
 
 [release_notes]
 versions_md = "required"

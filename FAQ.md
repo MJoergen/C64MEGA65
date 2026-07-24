@@ -289,9 +289,10 @@ you copy the C64MEGA65 config file that came with the
 to this very folder.
 
 Starting with Version 6, the C64MEGA65 config file's name includes the core
-version (for the V6 release it is `c64mega65-V6`; alpha builds use names like
-`c64mega65-WIP-V6-A15`, matching the version shown at the top of the welcome
-screen). This lets you keep the config files of different core versions side
+version and a `.cfg` extension (for the V6 release it is `c64mega65-V6.cfg`;
+alpha builds use names like `c64mega65-WIP-V6-A19.cfg`, matching the version
+shown at the top of the welcome screen). This lets you keep the config files
+of different core versions side
 by side on the same SD card, which is handy when you run the latest release
 in one MEGA65 core slot and an alpha version in another. As a side effect,
 your menu settings from an older core version (e.g. from Version 5.2's

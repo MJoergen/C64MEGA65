@@ -50,12 +50,14 @@ Version 6 - MONTH DAY, 2026
   loudness-linear attenuation: 50% means half as loud as 100%.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/85)
 
-* The C64MEGA65 config file now carries the core version in its name (for
-  example `c64mega65-V6` instead of just `c64mega65`). This lets you keep
-  the config files of different core versions side by side in the same
-  `/c64` folder on your SD card, which is handy when you run, say, the
-  latest release in one MEGA65 core slot and an alpha core in another slot.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/182)
+* The C64MEGA65 config file now carries the core version and a `.cfg`
+  filename extension (for example `c64mega65-V6.cfg` instead of just
+  `c64mega65`). This lets you keep the config files of different core
+  versions side by side in the same `/c64` folder on your SD card, which is
+  handy when you run, say, the latest release in one MEGA65 core slot and an
+  alpha core in another slot.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/182 and
+   https://github.com/MJoergen/C64MEGA65/issues/239)
 
 * The core (and any connected hardware cartridge) is now auto-reset when
   you change the Expansion Port mode in the on-screen menu (between

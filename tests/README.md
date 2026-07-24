@@ -137,8 +137,8 @@ menu in the QNICE emulator) and `python3 M2M/rom/tests/menu_test.py verify`
   IEC, Kernal selection, OSM scaling, CIA model, flip joystick, REU,
   improve audio, PRG/CRT/D64 loading (the new Model/Turbo/Volume/RTC/
   VIC-II/NTSC entries are intentionally silent placeholders)
-* Settings save/restore across a power cycle with the new 159-byte
-  config file `/c64/c64mega65-<CORE_VERSION>` (re-generate it with
+* Settings save/restore across a power cycle with the new 170-byte
+  config file `/c64/c64mega65-<CORE_VERSION>.cfg` (re-generate it with
   M2M/tools/make_config.sh)
 * Provoke each authoring fatal once in a scratch config.vhd: unbalanced
   brackets (boot fatal with item index), OPTM_G_START inside a submenu
