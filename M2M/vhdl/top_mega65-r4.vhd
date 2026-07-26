@@ -423,6 +423,7 @@ architecture synthesis of mega65_r4 is
    signal i2c_scl                : std_logic := 'H';
 
    -- Ethernet
+   signal main_eth_rx_ready      : std_logic;                    -- One-cycle strobe per received byte
    signal main_eth_rx_valid      : std_logic;                    -- One-cycle strobe per received byte
    signal main_eth_rx_last       : std_logic;                    -- Last byte of frame
    signal main_eth_rx_ok         : std_logic;                    -- Only meaningful when eth_rx_last = '1'
@@ -651,6 +652,7 @@ begin
       main_pot2_x_o           => main_pot2_x,
       main_pot2_y_o           => main_pot2_y,
       main_rtc_o              => main_rtc,
+      main_eth_rx_ready_i     => main_eth_rx_ready,
       main_eth_rx_valid_o     => main_eth_rx_valid,
       main_eth_rx_last_o      => main_eth_rx_last,
       main_eth_rx_ok_o        => main_eth_rx_ok,
@@ -967,6 +969,7 @@ begin
          cart_a_o                => cart_a_out,
 
          -- Ethernet
+         eth_rx_ready_o          => main_eth_rx_ready,
          eth_rx_valid_i          => main_eth_rx_valid,
          eth_rx_last_i           => main_eth_rx_last,
          eth_rx_ok_i             => main_eth_rx_ok,

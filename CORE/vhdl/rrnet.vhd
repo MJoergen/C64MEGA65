@@ -104,6 +104,7 @@ entity rrnet is
     -- which allows the 2-cycle port B RAM read latency to be absorbed
     -- without stalling. With a 32 MHz clock speed, tx_ready_i pulses every
     -- 32 / 12.5 = 2.56 clock cycles, so this is safe with margin.
+    eth_rx_ready_o : out   std_logic;                    -- One-cycle strobe per received byte
     eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
     eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
     eth_rx_ok_i    : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
@@ -372,6 +373,9 @@ begin
   -- pulses, at which point the receiver re-arms.
   ----------------------------------------------------------
 
+  eth_rx_ready_o <= rx_accept when rx_state = RX_IDLE_ST or rx_state = RX_DATA_ST else
+                    '0';
+
   rx_proc : process (clk_i)
   begin
     if rising_edge(clk_i) then
@@ -407,7 +411,7 @@ begin
           end if;
 
         when RX_DATA_ST =>
-          if eth_rx_valid_i = '1' then
+          if eth_rx_valid_i = '1' and rx_accept = '1' then
             -- Byte-lane selection follows the LSB of the write address,
             -- same convention used on the Tx read side.
             rx_addr  <= rx_wr_addr;
@@ -718,7 +722,7 @@ begin
               -- when the pointer has advanced past $0404 + rx_length, the
               -- receiver is re-armed.
               if rx_state = RX_READY_ST then
-                rd_data_o  <= rxtx_rddat(15 downto 8);
+                rd_data_o <= rxtx_rddat(15 downto 8);
                 if reg_rx_ptr >= C_RX_BUF_START + 4 then
                   reg_rx_ptr <= reg_rx_ptr + 2;
 

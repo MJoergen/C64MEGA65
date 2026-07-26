@@ -270,6 +270,7 @@ entity main is
     c1541rom_data_o        : out   std_logic_vector(7 downto 0);
 
     -- Ethernet interface
+    eth_rx_ready_o         : out   std_logic;                    -- One-cycle strobe per received byte
     eth_rx_valid_i         : in    std_logic;                    -- One-cycle strobe per received byte
     eth_rx_last_i          : in    std_logic;                    -- Last byte of frame
     eth_rx_ok_i            : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
@@ -1456,6 +1457,7 @@ begin
       we_i           => c64_ram_we,
       wr_data_i      => std_logic_vector(c64_ram_data_o),
       rd_data_o      => rrnet_dout,
+      eth_rx_ready_o => eth_rx_ready_o,
       eth_rx_valid_i => eth_rx_valid_i,
       eth_rx_last_i  => eth_rx_last_i,
       eth_rx_ok_i    => eth_rx_ok_i,

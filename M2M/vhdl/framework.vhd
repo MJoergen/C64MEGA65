@@ -170,6 +170,7 @@ port (
    main_pot2_x_o           : out   std_logic_vector(7 downto 0);
    main_pot2_y_o           : out   std_logic_vector(7 downto 0);
    main_rtc_o              : out   std_logic_vector(64 downto 0);
+   main_eth_rx_ready_i     : in    std_logic;
    main_eth_rx_valid_o     : out   std_logic;
    main_eth_rx_last_o      : out   std_logic;
    main_eth_rx_ok_o        : out   std_logic;
@@ -1189,6 +1190,7 @@ begin
       port map (
          core_clk_i      => main_clk_i,
          core_rst_i      => main_rst_i,
+         core_rx_ready_i => main_eth_rx_ready_i,
          core_rx_valid_o => main_eth_rx_valid_o,
          core_rx_last_o  => main_eth_rx_last_o,
          core_rx_ok_o    => main_eth_rx_ok_o,

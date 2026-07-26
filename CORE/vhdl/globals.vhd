@@ -235,5 +235,9 @@ constant audio_cy1      : std_logic_vector(23 downto 0) := std_logic_vector(to_s
 constant audio_cy2      : std_logic_vector(23 downto 0) := std_logic_vector(to_signed(-2023767, 24));
 constant audio_att      : std_logic_vector( 4 downto 0) := "00000";
 constant audio_mix      : std_logic_vector( 1 downto 0) := "00"; -- 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
-                                                   
+
+-- Ethernet reception FIFO size.
+-- The total number of bytes in the FIFO is 2**ETH_FIFO_ADDR_BITS.
+constant ETH_FIFO_ADDR_BITS : natural := 12;
+
 end package globals;

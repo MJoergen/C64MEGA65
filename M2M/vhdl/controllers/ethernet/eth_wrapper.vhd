@@ -8,7 +8,12 @@ library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
 
+library work;
+  -- for ETH_FIFO_ADDR_BITS
+  use work.globals.all;
+
 library unisim;
+  -- for ODDR
   use unisim.vcomponents.all;
 
 entity eth_wrapper is
@@ -19,6 +24,7 @@ entity eth_wrapper is
     -- Connect to CORE
     core_clk_i      : in    std_logic; -- At least 12.5 MHz
     core_rst_i      : in    std_logic; -- Synchronous, active high
+    core_rx_ready_i : in    std_logic;
     core_rx_valid_o : out   std_logic;
     core_rx_last_o  : out   std_logic;
     core_rx_ok_o    : out   std_logic;
@@ -77,14 +83,16 @@ architecture rtl of eth_wrapper is
   constant C_LAST : natural          := 8;
   constant C_OK   : natural          := 9;
 
-  signal   eth_rx_valid : std_logic;
-  signal   eth_rx_last  : std_logic;
-  signal   eth_rx_ok    : std_logic;
-  signal   eth_rx_data  : std_logic_vector(7 downto 0);
-  signal   eth_tx_ready : std_logic;
-  signal   eth_tx_valid : std_logic;
-  signal   eth_tx_last  : std_logic;
-  signal   eth_tx_data  : std_logic_vector(7 downto 0);
+  signal   eth_fifo_overrun : std_logic;
+  signal   eth_rx_ready     : std_logic;
+  signal   eth_rx_valid     : std_logic;
+  signal   eth_rx_last      : std_logic;
+  signal   eth_rx_ok        : std_logic;
+  signal   eth_rx_data      : std_logic_vector(7 downto 0);
+  signal   eth_tx_ready     : std_logic;
+  signal   eth_tx_valid     : std_logic;
+  signal   eth_tx_last      : std_logic;
+  signal   eth_tx_data      : std_logic_vector(7 downto 0);
 
 begin
 
@@ -120,7 +128,7 @@ begin
   -- I/O buffering
   --------------------------------------------------
 
-  oddr_clk_inst : component oddr
+  oddr_clk_inst : component ODDR
     port map (
       c  => eth_clk_i,
       ce => '1',
@@ -129,9 +137,9 @@ begin
       r  => '0',
       s  => '0',
       q  => eth_clk_o
-    ); -- oddr_clk_inst : component oddr
+    ); -- oddr_clk_inst
 
-  oddr_txen_inst : component oddr
+  oddr_txen_inst : component ODDR
     port map (
       c  => eth_clk_i,
       ce => '1',
@@ -140,11 +148,11 @@ begin
       r  => '0',
       s  => '0',
       q  => eth_tx_en_o
-    ); -- oddr_clk_inst : component oddr
+    ); -- oddr_clk_inst
 
   eth_txd_gen : for i in 0 to 1 generate
 
-    oddr_txd_inst : component oddr
+    oddr_txd_inst : component ODDR
       port map (
         c  => eth_clk_i,
         ce => '1',
@@ -153,7 +161,7 @@ begin
         r  => '0',
         s  => '0',
         q  => eth_tx_d_o(i)
-      ); -- oddr_txd_inst : component oddr
+      ); -- oddr_txd_inst
 
   end generate eth_txd_gen;
 
@@ -199,26 +207,50 @@ begin
 
 
   --------------------------------------------------
-  -- Clock Domain Crossing
+  -- Drop whole frames if FIFO overrun
+  --------------------------------------------------
+
+  overrun_proc : process (eth_clk_i)
+  begin
+    if rising_edge(eth_clk_i) then
+      if eth_rx_valid = '1' then
+        if eth_rx_ready = '0' then
+          eth_fifo_overrun <= '1';
+        end if;
+
+        if eth_rx_last = '1' then
+          eth_fifo_overrun <= '0';
+        end if;
+      end if;
+
+      if eth_rst_i = '1' then
+        eth_fifo_overrun <= '0';
+      end if;
+    end if;
+  end process overrun_proc;
+
+
+  --------------------------------------------------
+  -- Clock Domain Crossing + packet buffer
   --------------------------------------------------
 
   axis_fifo_async_rx_inst : entity work.axis_fifo_async
     generic map (
-      G_ADDR_BITS => 2,
+      G_ADDR_BITS => ETH_FIFO_ADDR_BITS,
       G_DATA_BITS => 10,
       G_RAM_STYLE => "distributed"
     )
     port map (
       async_rst_i      => eth_rst,
       s_clk_i          => eth_clk_i,
-      s_ready_o        => open,
+      s_ready_o        => eth_rx_ready,
       s_valid_i        => eth_rx_valid,
       s_data_i(R_DATA) => eth_rx_data,
       s_data_i(C_LAST) => eth_rx_last,
-      s_data_i(C_OK)   => eth_rx_ok,
+      s_data_i(C_OK)   => eth_rx_ok and not eth_fifo_overrun,
       s_fill_o         => open,
       m_clk_i          => core_clk_i,
-      m_ready_i        => '1',
+      m_ready_i        => core_rx_ready_i,
       m_valid_o        => core_rx_valid_o,
       m_data_o(R_DATA) => core_rx_data_o,
       m_data_o(C_LAST) => core_rx_last_o,

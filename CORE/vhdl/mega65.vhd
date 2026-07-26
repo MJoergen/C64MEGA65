@@ -235,6 +235,7 @@ port (
    cart_d_o                : out unsigned( 7 downto 0);
 
     -- Ethernet interface
+   eth_rx_ready_o          : out std_logic;                    -- One-cycle strobe per received byte
    eth_rx_valid_i          : in  std_logic;                    -- One-cycle strobe per received byte
    eth_rx_last_i           : in  std_logic;                    -- Last byte of frame
    eth_rx_ok_i             : in  std_logic;                    -- Only meaningful when rx_last_i = '1'
@@ -908,6 +909,7 @@ begin
          c1541rom_data_i        => qnice_c1541rom_data_to,
          c1541rom_data_o        => qnice_c1541rom_data_from,
 
+         eth_rx_ready_o         => eth_rx_ready_o,
          eth_rx_valid_i         => eth_rx_valid_i,
          eth_rx_last_i          => eth_rx_last_i,
          eth_rx_ok_i            => eth_rx_ok_i,
