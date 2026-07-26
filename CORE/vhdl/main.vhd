@@ -727,6 +727,7 @@ architecture synthesis of main is
   signal   reu_dout      : unsigned(7 downto 0);
 
   -- SIM_RRNET
+  signal   rrnet_ioe     : std_logic;
   signal   rrnet_dout    : std_logic_vector(7 downto 0);
 
   -- Signals from the cartridge.vhd module (software defined cartridges)
@@ -1394,6 +1395,7 @@ begin
     core_io_rom    <= '0';
     core_irq_n     <= '1';
     reu_iof        <= '0';
+    rrnet_ioe      <= '0';
     crt_addr_bus_o <= c64_ram_addr_o;
 
     core_dma_v := '0';
@@ -1429,6 +1431,7 @@ begin
         core_io_rom  <= '0';
         core_io_ext  <= '1';
         core_io_data <= unsigned(rrnet_dout);
+        rrnet_ioe    <= core_ioe;
       end if;
     end if;
 
@@ -1452,7 +1455,7 @@ begin
     port map (
       clk_i          => clk_main_i,
       rst_i          => not c64_exp_port_mode_i(C_SIM_RRNET),
-      cs_i           => core_ioe,
+      cs_i           => rrnet_ioe,
       addr_i         => std_logiC_vector(c64_ram_addr_o(7 downto 0)),
       we_i           => c64_ram_we,
       wr_data_i      => std_logic_vector(c64_ram_data_o),

@@ -132,7 +132,7 @@ set_max_delay 2 -datapath_only \
     -from [get_pins -hierarchical "*m_gray_rd_reg*/C"] \
     -to   [get_pins -hierarchical "*cdc_block.s_gray_rd_meta_reg*/D"]
 set_false_path -to [get_pins -hierarchical "*_rst_meta_reg*/D"]
-set_false_path -to [get_pins i_framework/eth_wrapper_inst/axis_fifo_async_rx_inst/m_data_o_reg[*]/D]
+#set_false_path -to [get_pins i_framework/eth_wrapper_inst/axis_fifo_async_rx_inst/m_data_o_reg[*]/D]
 set_false_path -to [get_pins i_framework/eth_wrapper_inst/axis_fifo_async_tx_inst/m_data_o_reg[*]/D]
 
 

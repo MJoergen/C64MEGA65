@@ -238,7 +238,7 @@ begin
     generic map (
       G_ADDR_BITS => ETH_FIFO_ADDR_BITS,
       G_DATA_BITS => 10,
-      G_RAM_STYLE => "distributed"
+      G_RAM_STYLE => "block"
     )
     port map (
       async_rst_i      => eth_rst,
