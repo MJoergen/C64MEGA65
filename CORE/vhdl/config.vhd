@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A19";
+constant CORE_VERSION : string := "WIP-V6-A20";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -362,7 +362,7 @@ constant OPTM_G_SUBMENU    : integer := 16#0C000#;         -- starts/ends a sect
                                                            -- block inside another one
 constant OPTM_G_LOAD_ROM   : integer := 16#18000#;         -- line item means: load ROM; first occurance = rom 0, second = rom 1, ...
 constant OPTM_G_DEPENDENT  : integer := 16#20000000#;      -- dependent line (smart dependencies, see OPTM_DEP below): visible only
-                                                           -- while a specific item of a specific mother group is selected (bit 29)
+                                                           -- while one of the mother-group items in a 4-bit item mask is selected (bit 29)
 
 constant OPTM_GTC          : natural := 30;                -- Amount of significant bits in OPTM_G_* constants (max 30: 2**31 overflows
                                                            -- the integer range expression below); was 17 before the smart-dependencies feature
@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 170; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 190; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -401,7 +401,7 @@ constant OPTM_SIZE         : natural := 170; -- amount of items including empty 
 -- count one line per item that is visible at that level, including one line per submenu label, excluding the contents
 -- of submenus. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_DX           : natural := 25;
-constant OPTM_DY           : natural := 28;
+constant OPTM_DY           : natural := 31;
 
 -- !!! DO NOT TOUCH THE TYPE DEFINITION IN THE NEXT LINE AND CONTINUE YOUR CONFIGURATION ONE LINE LATER
 type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC - 1;
@@ -412,8 +412,30 @@ constant OPTM_ITEMS        : string :=
    " C64 for MEGA65\n"          &
    "\n"                         &
    " 8:%s\n"                    &  -- %s will be replaced by OPTM_S_MOUNT when not mounted and by the filename when mounted
-   " Use internal 1581      \n" &  -- fixed-width label: HANDLE_CORE_IO shows live physical-drive status in the trailing field
+   " 8:Internal 1581        \n" &  -- fixed-width label: HANDLE_CORE_IO shows live physical-drive status in the trailing field
+   " 9:%s\n"                    &  -- second virtual drive (issue #93); visible only in the "Disk Image" modes
+   " 9:Internal 1581        \n" &  -- fixed-width label, see "8:Internal 1581" above
    " PRG:%s\n"                  &
+
+   " Drive Settings\n"          &  -- Drive Settings submenu (issue #93)
+   " Drive 8\n"                 &
+   "\n"                         &
+   " Disk Image: If mounted\n"  &  -- drive answers on the IEC bus only while a disk image is mounted
+   " Disk Image: Always\n"      &  -- drive answers on the IEC bus even without a mounted image ("no disk in drive")
+   " Internal 1581\n"           &  -- MEGA65's built-in physical drive backs this IEC device (only on one drive at a time)
+   " Off\n"                     &  -- IEC device fully off, e.g. to use this device number on the hardware IEC port
+   " Unmount on reset\n"        &  -- on = unmount the disk image on a soft core reset (pre-V6 behavior)
+   "\n"                         &
+   " Drive 9\n"                 &
+   "\n"                         &
+   " Disk Image: If mounted\n"  &
+   " Disk Image: Always\n"      &
+   " Internal 1581\n"           &
+   " Off\n"                     &
+   " Unmount on reset\n"        &
+   "\n"                         &
+   " Back\n"                    &  -- returns to the main menu
+
    "\n"                         &
    " Expansion Port\n"          &
    "\n"                         &
@@ -597,7 +619,7 @@ constant OPTM_ITEMS        : string :=
    " Close Menu\n";
 
 constant OPTM_G_MOUNT_8       : integer := 1;
-constant OPTM_G_MOUNT_9       : integer := 2;   -- not used, yet; each drive needs a unique group ID
+constant OPTM_G_MOUNT_9       : integer := 2;   -- each drive needs a unique group ID
 constant OPTM_G_LOAD_PRG      : integer := 3;
 constant OPTM_G_EXP_PORT      : integer := 4;
 constant OPTM_G_MOUNT_CRT     : integer := 5;
@@ -626,20 +648,54 @@ constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
-constant OPTM_G_INT1581       : integer := 31;  -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
+constant OPTM_G_DRV8_MODE     : integer := 31;  -- drive 8 mode: Disk Image (If mounted/Always), Internal 1581, Off (issue #93)
+constant OPTM_G_DRV8_UNMOUNT  : integer := 32;  -- drive 8: unmount the disk image on a soft core reset (on = pre-V6 behavior)
+constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Internal 1581" is the factory default here (issue #93)
+constant OPTM_G_DRV9_UNMOUNT  : integer := 34;  -- drive 9: unmount the disk image on a soft core reset
 
--- !!! DO NOT TOUCH THE FUNCTION DEFINITION IN THE NEXT FOUR LINES
+-- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
+-- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
+-- can be visible for MORE than one selected item of its mother group: OPTM_DEP(m, i) = visible while
+-- item i is selected; OPTM_DEP2(m, i, j) = visible while item i OR item j is selected. Items 0..3 only.
 function OPTM_DEP(mother : natural; item : natural) return natural is
 begin
-   return OPTM_G_DEPENDENT + (item * 16#02000000#) + (mother * 16#00020000#);
+   return OPTM_G_DEPENDENT + ((2 ** item) * 16#02000000#) + (mother * 16#00020000#);
 end function OPTM_DEP;
+function OPTM_DEP2(mother : natural; item_a : natural; item_b : natural) return natural is
+begin
+   return OPTM_G_DEPENDENT + ((2 ** item_a + 2 ** item_b) * 16#02000000#) + (mother * 16#00020000#);
+end function OPTM_DEP2;
 
 -- CONTINUE YOUR CONFIGURATION FROM HERE ON
 constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                        -- C64 for MEGA65
                                              OPTM_G_LINE,
-                                             OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START,
-                                             OPTM_G_INT1581       + OPTM_G_SINGLESEL,  -- Use internal 1581 (default Off = disk image)
+                                             OPTM_G_MOUNT_8       + OPTM_G_MOUNT_DRV   + OPTM_G_START
+                                                                  + OPTM_DEP2(OPTM_G_DRV8_MODE, 0, 1), -- 8:%s (only in the Disk Image modes)
+                                             OPTM_G_TEXT          + OPTM_DEP(OPTM_G_DRV8_MODE, 2),     -- 8:Internal 1581 (live status line)
+                                             OPTM_G_MOUNT_9       + OPTM_G_MOUNT_DRV
+                                                                  + OPTM_DEP2(OPTM_G_DRV9_MODE, 0, 1), -- 9:%s (only in the Disk Image modes)
+                                             OPTM_G_TEXT          + OPTM_DEP(OPTM_G_DRV9_MODE, 2),     -- 9:Internal 1581 (live status line)
                                              OPTM_G_LOAD_PRG      + OPTM_G_LOAD_ROM,
+
+                                             OPTM_G_SUBMENU,                          -- open "Drive Settings"
+                                             OPTM_G_HEADLINE,                         -- Drive 8
+                                             OPTM_G_LINE,
+                                             OPTM_G_DRV8_MODE     + OPTM_G_STDSEL,    -- Disk Image: If mounted (default for drive 8)
+                                             OPTM_G_DRV8_MODE,                        -- Disk Image: Always
+                                             OPTM_G_DRV8_MODE,                        -- Internal 1581
+                                             OPTM_G_DRV8_MODE,                        -- Off
+                                             OPTM_G_DRV8_UNMOUNT  + OPTM_G_SINGLESEL + OPTM_G_STDSEL, -- Unmount on reset (default: on)
+                                             OPTM_G_LINE,
+                                             OPTM_G_HEADLINE,                         -- Drive 9
+                                             OPTM_G_LINE,
+                                             OPTM_G_DRV9_MODE,                        -- Disk Image: If mounted
+                                             OPTM_G_DRV9_MODE,                        -- Disk Image: Always
+                                             OPTM_G_DRV9_MODE     + OPTM_G_STDSEL,    -- Internal 1581 (default for drive 9)
+                                             OPTM_G_DRV9_MODE,                        -- Off
+                                             OPTM_G_DRV9_UNMOUNT  + OPTM_G_SINGLESEL + OPTM_G_STDSEL, -- Unmount on reset (default: on)
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Drive Settings"
+
                                              OPTM_G_LINE,
                                              OPTM_G_HEADLINE,                         -- Expansion Port
                                              OPTM_G_LINE,
@@ -950,8 +1006,8 @@ begin
             when SEL_OPTM_ICOUNT       => data_o <= x"00" & std_logic_vector(to_unsigned(OPTM_SIZE, 8));
             when SEL_OPTM_DIMENSIONS   => data_o <= getDXDY(OPTM_DX, OPTM_DY, index);
             when SEL_OPTM_DEPS         => if index = 4095 then               -- smart dependencies (OPTM_DEP):
-                                            data_o <= x"1DEF";               -- magic "DEPendency Format 1" feature probe
-                                          else                               -- per line: {000, flag(b29), item(b28..25), mother(b24..17)}
+                                            data_o <= x"2DEF";               -- magic "DEPendency Format 2" feature probe (item mask)
+                                          else                               -- per line: {000, flag(b29), item mask(b28..25), mother(b24..17)}
                                             data_o <= "000" &
                                                       std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(29)) &
                                                       std_logic_vector(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(28 downto 25)) &

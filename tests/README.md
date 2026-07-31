@@ -5,6 +5,70 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A20 - TBD
+------------------------
+
+@TODO: Test the two simulated drives 8 and 9 and the new per-drive
+`Drive Settings` submenu (issues #93 and #90). The main menu now shows
+dependent entries per drive: `8:<Mount Drive>` / `9:<Mount Drive>` while the
+drive is in one of the two "Disk Image" modes, `8:Internal 1581` /
+`9:Internal 1581` (with the live physical-drive status in the trailing field)
+while it is in "Internal 1581" mode, and no entry at all for a drive that is
+`Off`. Factory defaults: drive 8 = `Disk Image: If mounted`, drive 9 =
+`Internal 1581`, both `Unmount on reset` items on.
+
+* Mount D64 and D81 images on drive 8, on drive 9, and on both at the same
+  time. LOAD and SAVE on both drives and verify on the SD card that the data
+  landed in the correct image: upstream M2M issue #57 describes cross-wired
+  drives (drive 8 serving the track drive 9 asked for) which the new
+  index-preserving wiring in `main.vhd` prevents; this is the key test for it.
+* Write to both drives in one session, let both caches flush (yellow drive-LED
+  phases), power-cycle and verify both images are intact, including the last
+  byte of a written track (upstream M2M issue #52).
+* Change and save OSM settings while zero, one and two drives are mounted and
+  while a cache is dirty: exercises the formerly endless all-vdrives
+  dirty-check loop of the settings-save path (upstream M2M issue #58) - the
+  Shell must never freeze and must save once the caches are clean.
+* `Disk Image: Always`: with no image mounted the drive must answer on the IEC
+  bus like a real drive without a disk (e.g. an error blink / DEVICE NOT
+  PRESENT free operation), and mounting must work as usual.
+* `Internal 1581` on either drive: the physical drive must appear as IEC
+  device 8 or 9 accordingly, with the live status (`Motor`, `Head`, `Reading`,
+  `Busy`) shown on the main-menu line. Selecting it on one drive while it is
+  active on the other must automatically switch the other drive to
+  `Disk Image: If mounted` (there is only one physical mechanism). The
+  symmetric idle-gate must refuse mode changes while either the physical drive
+  or an image drive is mid-access or holds unsaved data.
+* `Off`: the drive must be completely silent on the IEC bus so its device
+  number can be used by a real drive or an SD2IEC on the hardware IEC port
+  (with `IEC: Use hardware port` enabled).
+* `Unmount on reset` switched off: a mounted image must survive a soft reset
+  (reset button short press and OSM-triggered resets) with the menu still
+  showing the image name; a long-press hard reset must always unmount.
+* Config file: `OPTM_SIZE` grew from 170 to 190 and the version changed, so a
+  new config file (`c64mega65-WIP-V6-A20.cfg`) must be generated with
+  `M2M/tools/make_config.sh` - verify all settings incl. the new Drive
+  Settings persist across reboots.
+* SIMCRT regression: the HyperRAM map was retuned (M2M framework region 4 MB
+  to 3 MB, adversarially validated against the ascal scaler footprint), the
+  CRT staging pool moved and grew to 2.91 MB. Load a small `.crt`, a 1 MB
+  EasyFlash `.crt` and a 2 MB MD2 `.crt` on an R3 machine while both drives
+  are mounted, and re-test SIMREU, to prove the regions do not overlap.
+* Drive-steal stress (adversarial-review residuals, static analysis only so
+  far): move `Internal 1581` back and forth between drives 8 and 9 many
+  times, with and without a real disk in the physical drive, immediately
+  after physical-drive activity (motor still spinning down) and with a D81
+  image still mounted on the stolen drive. Expected: no phantom head steps,
+  no spurious error blinks, the physical drive re-appears with a
+  disk-change indication, and the stolen drive keeps serving its D81
+  correctly. This exercises the toggle re-encoders in `c1581_multi.sv`, the
+  phys switch sequencer in `main.vhd` and the clear-before-set steal in the
+  Shell, none of which have a testbench yet.
+* Corrupt/older config file: restore a config saved by a pre-A20 build (or
+  a deliberately corrupted one). The core must come up with at most one
+  drive in `Internal 1581` mode (RTL one-hot guard keeps the lower drive)
+  and the menu must recover once the user touches the Drive Settings.
+
 Version WIP-V6-A19 - TBD
 ------------------------
 

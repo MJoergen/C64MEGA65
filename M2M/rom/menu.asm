@@ -625,6 +625,39 @@ OPTM_RUN        SYSCALL(enter, 1)
                 MOVE    OPTM_FOREGROUND, R7     ; the menu now owns the surface
                 MOVE    1, @R7
 
+                ; Normalize the initial cursor position: since dependency
+                ; format 2 a dependent line may be selectable (e.g. the mount
+                ; lines of C64MEGA65 issue #93, one of which carries the
+                ; OPTM_G_START flag), so the entry position can be hidden when
+                ; its mother selection changed. A hidden or non-selectable
+                ; entry position would hit the fatal screen-coordinate
+                ; conversion below; advance to the next visible selectable
+                ; line instead (with wrap-around; the boot-time validators
+                ; plus the guard counter make this loop terminate).
+                MOVE    R0, R9                  ; R9: loop guard (N tries)
+_OPTM_RUN_INI   MOVE    SP, R7                  ; structure word of position R2
+                ADD     3, R7
+                ADD     R2, R7
+                MOVE    @R7, R7
+                SHL     1, R7                   ; bit 15: visible at level 0?
+                RBRA    _OPTM_RUN_INIA, !C      ; no: advance
+                MOVE    R1, R7                  ; GROUPS[R2]
+                ADD     R2, R7
+                MOVE    @R7, R7
+                MOVE    R7, R8                  ; submenu labels are selectable
+                AND     OPTM_SUBMENU, R8
+                RBRA    _OPTM_RUN_INID, !Z
+                AND     0x00FF, R7              ; group id != 0: selectable
+                RBRA    _OPTM_RUN_INID, !Z
+_OPTM_RUN_INIA  ADD     1, R2                   ; next flat position
+                CMP     R0, R2                  ; wrap around at the end
+                RBRA    _OPTM_RUN_INIB, !Z
+                XOR     R2, R2
+_OPTM_RUN_INIB  SUB     1, R9                   ; no selectable line at all:
+                RBRA    _OPTM_RUN_INI, !Z       ; cannot happen (validators),
+                XOR     R2, R2                  ; but never loop forever
+_OPTM_RUN_INID  MOVE    R2, R3                  ; old selected item = current
+
                 ; Main loop
 _OPTM_RUN_SEL   MOVE    SP, R8                  ; update (SP+1), i.e. update..
                 ADD     3, R8                   ; ..the pointer to the curr..

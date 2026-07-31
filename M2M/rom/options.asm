@@ -589,11 +589,13 @@ _HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
 
                 ; validate the dependent-menu-entry declarations (OPTM_DEP,
                 ; see optm_deps.asm) once at boot. The masked groups, the raw
-                ; dependency words and the special-line flags (mount, load_rom,
-                ; help and the start line, which are not part of the masked
-                ; groups window) are materialized into transient HEAP scratch -
-                ; past the init record, and rebuilt by HELP_MENU on every open -
-                ; and handed to OPTM_DEPS_VAL.
+                ; dependency words and the special-line flags (load_rom and
+                ; help, which are not part of the masked groups window) are
+                ; materialized into transient HEAP scratch - past the init
+                ; record, and rebuilt by HELP_MENU on every open - and handed
+                ; to OPTM_DEPS_VAL. Mount-drive and cursor-start lines are NOT
+                ; special since dependency format 2: the per-drive mount lines
+                ; of C64MEGA65 issue #93 are dependent lines.
 _HLP_DEPVAL     MOVE    LOG_STR_DEPS, R8
                 SYSCALL(puts, 1)
                 RSUB    OPTM_DEPS_PROBE, 1      ; does config.vhd support it?
@@ -627,7 +629,7 @@ _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 MOVE    R7, R10
                 SYSCALL(memcpy, 1)
 
-                MOVE    M2M$CFG_OPTM_MOUNT, @R0 ; mount flags -> special base+2N
+                MOVE    M2M$CFG_OPTM_HELP, @R0  ; help flags -> special base+2N
                 MOVE    M2M$RAMROM_DATA, R8
                 MOVE    HEAP, R9
                 ADD     OPTM_STRUCTSIZE, R9
@@ -636,18 +638,8 @@ _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 MOVE    R7, R10
                 SYSCALL(memcpy, 1)
 
-                MOVE    M2M$CFG_OPTM_HELP, @R0  ; OR in the help flags
-                RSUB    _HLP_DEP_OR, 1
                 MOVE    M2M$CFG_OPTM_CRTROM, @R0 ; OR in the load-ROM flags
                 RSUB    _HLP_DEP_OR, 1
-
-                MOVE    HEAP, R8                ; mark the start line special too
-                ADD     OPTM_STRUCTSIZE, R8
-                ADD     R7, R8
-                ADD     R7, R8
-                MOVE    OPTM_START, R9
-                ADD     @R9, R8
-                MOVE    1, @R8
 
                 MOVE    HEAP, R8                ; R8: masked groups array
                 ADD     OPTM_STRUCTSIZE, R8
@@ -683,7 +675,9 @@ _HLP_S_RET      SYSCALL(leave, 1)
 ; OR the currently selected config window (one flag per line, in bit 0) into
 ; the special-line scratch array at HEAP + OPTM_STRUCTSIZE + 2*OPTM_ICOUNT.
 ; The caller selects the config window first; used by HELP_MENU_INIT to fold
-; the mount / load-ROM / help flag windows together.
+; the load-ROM flags into the help flags (the memcpy base of the array).
+; Mount-drive and cursor-start lines are NOT special since dependency
+; format 2, see the comment at _HLP_DEPVAL.
 _HLP_DEP_OR     INCRB
                 MOVE    OPTM_ICOUNT, R0
                 MOVE    @R0, R0                 ; R0: amount of menu items (N)
@@ -707,14 +701,16 @@ _HDO_DONE       DECRB
 ; OPTM_DEPS_PROBE: Detect whether config.vhd supports the dependency feature
 ;
 ; Reads the magic word at the out-of-band address 0xFFF of the SEL_OPTM_DEPS
-; window. A config.vhd that knows the feature returns 0x1DEF there; an old
-; config.vhd hits the unknown-selector default and returns 0xEEEE. This
-; doubles as a format version for future extensions. (Lives here rather than
-; in optm_deps.asm so that file stays free of config-device dependencies and
-; remains emulator-testable in isolation.)
+; window. A config.vhd that knows the feature returns 0x2DEF there (dependency
+; format 2: 4-bit item MASK); an old config.vhd hits the unknown-selector
+; default and returns 0xEEEE, and a format-1 config.vhd (single item index)
+; returns 0x1DEF -- both are treated as feature-off, because this firmware
+; interprets bits 11-8 as a mask. (Lives here rather than in optm_deps.asm so
+; that file stays free of config-device dependencies and remains
+; emulator-testable in isolation.)
 ;
 ; Input:  none
-; Output: C=1 feature available (config.vhd returned 0x1DEF), C=0 otherwise.
+; Output: C=1 feature available (config.vhd returned 0x2DEF), C=0 otherwise.
 ;         All registers are preserved.
 ; ----------------------------------------------------------------------------
 
@@ -726,7 +722,7 @@ OPTM_DEPS_PROBE INCRB
                 MOVE    M2M$RAMROM_DATA, R0
                 ADD     0x0FFF, R0              ; magic word at address 0xFFF
                 MOVE    @R0, R0
-                CMP     0x1DEF, R0
+                CMP     0x2DEF, R0
                 RBRA    _ODP_ON, Z
                 AND     0xFFFB, SR              ; clear Carry: feature off
                 DECRB
@@ -874,13 +870,20 @@ ROSM_SAVE       SYSCALL(enter, 1)
                 RSUB    VD_ACTIVE, 1            ; any vdrives at all?
                 RBRA    _ROSMS_1, !C            ; no, so no danger of corruptn
                 MOVE    R8, R0                  ; R0: amount of vdrives
-                XOR     R8, R8                  ; vdrive id
-_ROSMS_0        MOVE    VD_CACHE_DIRTY, R9
+                XOR     R1, R1                  ; R1: vdrive id. Do NOT use R8
+                                                ; as the loop counter: it is
+                                                ; overwritten by the result of
+                                                ; VD_DRV_READ, which made this
+                                                ; loop spin forever with more
+                                                ; than one (clean) vdrive --
+                                                ; upstream M2M issue #58
+_ROSMS_0        MOVE    R1, R8                  ; R8: vdrive id of curr. drv
+                MOVE    VD_CACHE_DIRTY, R9
                 RSUB    VD_DRV_READ, 1          ; get dirty flag for curr. drv
                 CMP     0, R8                   ; dirty?
                 RBRA    _ROSMS_NOWR, !Z         ; yes: do not save
-                ADD     1, R8                   ; no: check next vdrive
-                CMP     R0, R8                  ; done?
+                ADD     1, R1                   ; no: check next vdrive
+                CMP     R0, R1                  ; done?
                 RBRA    _ROSMS_0, !Z            ; no: next iteration
                 RBRA    _ROSMS_1, 1             ; yes: detect changes & save
 

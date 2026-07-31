@@ -694,22 +694,46 @@ HANDLE_CORE_IO  SYSCALL(enter, 1)
                 CMP     0, @R0                  ; physical-drive line visible?
                 RBRA    _HCIO_1581_HIDE, !Z
 
-                ; The selected-state array is ordinary QNICE RAM and cheaper
-                ; than reading M2M$CFM_DATA. When image mode is selected, the
-                ; static label is already correct and no diagnostic MMIO poll
-                ; is needed.
+                ; Which drive (if any) is backed by the internal 1581? Since
+                ; issue #93 EITHER drive 8 or drive 9 can be, chosen in the
+                ; "Drive Settings" submenu (at most one at a time, enforced in
+                ; OSM_SEL_POST). The selected-state array is ordinary QNICE RAM
+                ; and cheaper than reading M2M$CFM_DATA. When neither drive is
+                ; in "Internal 1581" mode, both live-status lines are hidden by
+                ; their dependencies and no diagnostic MMIO poll is needed.
+                ; R6/R7 stay live until the update at the end: R6 = per-drive
+                ; status string table, R7 = flat index of the live-status line.
                 MOVE    OPTM_DATA, R0
                 MOVE    @R0, R0
                 ADD     OPTM_IR_STDSEL, R0
-                MOVE    @R0, R0
-                ADD     C64_OSM_INTERNAL_1581, R0
-                CMP     0, @R0
-                RBRA    _HCIO_1581_OFF, Z
+                MOVE    @R0, R0                 ; R0: selected-state array
+                MOVE    P1581_OSM_STR8, R6      ; assume drive 8 first
+                MOVE    C64_OSM_DRV8_1581_LN, R7
+                MOVE    R0, R1
+                ADD     C64_OSM_DRV8_1581, R1
+                CMP     0, @R1                  ; drive 8 in 1581 mode?
+                RBRA    _HCIO_1581_DRV, !Z      ; yes
+                MOVE    P1581_OSM_STR9, R6      ; no: try drive 9
+                MOVE    C64_OSM_DRV9_1581_LN, R7
+                MOVE    R0, R1
+                ADD     C64_OSM_DRV9_1581, R1
+                CMP     0, @R1                  ; drive 9 in 1581 mode?
+                RBRA    _HCIO_1581_OFF, Z       ; neither: nothing to show
+
+                ; When the 1581-backed drive changed (8 -> 9 or 9 -> 8), the
+                ; cached coarse state refers to the OTHER line: invalidate so
+                ; the new line is repainted immediately.
+_HCIO_1581_DRV  MOVE    P1581_OSM_LDRV, R0
+                CMP     @R0, R7                 ; same line as last time?
+                RBRA    _HCIO_1581_TMR, Z
+                MOVE    R7, @R0
+                MOVE    P1581_OSM_LAST, R0
+                MOVE    P1581_OS_INVALID, @R0
 
                 ; IO$CYC_MID advances at about 763 Hz. Poll once per eight
                 ; changes, about 95 Hz. The invalid state bypasses the timer so
                 ; opening or returning to the main menu updates immediately.
-                MOVE    P1581_OSM_LAST, R0
+_HCIO_1581_TMR  MOVE    P1581_OSM_LAST, R0
                 CMP     P1581_OS_INVALID, @R0
                 RBRA    _HCIO_1581_POLL, Z
                 MOVE    IO$CYC_MID, R0
@@ -742,15 +766,15 @@ _HCIO_1581_POLL MOVE    IO$CYC_MID, R0
                 RSUB    P1581_CLASSIFY, 1
                 RBRA    _HCIO_1581_UPDATE, 1
 
+                ; Neither drive is in "Internal 1581" mode: both status lines
+                ; are hidden by their dependencies, so there is nothing to
+                ; paint. Invalidate the cached state so a future activation
+                ; repaints (the heap copy of a status line can hold a stale
+                ; busy label from before its drive left the 1581 mode).
 _HCIO_1581_OFF  MOVE    P1581_OSM_LAST, R0
-                CMP     P1581_OS_IDLE, @R0
-                RBRA    _HCIO_1581_RET, Z       ; already shows normal label
-                CMP     P1581_OS_INVALID, @R0
-                RBRA    _HCIO_1581_OFF_INIT, Z  ; fresh copy is already normal
-                MOVE    P1581_OS_IDLE, R8
-                RBRA    _HCIO_1581_UPDATE, 1
-_HCIO_1581_OFF_INIT
-                MOVE    P1581_OS_IDLE, @R0
+                MOVE    P1581_OS_INVALID, @R0
+                MOVE    P1581_OSM_LDRV, R0
+                MOVE    0, @R0
                 RBRA    _HCIO_1581_RET, 1
 
 _HCIO_1581_UPDATE
@@ -758,17 +782,18 @@ _HCIO_1581_UPDATE
                 CMP     @R0, R8                 ; coarse state unchanged?
                 RBRA    _HCIO_1581_RET, Z
                 MOVE    R8, @R0
-                RSUB    P1581_STATUS_STR, 1     ; R8: fixed-width label
-                MOVE    R8, R6
+                ADD     R8, R6                  ; R6: per-drive string table
+                MOVE    @R6, R10                ; R10: fixed-width label
 
                 ; Patch and paint only the fixed-width label behind the
                 ; selection marker. OPTM_LIVE_TEXT preserves the heap copy,
-                ; selector and highlight attributes without a full redraw.
-                MOVE    C64_OSM_INTERNAL_1581, R8
+                ; selector and highlight attributes without a full redraw
+                ; (and skips the painting when the line is hidden).
+                MOVE    R7, R8                  ; flat index of the status line
                 MOVE    1, R9                   ; skip selection marker
-                MOVE    R6, R10
                 MOVE    P1581_OSM_LABEL_LEN, R11
                 RSUB    OPTM_LIVE_TEXT, 1
+                RBRA    _HCIO_1581_RET, 1
 
 _HCIO_1581_HIDE MOVE    P1581_OSM_LAST, R0
                 CMP     P1581_OS_INVALID, @R0
@@ -784,6 +809,8 @@ _HCIO_1581_RET
 P1581_OSM_INIT  INCRB
                 MOVE    P1581_OSM_LAST, R0
                 MOVE    P1581_OS_INVALID, @R0
+                MOVE    P1581_OSM_LDRV, R0
+                MOVE    0, @R0
                 MOVE    P1581_OSM_TICK, R0
                 MOVE    IO$CYC_MID, R1
                 MOVE    @R1, R2
@@ -822,6 +849,11 @@ OSM_SEL_POST    INCRB
                 CMP     C64_OPTM_G_HDMI_FILTER, R8
                 RBRA    _OSM_SP_FILTER, Z
 
+                ; NOTE: the "steal" (selecting Internal 1581 for one drive
+                ; switches the other drive to Disk Image: If mounted) lives in
+                ; OSM_SEL_PRE, not here: it must clear the other drive BEFORE
+                ; the framework applies the new selection (see _OSM_PRE_STEAL).
+
                 ; Auto-soft-reset the core when the user changes a setting
                 ; that requires a clean restart:
                 ;   * Kernal mode
@@ -856,20 +888,22 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; the live controller state at word offset RM_CTRL_STATE = 0x04. That word is
 ; nonzero in the read-FSM phase (bits 15..12), the step-FSM phase (bits 11..10)
 ; or the motor-on bit (bit 3) while, and only while, the physical drive is
-; actually accessing the medium: all three are held at 0 whenever drive 8 is
-; backed by a disk image (the controller resets its FSMs and clears motor-on
-; when it is not in physical mode). So P1581_BUSY_MASK is a clean physical-drive
-; busy flag that is meaningful without any extra RTL and naturally reads idle in
-; disk-image mode. Read via the standard M2M$RAMROM_DEV / _4KWIN / _DATA window.
+; actually accessing the medium: all three are held at 0 whenever no drive is
+; backed by the physical mechanism (the controller resets its FSMs and clears
+; motor-on when it is not in physical mode). So P1581_BUSY_MASK is a clean
+; physical-drive busy flag that is meaningful without any extra RTL and
+; naturally reads idle in disk-image mode. Read via the standard
+; M2M$RAMROM_DEV / _4KWIN / _DATA window.
 ;
 ; Word offset RM_IMG_DRIVE = 0x28 is the mirror image for the OTHER direction:
-; bit 0 is set while the SIMULATED (disk image) drive 8 is active (drive LED,
-; covering both the 1541 and the 1581 image engines) or still holds unsaved
-; data in a dirty write-back cache. While the INTERNAL drive is the active
-; source, main.vhd masks the LED out of this bit (the LED then shows PHYSICAL
-; activity, which RM_CTRL_STATE already gates), so apart from a not-yet-flushed
-; cache it reads idle in physical mode. It is the gate for switching
-; Image -> Internal, because the image drive can WRITE and a switch mid-write
+; bit 0 is set while ANY simulated (disk image) drive is active (drive LEDs,
+; covering both the 1541 and the 1581 image engines of both drives 8 and 9,
+; see img_drive_busy in main.vhd) or still holds unsaved data in a dirty
+; write-back cache. A drive whose mode is "Internal 1581" has its LED masked
+; out of this bit in main.vhd (the LED then shows PHYSICAL activity, which
+; RM_CTRL_STATE already gates), so apart from a not-yet-flushed cache it reads
+; idle in physical mode. It is the gate for mode changes in the Drive Settings
+; submenu, because the image drives can WRITE and a switch mid-write
 ; or with a dirty cache would lose data (maintainer decision 2026-07-12: the
 ; idle-gate must be symmetric).
 
@@ -919,26 +953,28 @@ _P1581_C_BUSY  MOVE    P1581_OS_BUSY, R8
 _P1581_C_RET   DECRB
                 RET
 
-; Map a valid P1581_OS_* state to its zero-terminated, 23-character label.
-;
-; Input/Output: R8 = state / string pointer
-P1581_STATUS_STR
-                INCRB
-                MOVE    P1581_OSM_STRINGS, R0
-                ADD     R8, R0
-                MOVE    @R0, R8
-                DECRB
-                RET
+; Per-drive tables mapping a valid P1581_OS_* state to its zero-terminated,
+; 23-character label (the idle labels equal the static "n:Internal 1581" menu
+; lines in config.vhd, so painting them is a visual no-op). Indexed directly
+; by HANDLE_CORE_IO; either drive 8 or drive 9 can be the internal 1581
+; (issue #93).
+P1581_OSM_STR8
+                .DW P1581_OSM8_IDLE, P1581_OSM8_MOTOR, P1581_OSM8_HEAD
+                .DW P1581_OSM8_READING, P1581_OSM8_BUSY
+P1581_OSM_STR9
+                .DW P1581_OSM9_IDLE, P1581_OSM9_MOTOR, P1581_OSM9_HEAD
+                .DW P1581_OSM9_READING, P1581_OSM9_BUSY
 
-P1581_OSM_STRINGS
-                .DW P1581_OSM_IDLE, P1581_OSM_MOTOR, P1581_OSM_HEAD
-                .DW P1581_OSM_READING, P1581_OSM_BUSY
-
-P1581_OSM_IDLE    .ASCII_W "Use internal 1581      "
-P1581_OSM_MOTOR   .ASCII_W "Internal 1581 <Motor>  "
-P1581_OSM_HEAD    .ASCII_W "Internal 1581 <Head>   "
-P1581_OSM_READING .ASCII_W "Internal 1581 <Reading>"
-P1581_OSM_BUSY    .ASCII_W "Internal 1581 <Busy>   "
+P1581_OSM8_IDLE    .ASCII_W "8:Internal 1581        "
+P1581_OSM8_MOTOR   .ASCII_W "8:Internal 1581 Motor  "
+P1581_OSM8_HEAD    .ASCII_W "8:Internal 1581 Head   "
+P1581_OSM8_READING .ASCII_W "8:Internal 1581 Reading"
+P1581_OSM8_BUSY    .ASCII_W "8:Internal 1581 Busy   "
+P1581_OSM9_IDLE    .ASCII_W "9:Internal 1581        "
+P1581_OSM9_MOTOR   .ASCII_W "9:Internal 1581 Motor  "
+P1581_OSM9_HEAD    .ASCII_W "9:Internal 1581 Head   "
+P1581_OSM9_READING .ASCII_W "9:Internal 1581 Reading"
+P1581_OSM9_BUSY    .ASCII_W "9:Internal 1581 Busy   "
 
 ; OSM_SEL_PRE callback function:
 ;
@@ -947,13 +983,18 @@ P1581_OSM_BUSY    .ASCII_W "Internal 1581 <Busy>   "
 ; menu item has been handled by the framework.
 OSM_SEL_PRE     INCRB
 
-                ; Symmetric idle-gate for "Use internal 1581" (issue #90):
-                ; ignore an attempt to switch drive 8 between disk image and
-                ; the physical internal 1581 while EITHER side is mid-access
-                ; (or the image drive still holds unsaved data). The handler
-                ; is _OSM_PRE_1581, at the end of this callback.
-                CMP     C64_OPTM_G_INT1581, R8
-                RBRA    _OSM_PRE_1581, Z
+                ; Symmetric idle-gate for the per-drive mode radio groups of
+                ; the "Drive Settings" submenu (issues #90 and #93): ignore an
+                ; attempt to change the mode of drive 8 or 9 while EITHER the
+                ; physical internal 1581 or an image drive is mid-access (or
+                ; an image drive still holds unsaved data). This covers
+                ; entering and leaving "Internal 1581" as well as switching a
+                ; busy image drive to "Off". The handler is _OSM_PRE_MODE, at
+                ; the end of this callback.
+                CMP     C64_OPTM_G_DRV8_MODE, R8
+                RBRA    _OSM_PRE_MODE, Z
+                CMP     C64_OPTM_G_DRV9_MODE, R8
+                RBRA    _OSM_PRE_MODE, Z
 
                 ; Automatically switch to "Simulate cartridge" if the user
                 ; chooses to load a software cartridge. When the previous
@@ -972,32 +1013,33 @@ OSM_SEL_PRE     INCRB
                 RSUB    M2M$FORCE_MENU, 1
                 RSUB    RESET_CORE, 1           ; HW slot just decoupled;
                                                 ; park the C64 in clean reset
-                RBRA    _OSM_SEL_PRE_R, 1       ; do not fall into _OSM_PRE_1581
+                RBRA    _OSM_SEL_PRE_R, 1       ; do not fall into _OSM_PRE_MODE
 
-                ; Idle-gate handler for OPTM_G_INT1581. On entry R9 holds the
-                ; requested new single-select value (1 = internal 1581,
-                ; 0 = disk image). menu.asm has already flipped the on-screen
-                ; marker and the OPTM_IR_STDSEL heap, but the OSM bit that
-                ; main.vhd turns into phys_1581_en is only written by the
-                ; framework AFTER this callback returns (the OPTM_IR_STDSEL ->
-                ; M2M$CFM_DATA copy in OPTM_CB_SEL). So a revert done here is
-                ; still in time to keep the hardware bit unchanged.
+                ; Idle-gate handler for the OPTM_G_DRV8_MODE / OPTM_G_DRV9_MODE
+                ; radio groups. On entry R8 holds the group id and R9 the
+                ; requested new item. menu.asm has already flipped the
+                ; on-screen marker and the OPTM_IR_STDSEL heap, but the OSM
+                ; bits that main.vhd turns into the drive mode are only written
+                ; by the framework AFTER this callback returns (the
+                ; OPTM_IR_STDSEL -> M2M$CFM_DATA copy in OPTM_CB_SEL). So a
+                ; revert done here is still in time to keep the hardware bits
+                ; unchanged.
                 ;
-                ; Symmetric idle-gate: the toggle is only allowed while BOTH
-                ; sides of the switch are quiet. Read the physical-1581
-                ; control-state word (busy while the internal drive reads,
-                ; steps or spins) and the image-drive word (busy while the
-                ; simulated drive is active or a dirty write-back cache is not
-                ; yet flushed -- the image drive can WRITE, so switching away
-                ; from it mid-access would lose data). Each side naturally
-                ; reads idle while the other one is the active source, so
-                ; checking both words gates both directions with one code
-                ; path. If either is busy, force the item back to its previous
-                ; value. M2M$FORCE_MENU both repaints the marker and rewrites
-                ; M2M$CFM_DATA, and the framework then re-copies the (reverted)
-                ; OPTM_IR_STDSEL over the same bit, so neither the menu nor the
-                ; core ever sees the flip.
-_OSM_PRE_1581   MOVE    R9, R0                  ; R0: the requested new value
+                ; Symmetric idle-gate: a mode change is only allowed while BOTH
+                ; sides of a potential source switch are quiet. Read the
+                ; physical-1581 control-state word (busy while the internal
+                ; drive reads, steps or spins) and the image-drive word (busy
+                ; while a simulated drive is active or a dirty write-back cache
+                ; is not yet flushed -- the image drives can WRITE, so
+                ; switching away mid-access would lose data). Each side
+                ; naturally reads idle while the other one is the active
+                ; source, so checking both words gates both directions with one
+                ; code path. If either is busy, force the radio group back to
+                ; its previous item: M2M$FORCE_MENU both repaints the markers
+                ; and rewrites M2M$CFM_DATA, and the framework then re-copies
+                ; the (reverted) OPTM_IR_STDSEL over the same bits, so neither
+                ; the menu nor the core ever sees the flip.
+_OSM_PRE_MODE   MOVE    R8, R7                  ; R7: the mode group id
                 MOVE    M2M$RAMROM_DEV, R1
                 MOVE    P1581_DIAG_DEV, @R1     ; select the diag device
                 MOVE    M2M$RAMROM_4KWIN, R1
@@ -1006,16 +1048,64 @@ _OSM_PRE_1581   MOVE    R9, R0                  ; R0: the requested new value
                 ADD     P1581_RM_CTRL, R1        ; -> RM_CTRL_STATE
                 MOVE    @R1, R1                  ; R1: control-state word
                 AND     P1581_BUSY_MASK, R1      ; read / step / motor active?
-                RBRA    _OSM_PRE_1581B, !Z       ; physical drive busy: revert
+                RBRA    _OSM_PRE_MODEB, !Z       ; physical drive busy: revert
                 MOVE    M2M$RAMROM_DATA, R1
                 ADD     P1581_RM_IMGBSY, R1      ; -> RM_IMG_DRIVE
                 MOVE    @R1, R1                  ; R1: image-drive word
                 AND     P1581_IMGBSY_MSK, R1     ; image drive busy or dirty?
-                RBRA    _OSM_SEL_PRE_R, Z        ; both idle: allow the change
+                RBRA    _OSM_PRE_STEAL, Z        ; both idle: allow the change
 
-_OSM_PRE_1581B  MOVE    C64_OSM_INTERNAL_1581, R8 ; busy: revert to old value
-                MOVE    1, R9                     ; single-select toggle, so the
-                SUB     R0, R9                    ; previous value is 1 - new
+                ; Busy: find the OLD selected item of the group. The four
+                ; radio items sit at consecutive flat indices; M2M$CFM_DATA is
+                ; only updated after this callback, so M2M$GET_SETTING still
+                ; sees the previous selection.
+_OSM_PRE_MODEB  MOVE    C64_OSM_DRV8_IMG_MNT, R0 ; R0: first item of drive 8
+                CMP     C64_OPTM_G_DRV8_MODE, R7
+                RBRA    _OSM_PRE_MODEC, Z
+                MOVE    C64_OSM_DRV9_IMG_MNT, R0 ; first item of drive 9
+_OSM_PRE_MODEC  MOVE    4, R1                    ; 4 radio items per group
+_OSM_PRE_MODED  MOVE    R0, R8
+                RSUB    M2M$GET_SETTING, 1
+                CMP     1, R9                    ; the old selected item?
+                RBRA    _OSM_PRE_MODEE, Z        ; yes: revert to it
+                ADD     1, R0
+                SUB     1, R1
+                RBRA    _OSM_PRE_MODED, !Z
+                RBRA    _OSM_SEL_PRE_R, 1        ; defensive: nothing selected
+
+_OSM_PRE_MODEE  MOVE    R0, R8                   ; force the old item back
+                MOVE    1, R9
+                RSUB    M2M$FORCE_MENU, 1
+                RBRA    _OSM_SEL_PRE_R, 1
+
+                ; Both sides idle: the change is allowed. If the user just
+                ; selected "Internal 1581" (radio item 2) for one drive while
+                ; the OTHER drive is still in that mode, switch the other
+                ; drive to "Disk Image: If mounted" NOW, i.e. BEFORE the
+                ; framework applies the new selection to M2M$CFM_DATA (there
+                ; is only ONE physical mechanism, issue #93). This
+                ; clear-before-set ordering guarantees that the hardware never
+                ; sees both phys-mode bits at once and that the physical-1581
+                ; controller passes through a disabled window on every drive
+                ; steal, re-arming its conservative disk-change latch (the
+                ; switch sequencer in main.vhd guarantees the same gap in
+                ; hardware, independent of this ordering). M2M$GET_SETTING
+                ; still reads the PRE-change state here, which is exactly
+                ; what the check needs.
+_OSM_PRE_STEAL  CMP     2, R9                   ; "Internal 1581" selected?
+                RBRA    _OSM_SEL_PRE_R, !Z      ; no: nothing to do
+                MOVE    C64_OSM_DRV9_1581, R0   ; assume drive 8 changed:
+                MOVE    C64_OSM_DRV9_IMG_MNT, R1 ; the other drive is 9
+                CMP     C64_OPTM_G_DRV8_MODE, R7
+                RBRA    _OSM_PRE_STEALB, Z
+                MOVE    C64_OSM_DRV8_1581, R0   ; drive 9 changed:
+                MOVE    C64_OSM_DRV8_IMG_MNT, R1 ; the other drive is 8
+_OSM_PRE_STEALB MOVE    R0, R8                  ; other drive in 1581 mode?
+                RSUB    M2M$GET_SETTING, 1
+                CMP     1, R9
+                RBRA    _OSM_SEL_PRE_R, !Z      ; no: nothing to do
+                MOVE    R1, R8                  ; yes: -> Disk Image If mounted
+                MOVE    1, R9
                 RSUB    M2M$FORCE_MENU, 1
                 RBRA    _OSM_SEL_PRE_R, 1
 
@@ -1270,6 +1360,11 @@ SS_LINE         .BLOCK SS_LINE_LEN              ; full custom line "Model: PAL C
 ; Live internal-1581 OSM status state used by HANDLE_CORE_IO.
 P1581_OSM_LAST  .BLOCK 1                        ; last displayed coarse state
 P1581_OSM_TICK  .BLOCK 1                        ; last IO$CYC_MID value observed
+P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
+                                                ; was last updated (flat menu
+                                                ; index; 0 = none) -- either
+                                                ; drive 8 or 9 can be the
+                                                ; internal 1581 (issue #93)
 
 ; ----------------------------------------------------------------------------
 ; Heap and Stack: Need to be located in RAM after the variables
@@ -1278,20 +1373,20 @@ P1581_OSM_TICK  .BLOCK 1                        ; last IO$CYC_MID value observed
 ; The On-Screen-Menu uses the heap for several data structures. This heap
 ; is located before the main system heap in memory.
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
-; Example: If your HEAP_SIZE would be 30208, then you write 30208-3072=27136
+; Example: If your HEAP_SIZE would be 30208, then you write 30208-3456=26752
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 3072 words comfortably fit the current menu: 170 items, 10 submenus and a
-; 1663-character OPTM_ITEMS string give budget 1 = 22 + 1663 + 4*170 = 2365
+; 3456 words comfortably fit the current menu: 190 items, 11 submenus and a
+; 1922-character OPTM_ITEMS string give budget 1 = 22 + 1922 + 4*190 = 2704
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (VDRIVES_NUM + submenus +
-; CRTROM_MAN_NUM + 1) * OSM width = 14 x 27 = 378 words for the "%s" replacement
+; CRTROM_MAN_NUM + 1) * OSM width = 16 x 27 = 432 words for the "%s" replacement
 ; strings; it depends only on those counts, NOT on the item count, so only
-; budget 1 grows when menu lines are added. Peak use is 2365 + 378 = 2743,
-; leaving about 329 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
+; budget 1 grows when menu lines are added. Peak use is 2704 + 432 = 3136,
+; leaving about 320 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
 ; console for the live numbers). Keep this as small as it safely can be: every
 ; word reserved here is one word less for the (sorted) file browser heap.
-MENU_HEAP_SIZE  .EQU 3072
+MENU_HEAP_SIZE  .EQU 3456
 
 #ifndef RELEASE
 
@@ -1299,14 +1394,14 @@ MENU_HEAP_SIZE  .EQU 3072
 ; this needs to be the last variable before the monitor variables as it is
 ; only defined as "BLOCK 1" to avoid a large amount of null-values in
 ; the ROM file
-HEAP_SIZE       .EQU 4096                       ; 7168 - 3072 = 4096
+HEAP_SIZE       .EQU 3712                       ; 7168 - 3456 = 3712
 HEAP            .BLOCK 1
 
 ; in RELEASE mode: 26.5k of heap which leads to a better user experience
 ; when it comes to folders with a lot of files
 #else
 
-HEAP_SIZE       .EQU 27136                      ; 30208 - 3072 = 27136
+HEAP_SIZE       .EQU 26752                      ; 30208 - 3456 = 26752
 HEAP            .BLOCK 1
  
 ; The monitor variables use 22 words, round to 32 for being safe and subtract
@@ -1315,9 +1410,9 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x8229 (the core-specific buffers and status words above sit
+; is currently 0x823C (the core-specific buffers and status words above sit
 ; just before it) and subtract the result from 0xFEE0. This yields currently a
-; stack size of 1719, which is more than 1.5k words and therefore sufficient.
+; stack size of 1700, which is more than 1.5k words and therefore sufficient.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation
 #endif

@@ -65,8 +65,8 @@ def masked(g):
 
 
 # ---------------------------------------------------------------------------
-# The V6 (#189) menu - source of truth: doc/path-to-OSM-submenus.md section 6
-# group ids
+# The V6 menu (#189 submenus, #93 two virtual drives, #229 dependencies) -
+# source of truth: CORE/vhdl/config.vhd (OPTM_ITEMS / OPTM_GROUPS)
 # ---------------------------------------------------------------------------
 
 G = dict(
@@ -76,7 +76,8 @@ G = dict(
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
-    RTC_GEOS=29, VICII_MODEL=30, INT1581=31,
+    RTC_GEOS=29, VICII_MODEL=30, DRV8_MODE=31, DRV8_UNMOUNT=32,
+    DRV9_MODE=33, DRV9_UNMOUNT=34,
 )
 
 OPEN = ("SUBMENU",)
@@ -88,8 +89,28 @@ V6_MENU = [
     (" C64 for MEGA65",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 8:%s",                    "MOUNT_8", ["MOUNT_DRV", "START"]),
-    (" Use internal 1581      ", "INT1581", ["SINGLESEL"]),
+    (" 8:Internal 1581        ", None, []),              # live status TEXT line
+    (" 9:%s",                    "MOUNT_9", ["MOUNT_DRV"]),
+    (" 9:Internal 1581        ", None, []),              # live status TEXT line
     (" PRG:%s",                  "LOAD_PRG", ["LOAD_ROM"]),
+    (" Drive Settings",          None, OPEN),            # region 1 (issue #93)
+    (" Drive 8",                 None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Disk Image: If mounted",  "DRV8_MODE", ["STDSEL"]),
+    (" Disk Image: Always",      "DRV8_MODE", []),
+    (" Internal 1581",           "DRV8_MODE", []),
+    (" Off",                     "DRV8_MODE", []),
+    (" Unmount on reset",        "DRV8_UNMOUNT", ["SINGLESEL", "STDSEL"]),
+    ("",                         None, ["LINE"]),
+    (" Drive 9",                 None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Disk Image: If mounted",  "DRV9_MODE", []),
+    (" Disk Image: Always",      "DRV9_MODE", []),
+    (" Internal 1581",           "DRV9_MODE", ["STDSEL"]),
+    (" Off",                     "DRV9_MODE", []),
+    (" Unmount on reset",        "DRV9_UNMOUNT", ["SINGLESEL", "STDSEL"]),
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 1
     ("",                         None, ["LINE"]),
     (" Expansion Port",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
@@ -100,7 +121,7 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" C64 Configuration",       None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
-    (" Model: %s",               None, OPEN),            # region 1
+    (" Model: %s",               None, OPEN),            # region 2
     (" Model",                   None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" PAL",                     "MACHINE_MODE", ["STDSEL"]),
@@ -117,9 +138,9 @@ V6_MENU = [
     (" 3x",                      "TURBO_SPEED", []),
     (" 4x",                      "TURBO_SPEED", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 1
+    (" Back",                    None, CLOSE),           # close region 2
     (" Flip joystick ports",     "FLIP_JOYS", ["SINGLESEL"]),
-    (" HDMI: %s",                None, OPEN),            # region 2
+    (" HDMI: %s",                None, OPEN),            # region 3
     (" HDMI Display Mode",       None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 16:9 720p 50 Hz",         "HDMI_MODES_PAL", ["STDSEL"]),
@@ -132,7 +153,7 @@ V6_MENU = [
     (" HDMI: Flicker-free",      "HDMI_FF", ["SINGLESEL", "STDSEL"]),
     (" HDMI: Flicker-free",      "HDMI_FF_NTSC", ["SINGLESEL", "STDSEL"]),
     (" HDMI: DVI (no sound)",    "HDMI_DVI", ["SINGLESEL"]),
-    (" HDMI: %s",                None, OPEN),            # region 3 (in 2)
+    (" HDMI: %s",                None, OPEN),            # region 4 (in 3)
     (" HDMI Filter",             None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" No Filter",               "HDMI_FILTER", []),
@@ -144,12 +165,12 @@ V6_MENU = [
     (" CRT (S-Video)",           "HDMI_FILTER", []),
     (" CRT (Composite)",         "HDMI_FILTER", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 3
+    (" Back",                    None, CLOSE),           # close region 4
     (" HDMI: Zoom-in",           "HDMI_ZOOM", ["SINGLESEL"]),
     (" HDMI: Raw 50.1 Hz",       "HDMI_RAW50", ["SINGLESEL"]),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 2
-    (" VGA: %s",                 None, OPEN),            # region 4
+    (" Back",                    None, CLOSE),           # close region 3
+    (" VGA: %s",                 None, OPEN),            # region 5
     (" VGA Display Mode",        None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" Standard",                "VGA_MODES", ["STDSEL"]),
@@ -159,8 +180,8 @@ V6_MENU = [
     (" 15 kHz with HS/VS",       "VGA_MODES", []),
     (" 15 kHz with CSYNC",       "VGA_MODES", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 4
-    (" SID: %s",                 None, OPEN),            # region 5
+    (" Back",                    None, CLOSE),           # close region 5
+    (" SID: %s",                 None, OPEN),            # region 6
     (" SID Settings",            None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" Mono SID",                None, []),
@@ -185,9 +206,9 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Audio improvements",      "IMPROVE_AUDIO", ["SINGLESEL", "STDSEL"]),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 5
+    (" Back",                    None, CLOSE),           # close region 6
     (" IEC: Use hardware port",  "IEC", ["SINGLESEL"]),
-    (" Kernal: %s",              None, OPEN),            # region 6
+    (" Kernal: %s",              None, OPEN),            # region 7
     (" Kernal Selection",        None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" Standard",                "KERNAL_MODES", ["STDSEL"]),
@@ -195,8 +216,8 @@ V6_MENU = [
     (" Japanese",                "KERNAL_MODES", []),
     (" JiffyDOS",                "KERNAL_MODES", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 6
-    (" Volume: %s",              None, OPEN),            # region 7
+    (" Back",                    None, CLOSE),           # close region 7
+    (" Volume: %s",              None, OPEN),            # region 8
     (" Volume Control",          None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 100%",                    "VOLUME", ["STDSEL"]),
@@ -221,12 +242,12 @@ V6_MENU = [
     (" 5%",                      "VOLUME", []),
     (" 0%",                      "VOLUME", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 7
-    (" Advanced Settings",       None, OPEN),            # region 8
+    (" Back",                    None, CLOSE),           # close region 8
+    (" Advanced Settings",       None, OPEN),            # region 9
     (" Advanced Settings",       None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" GEOS Real-Time-Clock",    "RTC_GEOS", ["SINGLESEL"]),
-    (" OSM: %s",                 None, OPEN),            # region 9 (in 8)
+    (" OSM: %s",                 None, OPEN),            # region 10 (in 9)
     (" OSM Scaling",             None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 100%",                    "OSM_MODE", ["STDSEL"]),
@@ -239,18 +260,18 @@ V6_MENU = [
     (" 53%",                     "OSM_MODE", []),
     (" 50%",                     "OSM_MODE", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 9
+    (" Back",                    None, CLOSE),           # close region 10
     (" CIA: Use 8521 (C64C)",    "CIA_8521", ["SINGLESEL"]),
-    (" VIC-II: %s",              None, OPEN),            # region 10 (in 8)
+    (" VIC-II: %s",              None, OPEN),            # region 11 (in 9)
     (" VIC-II model",            None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 656x/NMOS",               "VICII_MODEL", ["STDSEL"]),
     (" 856x/HMOS",               "VICII_MODEL", []),
     (" 856x/old HMOS",           "VICII_MODEL", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 10
+    (" Back",                    None, CLOSE),           # close region 11
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 8
+    (" Back",                    None, CLOSE),           # close region 9
     ("",                         None, ["LINE"]),
     (" About & Help",            "ABOUT_HELP", ["HELP"]),
     ("",                         None, ["LINE"]),
@@ -262,51 +283,58 @@ FLAGVAL = dict(STDSEL=F_STDSEL, LINE=F_LINE, START=F_START,
                MOUNT_DRV=F_MOUNT_DRV, HELP=F_HELP, SUBMENU=F_SUBMENU,
                LOAD_ROM=F_LOAD_ROM, CLOSEF=F_CLOSE)
 
-# Smart dependencies (OPTM_DEP, see optm_deps.asm + config.vhd): the high bits
-# of an OPTM_GROUPS element encode that a line is only visible while item
-# <item> of mother group <gid> is selected. OPTM_G_DEPENDENT is bit 29.
+# Smart dependencies (OPTM_DEP / OPTM_DEP2, see optm_deps.asm + config.vhd):
+# the high bits of an OPTM_GROUPS element encode that a line is only visible
+# while one of the items in a 4-bit item MASK of mother group <gid> is
+# selected (dependency format 2, magic 0x2DEF). OPTM_G_DEPENDENT is bit 29;
+# bits 28..25 carry the mask, bits 24..17 the mother group id.
 F_DEPENDENT = 0x20000000
 
 
-def dep_value(gid, item):
-    """OPTM_DEP(mother, item) - the value added to an OPTM_GROUPS element."""
-    return F_DEPENDENT + (item * 0x02000000) + (gid * 0x00020000)
+def dep_value(gid, mask):
+    """The value added to an OPTM_GROUPS element for a dependency with the
+    given 4-bit item mask. OPTM_DEP(m, i) == dep_value(m, 2**i) and
+    OPTM_DEP2(m, a, b) == dep_value(m, 2**a + 2**b)."""
+    return F_DEPENDENT + (mask * 0x02000000) + (gid * 0x00020000)
 
 
-# flat index -> (mother group name, item index); the dependent lines of the V6
-# menu (the PAL/NTSC HDMI variants and the two flicker-free twins + Raw 50.1)
+# flat index -> (mother group name, 4-bit item mask); the dependent lines of
+# the V6 menu: the per-drive mount lines + internal-1581 status lines (#93)
+# and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229)
 V6_DEPS = {
-    37: ("MACHINE_MODE", 0), 38: ("MACHINE_MODE", 1),
-    39: ("MACHINE_MODE", 0), 40: ("MACHINE_MODE", 1),
-    41: ("MACHINE_MODE", 0), 42: ("MACHINE_MODE", 1),
-    44: ("MACHINE_MODE", 0), 45: ("MACHINE_MODE", 1),
-    61: ("MACHINE_MODE", 0),
+    2:  ("DRV8_MODE", 0b0011), 3: ("DRV8_MODE", 0b0100),
+    4:  ("DRV9_MODE", 0b0011), 5: ("DRV9_MODE", 0b0100),
+    57: ("MACHINE_MODE", 0b0001), 58: ("MACHINE_MODE", 0b0010),
+    59: ("MACHINE_MODE", 0b0001), 60: ("MACHINE_MODE", 0b0010),
+    61: ("MACHINE_MODE", 0b0001), 62: ("MACHINE_MODE", 0b0010),
+    64: ("MACHINE_MODE", 0b0001), 65: ("MACHINE_MODE", 0b0010),
+    81: ("MACHINE_MODE", 0b0001),
 }
 
 
 def menu_words(menu, deps=None):
     """The full VHDL integer per entry, optionally including OPTM_DEP() bits.
-    deps maps flat index -> (mother group name, item index)."""
+    deps maps flat index -> (mother group name, item mask)."""
     out = []
     for i, (label, group, flags) in enumerate(menu):
         v = G[group] if group else 0
         for f in flags:
             v += FLAGVAL[f]
         if deps and i in deps:
-            mg, item = deps[i]
-            v += dep_value(G[mg], item)
+            mg, mask = deps[i]
+            v += dep_value(G[mg], mask)
         out.append(v)
     return out
 
 
 def menu_deps_raw(menu, deps):
     """The raw per-line dependency word as served by SEL_OPTM_DEPS:
-    bit 12 = flag, bits 11..8 = item, bits 7..0 = mother group id."""
+    bit 12 = flag, bits 11..8 = item mask, bits 7..0 = mother group id."""
     out = []
     for i in range(len(menu)):
         if deps and i in deps:
-            mg, item = deps[i]
-            out.append(0x1000 | (item << 8) | G[mg])
+            mg, mask = deps[i]
+            out.append(0x1000 | (mask << 8) | G[mg])
         else:
             out.append(0)
     return out
@@ -314,36 +342,50 @@ def menu_deps_raw(menu, deps):
 
 def resolve_deps(masked_groups, raw_deps):
     """Port of OPTM_DEPS_RESOLVE: raw dependency words -> resolved words
-    (bit 15 = valid, bit 8 = expected state, bits 7..0 = controlling line)."""
+    (bit 15 = valid, bits 11..8 = item mask copied through, bits 7..0 =
+    flat index of the FIRST member of the mother group, for BOTH mother
+    types; OPTM_DEP_OK branches on the mother type at runtime)."""
     out = []
     for w in raw_deps:
         if not (w & 0x1000):                    # not dependent
             out.append(0)
             continue
         mother = w & 0xFF
-        item = (w >> 8) & 0xF
+        mask = w & 0x0F00                        # kept in place (bits 11-8)
         members = [j for j, g in enumerate(masked_groups) if (g & 0xFF) == mother]
         if not members:                          # defensive (boot-validated)
             out.append(0)
             continue
-        if masked_groups[members[0]] & 0x8000:   # single-select mother
-            ctl, expected = members[0], item
-        else:                                     # radio mother
-            ctl, expected = members[item], 1
-        out.append(0x8000 | (expected << 8) | ctl)
+        out.append(0x8000 | mask | members[0])
     return out
 
 
-def dep_ok(i, resolved, stdsel):
-    """Port of OPTM_DEP_OK: is line i visible w.r.t. its dependency?"""
+def dep_ok(i, resolved, stdsel, groups):
+    """Port of OPTM_DEP_OK: is line i visible w.r.t. its dependency?
+    Needs the (masked) groups array to find the mother type and to walk the
+    mother group members (the assembly reads it via OPTM_IR_GROUPS)."""
     if resolved is None:                          # feature off
         return True
     w = resolved[i]
     if not (w & 0x8000):                          # not dependent
         return True
-    ctl = w & 0xFF
-    expected = (w >> 8) & 1
-    return (1 if stdsel[ctl] else 0) == expected
+    first = w & 0xFF                              # first member of the mother
+    mask = (w >> 8) & 0xF
+    if groups[first] & 0x8000:                    # single-select mother:
+        k = 1 if stdsel[first] else 0             # k = live state (0/1)
+        return bool((mask >> k) & 1)
+    gid = groups[first] & 0xFF                    # radio mother: find the
+    k = 0                                         # ordinal k of the currently
+    j = first                                     # selected member
+    while True:
+        if j == len(groups):
+            return False                          # no selected member: hidden
+        if (groups[j] & 0xFF) == gid:
+            if stdsel[j]:
+                break                             # selected member, ordinal k
+            k += 1
+        j += 1
+    return bool((mask >> k) & 1)                  # k >= 4 shifts the mask out
 
 
 def menu_masked(menu):
@@ -352,6 +394,14 @@ def menu_masked(menu):
 
 def menu_stdsel(menu):
     return [1 if "STDSEL" in flags else 0 for _, _, flags in menu]
+
+
+def menu_special(menu):
+    """The special-line array that HELP_MENU_INIT hands to OPTM_DEPS_VAL:
+    since dependency format 2 only HELP and LOAD_ROM lines are special
+    (mount-drive and cursor-start lines MAY be dependent, see issue #93)."""
+    return [1 if ("HELP" in flags or "LOAD_ROM" in flags) else 0
+            for _, _, flags in menu]
 
 
 # ---------------------------------------------------------------------------
@@ -509,7 +559,7 @@ def build_new(groups, level, resolved=None, stdsel=None):
             cur = stack.pop()
         else:
             v = 1 if level == cur else 0
-            if v and not dep_ok(i, resolved, stdsel):
+            if v and not dep_ok(i, resolved, stdsel, groups):
                 v = 0
             out.append(cur | (0x8000 if v else 0))
             vis += v
@@ -615,7 +665,7 @@ def summ_scan(groups, heading, stdsel, resolved=None):
             continue
         if not (1 <= w < 255):
             continue
-        if not dep_ok(i, resolved, stdsel):
+        if not dep_ok(i, resolved, stdsel, groups):
             continue
         if stdsel[i] == 0:
             continue
@@ -628,8 +678,9 @@ def num_regions(groups):
 
 def validate_deps(groups, raw, special):
     """Port of OPTM_DEPS_VAL. groups are masked words, raw are raw dependency
-    words, special[i] != 0 marks mount/load_rom/help/start lines. Returns
-    ('ok',) or ('err', class, idx) with class 0..4."""
+    words, special[i] != 0 marks load_rom/help lines (mount and start lines
+    are no longer special since dependency format 2). Returns ('ok',) or
+    ('err', class, idx) with class 0..4."""
     n = len(groups)
     for i in range(n):                            # pass A
         if not (raw[i] & 0x1000):
@@ -638,7 +689,7 @@ def validate_deps(groups, raw, special):
                 or special[i]):                   # class 4: special line
             return ("err", 4, i)                  # (incl. a bare CLOSE, id 255)
         mother = raw[i] & 0xFF
-        item = (raw[i] >> 8) & 0xF
+        mask = (raw[i] >> 8) & 0xF
         if mother == 0 or mother == 255:          # class 0: bad mother id
             return ("err", 0, i)
         count = single = chain = 0
@@ -653,11 +704,13 @@ def validate_deps(groups, raw, special):
             return ("err", 0, i)
         if chain:                                 # class 3: dependency chain
             return ("err", 3, i)
-        if single:
-            if item > 1:                          # class 1: single-sel item > 1
-                return ("err", 1, i)
-        elif item >= count:                       # class 1: radio item overflow
+        if mask == 0:                             # class 1: empty mask
             return ("err", 1, i)
+        if single:
+            if mask & 0xC:                        # class 1: single-sel mothers
+                return ("err", 1, i)              # only have items 0 and 1
+        elif count < 4 and (mask >> count):       # class 1: radio mask bit at or
+            return ("err", 1, i)                  # beyond the member count
     for i in range(n):                            # pass B: group uniformity
         gid = groups[i] & 0xFF
         if gid == 0 or gid == 255 or (groups[i] & 0x4000):
@@ -669,8 +722,10 @@ def validate_deps(groups, raw, special):
 
 
 # A synthetic menu for the dependency testbed: a radio mother (gid 22, members
-# at idx 2/3), a single-select mother (gid 14, idx 5) and dependent radio /
-# toggle lines inside region 2 (idx 7..11).
+# at idx 2/3), a single-select mother (gid 14, idx 5) and dependent lines
+# inside region 2 (idx 7..14): plain radio lines, a two-bit-mask line, a
+# MOUNT_DRV-style line (masked as single-select, legal since dependency
+# format 2 / issue #93) and a TEXT status line (group id 0).
 DEP_MOTHER_R = 22
 DEP_MOTHER_S = 14
 DEP_GROUPS = [
@@ -681,34 +736,42 @@ DEP_GROUPS = [
     0xC0FF,             # 4  close region 1
     0x8000 | DEP_MOTHER_S,  # 5  toggle (single-select mother)
     0xC000,             # 6  open region 2 (heading for %s)
-    13,                 # 7  PAL variant a   dep(22,0)
-    25,                 # 8  NTSC variant a  dep(22,1)
-    13,                 # 9  PAL variant b   dep(22,0)
-    25,                 # 10 NTSC variant b  dep(22,1)
-    15,                 # 11 toggle-dependent line dep(14,1)
-    0xC0FF,             # 12 close region 2
-    0x00FF,             # 13 Close Menu
+    13,                 # 7  PAL variant a   dep(22, mask 0b01)
+    25,                 # 8  NTSC variant a  dep(22, mask 0b10)
+    13,                 # 9  PAL variant b   dep(22, mask 0b01)
+    25,                 # 10 NTSC variant b  dep(22, mask 0b10)
+    15,                 # 11 toggle-dependent line dep(14, mask 0b10)
+    16,                 # 12 both-modes line dep(22, mask 0b11) - two-bit mask
+    0x8000 | 17,        # 13 MOUNT_DRV-style line dep(22, mask 0b01)
+    0x0000,             # 14 TEXT status line dep(22, mask 0b10)
+    0xC0FF,             # 15 close region 2
+    0x00FF,             # 16 Close Menu
 ]
-DEP_RAW_MAP = {7: (22, 0), 8: (22, 1), 9: (22, 0), 10: (22, 1), 11: (14, 1)}
+DEP_RAW_MAP = {7: (22, 0b01), 8: (22, 0b10), 9: (22, 0b01), 10: (22, 0b10),
+               11: (14, 0b10), 12: (22, 0b11), 13: (22, 0b01), 14: (22, 0b10)}
 
 
 def dep_raw_array(rawmap, n):
     raw = [0] * n
-    for idx, (m, it) in rawmap.items():
-        raw[idx] = 0x1000 | (it << 8) | m
+    for idx, (m, mask) in rawmap.items():
+        raw[idx] = 0x1000 | (mask << 8) | m
     return raw
 
 
 def deps_resolve_fixtures():
     """(name, groups, raw) -> expected resolved array via resolve_deps."""
     fx = []
-    fx.append(("v6 model", DEP_GROUPS, dep_raw_array(DEP_RAW_MAP, len(DEP_GROUPS))))
-    # single-select mother, expected state 0 (visible while OFF)
+    fx.append(("synthetic model", DEP_GROUPS,
+               dep_raw_array(DEP_RAW_MAP, len(DEP_GROUPS))))
+    # single-select mother: mask 0b01 = visible while OFF, 0b10 = while ON
     g = [0x8000 | 9, 12, 12]
-    r = [0, 0x1000 | (0 << 8) | 9, 0x1000 | (1 << 8) | 9]
+    r = [0, 0x1000 | (0b01 << 8) | 9, 0x1000 | (0b10 << 8) | 9]
     fx.append(("single-select off/on", g, r))
     # no dependencies at all
     fx.append(("none", [1, 2, 0x1000], [0, 0, 0]))
+    # the real V6 menu: masks 0b0011/0b0100 (drives) and 0b0001/0b0010 (HDMI)
+    fx.append(("v6 real menu", menu_masked(V6_MENU),
+               menu_deps_raw(V6_MENU, V6_DEPS)))
     return fx
 
 
@@ -716,29 +779,50 @@ def deps_val_fixtures():
     """(name, groups, raw, special) -> expected via validate_deps."""
     n = len(DEP_GROUPS)
     base = dep_raw_array(DEP_RAW_MAP, n)
-    fx = [("valid v6 model", DEP_GROUPS, base, [0] * n)]
+    fx = [("valid synthetic model", DEP_GROUPS, base, [0] * n)]
     # class 0: mother does not exist (gid 99)
-    r = list(base); r[7] = 0x1000 | (0 << 8) | 99
+    r = list(base); r[7] = 0x1000 | (0b01 << 8) | 99
     fx.append(("mother missing", DEP_GROUPS, r, [0] * n))
-    # class 1: radio item index out of range (mother 22 has 2 members)
-    r = list(base); r[7] = 0x1000 | (5 << 8) | 22
-    # keep the group uniform so the index error is hit, not the mix error
+    # class 1: radio mask bits 0+2, bit 2 out of range (mother 22: 2 members)
+    r = list(base); r[7] = 0x1000 | (0b0101 << 8) | 22
+    # keep the group uniform so the mask error is hit, not the mix error
     r[9] = r[7]
-    fx.append(("item overflow", DEP_GROUPS, r, [0] * n))
+    fx.append(("mask overflow", DEP_GROUPS, r, [0] * n))
+    # class 1: pure out-of-range mask bit (bit 2 only)
+    r = list(base); r[7] = 0x1000 | (0b0100 << 8) | 22
+    r[9] = r[7]
+    fx.append(("mask bit out of range", DEP_GROUPS, r, [0] * n))
+    # class 1: empty mask
+    r = list(base); r[7] = 0x1000 | (0b0000 << 8) | 22
+    r[9] = r[7]
+    fx.append(("empty mask", DEP_GROUPS, r, [0] * n))
+    # class 1: single-select mother with a mask bit beyond bit 1
+    r = list(base); r[11] = 0x1000 | (0b0100 << 8) | 14
+    fx.append(("single-select mask too wide", DEP_GROUPS, r, [0] * n))
     # class 2: members of one group carry different dependency words
-    r = list(base); r[9] = 0x1000 | (1 << 8) | 22    # idx 7 is (22,0), idx 9 (22,1)
+    r = list(base); r[9] = 0x1000 | (0b10 << 8) | 22  # idx 7 mask 0b01, idx 9 0b10
     fx.append(("mixed group", DEP_GROUPS, r, [0] * n))
     # class 3: the mother group is itself dependent (chain)
-    r = list(base); r[2] = 0x1000 | (0 << 8) | 13; r[3] = r[2]
+    r = list(base); r[2] = 0x1000 | (0b01 << 8) | 13; r[3] = r[2]
     fx.append(("dependency chain", DEP_GROUPS, r, [0] * n))
     # class 4: a special (load-ROM) line is dependent
-    r = list(base); r[0] = 0x1000 | (0 << 8) | 22
+    r = list(base); r[0] = 0x1000 | (0b01 << 8) | 22
     sp = [0] * n; sp[0] = 1
     fx.append(("special line", DEP_GROUPS, r, sp))
     # class 4: a dependency on the bare main-level Close line (group id 255,
     # no submenu bit) - this is the case the adversarial review caught (#1)
-    r = list(base); r[13] = 0x1000 | (0 << 8) | 22
+    r = list(base); r[16] = 0x1000 | (0b01 << 8) | 22
     fx.append(("dependent bare close", DEP_GROUPS, r, [0] * n))
+    # legal since dependency format 2: ONLY a mount-style (single-select
+    # masked) line is dependent; its special flag is 0 because options.asm no
+    # longer folds the mount window into the special array (issue #93)
+    g2 = [22, 22, 0x8000 | 1, 0x00FF]
+    r2 = [0, 0, 0x1000 | (0b01 << 8) | 22, 0]
+    fx.append(("dependent mount line accepted", g2, r2, [0] * 4))
+    # the real V6 menu with its real special array (help | load_rom): the
+    # dependent mount/START/TEXT lines of issue #93 must validate cleanly
+    fx.append(("v6 real menu", menu_masked(V6_MENU),
+               menu_deps_raw(V6_MENU, V6_DEPS), menu_special(V6_MENU)))
     return fx
 
 
@@ -746,10 +830,11 @@ def deps_build_fixtures():
     """(name, groups, resolved, stdsel, level) -> expected via build_new."""
     n = len(DEP_GROUPS)
     res = resolve_deps(DEP_GROUPS, dep_raw_array(DEP_RAW_MAP, n))
-    # a single-select mother referenced with item 0 = "visible while OFF"; this
-    # is the only way a resolved expected-state-0 word (bit 8 = 0) reaches
-    # OPTM_DEP_OK at runtime, so it pins the predicate's expected-0 arm (#4)
-    res0 = resolve_deps(DEP_GROUPS, dep_raw_array({**DEP_RAW_MAP, 11: (14, 0)}, n))
+    # a single-select mother referenced with mask 0b01 = "visible while OFF";
+    # this is the only way mask bit 0 of a single-select mother reaches
+    # OPTM_DEP_OK at runtime, so it pins the predicate's state-0 arm (#4)
+    res0 = resolve_deps(DEP_GROUPS,
+                        dep_raw_array({**DEP_RAW_MAP, 11: (14, 0b01)}, n))
 
     def sd(**kw):
         s = [0] * n
@@ -758,16 +843,34 @@ def deps_build_fixtures():
         return s
 
     fx = []
-    # PAL selected, toggle off: PAL variants visible, NTSC + toggle-dep hidden
+    # PAL selected, toggle off: PAL variants + both-modes + mount visible,
+    # NTSC variants + toggle-dep + TEXT status hidden
     fx.append(("region2 PAL", DEP_GROUPS, res, sd(i2=1, i5=0), 2))
-    # NTSC selected, toggle on: NTSC variants + toggle-dep visible
+    # NTSC selected, toggle on: NTSC variants + both-modes + toggle-dep +
+    # TEXT status visible, PAL variants + mount hidden
     fx.append(("region2 NTSC", DEP_GROUPS, res, sd(i3=1, i5=1), 2))
     # main level: dependents are hidden by level anyway
     fx.append(("main level", DEP_GROUPS, res, sd(i2=1), 0))
-    # dep(G,0): the toggle-dependent line is visible while the toggle is OFF
-    fx.append(("dep(G,0) toggle OFF visible", DEP_GROUPS, res0, sd(i2=1, i5=0), 2))
-    # dep(G,0): and hidden while the toggle is ON
-    fx.append(("dep(G,0) toggle ON hidden", DEP_GROUPS, res0, sd(i2=1, i5=1), 2))
+    # mask 0b01 on a single-select mother: visible while the toggle is OFF
+    fx.append(("mask(G,0b01) toggle OFF visible", DEP_GROUPS, res0,
+               sd(i2=1, i5=0), 2))
+    # and hidden while the toggle is ON
+    fx.append(("mask(G,0b01) toggle ON hidden", DEP_GROUPS, res0,
+               sd(i2=1, i5=1), 2))
+    # no member of the radio mother selected at all: every line that depends
+    # on it is hidden (pins the no-selected-member arm of OPTM_DEP_OK)
+    fx.append(("no mother member selected", DEP_GROUPS, res, sd(i5=1), 2))
+    # the real V6 menu at the main level with factory defaults: 8:%s visible,
+    # 8:Internal 1581 hidden, 9:%s hidden, 9:Internal 1581 visible (#93)
+    v6g = menu_masked(V6_MENU)
+    v6res = resolve_deps(v6g, menu_deps_raw(V6_MENU, V6_DEPS))
+    fx.append(("v6 defaults main level", v6g, v6res, menu_stdsel(V6_MENU), 0))
+    # drive 9 switched to "Disk Image: Always": 9:%s appears, status line hides
+    s = menu_stdsel(V6_MENU)
+    s[20], s[19] = 0, 1
+    fx.append(("v6 drive 9 Always", v6g, v6res, s, 0))
+    # the HDMI submenu level with the PAL machine mode: NTSC variants hidden
+    fx.append(("v6 HDMI level PAL", v6g, v6res, menu_stdsel(V6_MENU), 3))
     return fx
 
 
@@ -787,6 +890,9 @@ def deps_summ_fixtures():
     fx.append(("PAL variant", DEP_GROUPS, res, sd(i2=1, i7=1, i8=1), 6))
     # NTSC selected: idx 7 is dep-hidden even though selected; finds idx 8
     fx.append(("NTSC skips hidden", DEP_GROUPS, res, sd(i3=1, i7=1, i8=1), 6))
+    # NTSC selected + only the two-bit-mask line selected: the walk skips the
+    # dep-hidden 7, the unselected 8/10, the hidden 11 and finds idx 12
+    fx.append(("two-bit mask member", DEP_GROUPS, res, sd(i3=1, i12=1), 6))
     return fx
 
 
@@ -840,27 +946,55 @@ class NavSim:
             if "%s" in t and (arr[i] & 0x8000):
                 self.trace.append("W I=%04X" % i)
 
+    def _normalize(self):
+        """Port of the _OPTM_RUN_INI* entry normalization that OPTM_RUN runs
+        right after building the structure: if the entry position is hidden
+        at the current level or not selectable, advance (with wrap-around
+        and a guard counter) to the next visible selectable line. Needed
+        since dependency format 2, where a selectable line (e.g. the mount
+        line carrying OPTM_G_START, issue #93) can be dependency-hidden."""
+        arr = self._struct()["arr"]
+        guard = self.n
+        c = self.cursor
+        while True:
+            if arr[c] & 0x8000:                   # visible at this level?
+                w = self.g[c]
+                if (w & SUBMENU) or (w & 0xFF):   # selectable?
+                    break
+            c += 1                                # advance with wrap-around
+            if c == self.n:
+                c = 0
+            guard -= 1
+            if guard == 0:                        # cannot happen (validators),
+                c = 0                             # but never loop forever
+                break
+        self.cursor = c
+
     def _redraw(self):
         """A structure-rebuild redraw (the _OPTM_RUN_SM_4 path: enter / leave /
         section-4.3 mother toggle). The runtime rebuilds the (sub)menu structure
-        and restarts OPTM_RUN with the kept cursor; if that cursor were on a
-        line the rebuild hides, _OPTM_R_F2M would halt with OPTM_F_MENUIDX. The
-        feature guarantees it never is (the cursor sits on the just-entered
-        line, the opener it left to, or the mother it just toggled - none of
-        which a dependency can hide). Assert that invariant here so a future
-        regression that strands the cursor is caught by the suite, not by a
-        QNICE halt on hardware. (Background OPTM_SET redraws do NOT rebuild the
-        struct, so this assertion deliberately does not apply to them - see the
-        refuted findings #8/#10 in the adversarial review.)"""
+        and restarts OPTM_RUN with the kept cursor, which re-runs the entry
+        normalization (_OPTM_RUN_INI*). On this path the cursor sits on the
+        just-entered line, the opener it left to, or the mother it just
+        toggled - none of which a dependency can hide - so the normalization
+        must be a no-op here. Assert that invariant so a future regression
+        that strands the cursor is caught by the suite instead of silently
+        warping the cursor on hardware. (Background OPTM_SET redraws do NOT
+        rebuild the struct, so neither the normalization nor the assertion
+        applies to them - see the refuted findings #8/#10 in the adversarial
+        review.)"""
         self._emit_w()
-        assert self._visible(self.cursor), (
-            "cursor %d hidden after a structure-rebuild redraw at level %d"
-            % (self.cursor, self.level))
+        before = self.cursor
+        self._normalize()
+        assert self.cursor == before, (
+            "cursor moved %d -> %d by a structure-rebuild redraw at level %d"
+            % (before, self.cursor, self.level))
 
     def run_start(self):
-        """The testbed calls OPTM_SHOW before each OPTM_RUN, like
-        HELP_MENU does in production."""
+        """The testbed calls OPTM_SHOW before each OPTM_RUN, like HELP_MENU
+        does in production; OPTM_RUN then normalizes the entry cursor."""
         self._emit_w()
+        self._normalize()
 
     def _move(self, step):
         c = self.cursor
@@ -895,7 +1029,8 @@ class NavSim:
                     assert i < self.n, "NOSEL fatal"
                     if self.g[i] & 0x4000:           # child opener / own closer
                         break
-                    if (self.g[i] & 0xFF) and dep_ok(i, self.resolved, self.sel):
+                    if (self.g[i] & 0xFF) and dep_ok(i, self.resolved,
+                                                     self.sel, self.g):
                         break                        # visible selectable line
                 self.cursor = i
                 self._redraw()                      # SM_4 rebuild + cursor check
@@ -969,6 +1104,12 @@ class NavSim:
 O, C = 0xC000, 0xC0FF
 
 
+def flat_index(label, nth=0):
+    """Flat index of the nth V6 menu line with exactly this label."""
+    idxs = [i for i, (t, _, _) in enumerate(V6_MENU) if t == label]
+    return idxs[nth]
+
+
 def struct_fixtures():
     fx = []
     fx.append(("current C64 menu", 2, menu_masked(CUR_MENU)))
@@ -988,8 +1129,8 @@ def struct_fixtures():
     fx.append(("START on plain line inside region", 1, [O, 5, C]))
     fx.append(("START on closer", 0, [1, O, 5, C]))
     fx.append(("START on depth-1 opener", 0, [O, 5, C]))
-    fx.append(("V6 menu with START on nested opener", 141,
-               menu_masked(V6_MENU)))
+    fx.append(("V6 menu with START on nested opener",
+               flat_index(" OSM: %s"), menu_masked(V6_MENU)))
     return fx
 
 
@@ -1003,17 +1144,20 @@ def summ_fixtures():
             s[int(k[1:])] = v
         return s
 
+    hdmi = flat_index(" HDMI: %s")               # 54: the HDMI submenu opener
+    adv = flat_index(" Advanced Settings")       # 157: the Advanced opener
+    osm = flat_index(" OSM: %s")                 # 161: the OSM scaling opener
     fx = []
-    # heading 34 (HDMI): nothing selected of its own; child skipped; the
-    # selected line 55 inside the child must NOT leak: ends at own closer
-    fx.append(("HDMI region empty -> own closer", 34, v6g,
-               sel(i37=0, i38=0, i44=0, i45=0)))
-    # heading 34 with 4:3 PAL selected -> found 39
-    fx.append(("HDMI region finds 4:3 PAL", 34, v6g, sel(i37=0, i39=1)))
-    # heading 137 (Advanced): no radio group of its own at all
-    fx.append(("Advanced has no own radio group", 137, v6g, base))
-    # heading 141 (OSM scaling): default -> 144
-    fx.append(("OSM scaling default", 141, v6g, base))
+    # HDMI heading: nothing selected of its own; child skipped; the selected
+    # Scanlines line inside the child must NOT leak: ends at own closer
+    fx.append(("HDMI region empty -> own closer", hdmi, v6g,
+               sel(i57=0, i58=0, i64=0, i65=0)))
+    # HDMI heading with 4:3 576p 50 Hz selected -> found 59
+    fx.append(("HDMI region finds 4:3 PAL", hdmi, v6g, sel(i57=0, i59=1)))
+    # Advanced Settings: no radio group of its own at all
+    fx.append(("Advanced has no own radio group", adv, v6g, base))
+    # OSM scaling: default -> 164
+    fx.append(("OSM scaling default", osm, v6g, base))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1162,61 +1306,76 @@ def emit_deps_asm(path):
         f.write("\n".join(L) + "\n")
 
 
+def nav_start():
+    """The flat index of the OPTM_G_START line of the V6 menu."""
+    return next(i for i, (_, _, f) in enumerate(V6_MENU) if "START" in f)
+
+
 def nav_script():
     """Build the nav-test key script with the simulator and return
-    (keys, expected trace lines)."""
+    (keys, expected trace lines). The testbed record keeps the dependency
+    feature OFF for this scenario (all dependent lines stay visible); the
+    dependency-aware paths of OPTM_RUN are covered by scenario 3."""
     g = menu_masked(V6_MENU)
-    s = NavSim(g, menu_stdsel(V6_MENU), 2,
+    s = NavSim(g, menu_stdsel(V6_MENU), nav_start(),
                labels=[t for t, _, _ in V6_MENU])
 
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (169)
-    assert s.cursor == 169
+    assert s.cursor == 2            # start line: visible and selectable
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (189)
+    assert s.cursor == 189
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
-    s.until(KEY_DOWN, 15)           # to "Model: %s"
+    s.until(KEY_DOWN, 7)            # to "Drive Settings" (issue #93)
     s.feed(KEY_SELECT)              # enter region 1
-    assert (s.level, s.cursor) == (1, 18)
+    assert (s.level, s.cursor) == (1, 10)
+    s.until(KEY_DOWN, 12)           # to "Internal 1581"
+    s.feed(KEY_SELALT)              # radio-select the drive-8 mode via Space
+    s.feed(KEY_MENUUP)              # pop to main, cursor on the opener
+    assert (s.level, s.cursor) == (0, 7)
+    s.until(KEY_DOWN, 35)           # to "Model: %s"
+    s.feed(KEY_SELECT)              # enter region 2
+    assert (s.level, s.cursor) == (2, 38)
     s.feed(KEY_DOWN)                # NTSC
     s.feed(KEY_SELALT)              # radio-select NTSC via Space
     s.feed(KEY_MENUUP)              # pop to main, cursor on the opener
-    assert (s.level, s.cursor) == (0, 15)
-    s.until(KEY_DOWN, 34)           # to "HDMI: %s"
-    s.feed(KEY_SELECT)              # enter region 2
-    assert (s.level, s.cursor) == (2, 37)
+    assert (s.level, s.cursor) == (0, 35)
+    s.until(KEY_DOWN, 54)           # to "HDMI: %s"
+    s.feed(KEY_SELECT)              # enter region 3
+    assert (s.level, s.cursor) == (3, 57)
     s.feed(0x8000 | KEY_DOWN)       # background redraw + down
-    s.until(KEY_DOWN, 47)           # to nested "HDMI: %s" (filter)
-    s.feed(KEY_SELECT)              # enter region 3 (depth 2)
-    assert (s.level, s.cursor) == (3, 50)
-    s.until(KEY_DOWN, 59)           # to the " Back" closer line
+    s.until(KEY_DOWN, 67)           # to nested "HDMI: %s" (filter)
+    s.feed(KEY_SELECT)              # enter region 4 (depth 2)
+    assert (s.level, s.cursor) == (4, 70)
+    s.until(KEY_DOWN, 79)           # to the " Back" closer line
     s.feed(KEY_SELECT)              # leave via the closer
-    assert (s.level, s.cursor) == (2, 47)
+    assert (s.level, s.cursor) == (3, 67)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 34)
-    s.until(KEY_DOWN, 111)          # to "Volume: %s" - entering this region
+    assert (s.level, s.cursor) == (0, 54)
+    s.until(KEY_DOWN, 131)          # to "Volume: %s" - entering this region
     s.feed(KEY_SELECT)              # is the regression case for the percent-
-    assert (s.level, s.cursor) == (7, 114)   # terminated-label scanner bug
+    assert (s.level, s.cursor) == (8, 134)   # terminated-label scanner bug
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
-    assert (s.level, s.cursor) == (0, 111)
-    s.until(KEY_DOWN, 137)          # to "Advanced Settings"
-    s.feed(KEY_SELECT)              # enter region 8
-    assert (s.level, s.cursor) == (8, 140)
+    assert (s.level, s.cursor) == (0, 131)
+    s.until(KEY_DOWN, 157)          # to "Advanced Settings"
+    s.feed(KEY_SELECT)              # enter region 9
+    assert (s.level, s.cursor) == (9, 160)
     s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 156)          # to "VIC-II: %s"
-    s.feed(KEY_SELECT)              # enter region 10 (depth 2)
-    assert (s.level, s.cursor) == (10, 159)
+    s.until(KEY_DOWN, 176)          # to "VIC-II: %s"
+    s.feed(KEY_SELECT)              # enter region 11 (depth 2)
+    assert (s.level, s.cursor) == (11, 179)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 163          # lands on the closer line
+    assert s.cursor == 183          # lands on the closer line
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (10, 163)
+    assert (s.level, s.cursor) == (11, 183)
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_MENUUP)              # pop to region 8
-    assert (s.level, s.cursor) == (8, 156)
+    s.feed(KEY_MENUUP)              # pop to region 9
+    assert (s.level, s.cursor) == (9, 176)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 137)
+    assert (s.level, s.cursor) == (0, 157)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -1274,28 +1433,37 @@ def nav2_script():
 NAV3_LABELS = [" Tog", " D:%s", " E:%s", " S:%s", " F", " G", " back", " quit"]
 
 
+NAV3_START = 1                          # deliberately a dep-hidden line: the
+                                        # OPTM_RUN entry normalization must
+                                        # advance to the next selectable line
+
+
 def nav3_script():
     """Dependency scenario in the live OPTM_RUN state machine: a single-select
     mother (idx 0) with a same-view dependent (idx 1) drives the real-time
     redraw (OPTM_DEPS_AFFECTS -> OPTM_SHOW); a submenu whose first content
     (idx 4) is dependent drives the enter-scan dependency skip
-    (_OPTM_RUN_SM_2). Both are no-ops for the deps-off scenarios 1 and 2."""
+    (_OPTM_RUN_SM_2); the start cursor sits on the dep-hidden idx 1 and
+    drives the _OPTM_RUN_INI* entry normalization. All three are no-ops for
+    the deps-off scenarios 1 and 2."""
     groups = [
-        0x8001,   # 0 single-select toggle, mother gid 1 (START line)
-        0x0002,   # 1 dependent radio gid 2  dep(1,1)  same view as the mother
+        0x8001,   # 0 single-select toggle, mother gid 1
+        0x0002,   # 1 dependent radio gid 2, mask 0b10: same view as the mother
         0x0003,   # 2 radio gid 3 (always visible)
         0xC000,   # 3 open region 1 (submenu " S:%s")
-        0x0004,   # 4 dependent radio gid 4  dep(1,1)  first content of region 1
+        0x0004,   # 4 dependent radio gid 4, mask 0b10: first content of reg. 1
         0x0005,   # 5 radio gid 5 (always visible)
         0xC0FF,   # 6 close region 1
         0x00FF,   # 7 Close Menu
     ]
     raw = [0] * 8
-    raw[1] = 0x1000 | (1 << 8) | 1     # dep(mother gid 1, item 1): visible if ON
-    raw[4] = 0x1000 | (1 << 8) | 1
+    raw[1] = 0x1000 | (0b10 << 8) | 1   # dep(gid 1, mask 0b10): visible if ON
+    raw[4] = 0x1000 | (0b10 << 8) | 1
     stdsel = [0] * 8                    # toggle OFF
-    s = NavSim(groups, stdsel, 0, labels=NAV3_LABELS, raw_deps=raw)
-    s.run_start()
+    s = NavSim(groups, stdsel, NAV3_START, labels=NAV3_LABELS, raw_deps=raw)
+    s.run_start()                       # normalization: idx1 is dep-hidden ->
+    assert s.cursor == 2                # the cursor advances to idx2
+    s.until(KEY_UP, 0)                  # to the toggle (skips hidden idx1)
     s.feed(KEY_SELECT)                  # toggle ON  -> redraw, idx1 appears
     s.feed(KEY_SELECT)                  # toggle OFF -> redraw, idx1 hidden
     s.until(KEY_DOWN, 3)                # to the submenu opener
@@ -1410,7 +1578,7 @@ def emit_nav_asm(path):
     g2, sd2, keys2, _ = nav2_script()
     L = ["; AUTOGENERATED by menu_test.py gen - DO NOT EDIT", ""]
     L.append("NAV_N           .EQU %d" % len(g))
-    L.append("NAV_START       .EQU 2")
+    L.append("NAV_START       .EQU %d" % nav_start())
     L.append("NAV_GROUPS")
     L += dw_lines(g)
     L.append("NAV_STDSEL_DEF")
@@ -1436,7 +1604,7 @@ def emit_nav_asm(path):
     L.append("")
     L.append("; scenario 3: dependency menu, see nav3_script() in menu_test.py")
     L.append("NAV3_N          .EQU %d" % len(g3))
-    L.append("NAV3_START      .EQU 0")
+    L.append("NAV3_START      .EQU %d" % NAV3_START)
     L.append("NAV3_GROUPS")
     L += dw_lines(g3)
     L.append("NAV3_STDSEL_DEF")
@@ -1458,10 +1626,19 @@ def emit_nav_asm(path):
 # C_MENU_* constants for mega65.vhd: name -> (label substring, group, ordinal
 # within group). Ordinal disambiguates radio members that share a label.
 C_MENU = [
+    ("C_MENU_DRV8_IMG_MNT", "DRV8_MODE", 0),
+    ("C_MENU_DRV8_IMG_ALW", "DRV8_MODE", 1),
+    ("C_MENU_DRV8_1581",    "DRV8_MODE", 2),
+    ("C_MENU_DRV8_OFF",     "DRV8_MODE", 3),
+    ("C_MENU_DRV8_UNMOUNT", "DRV8_UNMOUNT", 0),
+    ("C_MENU_DRV9_IMG_MNT", "DRV9_MODE", 0),
+    ("C_MENU_DRV9_IMG_ALW", "DRV9_MODE", 1),
+    ("C_MENU_DRV9_1581",    "DRV9_MODE", 2),
+    ("C_MENU_DRV9_OFF",     "DRV9_MODE", 3),
+    ("C_MENU_DRV9_UNMOUNT", "DRV9_UNMOUNT", 0),
     ("C_MENU_EXP_PORT_HW",  "EXP_PORT", 0),
     ("C_MENU_SIM_CRT",      "EXP_PORT", 1),
     ("C_MENU_SIM_REU",      "REU", 0),
-    ("C_MENU_INTERNAL_1581", "INT1581", 0),
     ("C_MENU_FLIP_JOYS",    "FLIP_JOYS", 0),
     ("C_MENU_MONO_6581",    "SID_SETUP", 0),
     ("C_MENU_MONO_8580",    "SID_SETUP", 1),
@@ -1551,7 +1728,7 @@ def vhdl_tb_vectors():
     for idx in sorted(V6_DEPS):                   # every dependent line
         vecs.append((SEL << 12 | idx, raw[idx]))
     vecs.append((SEL << 12 | 0, 0x0000))          # a non-dependent line -> 0
-    vecs.append((SEL << 12 | 0xFFF, 0x1DEF))      # the feature-probe magic
+    vecs.append((SEL << 12 | 0xFFF, 0x2DEF))      # feature probe: dep format 2
     vecs.append((0x0999 << 12 | 0, 0xEEEE))       # unknown selector -> default
     return vecs
 
@@ -1674,6 +1851,10 @@ def vhdl_blocks():
     vals = c_menu_values()
     out.append("")
     out.append("-- === C_MENU constants for mega65.vhd ===")
+    out.append("constant %-33s: natural := %d;"
+               % ("C_MENU_DRV8_1581_LN", flat_index(" 8:Internal 1581        ")))
+    out.append("constant %-33s: natural := %d;"
+               % ("C_MENU_DRV9_1581_LN", flat_index(" 9:Internal 1581        ")))
     for name, gname, ordinal in C_MENU:
         out.append("constant %-33s: natural := %d;" % (name, vals[name]))
     lo, hi = osm_scaling_range()[1], osm_scaling_range()[0]
@@ -1728,8 +1909,6 @@ def verify():
     gconsts = parse_vhdl_constants(cfg, "OPTM_G_")
     for gname, gid in G.items():
         cn = "OPTM_G_" + gname
-        if gname in ("MOUNT_9",) and cn not in gconsts:
-            continue
         if gconsts.get(cn) != gid:
             errors.append("%s = %s, model says %d"
                           % (cn, gconsts.get(cn), gid))
@@ -1741,8 +1920,8 @@ def verify():
         errors.append("OPTM_GROUPS array not found")
     else:
         body = re.sub(r"--[^\n]*", "", m.group(1))
-        # split on top-level commas only: an entry may contain a comma inside
-        # an OPTM_DEP(mother, item) call
+        # split on top-level commas only: an entry may contain commas inside
+        # an OPTM_DEP(mother, item) / OPTM_DEP2(mother, a, b) call
         entries, depth, cur = [], 0, ""
         for ch in body:
             if ch == "(":
@@ -1759,12 +1938,15 @@ def verify():
             entries.append(cur.strip())
         env = dict(gconsts)
         env.update(parse_vhdl_constants(cfg, "OPTM_G"))
-        env["OPTM_DEP"] = dep_value          # OPTM_DEP(mother, item) helper
+        # dependency format 2 helpers: a 4-bit item MASK in bits 28..25
+        env["OPTM_DEP"] = lambda m, i: dep_value(m, 2 ** i)
+        env["OPTM_DEP2"] = lambda m, a, b: dep_value(m, 2 ** a + 2 ** b)
         vals = []
         for e in entries:
             try:
-                vals.append(eval(e.replace("16#", "0x").replace("#", ""),
-                                 {}, env))
+                # parenthesize: an entry may span multiple source lines
+                vals.append(eval("(" + e.replace("16#", "0x").replace("#", "")
+                                 + ")", {}, env))
             except Exception:
                 errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
                 vals.append(-1)
@@ -1824,12 +2006,31 @@ def verify():
     elif mconsts.get("C_MENU_KERNAL") != kernal_idx[0]:
         errors.append("C_MENU_KERNAL = %s, model says %d"
                       % (mconsts.get("C_MENU_KERNAL"), kernal_idx[0]))
+    # C_MENU_DRV8_1581_LN / C_MENU_DRV9_1581_LN are the flat indices of the
+    # two "Internal 1581" live-status TEXT lines (issue #93). They carry no
+    # group, so resolve them from the golden model by label and check that
+    # they really are group-less TEXT lines
+    for cname, prefix in (("C_MENU_DRV8_1581_LN", " 8:Internal 1581"),
+                          ("C_MENU_DRV9_1581_LN", " 9:Internal 1581")):
+        idxs = [i for i, (lbl, grp, flg) in enumerate(V6_MENU)
+                if lbl.startswith(prefix) and grp is None and not flg]
+        if len(idxs) != 1:
+            errors.append("no unique %r TEXT line in the golden model" % prefix)
+        elif mconsts.get(cname) != idxs[0]:
+            errors.append("%s = %s, model says %d"
+                          % (cname, mconsts.get(cname), idxs[0]))
     m = re.search(r"subtype\s+C_MENU_OSM_SCALING\s+is\s+natural\s+range\s+"
                   r"(\d+)\s+downto\s+(\d+)", mega)
     hi, lo = osm_scaling_range()
     if not m or (int(m.group(1)), int(m.group(2))) != (hi, lo):
         errors.append("C_MENU_OSM_SCALING range mismatch: model says "
                       "%d downto %d" % (hi, lo))
+    m = re.search(r"subtype\s+C_MENU_VOLUME\s+is\s+natural\s+range\s+"
+                  r"(\d+)\s+downto\s+(\d+)", mega)
+    vol = volume_indices()
+    if not m or (int(m.group(1)), int(m.group(2))) != (vol[-1], vol[0]):
+        errors.append("C_MENU_VOLUME range mismatch: model says "
+                      "%d downto %d" % (vol[-1], vol[0]))
 
     if errors:
         print("VERIFY FAIL (%d errors):" % len(errors))
@@ -1936,10 +2137,10 @@ MUTANTS = [
      "M2M/rom/optm_deps.asm",
      "_ODO_HID        AND     0xFFFB, SR",
      "_ODO_HID        OR      0x0004, SR"),
-    ("optm_deps.asm  RESOLVE uses the wrong expected state",
+    ("optm_deps.asm  RESOLVE truncates the item mask to 2 bits",
      "M2M/rom/optm_deps.asm",
-     "MOVE    1, R8                   ; expected = 1",
-     "MOVE    0, R8                   ; expected = 1"),
+     "AND     0x0F00, R5              ; (bits 11-8, as in the raw word)",
+     "AND     0x0300, R5              ; (bits 11-8, as in the raw word)"),
     ("optm_deps.asm  VAL skips the dependency-chain fatal",
      "M2M/rom/optm_deps.asm",
      "RBRA    _VAL_E_CHAIN, !Z",
@@ -1964,14 +2165,38 @@ MUTANTS = [
      "M2M/rom/optm_deps.asm",
      "RBRA    _VAL_E_SPEC, Z          ; without the submenu marker bit",
      "RBRA    _VAL_E_SPEC, N          ; without the submenu marker bit"),
-    ("optm_deps.asm  OPTM_DEP_OK inverts the expected-state-0 arm (#4)",
+    ("optm_deps.asm  OPTM_DEP_OK swaps the single-select mask bits (#4)",
      "M2M/rom/optm_deps.asm",
-     "CMP     0, R3                   ; expected 0: visible iff state 0\n                RBRA    _ODO_VIS, Z",
-     "CMP     0, R3                   ; expected 0: visible iff state 0\n                RBRA    _ODO_HID, Z"),
+     "RBRA    _ODO_TSTB0, Z           ; state 0: test mask bit 0",
+     "RBRA    _ODO_TSTB0, !Z          ; state 0: test mask bit 0"),
     ("optm_deps.asm  VAL drops its R8-preservation contract (#5)",
      "M2M/rom/optm_deps.asm",
      "MOVE    @SP++, R8\n                AND     0xFFFB, SR              ; clear Carry: success",
      "MOVE    @SP++, R0\n                AND     0xFFFB, SR              ; clear Carry: success"),
+    ("optm_deps.asm  OPTM_DEP_OK shows lines whose mother has no selection",
+     "M2M/rom/optm_deps.asm",
+     "RBRA    _ODO_HID, Z             ; no selected member: hidden",
+     "RBRA    _ODO_VIS, Z             ; no selected member: hidden"),
+    ("optm_deps.asm  VAL accepts an empty item mask",
+     "M2M/rom/optm_deps.asm",
+     "CMP     0, R8                   ; empty mask: error\n                RBRA    _VAL_E_IDX, Z",
+     "CMP     0, R8                   ; empty mask: error\n                RBRA    _VAL_A_NEXT, Z"),
+    ("optm_deps.asm  VAL accepts an out-of-range radio mask bit",
+     "M2M/rom/optm_deps.asm",
+     "CMP     0, R8                   ; anything left is out of range\n                RBRA    _VAL_E_IDX, !Z",
+     "CMP     0, R8                   ; anything left is out of range\n                RBRA    _VAL_A_NEXT, !Z"),
+    ("optm_deps.asm  VAL accepts mask bits 2/3 on a single-select mother",
+     "M2M/rom/optm_deps.asm",
+     "AND     0x000C, R12\n                RBRA    _VAL_E_IDX, !Z",
+     "AND     0x000C, R12\n                RBRA    _VAL_A_NEXT, !Z"),
+    ("menu.asm  entry normalization inverts the visibility test",
+     "M2M/rom/menu.asm",
+     "RBRA    _OPTM_RUN_INIA, !C      ; no: advance",
+     "RBRA    _OPTM_RUN_INIA, C       ; no: advance"),
+    ("menu.asm  entry normalization never accepts a plain selectable line",
+     "M2M/rom/menu.asm",
+     "AND     0x00FF, R7              ; group id != 0: selectable\n                RBRA    _OPTM_RUN_INID, !Z",
+     "AND     0x00FF, R7              ; group id != 0: selectable\n                RBRA    _OPTM_RUN_INID, Z"),
 ]
 
 

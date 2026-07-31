@@ -1062,7 +1062,12 @@ _HDR_SEND_LOOP  CMP     R6, R0                  ; transmission done?
                 MOVE    VD_B_WREN, R8           ; strobe write enable
                 MOVE    1, R9
                 RSUB    VD_CAD_WRITE, 1
-                XOR     0, R9
+                XOR     R9, R9                  ; was "XOR 0, R9": a no-op that
+                                                ; left WREN asserted, so the
+                                                ; later ACK strobe of the
+                                                ; write-back path corrupted the
+                                                ; last byte of the track buffer
+                                                ; -- upstream M2M issue #52
                 RSUB    VD_CAD_WRITE, 1
 
                 ADD     1, R6                   ; next byte

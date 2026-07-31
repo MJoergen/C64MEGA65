@@ -123,6 +123,15 @@ port (
    clk_core_i        : in std_logic;
    reset_core_i      : in std_logic;
 
+   -- Optional "keep mounted on reset" support (C64MEGA65 issue #93). Both signals are in
+   -- the core clock domain. A drive with unmount_on_reset_i(i) = '0' keeps its disk image
+   -- mounted (drive_mounted_o(i) stays latched) across a core reset, UNLESS
+   -- reset_hard_core_i qualifies the reset as a hard reset -- a hard reset always unmounts
+   -- everything. The defaults reproduce the classic behavior: every core reset unmounts
+   -- all drives, so existing cores do not need to connect these ports.
+   reset_hard_core_i  : in std_logic := '0';
+   unmount_on_reset_i : in std_logic_vector(VDNUM - 1 downto 0) := (others => '1');
+
    ---------------------------------------------------------------------------------------
    -- Core clock domain
    ---------------------------------------------------------------------------------------
@@ -191,8 +200,10 @@ signal sd_buff_addr     : std_logic_vector(AW downto 0);
 signal sd_buff_dout     : std_logic_vector(DW downto 0);
 signal sd_buff_wr       : std_logic;
 
--- combinatoric (real-time) value: correction of sd_blk_cnt_i, which is too low by 1 by default
-signal sd_blk_cnt_i_corrected : vd_vec_array(VDNUM - 1 downto 0)(5 downto 0);
+-- combinatoric (real-time) value: correction of sd_blk_cnt_i, which is too low by 1 by default.
+-- 7 bits wide: the corrected value of the maximum encoded count 63 is 64, which would
+-- overflow (truncate to 0) in a 6-bit signal -- upstream M2M issue #73.
+signal sd_blk_cnt_i_corrected : vd_vec_array(VDNUM - 1 downto 0)(6 downto 0);
 
 -- Signals (not registers) to improve QNICE firmware performance because the calculations
 -- are done in hardware instead of in software.
@@ -290,12 +301,13 @@ begin
    g_bytecalc : for i in 0 to VDNUM - 1 generate
       -- MiSTer's value is too low by 1 by default, so we correct it; here is the original comment from "hps_io.sv"
       -- "number of blocks-1, total size ((sd_blk_cnt+1)*(1<<(BLKSZ+7))) must be <= 16384!"
-      sd_blk_cnt_i_corrected(i) <= std_logic_vector(to_unsigned((to_integer(unsigned(sd_blk_cnt_i(i))) + 1), 6));
+      sd_blk_cnt_i_corrected(i) <= std_logic_vector(to_unsigned((to_integer(unsigned(sd_blk_cnt_i(i))) + 1), 7));
 
       -- calculate lba and block count in bytes by shifting to the left
       sd_lba_bytes(i)((31 + 7 + BLKSZ) downto (7 + BLKSZ))     <= sd_lba_i(i);
       sd_lba_bytes(i)((7 + BLKSZ - 1) downto 0)                <= (others => '0');
-      sd_blk_cnt_bytes(i)((5 + 7 + BLKSZ) downto (7 + BLKSZ))  <= sd_blk_cnt_i_corrected(i);
+      sd_blk_cnt_bytes(i)(31 downto (7 + BLKSZ + 7))           <= (others => '0');
+      sd_blk_cnt_bytes(i)((6 + 7 + BLKSZ) downto (7 + BLKSZ))  <= sd_blk_cnt_i_corrected(i);
       sd_blk_cnt_bytes(i)((7 + BLKSZ - 1) downto 0)            <= (others => '0');
 
       -- calculate the QNICE RAMROM logic 4k window and the offset within the window by selecting the right bits
@@ -309,7 +321,9 @@ begin
    begin
       if rising_edge(clk_core_i) then
          for i in 0 to VDNUM - 1 loop
-            if reset_core_i = '1' then
+            -- a core reset unmounts a drive unless the core keeps it mounted via
+            -- unmount_on_reset_i(i) = '0'; a hard reset always unmounts (see the port comment)
+            if reset_core_i = '1' and (unmount_on_reset_i(i) = '1' or reset_hard_core_i = '1') then
                drive_mounted_reg(i) <= '0';
             elsif img_mounted_out(i) = '1' then
                -- to unmount a drive: strobe img_mounted while having the image size set to zero
@@ -573,7 +587,7 @@ begin
             when x"2" =>
                for i in 0 to VDNUM - 1 loop
                   if to_integer(unsigned(qnice_addr_i(19 downto 12))) = (i + 1) then
-                     qnice_data_o(5 downto 0) <= sd_blk_cnt_i_corrected(i);
+                     qnice_data_o(6 downto 0) <= sd_blk_cnt_i_corrected(i);
                   end if;
                end loop;
 

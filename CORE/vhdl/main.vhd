@@ -159,11 +159,21 @@ entity main is
     iec_srq_n_i            : in    std_logic;
     iec_srq_n_o            : out   std_logic;
 
-    -- MEGA65 physical internal 1581 (issue #90): drive 8 backed by the real
+    -- Per-drive mode from the "Drive Settings" OSM submenu (issues #90 and #93),
+    -- 2 bits per drive: "00" = Disk Image: If mounted, "01" = Disk Image: Always,
+    -- "10" = Internal 1581 (this drive is backed by the real internal 3.5" DD
+    -- floppy; the Shell enforces at most one drive in this state), "11" = Off
+    -- (drive held in reset so its IEC device number stays free for the hardware
+    -- IEC port). drive_unmount_i = 1 keeps the pre-V6 behavior of unmounting the
+    -- drive's disk image on a soft core reset; 0 keeps the image mounted (hard
+    -- resets always unmount, see vdrives_inst).
+    drive_mode_i           : in    std_logic_vector(2 * G_VDNUM - 1 downto 0);
+    drive_unmount_i        : in    std_logic_vector(G_VDNUM - 1 downto 0);
+
+    -- MEGA65 physical internal 1581 (issue #90): one drive backed by the real
     -- internal 3.5" DD floppy (read-only milestone). The physical controller
     -- runs in the QNICE 50 MHz clock domain (c64_clk_sd_i); c64_rst_sd_i is its
     -- reset. The f_* pins connect ONLY to the controller.
-    phys_1581_en_i         : in    std_logic;                    -- 1 = drive 8 uses the physical internal 1581
     c64_rst_sd_i           : in    std_logic;                    -- QNICE-domain (50 MHz) reset for the physical controller
     f_rdata_i              : in    std_logic;                    -- raw read flux from the drive
     f_index_i              : in    std_logic;
@@ -334,7 +344,7 @@ architecture synthesis of main is
 
   -- Generic MiSTer C64 signals
   signal   c64_pause     : std_logic;
-  signal   c64_drive_led : std_logic;
+  signal   c64_drive_led : std_logic_vector(G_VDNUM - 1 downto 0);
 
   -- directly connect the C64's CIA1 to the emulated keyboard matrix within keyboard.vhd
   signal   cia1_pa_in  : std_logic_vector(7 downto 0);
@@ -404,6 +414,27 @@ architecture synthesis of main is
   signal   cache_dirty      : std_logic_vector(G_VDNUM - 1 downto 0);
   signal   prevent_reset    : std_logic;
 
+  -- Per-drive decode of drive_mode_i (see the port comment; issues #90 and #93).
+  -- All in the main clock domain (drive_mode_i is derived from CDC-d OSM bits).
+  signal   drv_mode_if_mounted : std_logic_vector(G_VDNUM - 1 downto 0);
+  signal   drv_mode_off        : std_logic_vector(G_VDNUM - 1 downto 0);
+  signal   phys_1581_en        : std_logic_vector(G_VDNUM - 1 downto 0);
+
+  -- Physical-mode switch sequencer (issue #93): iec_drive's physical_mode input
+  -- gets the SEQUENCED vector phys_1581_en_q, which is forced to all-zeros for
+  -- C_PHYS_SWITCH_GAP cycles whenever the decoded vector changes. The all-zero
+  -- gap (~8 us, invisible to the C64 and to the 1581 DOS) guarantees that the
+  -- 50 MHz physical_1581_controller sees its enable drop on EVERY source
+  -- switch -- re-arming its conservative disk-change latch and idling its FSMs
+  -- -- and that the phys mux select inside c1581_multi never moves while any
+  -- drive engine observes live phys signals. This holds by construction,
+  -- independent of the order in which the Shell flips the OSM bits.
+  constant C_PHYS_SWITCH_GAP   : natural := 255;
+  signal   phys_switch_cnt     : natural range 0 to C_PHYS_SWITCH_GAP := 0;
+  signal   phys_1581_en_oh     : std_logic_vector(G_VDNUM - 1 downto 0);
+  signal   phys_1581_en_d      : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+  signal   phys_1581_en_q      : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+
   -- Image-drive busy/dirty flag for the symmetric source-toggle idle-gate (issue #90):
   -- drive LED (activity of the 1541 and 1581 image engines, incl. WD1772 command-busy)
   -- OR any dirty write-back cache. Generated in the main clock domain, 2-FF-synced into
@@ -437,6 +468,17 @@ architecture synthesis of main is
   signal   iec_sd_buf_data_in  : std_logic_vector( 7 downto 0);
   signal   iec_sd_buf_data_out : vd_vec_array(G_VDNUM - 1 downto 0)(7 downto 0);
   signal   iec_sd_buf_wr       : std_logic;
+
+  -- Upstream M2M issue #57: an UNPACKED SystemVerilog array port ("sd_lba[NDR]" is
+  -- [0:NDR-1], ascending) that is associated with a VHDL "downto" array actual gets its
+  -- elements cross-wired in mixed-language elaboration (elements match leftmost-to-
+  -- leftmost), so with two drives each drive would read/write the track the OTHER drive
+  -- addressed -- observed in the wild in the MegaPET core. Therefore the three unpacked
+  -- array outputs of iec_drive.sv are bound to ASCENDING-range signals (leftmost-to-
+  -- leftmost = index-preserving) and copied per element in iec_sd_order_gen below.
+  signal   iec_sd_lba_sv       : vd_vec_array(0 to G_VDNUM - 1)(31 downto 0);
+  signal   iec_sd_blk_cnt_sv   : vd_vec_array(0 to G_VDNUM - 1)( 5 downto 0);
+  signal   iec_sd_buf_dout_sv  : vd_vec_array(0 to G_VDNUM - 1)( 7 downto 0);
   signal   iec_par_stb_in      : std_logic;
   signal   iec_par_stb_out     : std_logic;
   signal   iec_par_data_in     : std_logic_vector(7 downto 0);
@@ -618,7 +660,9 @@ architecture synthesis of main is
   -- protected by using the signal prevent_reset.
   --
   -- hard_reset_n IS NOT MEANT TO BE USED IN MAIN.VHD
-  -- with the exception of the "cpu_data_in" the reset input of "cartridge_inst".
+  -- with the exception of the "cpu_data_in", the reset input of "cartridge_inst" and the
+  -- reset_hard_core_i input of vdrives_inst (a hard reset must always unmount the disk
+  -- images, even for drives whose "Unmount on reset" OSM setting is off).
   signal   reset_core_n     : std_logic                            := '1';
   signal   reset_core_int_n : std_logic                            := '1';
   signal   hard_reset_n     : std_logic                            := '1';
@@ -818,19 +862,21 @@ begin
 
   -- the drive led is on if either the C64 is writing to the virtual disk (cached in RAM)
   -- or if the dirty cache is dirty and/or currently being flushed to the SD card
-  drive_led_o     <= c64_drive_led when unsigned(cache_dirty) = 0 else
+  drive_led_o     <= (or c64_drive_led) when unsigned(cache_dirty) = 0 else
                      '1';
 
-  -- "Image drive 8 is busy or holds unsaved data" for the symmetric idle-gate (issue #90):
+  -- "An image drive is busy or holds unsaved data" for the symmetric idle-gate (issue #90):
   -- consulted by the QNICE Shell (via the phys-1581 diag device) before it allows switching
-  -- drive 8 from disk image to the internal 1581. The LED covers live drive activity of both
-  -- image engines; prevent_reset covers dirty write caches awaiting SD flush. While the
-  -- INTERNAL drive is the active source the LED reflects PHYSICAL activity (the 1581 DOS
+  -- a drive between disk image and the internal 1581. The LEDs cover live drive activity of
+  -- both image engines; prevent_reset covers dirty write caches awaiting SD flush. While the
+  -- INTERNAL drive is the active source its LED reflects PHYSICAL activity (the 1581 DOS
   -- drives it, e.g. the blinking error indicator), which the physical busy word already
-  -- covers -- so mask the LED with the mode bit, otherwise an Internal->Image switch would
-  -- be spuriously blocked whenever the toggle lands in a blink-ON phase. It is a slow,
-  -- quasi-static level, so a plain 2-FF sync into the diag clock domain is sufficient.
-  img_drive_busy <= (c64_drive_led and not phys_1581_en_i) or prevent_reset;
+  -- covers -- so mask each drive's LED with its mode bit, otherwise an Internal->Image
+  -- switch would be spuriously blocked whenever the toggle lands in a blink-ON phase. It is
+  -- a slow, quasi-static level, so a plain 2-FF sync into the diag clock domain is
+  -- sufficient. With two drives this stays a single, shared gate (conservative: activity on
+  -- either image drive blocks source switching on both).
+  img_drive_busy <= (or (c64_drive_led and not phys_1581_en)) or prevent_reset;
 
   img_busy_sync_proc : process (c64_clk_sd_i)
   begin
@@ -1824,22 +1870,74 @@ begin
   iec_par_stb_in  <= '0';
   iec_par_data_in <= (others => '0');
 
-  -- Drive is held to reset if the core is held to reset or if the drive is not mounted, yet.
-  -- Exception (issue #90): while "Use internal 1581" is active, drive 8 is backed by the REAL
-  -- internal mechanism, so there is no disk image to mount -- the drive must run unmounted.
-  -- Without this exception the whole drive (and with it the forced-active 1581 engine inside
-  -- iec_drive.sv) would stay in reset until a D81 image is mounted, making the physical drive
-  -- dead unless the user mounts an unrelated image first. phys_1581_en_i is in the main clock
-  -- domain (CDC-d OSM bit), like everything else in this equation.
-  -- @TODO: MiSTer also allows these options when it comes to drive-enable:
-  --        "P2oPQ,Enable Drive #8,If Mounted,Always,Never;"
-  --        "P2oNO,Enable Drive #9,If Mounted,Always,Never;"
-  --        This code currently only implements the "If Mounted" option
+  -- Per-drive mode decode (issues #90 and #93). Everything in this block is in the main
+  -- clock domain (drive_mode_i is derived from CDC-d OSM bits in mega65.vhd).
+  --
+  -- The reset equation implements all four "Drive Settings" states and thereby the MiSTer
+  -- options "P2oPQ,Enable Drive #8,If Mounted,Always,Never;" (c64.sv:228-231, reset wiring
+  -- c64.sv:1076-1080), plus our "Internal 1581" state:
+  --   * "Disk Image: If mounted": the drive runs only while an image is mounted (this was
+  --     the only implemented behavior before V6/issue #93).
+  --   * "Disk Image: Always": the drive also runs unmounted and answers on the IEC bus
+  --     like a real drive without a disk inserted.
+  --   * "Internal 1581": the drive is backed by the REAL internal mechanism, so there is
+  --     no disk image to mount -- the drive must run unmounted (issue #90). Without this
+  --     exception the drive (and with it the forced-active 1581 engine inside iec_drive.sv)
+  --     would stay in reset until a D81 image is mounted, making the physical drive dead.
+  --   * "Off" (MiSTer's "Never"): the drive is held in reset permanently. A drive in reset
+  --     is provably inert on the AND-wired IEC bus (c1541_multi.sv/c1581_multi.sv drive
+  --     their outputs to '1' while in reset), so its device number stays free, e.g. for a
+  --     real drive or an SD2IEC on the hardware IEC port.
 
-  iec_drives_reset(0) <= (not reset_core_n) or ((not vdrives_mounted(0)) and (not phys_1581_en_i));
-  iec_drv_reset_gen : for i in 1 to G_VDNUM - 1 generate
-    iec_drives_reset(i) <= (not reset_core_n) or (not vdrives_mounted(i));
+  iec_drv_reset_gen : for i in 0 to G_VDNUM - 1 generate
+    drv_mode_if_mounted(i) <= '1' when drive_mode_i(2 * i + 1 downto 2 * i) = "00" else '0';
+    phys_1581_en(i)        <= '1' when drive_mode_i(2 * i + 1 downto 2 * i) = "10" else '0';
+    drv_mode_off(i)        <= '1' when drive_mode_i(2 * i + 1 downto 2 * i) = "11" else '0';
+
+    iec_drives_reset(i)    <= (not reset_core_n) or
+                              drv_mode_off(i)    or
+                              (drv_mode_if_mounted(i) and not vdrives_mounted(i));
   end generate iec_drv_reset_gen;
+
+  -- M2M #57 fix: index-preserving per-element copies of the SystemVerilog unpacked-array
+  -- outputs (see the iec_sd_*_sv signal declaration comment above)
+  iec_sd_order_gen : for i in 0 to G_VDNUM - 1 generate
+    iec_sd_lba(i)          <= iec_sd_lba_sv(i);
+    iec_sd_blk_cnt(i)      <= iec_sd_blk_cnt_sv(i);
+    iec_sd_buf_data_out(i) <= iec_sd_buf_dout_sv(i);
+  end generate iec_sd_order_gen;
+
+  -- Defense in depth: at most ONE drive may be in physical mode. The Shell
+  -- enforces this (see _OSM_PRE_STEAL in CORE/m2m-rom/m2m-rom.asm), but a
+  -- corrupt config file -- or one saved before the per-drive modes existed --
+  -- restored into M2M$CFM_DATA could select "Internal 1581" for both drives.
+  -- Keep the lowest-numbered drive in that case.
+  phys_1581_oh_gen : for i in 0 to G_VDNUM - 1 generate
+    g_first : if i = 0 generate
+      phys_1581_en_oh(0) <= phys_1581_en(0);
+    end generate g_first;
+    g_rest : if i > 0 generate
+      phys_1581_en_oh(i) <= phys_1581_en(i) when unsigned(phys_1581_en(i - 1 downto 0)) = 0 else
+                            '0';
+    end generate g_rest;
+  end generate phys_1581_oh_gen;
+
+  -- Physical-mode switch sequencer: see the signal declaration comment
+  phys_switch_seq_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      if phys_1581_en_oh /= phys_1581_en_d then
+        phys_1581_en_d  <= phys_1581_en_oh;
+        phys_switch_cnt <= C_PHYS_SWITCH_GAP;
+        phys_1581_en_q  <= (others => '0');
+      elsif phys_switch_cnt /= 0 then
+        phys_switch_cnt <= phys_switch_cnt - 1;
+        phys_1581_en_q  <= (others => '0');
+      else
+        phys_1581_en_q  <= phys_1581_en_d;
+      end if;
+    end if;
+  end process phys_switch_seq_proc;
 
   iec_drive_inst : entity work.iec_drive
     generic map (
@@ -1869,14 +1967,14 @@ begin
       -- QNICE SD-Card/FAT32 interface
       clk_sys      => c64_clk_sd_i,                 -- "SD card" clock for writing to the drives' internal data buffers
 
-      sd_lba       => iec_sd_lba,
-      sd_blk_cnt   => iec_sd_blk_cnt,
+      sd_lba       => iec_sd_lba_sv,                -- unpacked SV arrays: bound to ascending-range signals, see M2M #57 comment
+      sd_blk_cnt   => iec_sd_blk_cnt_sv,
       sd_rd        => iec_sd_rd,
       sd_wr        => iec_sd_wr,
       sd_ack       => iec_sd_ack,
       sd_buff_addr => iec_sd_buf_addr,
       sd_buff_dout => iec_sd_buf_data_in,           -- data from SD card to the buffer RAM within the drive ("dout" is a strange name)
-      sd_buff_din  => iec_sd_buf_data_out,          -- read the buffer RAM within the drive
+      sd_buff_din  => iec_sd_buf_dout_sv,           -- read the buffer RAM within the drive (unpacked SV array, see M2M #57 comment)
       sd_buff_wr   => iec_sd_buf_wr,
 
       -- drive led
@@ -1895,10 +1993,13 @@ begin
       rom_wr_i     => c1541rom_we_i,
       rom_data_o   => c1541rom_data_o,
 
-      -- MEGA65 physical internal 1581 (issue #90): drive-0 ABI to the VHDL
-      -- physical_1581_controller + rdfifo (both in the c64_clk_sd_i 50 MHz domain).
-      -- Inert unless physical_mode=1, so image-mode behavior is unchanged.
-      physical_mode      => phys_1581_en_i,
+      -- MEGA65 physical internal 1581 (issues #90 and #93): per-drive mode vector; the
+      -- phys_* bundle below is shared and driven by the ONE drive whose bit is set (the
+      -- Shell enforces at most one; the switch sequencer above additionally forces an
+      -- all-zero gap on every change). Connects to the VHDL physical_1581_controller +
+      -- rdfifo (both in the c64_clk_sd_i 50 MHz domain). Inert while all bits are 0, so
+      -- image-mode behavior is unchanged.
+      physical_mode      => phys_1581_en_q,
 
       -- phys OUTPUTS (iec_drive -> controller / rdfifo)
       phys_active        => p1581_active,
@@ -1955,7 +2056,7 @@ begin
   -- c64_rst_sd_i (== qnice_rst one level up). The f_* mechanism pins connect ONLY
   -- here. The read-byte stream crosses back to the drive clock (clk_main_i) through
   -- the dual-clock rdfifo. G_CAPABLE=true on every board (feature gated by the OSM
-  -- bit phys_1581_en_i, not by synthesis).
+  -- "Internal 1581" drive mode via phys_1581_en, not by synthesis).
   i_physical_1581_controller : entity work.physical_1581_controller
     generic map (
       G_CAPABLE => true
@@ -2220,6 +2321,13 @@ begin
       clk_qnice_i      => c64_clk_sd_i,
       clk_core_i       => clk_main_i,
       reset_core_i     => not reset_core_n,
+
+      -- "Unmount on reset" (issue #93): a drive whose bit is 0 keeps its disk image
+      -- mounted across a soft core reset; reset_hard_core_i qualifies the reset so that a
+      -- HARD reset (the universal escape hatch) still unmounts everything. This is one of
+      -- the documented hard_reset_n exceptions, see the RESET SEMANTICS block above.
+      unmount_on_reset_i => drive_unmount_i,
+      reset_hard_core_i  => not hard_reset_n,
 
       -- MiSTer's "SD config" interface, which runs in the core's clock domain
       img_mounted_o    => iec_img_mounted,

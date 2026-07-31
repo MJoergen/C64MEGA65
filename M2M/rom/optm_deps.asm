@@ -3,12 +3,14 @@
 ;
 ; Dependent menu entries ("smart dependencies") for the Options Menu
 ;
-; A menu line can be tagged in config.vhd with OPTM_DEP(mother, item) so that
-; it is only visible while a specific item of a specific "mother" group is
-; selected. This is a pure visibility layer: dependent lines keep their own
-; osm_control bit, their saved config-file byte and their default state; the
-; VHDL side multiplexes the active variant explicitly. See
-; doc/path-to-OSM-dependencies.md for the complete design.
+; A menu line can be tagged in config.vhd with OPTM_DEP(mother, item) or
+; OPTM_DEP2(mother, item_a, item_b) so that it is only visible while one of
+; the items in a 4-bit item MASK of a specific "mother" group is selected
+; (dependency format 2, config.vhd magic 0x2DEF). This is a pure visibility
+; layer: dependent lines keep their own osm_control bit, their saved
+; config-file byte and their default state; the VHDL side multiplexes the
+; active variant explicitly. See doc/path-to-OSM-dependencies.md for the
+; complete design.
 ;
 ; This file is part of the self-contained menu component (menu.asm,
 ; menu_vars.asm, menu_struct.asm, optm_deps.asm) and is included at the end of
@@ -20,12 +22,14 @@
 ;
 ; The raw per-line dependency word as served by SEL_OPTM_DEPS (config.vhd):
 ;   bit 12    : OPTM_G_DEPENDENT flag (1 = this line is dependent)
-;   bits 11-8 : mother item index (0..15)
+;   bits 11-8 : mother item mask (bit k = visible while member k is selected;
+;               for a single-select mother: bit 0 = visible while it is off,
+;               bit 1 = visible while it is on)
 ;   bits  7-0 : mother group id (1..254)
 ; The resolved per-line dependency word (produced by OPTM_DEPS_RESOLVE):
 ;   bit 15    : valid (1 = this line is dependent)
-;   bit  8    : expected state of the controlling line (0 or 1)
-;   bits  7-0 : flat index of the controlling line
+;   bits 11-8 : mother item mask (copied through from the raw word)
+;   bits  7-0 : flat index of the FIRST member of the mother group
 ;
 ; done by sy2002 in 2026 and licensed under GPL v3
 ; ****************************************************************************
@@ -33,11 +37,15 @@
 ; ----------------------------------------------------------------------------
 ; OPTM_DEP_OK: Runtime visibility predicate for one menu line
 ;
-; Reads the resolved dependency array and the live selected-state array from
-; the menu initialization record (OPTM_DATA). When the dependency feature is
-; off (no record, or OPTM_IR_DEPS is 0) or the line carries no dependency,
-; the line is always visible. Otherwise the line is visible if and only if
-; the controlling line currently has the expected selected state.
+; Reads the resolved dependency array, the (masked) groups array and the live
+; selected-state array from the menu initialization record (OPTM_DATA). When
+; the dependency feature is off (no record, or OPTM_IR_DEPS is 0) or the line
+; carries no dependency, the line is always visible. Otherwise: for a
+; single-select mother the line is visible iff mask bit <state of the mother
+; line> is set; for a radio mother the members of the mother group are scanned
+; from its first member on, the ordinal k of the currently selected member is
+; determined, and the line is visible iff mask bit k is set (no selected
+; member, or a selected member beyond bit 3: hidden).
 ;
 ; Input:
 ;   R8: flat index of the menu line to test
@@ -67,18 +75,62 @@ OPTM_DEP_OK     INCRB
                 MOVE    R0, R3                  ; R3: live selected-state array
                 ADD     OPTM_IR_STDSEL, R3
                 MOVE    @R3, R3
-                MOVE    R1, R4
-                AND     0x00FF, R4              ; R4: controlling line index
-                ADD     R4, R3
-                MOVE    @R3, R3                 ; R3: actual state (0 or 1)
-                AND     0x0100, R1              ; expected state in bit 8?
-                RBRA    _ODO_EXP1, !Z           ; yes: expected 1
+                MOVE    R0, R4                  ; R4: (masked) groups array
+                ADD     OPTM_IR_GROUPS, R4
+                MOVE    @R4, R4
+                MOVE    R0, R5                  ; R5: amount of menu items (N)
+                ADD     OPTM_IR_SIZE, R5
+                MOVE    @R5, R5
 
-                CMP     0, R3                   ; expected 0: visible iff state 0
-                RBRA    _ODO_VIS, Z
-                RBRA    _ODO_HID, 1
+                MOVE    R1, R6                  ; R6: first member of the mother
+                AND     0x00FF, R6
+                MOVE    R1, R7                  ; R7: item mask (bits 3..0)
+                SHR     8, R7
+                AND     0x000F, R7
 
-_ODO_EXP1       CMP     0, R3                   ; expected 1: visible iff state 1
+                MOVE    R4, R2                  ; R2: GROUPS[first member]
+                ADD     R6, R2
+                MOVE    @R2, R2
+                MOVE    R2, R0                  ; single-select mother?
+                AND     0x8000, R0
+                RBRA    _ODO_RADIO, Z           ; no: radio mother
+
+                MOVE    R3, R0                  ; single-select: k = state (0/1)
+                ADD     R6, R0
+                MOVE    @R0, R0                 ; R0: state of the mother line
+                RBRA    _ODO_TSTB0, Z           ; state 0: test mask bit 0
+                SHR     1, R7                   ; state 1: test mask bit 1
+_ODO_TSTB0      AND     1, R7
+                RBRA    _ODO_HID, Z
+                RBRA    _ODO_VIS, 1
+
+_ODO_RADIO      AND     0x00FF, R2              ; R2: mother group id
+                XOR     R1, R1                  ; R1: member ordinal k
+_ODO_RSCAN      CMP     R5, R6                  ; end of the menu reached?
+                RBRA    _ODO_HID, Z             ; no selected member: hidden
+                MOVE    R4, R0                  ; GROUPS[j] group id
+                ADD     R6, R0
+                MOVE    @R0, R0
+                AND     0x00FF, R0
+                CMP     R2, R0                  ; member of the mother group?
+                RBRA    _ODO_RNEXT, !Z          ; no
+                MOVE    R3, R0                  ; member selected?
+                ADD     R6, R0
+                MOVE    @R0, R0
+                CMP     0, R0
+                RBRA    _ODO_RSEL, !Z           ; yes: k is its ordinal
+                ADD     1, R1                   ; no: next ordinal
+                CMP     4, R1                   ; ordinal beyond the 4-bit mask
+                RBRA    _ODO_HID, Z             ; window can never match: hidden
+_ODO_RNEXT      ADD     1, R6
+                RBRA    _ODO_RSCAN, 1
+
+_ODO_RSEL       CMP     0, R1                   ; visible iff mask bit k is set
+                RBRA    _ODO_RTST, Z
+_ODO_RSH        SHR     1, R7
+                SUB     1, R1
+                RBRA    _ODO_RSH, !Z
+_ODO_RTST       AND     1, R7
                 RBRA    _ODO_HID, Z
 
 _ODO_VIS        OR      0x0004, SR              ; set Carry: visible
@@ -152,13 +204,13 @@ _ODA_NO         AND     0xFFFB, SR              ; clear Carry: no effect
 ; OPTM_DEPS_RESOLVE: Resolve the raw dependency array in place
 ;
 ; Run once per menu open (see HELP_MENU). Rewrites every raw dependency word
-; into the resolved form expected by OPTM_DEP_OK: for a radio mother the
-; controlling line is the item-th member of the mother group and the expected
-; state is 1; for a single-select mother the controlling line is the mother
-; line itself and the expected state is the item index (0 or 1). Lines that
-; carry no dependency become 0. Assumes the structure was validated at boot
-; by OPTM_DEPS_VAL; a mother with no members is defensively treated as not
-; dependent.
+; into the resolved form expected by OPTM_DEP_OK: the item mask is copied
+; through (bits 11-8) and the controlling-line field (bits 7-0) receives the
+; flat index of the FIRST member of the mother group -- for both mother types;
+; OPTM_DEP_OK branches on the single-select flag of that line at runtime.
+; Lines that carry no dependency become 0. Assumes the structure was validated
+; at boot by OPTM_DEPS_VAL; a mother with no members is defensively treated as
+; not dependent.
 ;
 ; Input:
 ;   R8: pointer to the raw dependency array (N words, rewritten in place)
@@ -194,14 +246,12 @@ _RES_LOOP       CMP     R2, R3                  ; all lines done?
 
 _RES_DEP        MOVE    R8, R4                  ; R4: mother group id
                 AND     0x00FF, R4
-                MOVE    R8, R5                  ; R5: mother item index
-                SHR     8, R5
-                AND     0x000F, R5
+                MOVE    R8, R5                  ; R5: item mask, kept in place
+                AND     0x0F00, R5              ; (bits 11-8, as in the raw word)
 
                 XOR     R6, R6                  ; R6: inner index j
                 XOR     R7, R7                  ; R7: member count
                 XOR     R11, R11                ; R11: first member index
-                XOR     R12, R12                ; R12: item-th member index
 
 _RES_SCAN       CMP     R2, R6                  ; inner scan over all groups
                 RBRA    _RES_SCANE, Z
@@ -214,29 +264,15 @@ _RES_SCAN       CMP     R2, R6                  ; inner scan over all groups
                 CMP     0, R7                   ; first member?
                 RBRA    _RES_NF, !Z
                 MOVE    R6, R11                 ; remember first member
-_RES_NF         CMP     R5, R7                  ; the item-th member?
-                RBRA    _RES_NK, !Z
-                MOVE    R6, R12                 ; remember item-th member
-_RES_NK         ADD     1, R7                   ; one more member
+_RES_NF         ADD     1, R7                   ; one more member
 _RES_SCANN      ADD     1, R6
                 RBRA    _RES_SCAN, 1
 
 _RES_SCANE      CMP     0, R7                   ; mother has no members?
                 RBRA    _RES_ZERO, Z            ; defensively: not dependent
-                MOVE    R1, R8                  ; first member single-select?
-                ADD     R11, R8
-                MOVE    @R8, R8
-                AND     0x8000, R8
-                RBRA    _RES_RADIO, Z           ; no: radio mother
-                MOVE    R11, R9                 ; single: ctl = mother line
-                MOVE    R5, R8                  ; expected = item index (0/1)
-                RBRA    _RES_WR, 1
-_RES_RADIO      MOVE    R12, R9                 ; radio: ctl = item-th member
-                MOVE    1, R8                   ; expected = 1
-_RES_WR         AND     0xFFFD, SR              ; clear X for the shift
-                SHL     8, R8                   ; expected into bit 8
-                OR      0x8000, R8              ; valid bit
-                OR      R9, R8                  ; controlling line index
+                MOVE    R5, R8                  ; resolved word: item mask ...
+                OR      0x8000, R8              ; ... valid bit ...
+                OR      R11, R8                 ; ... first-member flat index
                 MOVE    R0, R10                 ; write resolved word back
                 ADD     R3, R10
                 MOVE    R8, @R10
@@ -264,18 +300,22 @@ _RES_DONE       MOVE    R0, R8                  ; restore R8 (array base)
 ; config.vhd, hence fatals. The step-1 restrictions checked here are:
 ;
 ;   class 0  ERR_F_DEPMOTHER  : mother group id is 0 or 255, or has no members
-;   class 1  ERR_F_DEPIDX     : radio mother: item >= member count;
-;                               single-select mother: item > 1
+;   class 1  ERR_F_DEPIDX     : item mask is empty, or contains a bit at or
+;                               beyond the member count (radio mother) / beyond
+;                               bit 1 (single-select mother)
 ;   class 2  ERR_F_DEPMIX     : members of one group carry differing
 ;                               dependency words (incl. some-tagged/some-not)
 ;   class 3  ERR_F_DEPCHAIN   : a line of a mother group is itself dependent
 ;   class 4  ERR_F_DEPSPECIAL : a dependent line is a submenu opener/closer or
-;                               is flagged MOUNT_DRV / LOAD_ROM / HELP / START
+;                               is flagged LOAD_ROM / HELP (since dependency
+;                               format 2, MOUNT_DRV and START lines MAY be
+;                               dependent: the mount lines of C64MEGA65 issue
+;                               #93 rely on it)
 ;
 ; SUBMENU and CLOSE lines are recognized from the groups array (bit 14); the
-; remaining special flags (MOUNT_DRV, LOAD_ROM, HELP) and the START line are
-; stripped from the masked groups window and are therefore supplied by the
-; caller in a separate one-word-per-line array (nonzero = special line).
+; remaining special flags (LOAD_ROM, HELP) are stripped from the masked groups
+; window and are therefore supplied by the caller in a separate
+; one-word-per-line array (nonzero = special line).
 ;
 ; Input:
 ;   R8: pointer to the (masked) groups array (N words)
@@ -318,8 +358,9 @@ _VAL_A          CMP     R1, R4                  ; all lines checked?
                 AND     0x1000, R6              ; is line i dependent?
                 RBRA    _VAL_A_NEXT, Z          ; no: skip
 
-                ; class 4: dependent special line (submenu/close/mount/
-                ; load_rom/help/start)
+                ; class 4: dependent special line (submenu opener/closer,
+                ; bare close, load_rom or help; mount-drive and cursor-start
+                ; lines MAY be dependent since dependency format 2)
                 MOVE    R0, R6                  ; GROUPS[i]
                 ADD     R4, R6
                 MOVE    @R6, R6
@@ -380,18 +421,26 @@ _VAL_MSCANE     CMP     0, R9                   ; class 0: mother has no members
                 CMP     0, R11                  ; class 3: dependency chain
                 RBRA    _VAL_E_CHAIN, !Z
 
-                ; class 1: item index out of range
-                MOVE    R5, R8                  ; recompute item index
+                ; class 1: item mask empty or out of range
+                MOVE    R5, R8                  ; recompute item mask
                 SHR     8, R8
                 AND     0x000F, R8
+                CMP     0, R8                   ; empty mask: error
+                RBRA    _VAL_E_IDX, Z
                 CMP     0, R10                  ; single-select mother?
                 RBRA    _VAL_IDX_R, Z           ; no: radio mother
-                CMP     R8, 1                   ; single: item must be 0 or 1
-                RBRA    _VAL_E_IDX, N           ; item > 1: error
+                MOVE    R8, R12                 ; single: only bits 0/1 allowed
+                AND     0x000C, R12
+                RBRA    _VAL_E_IDX, !Z
                 RBRA    _VAL_A_NEXT, 1
-_VAL_IDX_R      CMP     R8, R9                  ; radio: item vs member count
-                RBRA    _VAL_E_IDX, N           ; item > count: out of range
-                RBRA    _VAL_E_IDX, Z           ; item == count: out of range
+_VAL_IDX_R      MOVE    R9, R12                 ; radio: a mask bit at or beyond
+                CMP     4, R12                  ; the member count is an error;
+                RBRA    _VAL_A_NEXT, !N         ; >= 4 members: nothing to check
+_VAL_IDX_SH     SHR     1, R8                   ; drop the in-range positions
+                SUB     1, R12
+                RBRA    _VAL_IDX_SH, !Z
+                CMP     0, R8                   ; anything left is out of range
+                RBRA    _VAL_E_IDX, !Z
 
 _VAL_A_NEXT     ADD     1, R4
                 RBRA    _VAL_A, 1

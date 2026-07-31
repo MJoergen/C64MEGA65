@@ -91,6 +91,7 @@ constant C_DEV_C64_KERNAL_C64    : std_logic_vector(15 downto 0) := x"0105";    
 constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";     -- Custom Kernal: (simulated) C1541
 constant C_DEV_C64_KERNAL_C1581  : std_logic_vector(15 downto 0) := x"0107";     -- Custom Kernal: (simulated) C1581 (D81 enable)
 constant C_DEV_C64_PHYS1581      : std_logic_vector(15 downto 0) := x"0108";     -- Physical internal 1581: read-only diag register bank (issue #90)
+constant C_DEV_C64_MOUNT2        : std_logic_vector(15 downto 0) := x"0109";     -- RAM to buffer disk images: drive 9 (issue #93)
 
 ----------------------------------------------------------------------------------------------------------
 -- HyperRAM memory map (in units of 4 kW = 8 kB)
@@ -109,25 +110,29 @@ constant C_DEV_C64_PHYS1581      : std_logic_vector(15 downto 0) := x"0108";    
 --
 -- Each region is followed by enough unused space (or an explicit 8 kB guard) that a spurious
 -- write one window past a region boundary cannot corrupt the next region:
---   * M2M -> CRT     : M2M only uses a fraction of its 4 MB, so CRT is never reached.
---   * CRT -> VD0     : the largest supported .crt is 2 MB, leaving > 0.7 MB of CRT-pool slack.
---   * VD0 -> guard   : a D81 fills VD0 exactly (100 windows), so an explicit 8 kB guard window
---                      (x"03BE") sits between VD0 and SIMREU.
+--   * M2M -> CRT     : the M2M framework needs less than its 3 MB (ascal's worst-case frame
+--                      buffers plus margin), so CRT is never reached.
+--   * CRT -> VD1     : the largest supported .crt is 2 MB, leaving > 0.9 MB of CRT-pool slack.
+--   * VD1 -> guard   : a D81 fills VD1 exactly (100 windows), so an explicit 8 kB guard window
+--                      (x"0359") sits between VD1 and VD0.
+--   * VD0 -> guard   : same as VD1: explicit 8 kB guard window (x"03BE") between VD0 and SIMREU.
 --   * REU -> guard   : the original 8 kB SIMREU burst guard (x"03FF").
-constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework (4 MB)
-constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0200";     -- Used for SIMCRT (346 windows = 2.70 MB before VD0; >= 2 MB MD2 ceiling)
+constant C_HMAP_M2M              : std_logic_vector(15 downto 0) := x"0000";     -- Reserved for the M2M framework (384 windows = 3 MB)
+constant C_HMAP_CRT              : std_logic_vector(15 downto 0) := x"0180";     -- Used for SIMCRT (373 windows = 2.91 MB before VD1; >= 2 MB MD2 ceiling)
+constant C_HMAP_VD1              : std_logic_vector(15 downto 0) := x"02F5";     -- Drive 9 disk-image staging (100 windows = 819,200 B = one D81), ends x"0358" (issue #93)
+constant C_HMAP_VD1_GUARD        : std_logic_vector(15 downto 0) := x"0359";     -- 8 kB guard between VD1 and VD0 (absorbs a spurious write 1 past the VD1 boundary)
 constant C_HMAP_VD0              : std_logic_vector(15 downto 0) := x"035A";     -- Drive 8 disk-image staging (100 windows = 819,200 B = one D81), ends x"03BD"; D81 enable
 constant C_HMAP_VD0_GUARD        : std_logic_vector(15 downto 0) := x"03BE";     -- 8 kB guard between VD0 and SIMREU (absorbs a spurious write 1 past the VD0 boundary)
 constant C_HMAP_REU              : std_logic_vector(15 downto 0) := x"03BF";     -- Used for SIMREU (0.5 MB)
 constant C_HMAP_SIZE             : std_logic_vector(15 downto 0) := x"0400";     -- Total size of HyperRAM; final 8 kB is a guard for SIMREU bursts
 
--- Max .crt file size = the SIMCRT pool size in bytes = (VD0 base - CRT base) windows * 8 KB.
+-- Max .crt file size = the SIMCRT pool size in bytes = (VD1 base - CRT base) windows * 8 KB.
 -- Self-derived from the map above so it tracks any retune. It is enforced by the Shell in
 -- CORE/m2m-rom/m2m-rom.asm PREP_LOAD_IMAGE, so an oversized cartridge cannot stream past the
--- SIMCRT pool into the VD0 disk-image buffer. make_rom.sh exports this value to the Shell as
+-- SIMCRT pool into the VD1 disk-image buffer. make_rom.sh exports this value to the Shell as
 -- C64_CRT_MAX_SIZE_HI/LO (globals.asm), so the two never drift on a map retune.
 constant C_CRT_MAX_SIZE          : natural :=
-   (to_integer(unsigned(C_HMAP_VD0)) - to_integer(unsigned(C_HMAP_CRT))) * 8192;  -- = 346*8192 = 2,834,432
+   (to_integer(unsigned(C_HMAP_VD1)) - to_integer(unsigned(C_HMAP_CRT))) * 8192;  -- = 373*8192 = 3,055,616
 
 ----------------------------------------------------------------------------------------------------------
 -- Virtual Drive Management System
@@ -141,9 +146,10 @@ constant C_CRT_MAX_SIZE          : natural :=
 -- Otherwise make sure that you wire C_VD_DEVICE in the qnice_ramrom_devices process and that you
 -- have as many appropriately sized RAM buffers for disk images as you have drives
 type vd_buf_array is array(natural range <>) of std_logic_vector;
-constant C_VDNUM              : natural := 1;                                          -- amount of virtual drives, maximum is 15
+constant C_VDNUM              : natural := 2;                                          -- amount of virtual drives, maximum is 15
 constant C_VD_DEVICE          : std_logic_vector(15 downto 0) := C_DEV_C64_VDRIVES;    -- device number of vdrives.vhd device
 constant C_VD_BUFFER          : vd_buf_array := (  C_DEV_C64_MOUNT,
+                                                   C_DEV_C64_MOUNT2,
                                                    x"EEEE");                           -- Always finish the array using x"EEEE"
 
 ----------------------------------------------------------------------------------------------------------

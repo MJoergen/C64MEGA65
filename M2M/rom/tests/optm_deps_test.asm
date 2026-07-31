@@ -181,12 +181,18 @@ _DT_B_LOOP      MOVE    DT_FXIDX, R8
                 MOVE    R5, R6             ; R6: stdsel
                 ADD     R2, R6
 
-                MOVE    DT_REC, R8         ; point the record at this fixture
-                ADD     OPTM_IR_DEPS, R8
-                MOVE    R5, @R8
+                MOVE    DT_REC, R8         ; point the record at this fixture;
+                ADD     OPTM_IR_DEPS, R8   ; since dependency format 2 the
+                MOVE    R5, @R8            ; predicate also reads the groups
+                MOVE    DT_REC, R8         ; array and the menu size from the
+                ADD     OPTM_IR_STDSEL, R8 ; record (to find the mother type
+                MOVE    R6, @R8            ; and to walk the mother group)
                 MOVE    DT_REC, R8
-                ADD     OPTM_IR_STDSEL, R8
-                MOVE    R6, @R8
+                ADD     OPTM_IR_GROUPS, R8
+                MOVE    R4, @R8
+                MOVE    DT_REC, R8
+                ADD     OPTM_IR_SIZE, R8
+                MOVE    R2, @R8
 
                 MOVE    DT_BUF, R8         ; build the structure at the level
                 MOVE    R2, R9
@@ -243,11 +249,17 @@ _DT_S_LOOP      MOVE    DT_FXIDX, R8
                 ADD     R2, R6
 
                 MOVE    DT_REC, R8       ; point the record at this fixture
-                ADD     OPTM_IR_DEPS, R8
+                ADD     OPTM_IR_DEPS, R8 ; (incl. groups + size, see above)
                 MOVE    R5, @R8
                 MOVE    DT_REC, R8
                 ADD     OPTM_IR_STDSEL, R8
                 MOVE    R6, @R8
+                MOVE    DT_REC, R8
+                ADD     OPTM_IR_GROUPS, R8
+                MOVE    R4, @R8
+                MOVE    DT_REC, R8
+                ADD     OPTM_IR_SIZE, R8
+                MOVE    R2, @R8
 
                 MOVE    DT_S_D, R8       ; print "D <idx>"
                 SYSCALL(puts, 1)
@@ -318,4 +330,4 @@ DT_S_DONE       .ASCII_W "DONE"
 
 DT_FXIDX        .BLOCK 1
 DT_REC          .BLOCK 20
-DT_BUF          .BLOCK 64
+DT_BUF          .BLOCK 256                      ; fits the V6 menu fixtures

@@ -249,7 +249,11 @@ signal c64_clock_speed            : natural;                 -- clock speed depe
 signal c64_exp_port_mode          : std_logic_vector(1 downto 0);
                                                              -- bit 0: Simulate cartridge (.CRT file)
                                                              -- bit 1: Simulate REU
-signal phys_1581_en               : std_logic;               -- 1 = drive 8 backed by the physical internal 1581 (issue #90)
+-- Per-drive mode from the "Drive Settings" OSM submenu (issues #90 and #93), 2 bits per drive:
+-- "00" = Disk Image: If mounted, "01" = Disk Image: Always, "10" = Internal 1581 (physical
+-- drive backs this IEC device; the Shell enforces at most one drive in this state), "11" = Off
+signal c64_drive_mode             : std_logic_vector(2 * C_VDNUM - 1 downto 0);
+signal c64_drive_unmount          : std_logic_vector(C_VDNUM - 1 downto 0);  -- 1 = unmount disk image on a soft core reset
 
 -- C64 config settings
 signal sid_setup                  : std_logic_vector(1 downto 0);
@@ -339,17 +343,28 @@ signal hr_mnt_readdata            : std_logic_vector(15 downto 0);
 signal hr_mnt_readdatavalid       : std_logic;
 signal hr_mnt_waitrequest         : std_logic;
 
--- D81 enable: packed slave buses for the 3-master HyperRAM arbiter (avm_arbit_general)
--- slave index 0 = REU, 1 = CRT, 2 = MOUNT
-signal hr_arb_write               : std_logic_vector( 2 downto 0);
-signal hr_arb_read                : std_logic_vector( 2 downto 0);
-signal hr_arb_address             : std_logic_vector(95 downto 0);
-signal hr_arb_writedata           : std_logic_vector(47 downto 0);
-signal hr_arb_byteenable          : std_logic_vector( 5 downto 0);
-signal hr_arb_burstcount          : std_logic_vector(23 downto 0);
-signal hr_arb_readdata            : std_logic_vector(47 downto 0);
-signal hr_arb_readdatavalid       : std_logic_vector( 2 downto 0);
-signal hr_arb_waitrequest         : std_logic_vector( 2 downto 0);
+-- Drive 9 (issue #93): HyperRAM avalon master for the second disk-image mount buffer
+signal hr_mnt2_write              : std_logic;
+signal hr_mnt2_read               : std_logic;
+signal hr_mnt2_address            : std_logic_vector(31 downto 0);
+signal hr_mnt2_writedata          : std_logic_vector(15 downto 0);
+signal hr_mnt2_byteenable         : std_logic_vector( 1 downto 0);
+signal hr_mnt2_burstcount         : std_logic_vector( 7 downto 0);
+signal hr_mnt2_readdata           : std_logic_vector(15 downto 0);
+signal hr_mnt2_readdatavalid      : std_logic;
+signal hr_mnt2_waitrequest        : std_logic;
+
+-- Packed slave buses for the 4-master HyperRAM arbiter (avm_arbit_general)
+-- slave index 0 = REU, 1 = CRT, 2 = MOUNT (drive 8), 3 = MOUNT2 (drive 9)
+signal hr_arb_write               : std_logic_vector(  3 downto 0);
+signal hr_arb_read                : std_logic_vector(  3 downto 0);
+signal hr_arb_address             : std_logic_vector(127 downto 0);
+signal hr_arb_writedata           : std_logic_vector( 63 downto 0);
+signal hr_arb_byteenable          : std_logic_vector(  7 downto 0);
+signal hr_arb_burstcount          : std_logic_vector( 31 downto 0);
+signal hr_arb_readdata            : std_logic_vector( 63 downto 0);
+signal hr_arb_readdatavalid       : std_logic_vector(  3 downto 0);
+signal hr_arb_waitrequest         : std_logic_vector(  3 downto 0);
 
 signal hr_hdmi_ff                 : std_logic;
 
@@ -361,90 +376,116 @@ signal hr_hdmi_ff                 : std_logic;
 -- (flat index, see config.vhd). The values below are machine-checked
 -- against the menu structure: run "python3 M2M/rom/tests/menu_test.py verify"
 -- after every menu change.
-constant C_MENU_INTERNAL_1581 : natural := 3;   -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
-constant C_MENU_EXP_PORT_HW   : natural := 8;
-constant C_MENU_SIM_CRT       : natural := 9;
-constant C_MENU_SIM_REU       : natural := 11;
+-- Drive Settings submenu (issue #93): per-drive 4-state mode radio group
+-- (Disk Image: If mounted / Disk Image: Always / Internal 1581 / Off) plus a
+-- per-drive "Unmount on reset" single-select. The "Internal 1581" state means:
+-- MEGA65's built-in physical drive backs this IEC device (issue #90); the
+-- Shell enforces that only one drive at a time is in this state.
+-- C_MENU_DRV8_1581_LN / C_MENU_DRV9_1581_LN are the flat indices of the
+-- "8:Internal 1581" / "9:Internal 1581" live-status TEXT lines in the main
+-- menu (no osm_control meaning; HANDLE_CORE_IO in m2m-rom.asm patches the
+-- live physical-drive status into them via OPTM_LIVE_TEXT).
+constant C_MENU_DRV8_1581_LN  : natural := 3;
+constant C_MENU_DRV9_1581_LN  : natural := 5;
+constant C_MENU_DRV8_IMG_MNT  : natural := 10;
+constant C_MENU_DRV8_IMG_ALW  : natural := 11;
+constant C_MENU_DRV8_1581     : natural := 12;
+constant C_MENU_DRV8_OFF      : natural := 13;
+constant C_MENU_DRV8_UNMOUNT  : natural := 14;
+constant C_MENU_DRV9_IMG_MNT  : natural := 18;
+constant C_MENU_DRV9_IMG_ALW  : natural := 19;
+constant C_MENU_DRV9_1581     : natural := 20;
+constant C_MENU_DRV9_OFF      : natural := 21;
+constant C_MENU_DRV9_UNMOUNT  : natural := 22;
+constant C_MENU_EXP_PORT_HW   : natural := 28;
+constant C_MENU_SIM_CRT       : natural := 29;
+constant C_MENU_SIM_REU       : natural := 31;
 -- Model submenu: machine mode and turbo are not yet wired, see #181
 -- C_MENU_MODEL is the flat index of the " Model: %s" submenu opener; the
 -- custom SUBMENU_SUMMARY callback in m2m-rom.asm uses it to recognize that line
-constant C_MENU_MODEL         : natural := 15;
-constant C_MENU_MACHINE_PAL   : natural := 18;
-constant C_MENU_MACHINE_NTSC  : natural := 19;
-constant C_MENU_TURBO_OFF     : natural := 23;
-constant C_MENU_TURBO_C128    : natural := 24;
-constant C_MENU_TURBO_SMART   : natural := 25;
-constant C_MENU_TURBO_2X      : natural := 28;
-constant C_MENU_TURBO_3X      : natural := 29;
-constant C_MENU_TURBO_4X      : natural := 30;
-constant C_MENU_FLIP_JOYS     : natural := 33;
+constant C_MENU_MODEL         : natural := 35;
+constant C_MENU_MACHINE_PAL   : natural := 38;
+constant C_MENU_MACHINE_NTSC  : natural := 39;
+constant C_MENU_TURBO_OFF     : natural := 43;
+constant C_MENU_TURBO_C128    : natural := 44;
+constant C_MENU_TURBO_SMART   : natural := 45;
+constant C_MENU_TURBO_2X      : natural := 48;
+constant C_MENU_TURBO_3X      : natural := 49;
+constant C_MENU_TURBO_4X      : natural := 50;
+constant C_MENU_FLIP_JOYS     : natural := 53;
 -- HDMI submenu; the NTSC display modes (59.94 Hz) and the NTSC
 -- flicker-free twin are not yet wired, see #181/#105, neither is raw
 -- 50.1 Hz
-constant C_MENU_HDMI_16_9_50  : natural := 37;
-constant C_MENU_HDMI_16_9_5994 : natural := 38;
-constant C_MENU_HDMI_4_3_50   : natural := 39;
-constant C_MENU_HDMI_4_3_5994 : natural := 40;
-constant C_MENU_HDMI_5_4_50   : natural := 41;
-constant C_MENU_HDMI_5_4_5994 : natural := 42;
-constant C_MENU_HDMI_FF       : natural := 44;
-constant C_MENU_HDMI_FF_NTSC  : natural := 45;
-constant C_MENU_HDMI_DVI      : natural := 46;
+constant C_MENU_HDMI_16_9_50  : natural := 57;
+constant C_MENU_HDMI_16_9_5994 : natural := 58;
+constant C_MENU_HDMI_4_3_50   : natural := 59;
+constant C_MENU_HDMI_4_3_5994 : natural := 60;
+constant C_MENU_HDMI_5_4_50   : natural := 61;
+constant C_MENU_HDMI_5_4_5994 : natural := 62;
+constant C_MENU_HDMI_FF       : natural := 64;
+constant C_MENU_HDMI_FF_NTSC  : natural := 65;
+constant C_MENU_HDMI_DVI      : natural := 66;
 -- HDMI Filter submenu (nested inside the HDMI submenu; replaces V1's CRT
 -- emulation single-toggle). The selection is interpreted entirely by the
 -- core's m2m-rom.asm (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for
 -- native modes and loads the matching (H, V) coefficient pair via
 -- M2M$LOAD_POLYPHASE for polyphase modes. ASCAL_USAGE=1 in config.vhd
 -- routes mode control to QNICE directly.
-constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 50;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
-constant C_MENU_HDMI_FLT_SHARP         : natural := 51;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
-constant C_MENU_HDMI_FLT_BICUBIC       : natural := 52;  -- ascal native BICUBIC
-constant C_MENU_HDMI_FLT_SMOOTH        : natural := 53;
-constant C_MENU_HDMI_FLT_LANCZOS       : natural := 54;
-constant C_MENU_HDMI_FLT_SCANLINES     : natural := 55;  -- default; bit-identical to V1's CRT emulation
-constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 56;
-constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 57;
-constant C_MENU_HDMI_ZOOM     : natural := 60;
-constant C_MENU_HDMI_RAW50    : natural := 61;           -- not yet wired
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 70;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 71;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 72;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 73;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 74;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 75;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 76;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 77;
+constant C_MENU_HDMI_ZOOM     : natural := 80;
+constant C_MENU_HDMI_RAW50    : natural := 81;           -- not yet wired
 -- VGA submenu
-constant C_MENU_VGA_STD       : natural := 67;
-constant C_MENU_VGA_15KHZHSVS : natural := 71;
-constant C_MENU_VGA_15KHZCS   : natural := 72;
+constant C_MENU_VGA_STD       : natural := 87;
+constant C_MENU_VGA_15KHZHSVS : natural := 91;
+constant C_MENU_VGA_15KHZCS   : natural := 92;
 -- SID submenu
-constant C_MENU_MONO_6581     : natural := 80;
-constant C_MENU_MONO_8580     : natural := 81;
-constant C_MENU_STEREO_L6R6   : natural := 85;
-constant C_MENU_STEREO_L6R8   : natural := 86;
-constant C_MENU_STEREO_L8R6   : natural := 87;
-constant C_MENU_STEREO_L8R8   : natural := 88;
-constant C_MENU_STEREO_R_D420 : natural := 92;
-constant C_MENU_STEREO_R_D500 : natural := 93;
-constant C_MENU_STEREO_R_DE00 : natural := 94;
-constant C_MENU_STEREO_R_DF00 : natural := 95;
-constant C_MENU_IMPROVE_AUDIO : natural := 98;
-constant C_MENU_IEC           : natural := 101;
+constant C_MENU_MONO_6581     : natural := 100;
+constant C_MENU_MONO_8580     : natural := 101;
+constant C_MENU_STEREO_L6R6   : natural := 105;
+constant C_MENU_STEREO_L6R8   : natural := 106;
+constant C_MENU_STEREO_L8R6   : natural := 107;
+constant C_MENU_STEREO_L8R8   : natural := 108;
+constant C_MENU_STEREO_R_D420 : natural := 112;
+constant C_MENU_STEREO_R_D500 : natural := 113;
+constant C_MENU_STEREO_R_DE00 : natural := 114;
+constant C_MENU_STEREO_R_DF00 : natural := 115;
+constant C_MENU_IMPROVE_AUDIO : natural := 118;
+constant C_MENU_IEC           : natural := 121;
 -- Kernal submenu
-constant C_MENU_KERNAL        : natural := 102; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm 
-constant C_MENU_KERNAL_STD    : natural := 105;
-constant C_MENU_KERNAL_GS     : natural := 106;
-constant C_MENU_KERNAL_JAPAN  : natural := 107;
-constant C_MENU_KERNAL_JIFFY  : natural := 108;
+constant C_MENU_KERNAL        : natural := 122; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
+constant C_MENU_KERNAL_STD    : natural := 125;
+constant C_MENU_KERNAL_GS     : natural := 126;
+constant C_MENU_KERNAL_JAPAN  : natural := 127;
+constant C_MENU_KERNAL_JIFFY  : natural := 128;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
-subtype C_MENU_VOLUME is natural range 134 downto 114;
+subtype C_MENU_VOLUME is natural range 154 downto 134;
 -- Advanced Settings submenu (the VIC-II model is not yet wired)
-constant C_MENU_RTC_GEOS      : natural := 140;         -- GEOS Real-Time-Clock, see #133, #164 and #187
-subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
-constant C_MENU_8521          : natural := 155;
-constant C_MENU_VICII_NMOS    : natural := 159;
-constant C_MENU_VICII_HMOS    : natural := 160;
-constant C_MENU_VICII_OLDHMOS : natural := 161;
+constant C_MENU_RTC_GEOS      : natural := 160;         -- GEOS Real-Time-Clock, see #133, #164 and #187
+subtype C_MENU_OSM_SCALING is natural range 172 downto 164;
+constant C_MENU_8521          : natural := 175;
+constant C_MENU_VICII_NMOS    : natural := 179;
+constant C_MENU_VICII_HMOS    : natural := 180;
+constant C_MENU_VICII_OLDHMOS : natural := 181;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
 signal qnice_mnt_qnice_we           : std_logic;
 signal qnice_mnt_qnice_data         : std_logic_vector(15 downto 0);
 signal qnice_mnt_qnice_wait         : std_logic;
+
+-- Same for drive 9 (issue #93): second HyperRAM-backed disk-image mount buffer
+signal qnice_mnt2_qnice_ce          : std_logic;
+signal qnice_mnt2_qnice_we          : std_logic;
+signal qnice_mnt2_qnice_data        : std_logic_vector(15 downto 0);
+signal qnice_mnt2_qnice_wait        : std_logic;
 
 -- Custom Kernal access: C64 ROM
 signal qnice_c64rom_we              : std_logic;
@@ -532,31 +573,46 @@ begin
       end if;
    end process;
 
-   -- 3-master HyperRAM arbiter (REU, CRT, MOUNT). avm_arbit_general uses
-   -- flattened slave vectors; slave index k occupies bits ((k+1)*W-1 downto k*W), so a
-   -- VHDL "a & b & c" concatenation puts a at the MSBs. Index 0 = REU (LSBs), 1 = CRT,
-   -- 2 = MOUNT. The new MOUNT slave only touches HyperRAM during disk mount/serve/flush
-   -- (QNICE-paced, <1% of HyperRAM bandwidth) so it cannot starve the real-time REU.
-   hr_arb_write      <= hr_mnt_write      & hr_crt_write      & hr_reu_write;
-   hr_arb_read       <= hr_mnt_read       & hr_crt_read       & hr_reu_read;
-   hr_arb_address    <= hr_mnt_address    & hr_crt_address    & hr_reu_address;
-   hr_arb_writedata  <= hr_mnt_writedata  & hr_crt_writedata  & hr_reu_writedata;
-   hr_arb_byteenable <= hr_mnt_byteenable & hr_crt_byteenable & hr_reu_byteenable;
-   hr_arb_burstcount <= hr_mnt_burstcount & hr_crt_burstcount & hr_reu_burstcount;
+   -- HyperRAM map guard (issue #93): on R3/R3A boards the framework's ascal scaler keeps
+   -- its frame buffer in HyperRAM at RAMBASE 0 with an allocation of exactly
+   -- 2^ceil(log2(VGA_DX*VGA_DY*3)) bytes (see M2M/vhdl/av_pipeline/digital_pipeline.vhd);
+   -- its write path is hardware-masked to that window. The M2M region of the map in
+   -- globals.vhd must fully contain it. If a future OSM canvas or video-mode change grows
+   -- the allocation, this fires at elaboration time instead of ascal silently overlapping
+   -- the SIMCRT pool.
+   assert 2 ** f_log2(VGA_DX * VGA_DY * 3) <= to_integer(unsigned(C_HMAP_CRT)) * 8192
+      report "HyperRAM map: ascal frame buffer exceeds the M2M region -- raise C_HMAP_CRT in globals.vhd"
+      severity failure;
 
-   hr_reu_readdata      <= hr_arb_readdata(15 downto  0);
-   hr_crt_readdata      <= hr_arb_readdata(31 downto 16);
-   hr_mnt_readdata      <= hr_arb_readdata(47 downto 32);
-   hr_reu_readdatavalid <= hr_arb_readdatavalid(0);
-   hr_crt_readdatavalid <= hr_arb_readdatavalid(1);
-   hr_mnt_readdatavalid <= hr_arb_readdatavalid(2);
-   hr_reu_waitrequest   <= hr_arb_waitrequest(0);
-   hr_crt_waitrequest   <= hr_arb_waitrequest(1);
-   hr_mnt_waitrequest   <= hr_arb_waitrequest(2);
+   -- 4-master HyperRAM arbiter (REU, CRT, MOUNT, MOUNT2). avm_arbit_general uses
+   -- flattened slave vectors; slave index k occupies bits ((k+1)*W-1 downto k*W), so a
+   -- VHDL "a & b & c & d" concatenation puts a at the MSBs. Index 0 = REU (LSBs), 1 = CRT,
+   -- 2 = MOUNT (drive 8), 3 = MOUNT2 (drive 9). The MOUNT slaves only touch HyperRAM during
+   -- disk mount/serve/flush (QNICE-paced, <1% of HyperRAM bandwidth each) so they cannot
+   -- starve the real-time REU.
+   hr_arb_write      <= hr_mnt2_write      & hr_mnt_write      & hr_crt_write      & hr_reu_write;
+   hr_arb_read       <= hr_mnt2_read       & hr_mnt_read       & hr_crt_read       & hr_reu_read;
+   hr_arb_address    <= hr_mnt2_address    & hr_mnt_address    & hr_crt_address    & hr_reu_address;
+   hr_arb_writedata  <= hr_mnt2_writedata  & hr_mnt_writedata  & hr_crt_writedata  & hr_reu_writedata;
+   hr_arb_byteenable <= hr_mnt2_byteenable & hr_mnt_byteenable & hr_crt_byteenable & hr_reu_byteenable;
+   hr_arb_burstcount <= hr_mnt2_burstcount & hr_mnt_burstcount & hr_crt_burstcount & hr_reu_burstcount;
+
+   hr_reu_readdata       <= hr_arb_readdata(15 downto  0);
+   hr_crt_readdata       <= hr_arb_readdata(31 downto 16);
+   hr_mnt_readdata       <= hr_arb_readdata(47 downto 32);
+   hr_mnt2_readdata      <= hr_arb_readdata(63 downto 48);
+   hr_reu_readdatavalid  <= hr_arb_readdatavalid(0);
+   hr_crt_readdatavalid  <= hr_arb_readdatavalid(1);
+   hr_mnt_readdatavalid  <= hr_arb_readdatavalid(2);
+   hr_mnt2_readdatavalid <= hr_arb_readdatavalid(3);
+   hr_reu_waitrequest    <= hr_arb_waitrequest(0);
+   hr_crt_waitrequest    <= hr_arb_waitrequest(1);
+   hr_mnt_waitrequest    <= hr_arb_waitrequest(2);
+   hr_mnt2_waitrequest   <= hr_arb_waitrequest(3);
 
    i_avm_arbit : entity work.avm_arbit_general
       generic map (
-         G_NUM_SLAVES   => 3,
+         G_NUM_SLAVES   => 4,
          G_ADDRESS_SIZE => 32,
          G_DATA_SIZE    => 16
       )
@@ -606,8 +662,19 @@ begin
    c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
    c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
 
-   -- Physical internal 1581 (issue #90): drive 8 uses the real internal floppy
-   phys_1581_en <= main_osm_control_i(C_MENU_INTERNAL_1581);
+   -- Per-drive mode from the "Drive Settings" OSM submenu (issues #90 and #93).
+   -- Encoding: see the c64_drive_mode signal declaration. The "If mounted" radio item is
+   -- the fall-through, so a (transient or corrupt) all-zero radio group behaves like today.
+   c64_drive_mode(1 downto 0) <= "01" when main_osm_control_i(C_MENU_DRV8_IMG_ALW) = '1' else
+                                 "10" when main_osm_control_i(C_MENU_DRV8_1581)    = '1' else
+                                 "11" when main_osm_control_i(C_MENU_DRV8_OFF)     = '1' else
+                                 "00";
+   c64_drive_mode(3 downto 2) <= "01" when main_osm_control_i(C_MENU_DRV9_IMG_ALW) = '1' else
+                                 "10" when main_osm_control_i(C_MENU_DRV9_1581)    = '1' else
+                                 "11" when main_osm_control_i(C_MENU_DRV9_OFF)     = '1' else
+                                 "00";
+   c64_drive_unmount(0)       <= main_osm_control_i(C_MENU_DRV8_UNMOUNT);
+   c64_drive_unmount(1)       <= main_osm_control_i(C_MENU_DRV9_UNMOUNT);
 
    -- SID version, 0=6581, 1=8580, low bit = left SID
    sid_setup <= "00" when main_osm_control_i(C_MENU_MONO_6581)    else
@@ -789,8 +856,9 @@ begin
          iec_srq_n_i            => iec_srq_n_i,
          iec_srq_n_o            => iec_srq_n_o,
 
-         -- Physical internal 1581 (issue #90): mode bit, QNICE-domain reset, board pins
-         phys_1581_en_i         => phys_1581_en,
+         -- Per-drive mode (issues #90 and #93) and physical internal 1581: QNICE-domain reset, board pins
+         drive_mode_i           => c64_drive_mode,
+         drive_unmount_i        => c64_drive_unmount,
          c64_rst_sd_i           => qnice_rst_i,
          f_rdata_i              => f_rdata_i,
          f_index_i              => f_index_i,
@@ -955,6 +1023,8 @@ begin
       qnice_c64_qnice_we         <= '0';
       qnice_mnt_qnice_ce         <= '0';
       qnice_mnt_qnice_we         <= '0';
+      qnice_mnt2_qnice_ce        <= '0';
+      qnice_mnt2_qnice_we        <= '0';
       qnice_prg_qnice_ce         <= '0';
       qnice_prg_qnice_we         <= '0';
       qnice_prg_c64ram_d_frm     <= (others => '0');
@@ -992,6 +1062,13 @@ begin
             qnice_mnt_qnice_we         <= qnice_dev_we_i;
             qnice_dev_data_o           <= qnice_mnt_qnice_data;
             qnice_dev_wait_o           <= qnice_mnt_qnice_wait;
+
+         -- Disk mount buffer of drive 9 (issue #93); see i_mount_buf_wrapper2
+         when C_DEV_C64_MOUNT2 =>
+            qnice_mnt2_qnice_ce        <= qnice_dev_ce_i;
+            qnice_mnt2_qnice_we        <= qnice_dev_we_i;
+            qnice_dev_data_o           <= qnice_mnt2_qnice_data;
+            qnice_dev_wait_o           <= qnice_mnt2_qnice_wait;
 
          -- PRG file loader (*.PRG)
          when C_DEV_C64_PRG =>
@@ -1222,6 +1299,34 @@ begin
          hr_readdatavalid_i => hr_mnt_readdatavalid,
          hr_waitrequest_i   => hr_mnt_waitrequest
       ); -- i_mount_buf_wrapper
+
+   -- HyperRAM-backed disk-image mount buffer of drive 9 (issue #93)
+   -- QNICE side is the C_DEV_C64_MOUNT2 device; HyperRAM side is the 4th arbiter slave.
+   i_mount_buf_wrapper2 : entity work.mount_buf_wrapper
+      generic map (
+         G_BASE_ADDRESS => C_HMAP_VD1(9 downto 0) & X"000"
+      )
+      port map (
+         qnice_clk_i        => qnice_clk_i,
+         qnice_rst_i        => qnice_rst_i,
+         qnice_addr_i       => qnice_dev_addr_i,
+         qnice_data_i       => qnice_dev_data_i,
+         qnice_ce_i         => qnice_mnt2_qnice_ce,
+         qnice_we_i         => qnice_mnt2_qnice_we,
+         qnice_data_o       => qnice_mnt2_qnice_data,
+         qnice_wait_o       => qnice_mnt2_qnice_wait,
+         hr_clk_i           => hr_clk_i,
+         hr_rst_i           => hr_rst_i,
+         hr_write_o         => hr_mnt2_write,
+         hr_read_o          => hr_mnt2_read,
+         hr_address_o       => hr_mnt2_address,
+         hr_writedata_o     => hr_mnt2_writedata,
+         hr_byteenable_o    => hr_mnt2_byteenable,
+         hr_burstcount_o    => hr_mnt2_burstcount,
+         hr_readdata_i      => hr_mnt2_readdata,
+         hr_readdatavalid_i => hr_mnt2_readdatavalid,
+         hr_waitrequest_i   => hr_mnt2_waitrequest
+      ); -- i_mount_buf_wrapper2
 
    main2hr_avm_fifo : entity work.avm_fifo
       generic map (
