@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 170; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 172; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -589,6 +589,9 @@ constant OPTM_ITEMS        : string :=
    " Back\n"                    &  -- returns to Advanced Settings
 
    "\n"                         &
+   " SIM-RRNET\n"               &
+
+   "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
    "\n"                         &
@@ -627,6 +630,7 @@ constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 constant OPTM_G_INT1581       : integer := 31;  -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
+constant OPTM_G_SIM_RRNET     : integer := 32;
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITION IN THE NEXT FOUR LINES
 function OPTM_DEP(mother : natural; item : natural) return natural is
@@ -813,6 +817,9 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_VICII_MODEL,                      -- 856x/old HMOS
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "VIC-II: %s"
+
+                                             OPTM_G_LINE,
+                                             OPTM_G_SIM_RRNET     + OPTM_G_SINGLESEL, -- Simulated RR-NET
 
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Advanced Settings"

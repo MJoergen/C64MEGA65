@@ -368,6 +368,17 @@ architecture synthesis of mega65_r3 is
    signal i2c_sda                : std_logic := 'H';
    signal i2c_scl                : std_logic := 'H';
 
+   -- Ethernet
+   signal main_eth_rx_ready      : std_logic;                    -- One-cycle strobe per received byte
+   signal main_eth_rx_valid      : std_logic;                    -- One-cycle strobe per received byte
+   signal main_eth_rx_last       : std_logic;                    -- Last byte of frame
+   signal main_eth_rx_ok         : std_logic;                    -- Only meaningful when eth_rx_last = '1'
+   signal main_eth_rx_data       : std_logic_vector(7 downto 0); -- Received byte
+   signal main_eth_tx_ready      : std_logic;                    -- Pulses '1' on the byte-boundary cycle
+   signal main_eth_tx_valid      : std_logic;                    -- Client presents a byte
+   signal main_eth_tx_last       : std_logic;                    -- Client marks the last byte
+   signal main_eth_tx_data       : std_logic_vector(7 downto 0); -- Byte to transmit
+
 begin
 
    -----------------------------------------------------------------------------------------
@@ -454,13 +465,6 @@ begin
    audio_sdti_o  <= '0';
    audio_lrclk_o <= '0';
    audio_pdn_n_o <= '0';
-   eth_clock_o   <= '0';
-   eth_led2_o    <= '0';
-   eth_mdc_o     <= '0';
-   eth_mdio_io   <= 'Z';
-   eth_reset_o   <= '1';
-   eth_txd_o     <= (others => '0');
-   eth_txen_o    <= '0';
    -- MEGA65 physical internal 1581 (issue #90): the read-path control outputs
    -- (f_motora/f_selecta/f_side1/f_stepdir/f_step/f_density) are now driven by
    -- the physical_1581_controller via MEGA65_Core. Drive B and the write pins
@@ -600,6 +604,15 @@ begin
       main_pot2_x_o           => main_pot2_x,
       main_pot2_y_o           => main_pot2_y,
       main_rtc_o              => main_rtc,
+      main_eth_rx_ready_i     => main_eth_rx_ready,
+      main_eth_rx_valid_o     => main_eth_rx_valid,
+      main_eth_rx_last_o      => main_eth_rx_last,
+      main_eth_rx_ok_o        => main_eth_rx_ok,
+      main_eth_rx_data_o      => main_eth_rx_data,
+      main_eth_tx_ready_o     => main_eth_tx_ready,
+      main_eth_tx_valid_i     => main_eth_tx_valid,
+      main_eth_tx_last_i      => main_eth_tx_last,
+      main_eth_tx_data_i      => main_eth_tx_data,
 
       -- Provide HyperRAM to core (in HyperRAM clock domain)
       hr_clk_o                => hr_clk,
@@ -657,7 +670,17 @@ begin
       fpga_sda_io             => fpga_sda_io,
       fpga_scl_io             => fpga_scl_io,
       grove_sda_io            => grove_sda_io,
-      grove_scl_io            => grove_scl_io
+      grove_scl_io            => grove_scl_io,
+      eth_clock_o             => eth_clock_o,
+      eth_led2_o              => eth_led2_o,
+      eth_mdc_o               => eth_mdc_o,
+      eth_mdio_io             => eth_mdio_io,
+      eth_reset_o             => eth_reset_o,
+      eth_rxd_i               => eth_rxd_i,
+      eth_rxdv_i              => eth_rxdv_i,
+      eth_rxer_i              => eth_rxer_i,
+      eth_txd_o               => eth_txd_o,
+      eth_txen_o              => eth_txen_o
    ); -- i_framework
 
 
@@ -895,7 +918,18 @@ begin
          --
          cart_addr_oe_o    => cart_addr_oe, -- 0 : tristate (i.e. input), 1 : output
          cart_a_i          => cart_a_in,
-         cart_a_o          => cart_a_out
+         cart_a_o          => cart_a_out,
+
+         -- Ethernet
+         eth_rx_ready_o    => main_eth_rx_ready,
+         eth_rx_valid_i    => main_eth_rx_valid,
+         eth_rx_last_i     => main_eth_rx_last,
+         eth_rx_ok_i       => main_eth_rx_ok,
+         eth_rx_data_i     => main_eth_rx_data,
+         eth_tx_ready_i    => main_eth_tx_ready,
+         eth_tx_valid_o    => main_eth_tx_valid,
+         eth_tx_last_o     => main_eth_tx_last,
+         eth_tx_data_o     => main_eth_tx_data
       ); -- CORE
 
 end architecture synthesis;

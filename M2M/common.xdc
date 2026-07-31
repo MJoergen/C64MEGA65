@@ -17,6 +17,7 @@ create_generated_clock -name hr_clk          [get_pins i_framework/i_clk_m2m/i_c
 create_generated_clock -name hr_delay_refclk [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT2]
 create_generated_clock -name hr_clk_del      [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT3]
 create_generated_clock -name sr_clk          [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT4]
+create_generated_clock -name eth_clk         [get_pins i_framework/i_clk_m2m/i_clk_qnice/CLKOUT5]
 create_generated_clock -name audio_clk       [get_pins i_framework/i_clk_m2m/i_clk_audio/CLKOUT0]
 create_generated_clock -name tmds_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT0]
 create_generated_clock -name hdmi_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT1]
@@ -121,6 +122,18 @@ set_false_path -from [get_clocks hdmi_clk]  -to [get_clocks audio_clk]
 set_false_path -from [get_clocks audio_clk] -to [get_clocks hdmi_clk]
 set_false_path -from [get_clocks qnice_clk] -to [get_clocks hdmi_clk]
 set_false_path -through [get_pins i_framework/i_av_pipeline/i_digital_pipeline/i_ascal/reset_na]
+
+
+# Generic CDC. Used in M2M/vhdl/controllers/ethernet/eth_wrapper.vhd
+set_max_delay 2 -datapath_only \
+    -from [get_pins -hierarchical "*s_gray_wr_reg*/C"] \
+    -to   [get_pins -hierarchical "*cdc_block.m_gray_wr_meta_reg*/D"]
+set_max_delay 2 -datapath_only \
+    -from [get_pins -hierarchical "*m_gray_rd_reg*/C"] \
+    -to   [get_pins -hierarchical "*cdc_block.s_gray_rd_meta_reg*/D"]
+set_false_path -to [get_pins -hierarchical "*_rst_meta_reg*/D"]
+#set_false_path -to [get_pins i_framework/eth_wrapper_inst/axis_fifo_async_rx_inst/m_data_o_reg[*]/D]
+set_false_path -to [get_pins i_framework/eth_wrapper_inst/axis_fifo_async_tx_inst/m_data_o_reg[*]/D]
 
 
 ################################
