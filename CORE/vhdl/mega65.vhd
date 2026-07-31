@@ -451,7 +451,13 @@ constant C_MENU_8521          : natural := 155;
 constant C_MENU_VICII_NMOS    : natural := 159;
 constant C_MENU_VICII_HMOS    : natural := 160;
 constant C_MENU_VICII_OLDHMOS : natural := 161;
-constant C_MENU_SIM_RRNET     : natural := 165;
+-- Simulated RR-Net (issue #234): the three "On" variants all switch the very same
+-- simulated CS8900A on; telling MK2 from MK3 (the MK3 adds an 8 kB ROM at $8000,
+-- mapped via $DE80/$DE88, either the standard or a custom one) is not wired, yet
+constant C_MENU_RRNET_OFF        : natural := 167;
+constant C_MENU_RRNET_MK2        : natural := 168;
+constant C_MENU_RRNET_MK3_STD    : natural := 169;
+constant C_MENU_RRNET_MK3_CUSTOM : natural := 170;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -622,10 +628,12 @@ begin
    -- bit 0 = 1: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
    -- bit 1 = 0: No simulated REU
    -- bit 1 = 1: Simulate a 1750 REU with 512KB
-   -- bit 2 = 1: Simulate an RR-NET ethernet cartridge
+   -- bit 2 = 1: Simulate an RR-Net ethernet cartridge (any of the "On" variants)
    c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
    c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
-   c64_exp_port_mode(2) <= main_osm_control_i(C_MENU_SIM_RRNET);
+   c64_exp_port_mode(2) <= main_osm_control_i(C_MENU_RRNET_MK2)     or
+                           main_osm_control_i(C_MENU_RRNET_MK3_STD) or
+                           main_osm_control_i(C_MENU_RRNET_MK3_CUSTOM);
 
    -- Physical internal 1581 (issue #90): drive 8 uses the real internal floppy
    phys_1581_en <= main_osm_control_i(C_MENU_INTERNAL_1581);

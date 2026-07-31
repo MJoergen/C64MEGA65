@@ -49,6 +49,25 @@ on and no way to switch it off.
   expected to come back - that is exactly why the switch exists and why it
   defaults to off.
 
+@TODO: Test the simulated RR-Net (issue #234) and its new OSM section. In
+"Advanced Settings" the former single `SIM-RRNET` checkbox became a radio group
+below a yellow `RR-Net` headline: `Off` (the default), `On: MK2`,
+`On: MK3 & Std ROM` and `On: MK3 & Custom ROM`.
+
+* Confirm that each of the three `On` entries switches the simulated CS8900A on
+  and that `Off` switches it off again. Only `Off` versus `On` is wired so far,
+  so the three `On` entries are expected to behave identically; the MK3 extras
+  (the 8 KB ROM at `\$8000`, mapped via `\$DE80`/`\$DE88`, standard or custom)
+  are not implemented, yet.
+* Confirm the radio behavior itself: exactly one entry selected at a time, `Off`
+  after a fresh config file, and the choice surviving a reboot once the settings
+  are saved.
+* No wired menu item moved: every `C_MENU_*` control bit sits below the new
+  block, so only the items after it shifted. A quick sanity pass over
+  `About & Help` and `Close Menu` is enough.
+* Config file: the new lines grew `OPTM_SIZE` further to 177, so the
+  regeneration note above applies to this change as well.
+
 Version WIP-V6-A18X2 - 2026-07-18
 ---------------------------------
 

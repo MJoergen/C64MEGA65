@@ -76,7 +76,7 @@ G = dict(
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
-    RTC_GEOS=29, VICII_MODEL=30, INT1581=31,
+    RTC_GEOS=29, VICII_MODEL=30, INT1581=31, SIM_RRNET=32,
 )
 
 OPEN = ("SUBMENU",)
@@ -249,6 +249,13 @@ V6_MENU = [
     (" 856x/old HMOS",           "VICII_MODEL", []),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 10
+    ("",                         None, ["LINE"]),
+    (" RR-Net",                  None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Off",                     "SIM_RRNET", ["STDSEL"]),
+    (" On: MK2",                 "SIM_RRNET", []),
+    (" On: MK3 & Std ROM",       "SIM_RRNET", []),
+    (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 8
     ("",                         None, ["LINE"]),
@@ -1170,8 +1177,8 @@ def nav_script():
                labels=[t for t, _, _ in V6_MENU])
 
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (169)
-    assert s.cursor == 169
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (176)
+    assert s.cursor == 176
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 15)           # to "Model: %s"
@@ -1514,6 +1521,10 @@ C_MENU = [
     ("C_MENU_VICII_NMOS",   "VICII_MODEL", 0),
     ("C_MENU_VICII_HMOS",   "VICII_MODEL", 1),
     ("C_MENU_VICII_OLDHMOS", "VICII_MODEL", 2),
+    ("C_MENU_RRNET_OFF",        "SIM_RRNET", 0),
+    ("C_MENU_RRNET_MK2",        "SIM_RRNET", 1),
+    ("C_MENU_RRNET_MK3_STD",    "SIM_RRNET", 2),
+    ("C_MENU_RRNET_MK3_CUSTOM", "SIM_RRNET", 3),
 ]
 
 
