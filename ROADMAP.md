@@ -11,7 +11,6 @@ Feature Roadmap
 
 * NTSC
 * Turbo mode for games such as Zeropaige's Super Mario Bros
-* Support two simulated drives: 8 and 9
 * Offer an SD2IEC compatible IEC device that browses the SD card and that
   you can for example use to flash the EF1CR cartridge without the need of
   splitting large CRTs into multiple D64 disks using EasySplit
@@ -47,7 +46,6 @@ robustness, performance, and stability of the whole system, we will need
 to implement certain technical improvements in the "backend", again in no
 particular order:
 
-* Research MiSTer's SID improvements from November 16 (and newer)
 * Maximize compatibility of C1541 by implementing MiSTer's raw GCR mode
   which exclusively uses GCR internally (c1541_direct_gcr.sv instead of
   c1541_gcr.sv). `*.D64` images are converted to/from GCR when reading/writing

@@ -33,7 +33,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A18X1  | 07/18/26 | 95eae0f | Read-only support MEGA65's built-in floppy drive as 1581 (issue #90)
 | WIP-V6-A18X2  | 07/18/26 | d94fa73 | Fixed a regression that prevented simulated D81 images to work
 | WIP-V6-A19    | <date>   | <tbd>   | Simulate RR-Net (issue #234). Switchable GEOS Real-Time-Clock (issues #133, #164 and #187). Audio level control (issue #85). Config file has now .cfg file-extension (issue #239).
-| WIP-V6-A20    | <date>   | <tbd>   | Two simulated drives 8 and 9 with a per-drive Drive Settings submenu: Disk Image "If mounted" or "Always", Internal 1581 on either drive, Off, and per-drive "Unmount on reset" (issues #93 and #90). Fixed multi-drive firmware bugs before their first-ever activation (upstream M2M issues #52, #57, #58 and #73).
+| WIP-V6-A20    | <date>   | <tbd>   | Added drive 9; both drives can now be used either as simulated drives or one of them using the built-in floppy drive as 1581 (issues #93 and #237). Configurable drive activation (issue #88). Configurable un-mount on reset (issue #81).
 
 ## Version 5.2
 

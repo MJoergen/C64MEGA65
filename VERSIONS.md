@@ -22,6 +22,16 @@ Version 6 - MONTH DAY, 2026
   which drive ROMs you install.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/91)
 
+* Added drive 9. Both drives 8 and 9 can be configured as simulated drives
+  and optionally one of them can also be the build-in floppy as 1581. You can
+  configure whether the drives are always on or (like in past) only active
+  when a disk image is mounted. The unmount-on-reset behavior can be
+  configured and one or both drives can also be switched off completely to
+  make room for physical IEC devices.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/81 and
+   https://github.com/MJoergen/C64MEGA65/issues/93 and
+   https://github.com/MJoergen/C64MEGA65/issues/237)
+
 * Full DMA support for hardware cartridges such as hardware REUs (for example
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
@@ -41,10 +51,6 @@ Version 6 - MONTH DAY, 2026
   like A Pig's Quest and Mech Warrior Ultra.
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/136 and
    https://github.com/MJoergen/C64MEGA65/issues/198)
-
-  On 2024+ MEGA65s this feature works even better, smoother and more
-  compatible as it uses the built-in SDRAM instead of HyperRAM.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 * You can adjust the audio volume via the OSM. Implemented as a perceptual,
   loudness-linear attenuation: 50% means half as loud as 100%.
@@ -160,6 +166,15 @@ Version 6 - MONTH DAY, 2026
 
   - Improved Ocean Type 1 compatibility, so that for example Wonderboy works
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/138)
+
+## Improvements for 2024+ MEGA65s (R6/R6A) only:
+
+* We moved the HDMI image scaler (aka ASCAL) to the SDRAM. This frees up
+  HyperRAM bandwidth for simulated cartridges (`.crt`) and the simulated REU.
+  While everything runs and continues to run very fine on older machines,
+  the newer machines benefit from slightly improved compatibility and an even
+  lower amount of glitches.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 ## Bugfixes
 
