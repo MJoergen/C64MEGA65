@@ -222,24 +222,50 @@ signal img_type_out     : std_logic_vector(1 downto 0);
 signal drive_mounted_reg         : std_logic_vector(VDNUM - 1 downto 0);
 signal drive_mounted_reg_qnice   : std_logic_vector(VDNUM - 1 downto 0);
 
--- Cache signalling registers in core's and QNICE's clock domain
+-- "Unmount on reset" configuration and the hard-reset qualifier, CDC-d into the
+-- QNICE clock domain: the write-cache bookkeeping below must survive a soft
+-- core reset for drives that keep their disk image mounted (C64MEGA65 #93).
+-- The CDC uses packed source/destination vectors instead of sliced formals.
+signal unmount_qnice             : std_logic_vector(VDNUM - 1 downto 0);
+signal reset_hard_qnice          : std_logic;
+signal cdc_m2q_src               : std_logic_vector(2 * VDNUM + 1 downto 0);
+signal cdc_m2q_dst               : std_logic_vector(2 * VDNUM + 1 downto 0);
+
+-- Reset-driven unmounts must also reach the DRIVE ENGINES: a drive that keeps
+-- running while unmounted (e.g. the C64 core's "Disk Image: Always" mode) has
+-- latched its disk-present state from the last img_mounted strobe and would
+-- otherwise keep serving the stale image cache after a reset-driven unmount
+-- ("ghost disk"). rst_unmounted remembers which drives a core reset unmounted;
+-- shortly after the reset releases (and the drives left their synchronized
+-- resets), img_mounted_o is strobed for them with img_size_o forced to zero.
+signal rst_unmounted             : std_logic_vector(VDNUM - 1 downto 0) := (others => '0');
+signal rst_unmount_pulse         : std_logic_vector(VDNUM - 1 downto 0) := (others => '0');
+signal rst_unmount_cnt           : natural range 0 to 15 := 0;
+signal reset_core_d              : std_logic := '0';
+
+-- Cache signalling registers in core's and QNICE's clock domain. The QNICE-side
+-- registers carry power-on initializers because the reset branch below only
+-- clears them for drives that a core reset actually unmounts (see there).
 signal cache_dirty_r_core        : std_logic_vector(VDNUM - 1 downto 0);
-signal cache_dirty_r_qnice       : std_logic_vector(VDNUM - 1 downto 0);
+signal cache_dirty_r_qnice       : std_logic_vector(VDNUM - 1 downto 0) := (others => '0');
 signal cache_flushing_r_core     : std_logic_vector(VDNUM - 1 downto 0);
-signal cache_flushing_r_qnice    : std_logic_vector(VDNUM - 1 downto 0);
-signal latch_sd_wr               : vd_std_array(VDNUM - 1 downto 0);
-signal cache_flush_st_r_qnice    : std_logic_vector(VDNUM - 1 downto 0);
+signal cache_flushing_r_qnice    : std_logic_vector(VDNUM - 1 downto 0) := (others => '0');
+signal latch_sd_wr               : vd_std_array(VDNUM - 1 downto 0) := (others => '0');
+signal cache_flush_st_r_qnice    : std_logic_vector(VDNUM - 1 downto 0) := (others => '0');
 
 -- cache_flush_de_r_qnice: Delay in ms between last sd_wr_i and cache flush start signaling "start"
 -- cache_flush_de_counter: QNICE CPU cycles that represent the delay in ms
-signal cache_flush_de_r_qnice    : vd_unsigned_array(VDNUM - 1 downto 0)(15 downto 0);
-signal cache_flush_de_cnt_qnice  : vd_unsigned_array(VDNUM - 1 downto 0)(31 downto 0);
+-- (power-on defaults = 2 seconds, see the comment in the reset branch below)
+signal cache_flush_de_r_qnice    : vd_unsigned_array(VDNUM - 1 downto 0)(15 downto 0) := (others => to_unsigned(2000, 16));
+signal cache_flush_de_cnt_qnice  : vd_unsigned_array(VDNUM - 1 downto 0)(31 downto 0) := (others => to_unsigned(2 * QNICE_CLK_SPEED, 32));
 
 begin
-   -- Core clock domain: Output registers
-   img_mounted_o     <= img_mounted_out;
+   -- Core clock domain: Output registers. The rst_unmount_pulse overlay tells
+   -- the drive engines about reset-driven unmounts (see the signal comment):
+   -- an img_mounted strobe with size zero is the protocol's unmount notification.
+   img_mounted_o     <= img_mounted_out or rst_unmount_pulse;
    img_readonly_o    <= img_readonly_out;
-   img_size_o        <= img_size_out;
+   img_size_o        <= (others => '0') when unsigned(rst_unmount_pulse) /= 0 else img_size_out;
    img_type_o        <= img_type_out;
    drive_mounted_o   <= drive_mounted_reg;
    cache_dirty_o     <= cache_dirty_r_core;
@@ -283,19 +309,24 @@ begin
    sd_buff_wr_o      <= sd_buff_wr;
    sd_ack_o          <= sd_ack;
 
+   cdc_m2q_src             <= reset_hard_core_i & unmount_on_reset_i & drive_mounted_reg & reset_core_i;
+
    i_cdc_main2qnice: xpm_cdc_array_single
       generic map (
          DEST_SYNC_FF => 2,
-         WIDTH        => 1 + VDNUM
+         WIDTH        => 2 + 2 * VDNUM
       )
       port map (
-         src_clk                             => clk_core_i,
-         src_in(0)                           => reset_core_i,
-         src_in((1 + VDNUM - 1) downto 1)    => drive_mounted_reg,
-         dest_clk                            => clk_qnice_i,
-         dest_out(0)                         => reset_qnice,
-         dest_out((1 + VDNUM - 1) downto 1)  => drive_mounted_reg_qnice
+         src_clk      => clk_core_i,
+         src_in       => cdc_m2q_src,
+         dest_clk     => clk_qnice_i,
+         dest_out     => cdc_m2q_dst
       );
+
+   reset_qnice             <= cdc_m2q_dst(0);
+   drive_mounted_reg_qnice <= cdc_m2q_dst(VDNUM downto 1);
+   unmount_qnice           <= cdc_m2q_dst(2 * VDNUM downto VDNUM + 1);
+   reset_hard_qnice        <= cdc_m2q_dst(2 * VDNUM + 1);
 
    -- speed up the QNICE firmware by doing certain calculations in hardware instead of software
    g_bytecalc : for i in 0 to VDNUM - 1 generate
@@ -320,11 +351,17 @@ begin
    handle_drive_mounted : process(clk_core_i)
    begin
       if rising_edge(clk_core_i) then
+         rst_unmount_pulse <= (others => '0');
+         reset_core_d      <= reset_core_i;
+
          for i in 0 to VDNUM - 1 loop
             -- a core reset unmounts a drive unless the core keeps it mounted via
             -- unmount_on_reset_i(i) = '0'; a hard reset always unmounts (see the port comment)
             if reset_core_i = '1' and (unmount_on_reset_i(i) = '1' or reset_hard_core_i = '1') then
                drive_mounted_reg(i) <= '0';
+               if drive_mounted_reg(i) = '1' then
+                  rst_unmounted(i) <= '1';      -- this reset unmounted the drive
+               end if;
             elsif img_mounted_out(i) = '1' then
                -- to unmount a drive: strobe img_mounted while having the image size set to zero
                if img_size_out = x"00000000" then
@@ -336,6 +373,25 @@ begin
                end if;
             end if;
          end loop;
+
+         -- After the reset released, notify the DRIVE ENGINES of the
+         -- reset-driven unmounts with a real img_mounted strobe of size zero
+         -- (see the rst_unmounted signal comment: without it, a drive that
+         -- keeps running while unmounted serves a "ghost disk" from its
+         -- latched disk-present state and the stale cache). Wait a few cycles
+         -- so the drives have left their synchronized resets, then strobe for
+         -- several cycles so every clock-enable-gated consumer sees it.
+         if reset_core_d = '1' and reset_core_i = '0' then
+            rst_unmount_cnt <= 15;
+         elsif rst_unmount_cnt /= 0 then
+            rst_unmount_cnt <= rst_unmount_cnt - 1;
+            if rst_unmount_cnt <= 8 then
+               rst_unmount_pulse <= rst_unmounted;
+            end if;
+            if rst_unmount_cnt = 1 then
+               rst_unmounted <= (others => '0');
+            end if;
+         end if;
       end if;
    end process;
 
@@ -353,16 +409,24 @@ begin
             sd_buff_wr              <= '0';
             sd_ack                  <= (others => '0');
 
-            cache_dirty_r_qnice     <= (others => '0');
-            cache_flushing_r_qnice  <= (others => '0');
-            latch_sd_wr             <= (others => '0');
-            cache_flush_st_r_qnice  <= (others => '0');
-
+            -- The write-cache bookkeeping is only reset for drives that this
+            -- core reset actually unmounts: a hard reset, or "Unmount on
+            -- reset" enabled for the drive. A drive that keeps its disk image
+            -- mounted across a soft reset (C64MEGA65 issue #93) must also
+            -- keep its dirty flag, its write latch and its flush state --
+            -- otherwise unsaved data would silently never be flushed and the
+            -- image cache would diverge from the file on the SD card.
             -- 2 seconds is the default delay between the last sd_wr_i and the start of the cache flushing:
             -- 2 seconds = 2000 milliseconds = 2 x QNICE_CLK_SPEED (constant from qnice_globals.vhd) = 100_000_000 clock cycles
             for i in 0 to VDNUM - 1 loop
-               cache_flush_de_r_qnice(i)     <= to_unsigned(2000, 16);
-               cache_flush_de_cnt_qnice(i)   <= to_unsigned(2 * QNICE_CLK_SPEED, 32);
+               if unmount_qnice(i) = '1' or reset_hard_qnice = '1' then
+                  cache_dirty_r_qnice(i)      <= '0';
+                  cache_flushing_r_qnice(i)   <= '0';
+                  latch_sd_wr(i)              <= '0';
+                  cache_flush_st_r_qnice(i)   <= '0';
+                  cache_flush_de_r_qnice(i)   <= to_unsigned(2000, 16);
+                  cache_flush_de_cnt_qnice(i) <= to_unsigned(2 * QNICE_CLK_SPEED, 32);
+               end if;
             end loop;
          else
             -- we need to latch sd_wr_i so that in conjunction with sd_ack_o we can determine cache_dirty_r_qnice

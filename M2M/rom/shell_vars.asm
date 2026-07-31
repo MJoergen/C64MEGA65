@@ -21,6 +21,9 @@ WELCOME_SHOWN   .BLOCK 1                        ; we need to trust that this
 ; option menu
 OPTM_ICOUNT     .BLOCK 1                        ; amount of menu items
 OPTM_SCOUNT     .BLOCK 1                        ; amount of submenus
+OPTM_MAXHT      .BLOCK 1                        ; largest structural view height
+                                                ; (for the dependency-aware
+                                                ; geometry check at boot)
 OPTM_START      .BLOCK 1                        ; initially selected menu item
 OPTM_SELECTED   .BLOCK 1                        ; last options menu selection
 OPTM_MNT_STATUS .BLOCK 1                        ; drive mount status; all drvs

@@ -721,6 +721,76 @@ def validate_deps(groups, raw, special):
     return ("ok",)
 
 
+def deps_minhid(groups, raw):
+    """Port of OPTM_DEPS_MINHID: the guaranteed-hidden dependent-line count
+    for the boot-time height check in options.asm. Sum over all mother
+    groups - found via a first-occurrence scan of the dependent lines - of
+    the MINIMUM, over the mother's selectable states, of the number of
+    dependent lines of that mother whose mask bit for the state is clear
+    (= hidden in that state). States: single-select mothers 0..1; radio
+    mothers 0..min(member count, 4)-1 (states beyond the 4-bit mask width
+    hide every dependent line and can never lower the minimum). The sum is
+    GLOBAL over all views - a safe under-approximation, see the routine
+    header in optm_deps.asm; the exact per-view maximum is what
+    dep_aware_max_height() computes for the OPTM_DY authoring check."""
+    n = len(groups)
+    total = 0
+    for i in range(n):
+        if not (raw[i] & 0x1000):                 # not dependent
+            continue
+        mother = raw[i] & 0xFF
+        if any((raw[j] & 0x1000) and (raw[j] & 0xFF) == mother
+               for j in range(i)):                # not the first occurrence
+            continue
+        count = sum(1 for w in groups if (w & 0xFF) == mother)
+        if count == 0:                            # defensive (boot-validated)
+            continue
+        single = any((w & 0x8000) and (w & 0xFF) == mother for w in groups)
+        states = 2 if single else min(count, 4)
+        total += min(
+            sum(1 for j in range(n)
+                if (raw[j] & 0x1000) and (raw[j] & 0xFF) == mother
+                and not (((raw[j] >> 8) & 0xF) >> s) & 1)
+            for s in range(states))
+    return total
+
+
+def dep_aware_max_height(menu, deps):
+    """The dependency-aware OPTM_DY: the maximum number of SIMULTANEOUSLY
+    visible lines over all view levels. Per view, the structural line count
+    (build_new with deps off marks the view's members via bit 15) is
+    reduced, per mother group, by the minimum number of that mother's
+    dependent lines IN THIS VIEW that are hidden in any selectable state of
+    the mother - mutually exclusive dependent lines (e.g. the per-drive
+    mount/status twins of issue #93) can never be visible together. This is
+    the authoring convention documented above OPTM_DX/OPTM_DY in config.vhd;
+    the firmware's boot-time warning uses the global under-approximation
+    OPTM_DEPS_MINHID instead (see deps_minhid)."""
+    groups = menu_masked(menu)
+    raw = menu_deps_raw(menu, deps)
+    n = len(groups)
+    mothers = []
+    for i in range(n):                            # first-occurrence order
+        if (raw[i] & 0x1000) and (raw[i] & 0xFF) not in mothers:
+            mothers.append(raw[i] & 0xFF)
+    best = 0
+    for lv in range(num_regions(groups) + 1):
+        b = build_new(groups, lv)
+        height = b["vis"]
+        for mother in mothers:
+            members = [j for j in range(n) if (groups[j] & 0xFF) == mother]
+            single = any(groups[j] & 0x8000 for j in members)
+            states = 2 if single else min(len(members), 4)
+            masks = [(raw[j] >> 8) & 0xF for j in range(n)
+                     if (raw[j] & 0x1000) and (raw[j] & 0xFF) == mother
+                     and (b["arr"][j] & 0x8000)]
+            if masks:
+                height -= min(sum(1 for m in masks if not (m >> s) & 1)
+                              for s in range(states))
+        best = max(best, height)
+    return best
+
+
 # A synthetic menu for the dependency testbed: a radio mother (gid 22, members
 # at idx 2/3), a single-select mother (gid 14, idx 5) and dependent lines
 # inside region 2 (idx 7..14): plain radio lines, a two-bit-mask line, a
@@ -893,6 +963,64 @@ def deps_summ_fixtures():
     # NTSC selected + only the two-bit-mask line selected: the walk skips the
     # dep-hidden 7, the unselected 8/10, the hidden 11 and finds idx 12
     fx.append(("two-bit mask member", DEP_GROUPS, res, sd(i3=1, i12=1), 6))
+    return fx
+
+
+# Synthetic menus for the OPTM_DEPS_MINHID testbed. "State cap": a radio
+# mother (gid 40) with FIVE members, so the state loop is capped at
+# min(5, 4) = 4 states, and dependent-line masks whose per-state hidden
+# counts are s0:2 s1:2 s2:1 s3:1 - the minimum (1) is only reached in the
+# capped-in states 2/3, which kills a cap-at-2 mutant; plus a single-select
+# mother (gid 41) whose two dependent lines are hidden in state 0 and
+# visible in state 1 (minimum 0 at state 1), which kills a states=1 mutant.
+# The dependent lines are TEXT-style (group id 0): MINHID reads only their
+# raw dependency words, never their own group membership.
+MH_CAP_GROUPS = [
+    0x1000,          # 0  headline
+    40, 40, 40, 40, 40,  # 1..5  radio mother gid 40, 5 members (cap!)
+    0x8000 | 41,     # 6  single-select mother gid 41
+    0, 0, 0,         # 7..9  dependent lines of mother 40
+    0, 0,            # 10..11  dependent lines of mother 41
+    0x00FF,          # 12 close menu
+]
+MH_CAP_RAW = dep_raw_array({7: (40, 0b1100), 8: (40, 0b1100),
+                            9: (40, 0b0011),
+                            10: (41, 0b10), 11: (41, 0b10)},
+                           len(MH_CAP_GROUPS))
+
+# "Different minimum states": mother 50 (radio, 3 members) reaches its
+# minimum (1) only in states 1/2 (per-state hidden counts s0:2 s1:1 s2:1),
+# mother 51 (radio, 2 members) only in state 0 (s0:0 s1:1) - so the
+# min-over-states comparison must actually compare, not just take state 0.
+MH_MIN_GROUPS = [
+    50, 50, 50,      # 0..2  radio mother gid 50, 3 members
+    51, 51,          # 3..4  radio mother gid 51, 2 members
+    0, 0, 0, 0,      # 5..8  dependent lines of mother 50
+    0, 0,            # 9..10 dependent lines of mother 51
+    0x00FF,          # 11 close menu
+]
+MH_MIN_RAW = dep_raw_array({5: (50, 0b011), 6: (50, 0b101),
+                            7: (50, 0b110), 8: (50, 0b110),
+                            9: (51, 0b11), 10: (51, 0b01)},
+                           len(MH_MIN_GROUPS))
+
+
+def deps_minhid_fixtures():
+    """(name, groups, raw) -> expected sum via deps_minhid."""
+    fx = []
+    # the real V6 arrays: DRV8_MODE min 1 + DRV9_MODE min 1 + MACHINE_MODE
+    # min 4 (in the PAL state the four NTSC HDMI lines are hidden) = 6
+    fx.append(("v6 real menu", menu_masked(V6_MENU),
+               menu_deps_raw(V6_MENU, V6_DEPS)))
+    # no dependencies at all -> 0
+    fx.append(("no dependencies", [1, 2, 0x1000], [0, 0, 0]))
+    # the synthetic dependency model: mother 22 min 3, mother 14 min 0
+    fx.append(("synthetic model", DEP_GROUPS,
+               dep_raw_array(DEP_RAW_MAP, len(DEP_GROUPS))))
+    # multi-mother with the radio state cap + a single-select mother
+    fx.append(("state cap + single-select", MH_CAP_GROUPS, MH_CAP_RAW))
+    # minima in different (non-zero) states per mother
+    fx.append(("different minimum states", MH_MIN_GROUPS, MH_MIN_RAW))
     return fx
 
 
@@ -1272,6 +1400,8 @@ def expect_deps():
             lines.append("D %04X FOUND I=%04X" % (k, r[1]))
         else:
             lines.append("D %04X ERR C=%04X" % (k, r[1]))
+    for k, (name, g, raw) in enumerate(deps_minhid_fixtures()):
+        lines.append("M %04X S=%04X" % (k, deps_minhid(g, raw)))
     lines.append("DONE")
     return "\n".join(lines) + "\n"
 
@@ -1302,6 +1432,8 @@ def emit_deps_asm(path):
     L += block("DS", deps_summ_fixtures(),
                lambda fx: ([fx[1], fx[2], fx[3]],
                            "0x%04X, 0x%04X" % (len(fx[1]), fx[4])))
+    L += block("DM", deps_minhid_fixtures(),
+               lambda fx: ([fx[1], fx[2]], "0x%04X" % len(fx[1])))
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
 
@@ -1847,7 +1979,9 @@ def vhdl_blocks():
     out = []
     out.append("-- === OPTM_SIZE / OPTM_DY (V6 menu: %d items, %d regions,"
                % (n, num_regions(menu_masked(V6_MENU))))
-    out.append("-- === strlen incl. two-character newlines: %d)" % strlen)
+    out.append("-- === dependency-aware max height %d, strlen incl."
+               " two-character newlines: %d)"
+               % (dep_aware_max_height(V6_MENU, V6_DEPS), strlen))
     vals = c_menu_values()
     out.append("")
     out.append("-- === C_MENU constants for mega65.vhd ===")
@@ -1899,8 +2033,11 @@ def verify():
     if consts.get("OPTM_SIZE") != n:
         errors.append("OPTM_SIZE = %s, model says %d"
                       % (consts.get("OPTM_SIZE"), n))
-    exp_dy = max(validate(menu_masked(V6_MENU), 2)[2],
-                 build_new(menu_masked(V6_MENU), 0)["vis"])
+    # OPTM_DY is the dependency-aware maximum of simultaneously visible
+    # lines over all views (see the comment above OPTM_DX in config.vhd):
+    # per view, mutually exclusive dependent lines - e.g. the per-drive
+    # mount/status twins - count as the most that can show at once
+    exp_dy = dep_aware_max_height(V6_MENU, V6_DEPS)
     if consts.get("OPTM_DY") != exp_dy:
         errors.append("OPTM_DY = %s, model says %d"
                       % (consts.get("OPTM_DY"), exp_dy))
@@ -2197,6 +2334,18 @@ MUTANTS = [
      "M2M/rom/menu.asm",
      "AND     0x00FF, R7              ; group id != 0: selectable\n                RBRA    _OPTM_RUN_INID, !Z",
      "AND     0x00FF, R7              ; group id != 0: selectable\n                RBRA    _OPTM_RUN_INID, Z"),
+    ("optm_deps.asm  MINHID caps the radio states at 2 instead of 4",
+     "M2M/rom/optm_deps.asm",
+     "RBRA    _DMH_STATES, N\n                MOVE    4, R7",
+     "RBRA    _DMH_STATES, N\n                MOVE    2, R7"),
+    ("optm_deps.asm  MINHID first-occurrence skip broken (mothers recounted)",
+     "M2M/rom/optm_deps.asm",
+     "RBRA    _DMH_NEXT, Z            ; yes: already counted",
+     "RBRA    _DMH_SEENN, Z           ; yes: already counted"),
+    ("optm_deps.asm  MINHID tests only state 0 of a single-select mother",
+     "M2M/rom/optm_deps.asm",
+     "MOVE    2, R7                   ; single-select: states 0 and 1",
+     "MOVE    1, R7                   ; single-select: states 0 and 1"),
 ]
 
 

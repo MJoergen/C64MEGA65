@@ -521,6 +521,153 @@ _VAL_ERR        MOVE    R4, R6                  ; R6: offending line index
                 DECRB
                 RET
 
+; ----------------------------------------------------------------------------
+; OPTM_DEPS_MINHID: Guaranteed-hidden line count for the height check
+;
+; Since dependency format 2, dependent lines can be mutually exclusive (e.g.
+; the per-drive mount/status twins of C64MEGA65 issue #93: per drive, at most
+; one of the two is ever visible). The structural menu height therefore
+; over-counts the height a view can actually reach. This routine computes,
+; summed over all mother groups that control at least one dependent line, the
+; MINIMUM number of dependent lines of that mother that are hidden in ANY
+; selectable state of the mother (radio: item 0..count-1, capped at the 4-bit
+; mask width; single-select: off/on). Subtracting the sum from the structural
+; height yields a dependency-aware height bound. The sum is global over all
+; views, so the bound is a safe under-approximation when one mother controls
+; lines in several views; the exact per-view maximum is enforced at authoring
+; time by menu_test.py verify.
+;
+; Input:
+;   R8: pointer to the (masked) groups array (N words)
+;   R9: pointer to the raw dependency array (N words)
+;  R10: amount of menu items (N)
+;
+; Output:
+;   R8: sum of the per-mother minima (0 when there are no dependent lines)
+;   All other registers are preserved.
+; ----------------------------------------------------------------------------
+
+OPTM_DEPS_MINHID INCRB
+
+                MOVE    R9, @--SP               ; preserve the caller globals
+                MOVE    R10, @--SP
+                MOVE    R11, @--SP
+                MOVE    R12, @--SP
+                MOVE    R8, R0                  ; R0: groups array base
+                MOVE    R9, R1                  ; R1: dependency array base
+                MOVE    R10, R2                 ; R2: amount of menu items (N)
+                XOR     R3, R3                  ; R3: outer line index i
+                XOR     R4, R4                  ; R4: sum of the minima
+
+_DMH_OUTER      CMP     R2, R3                  ; all lines done?
+                RBRA    _DMH_DONE, Z
+                MOVE    R1, R5                  ; R5: raw DEPS[i]
+                ADD     R3, R5
+                MOVE    @R5, R5
+                MOVE    R5, R6
+                AND     0x1000, R6              ; is line i dependent?
+                RBRA    _DMH_NEXT, Z            ; no: skip
+                AND     0x00FF, R5              ; R5: mother group id
+
+                ; only handle the FIRST dependent line of each mother
+                XOR     R6, R6                  ; R6: scan index j
+_DMH_SEEN       CMP     R3, R6                  ; reached i?
+                RBRA    _DMH_FIRST, Z           ; yes: first occurrence
+                MOVE    R1, R7                  ; DEPS[j]
+                ADD     R6, R7
+                MOVE    @R7, R7
+                MOVE    R7, R8
+                AND     0x1000, R8              ; dependent?
+                RBRA    _DMH_SEENN, Z
+                AND     0x00FF, R7
+                CMP     R5, R7                  ; same mother?
+                RBRA    _DMH_NEXT, Z            ; yes: already counted
+_DMH_SEENN      ADD     1, R6
+                RBRA    _DMH_SEEN, 1
+
+                ; count the members of the mother group, note single-select
+_DMH_FIRST      XOR     R6, R6                  ; R6: scan index j
+                XOR     R7, R7                  ; R7: member count
+                XOR     R11, R11                ; R11: single-select flag
+_DMH_MSCAN      CMP     R2, R6
+                RBRA    _DMH_MSCANE, Z
+                MOVE    R0, R8                  ; GROUPS[j]
+                ADD     R6, R8
+                MOVE    @R8, R8
+                MOVE    R8, R9
+                AND     0x00FF, R9
+                CMP     R5, R9                  ; member of the mother group?
+                RBRA    _DMH_MSCANN, !Z
+                ADD     1, R7                   ; one more member
+                AND     0x8000, R8              ; single-select?
+                RBRA    _DMH_MSCANN, Z
+                MOVE    1, R11
+_DMH_MSCANN     ADD     1, R6
+                RBRA    _DMH_MSCAN, 1
+
+                ; states to test: single-select: 2; radio: min(count, 4),
+                ; because states beyond the 4-bit mask width hide MORE lines
+                ; than any state within it and can never lower the minimum
+_DMH_MSCANE     CMP     0, R7                   ; no members: defensively skip
+                RBRA    _DMH_NEXT, Z            ; (boot-validated: cannot happen)
+                CMP     0, R11
+                RBRA    _DMH_RADIO, Z
+                MOVE    2, R7                   ; single-select: states 0 and 1
+                RBRA    _DMH_STATES, 1
+_DMH_RADIO      CMP     4, R7                   ; radio: cap at 4
+                RBRA    _DMH_STATES, N
+                MOVE    4, R7
+_DMH_STATES     XOR     R6, R6                  ; R6: state s
+                MOVE    0x7FFF, R12             ; R12: minimum hidden so far
+
+_DMH_SLOOP      CMP     R7, R6                  ; all states tested?
+                RBRA    _DMH_SDONE, Z
+                XOR     R9, R9                  ; R9: scan index j
+                XOR     R10, R10                ; R10: hidden count in state s
+_DMH_HSCAN      CMP     R2, R9
+                RBRA    _DMH_HSCANE, Z
+                MOVE    R1, R8                  ; DEPS[j]
+                ADD     R9, R8
+                MOVE    @R8, R8
+                MOVE    R8, R11
+                AND     0x1000, R11             ; dependent?
+                RBRA    _DMH_HSCANN, Z
+                MOVE    R8, R11
+                AND     0x00FF, R11
+                CMP     R5, R11                 ; line of THIS mother?
+                RBRA    _DMH_HSCANN, !Z
+                SHR     8, R8                   ; R8: its item mask
+                AND     0x000F, R8
+                MOVE    R6, R11                 ; test mask bit s
+_DMH_HSH        CMP     0, R11
+                RBRA    _DMH_HTST, Z
+                SHR     1, R8
+                SUB     1, R11
+                RBRA    _DMH_HSH, 1
+_DMH_HTST       AND     1, R8
+                RBRA    _DMH_HSCANN, !Z         ; bit set: visible in state s
+                ADD     1, R10                  ; hidden in state s
+_DMH_HSCANN     ADD     1, R9
+                RBRA    _DMH_HSCAN, 1
+_DMH_HSCANE     CMP     R12, R10                ; new minimum?
+                RBRA    _DMH_SNEXT, !N          ; no: R10 >= R12
+                MOVE    R10, R12
+_DMH_SNEXT      ADD     1, R6
+                RBRA    _DMH_SLOOP, 1
+
+_DMH_SDONE      ADD     R12, R4                 ; sum += minimum of this mother
+
+_DMH_NEXT       ADD     1, R3
+                RBRA    _DMH_OUTER, 1
+
+_DMH_DONE       MOVE    R4, R8                  ; R8: the sum
+                MOVE    @SP++, R12              ; restore the caller globals
+                MOVE    @SP++, R11
+                MOVE    @SP++, R10
+                MOVE    @SP++, R9
+                DECRB
+                RET
+
 ; OPTM_DEPS_PROBE (the config.vhd feature probe) lives in options.asm, next to
 ; its callers HELP_MENU / HELP_MENU_INIT, because it touches the QNICE config
 ; device registers (M2M$CFG_OPTM_DEPS etc.). Keeping it out of this file lets

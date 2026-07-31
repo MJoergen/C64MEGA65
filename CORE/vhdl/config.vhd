@@ -399,9 +399,11 @@ constant OPTM_SIZE         : natural := 190; -- amount of items including empty 
 -- Net size of the Options menu on the screen in characters (excluding the frame, which is hardcoded to two characters)
 -- Without submenus: Use OPTM_SIZE as height, otherwise use the height of the largest menu view (usually the main menu):
 -- count one line per item that is visible at that level, including one line per submenu label, excluding the contents
--- of submenus. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
+-- of submenus. Dependent lines (OPTM_DEP) count dependency-AWARE: lines that can never be visible at the same time --
+-- e.g. the per-drive mount/status twins, of which each drive shows at most one -- count as the maximum number that
+-- can be visible simultaneously, not as their line count. Cross-check with "python3 M2M/rom/tests/menu_test.py verify".
 constant OPTM_DX           : natural := 25;
-constant OPTM_DY           : natural := 31;
+constant OPTM_DY           : natural := 29;
 
 -- !!! DO NOT TOUCH THE TYPE DEFINITION IN THE NEXT LINE AND CONTINUE YOUR CONFIGURATION ONE LINE LATER
 type OPTM_GTYPE is array (0 to OPTM_SIZE - 1) of integer range 0 to 2**OPTM_GTC - 1;

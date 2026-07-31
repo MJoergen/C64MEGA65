@@ -65,12 +65,12 @@ awk '/constant C_VDNUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; 
 awk '/constant C_CRTROMS_MAN_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_MAN_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 awk '/constant C_CRTROMS_AUTO_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_AUT_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 
-# Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_VD1 - C_HMAP_CRT) windows * 8 KB,
-# so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never drift
-# from the HyperRAM map in globals.vhd when it is retuned.
+# Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_CRT_GUARD - C_HMAP_CRT) windows
+# * 8 KB, so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never
+# drift from the HyperRAM map in globals.vhd when it is retuned.
 crt_base=$(awk '/constant C_HMAP_CRT / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
-vd1_base=$(awk '/constant C_HMAP_VD1 / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
-crt_max=$(( (0x${vd1_base} - 0x${crt_base}) * 8192 ))
+crt_top=$(awk '/constant C_HMAP_CRT_GUARD / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
+crt_max=$(( (0x${crt_top} - 0x${crt_base}) * 8192 ))
 printf 'C64_CRT_MAX_SIZE_HI         .EQU 0x%04X\n' $(( (crt_max >> 16) & 0xFFFF )) >> globals.asm
 printf 'C64_CRT_MAX_SIZE_LO         .EQU 0x%04X\n' $((  crt_max        & 0xFFFF )) >> globals.asm
 

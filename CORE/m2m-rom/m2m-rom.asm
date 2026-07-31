@@ -911,7 +911,9 @@ P1581_DIAG_DEV       .EQU 0x0108                ; C_DEV_C64_PHYS1581
 P1581_RM_CTRL        .EQU 0x0004                ; RM_CTRL_STATE word offset
 P1581_BUSY_MASK      .EQU 0xFC08                ; read | step | motor
 P1581_RM_IMGBSY      .EQU 0x0028                ; RM_IMG_DRIVE word offset
-P1581_IMGBSY_MSK     .EQU 0x0001                ; image drive busy or dirty
+P1581_IMGBSY_D8      .EQU 0x0001                ; image drive 8 busy or dirty
+P1581_IMGBSY_D9      .EQU 0x0002                ; image drive 9 busy or dirty
+P1581_IMGBSY_ANY     .EQU 0x0003                ; any image drive busy or dirty
 
 P1581_OS_IDLE        .EQU 0
 P1581_OS_MOTOR       .EQU 1
@@ -939,7 +941,7 @@ P1581_CLASSIFY INCRB
                 AND     0x0008, R0              ; motor on?
                 RBRA    _P1581_C_MOTOR, !Z
                 MOVE    R9, R0
-                AND     P1581_IMGBSY_MSK, R0
+                AND     P1581_IMGBSY_ANY, R0
                 RBRA    _P1581_C_BUSY, !Z
                 MOVE    P1581_OS_IDLE, R8
                 RBRA    _P1581_C_RET, 1
@@ -1040,40 +1042,63 @@ OSM_SEL_PRE     INCRB
                 ; the (reverted) OPTM_IR_STDSEL over the same bits, so neither
                 ; the menu nor the core ever sees the flip.
 _OSM_PRE_MODE   MOVE    R8, R7                  ; R7: the mode group id
-                MOVE    M2M$RAMROM_DEV, R1
-                MOVE    P1581_DIAG_DEV, @R1     ; select the diag device
-                MOVE    M2M$RAMROM_4KWIN, R1
-                MOVE    0, @R1                   ; register-bank window 0
-                MOVE    M2M$RAMROM_DATA, R1
-                ADD     P1581_RM_CTRL, R1        ; -> RM_CTRL_STATE
-                MOVE    @R1, R1                  ; R1: control-state word
-                AND     P1581_BUSY_MASK, R1      ; read / step / motor active?
-                RBRA    _OSM_PRE_MODEB, !Z       ; physical drive busy: revert
-                MOVE    M2M$RAMROM_DATA, R1
-                ADD     P1581_RM_IMGBSY, R1      ; -> RM_IMG_DRIVE
-                MOVE    @R1, R1                  ; R1: image-drive word
-                AND     P1581_IMGBSY_MSK, R1     ; image drive busy or dirty?
-                RBRA    _OSM_PRE_STEAL, Z        ; both idle: allow the change
-
-                ; Busy: find the OLD selected item of the group. The four
-                ; radio items sit at consecutive flat indices; M2M$CFM_DATA is
-                ; only updated after this callback, so M2M$GET_SETTING still
-                ; sees the previous selection.
-_OSM_PRE_MODEB  MOVE    C64_OSM_DRV8_IMG_MNT, R0 ; R0: first item of drive 8
+                MOVE    R9, R4                  ; R4: the requested new item
+                MOVE    C64_OSM_DRV8_IMG_MNT, R0 ; R0: first item of drive 8
+                MOVE    P1581_IMGBSY_D8, R6      ; R6: busy bit of THIS drive
                 CMP     C64_OPTM_G_DRV8_MODE, R7
-                RBRA    _OSM_PRE_MODEC, Z
+                RBRA    _OSM_PRE_MODE0, Z
                 MOVE    C64_OSM_DRV9_IMG_MNT, R0 ; first item of drive 9
-_OSM_PRE_MODEC  MOVE    4, R1                    ; 4 radio items per group
-_OSM_PRE_MODED  MOVE    R0, R8
+                MOVE    P1581_IMGBSY_D9, R6
+
+                ; Find the OLD selected item of the group: R1 = its flat
+                ; index, R5 = its ordinal (0..3). The four radio items sit at
+                ; consecutive flat indices; M2M$CFM_DATA is only updated after
+                ; this callback, so M2M$GET_SETTING still sees the previous
+                ; selection.
+_OSM_PRE_MODE0  MOVE    R0, R1
+                XOR     R5, R5
+_OSM_PRE_MODE1  MOVE    R1, R8
                 RSUB    M2M$GET_SETTING, 1
                 CMP     1, R9                    ; the old selected item?
-                RBRA    _OSM_PRE_MODEE, Z        ; yes: revert to it
-                ADD     1, R0
-                SUB     1, R1
-                RBRA    _OSM_PRE_MODED, !Z
-                RBRA    _OSM_SEL_PRE_R, 1        ; defensive: nothing selected
+                RBRA    _OSM_PRE_MODE2, Z        ; yes
+                ADD     1, R1
+                ADD     1, R5
+                CMP     4, R5                    ; all four items scanned?
+                RBRA    _OSM_PRE_MODE1, !Z
+                RBRA    _OSM_SEL_PRE_R, 1        ; defensive: nothing selected:
+                                                 ; cannot judge nor revert
 
-_OSM_PRE_MODEE  MOVE    R0, R8                   ; force the old item back
+                ; The gate, scoped to this drive (hardware-testing finding:
+                ; a global gate lets drive 9's lingering physical activity --
+                ; e.g. the 1581 DOS re-spinning the motor after every reset of
+                ; a reset storm -- permanently veto harmless drive-8 mode
+                ; changes):
+                ;  (a) the PHYSICAL mechanism only gates changes that enter
+                ;      or leave "Internal 1581" (radio item 2);
+                ;  (b) the image side only gates with THIS drive's own bit
+                ;      (engine activity or dirty write cache).
+_OSM_PRE_MODE2  MOVE    M2M$RAMROM_DEV, R2
+                MOVE    P1581_DIAG_DEV, @R2      ; select the diag device
+                MOVE    M2M$RAMROM_4KWIN, R2
+                MOVE    0, @R2                   ; register-bank window 0
+
+                CMP     2, R4                    ; entering Internal 1581?
+                RBRA    _OSM_PRE_MODE3, Z        ; yes: physical gate applies
+                CMP     2, R5                    ; leaving Internal 1581?
+                RBRA    _OSM_PRE_MODE4, !Z       ; no: image gate only
+_OSM_PRE_MODE3  MOVE    M2M$RAMROM_DATA, R2
+                ADD     P1581_RM_CTRL, R2        ; -> RM_CTRL_STATE
+                MOVE    @R2, R2                  ; R2: control-state word
+                AND     P1581_BUSY_MASK, R2      ; read / step / motor active?
+                RBRA    _OSM_PRE_MODEB, !Z       ; physical drive busy: revert
+
+_OSM_PRE_MODE4  MOVE    M2M$RAMROM_DATA, R2
+                ADD     P1581_RM_IMGBSY, R2      ; -> RM_IMG_DRIVE
+                MOVE    @R2, R2                  ; R2: per-drive busy word
+                AND     R6, R2                   ; THIS drive busy or dirty?
+                RBRA    _OSM_PRE_STEAL, Z        ; idle: allow the change
+
+_OSM_PRE_MODEB  MOVE    R1, R8                   ; busy: force the old item back
                 MOVE    1, R9
                 RSUB    M2M$FORCE_MENU, 1
                 RBRA    _OSM_SEL_PRE_R, 1
@@ -1092,7 +1117,7 @@ _OSM_PRE_MODEE  MOVE    R0, R8                   ; force the old item back
                 ; hardware, independent of this ordering). M2M$GET_SETTING
                 ; still reads the PRE-change state here, which is exactly
                 ; what the check needs.
-_OSM_PRE_STEAL  CMP     2, R9                   ; "Internal 1581" selected?
+_OSM_PRE_STEAL  CMP     2, R4                   ; "Internal 1581" selected?
                 RBRA    _OSM_SEL_PRE_R, !Z      ; no: nothing to do
                 MOVE    C64_OSM_DRV9_1581, R0   ; assume drive 8 changed:
                 MOVE    C64_OSM_DRV9_IMG_MNT, R1 ; the other drive is 9

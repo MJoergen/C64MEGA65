@@ -435,13 +435,16 @@ architecture synthesis of main is
   signal   phys_1581_en_d      : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
   signal   phys_1581_en_q      : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
 
-  -- Image-drive busy/dirty flag for the symmetric source-toggle idle-gate (issue #90):
-  -- drive LED (activity of the 1541 and 1581 image engines, incl. WD1772 command-busy)
-  -- OR any dirty write-back cache. Generated in the main clock domain, 2-FF-synced into
-  -- the 50 MHz diag domain (c64_clk_sd_i) where the QNICE Shell reads it as a level.
-  signal   img_drive_busy   : std_logic;
-  signal   img_busy_sd_m    : std_logic;
-  signal   img_busy_sd_s    : std_logic;
+  -- Per-drive image-drive busy/dirty flags for the source-toggle idle-gate (issues #90
+  -- and #93): drive LED (activity of the 1541 and 1581 image engines, incl. WD1772
+  -- command-busy) OR that drive's dirty write-back cache. Per drive, so the Shell can
+  -- scope its mode-change gate to the drive that is actually being changed (hardware-
+  -- testing finding: a global gate let drive 9's lingering physical activity veto
+  -- harmless drive-8 mode changes). Generated in the main clock domain, 2-FF-synced
+  -- into the 50 MHz diag domain (c64_clk_sd_i) where the QNICE Shell reads it as a level.
+  signal   img_drive_busy   : std_logic_vector(G_VDNUM - 1 downto 0);
+  signal   img_busy_sd_m    : std_logic_vector(G_VDNUM - 1 downto 0);
+  signal   img_busy_sd_s    : std_logic_vector(G_VDNUM - 1 downto 0);
 
   -- Read-side reset for the physical-1581 read FIFO: the SAME reset event as the
   -- write side (c64_rst_sd_i = QNICE/framework reset), 2-FF-synchronized into the
@@ -865,18 +868,17 @@ begin
   drive_led_o     <= (or c64_drive_led) when unsigned(cache_dirty) = 0 else
                      '1';
 
-  -- "An image drive is busy or holds unsaved data" for the symmetric idle-gate (issue #90):
-  -- consulted by the QNICE Shell (via the phys-1581 diag device) before it allows switching
-  -- a drive between disk image and the internal 1581. The LEDs cover live drive activity of
-  -- both image engines; prevent_reset covers dirty write caches awaiting SD flush. While the
-  -- INTERNAL drive is the active source its LED reflects PHYSICAL activity (the 1581 DOS
-  -- drives it, e.g. the blinking error indicator), which the physical busy word already
-  -- covers -- so mask each drive's LED with its mode bit, otherwise an Internal->Image
-  -- switch would be spuriously blocked whenever the toggle lands in a blink-ON phase. It is
-  -- a slow, quasi-static level, so a plain 2-FF sync into the diag clock domain is
-  -- sufficient. With two drives this stays a single, shared gate (conservative: activity on
-  -- either image drive blocks source switching on both).
-  img_drive_busy <= (or (c64_drive_led and not phys_1581_en)) or prevent_reset;
+  -- "This image drive is busy or holds unsaved data" for the idle-gate (issues #90 and
+  -- #93), one bit per drive: consulted by the QNICE Shell (via the phys-1581 diag device)
+  -- before it allows a mode change of THAT drive. The LED covers live drive activity of
+  -- both image engines; the per-drive dirty flag covers a write cache awaiting SD flush.
+  -- While the INTERNAL drive is the active source its LED reflects PHYSICAL activity (the
+  -- 1581 DOS drives it, e.g. the blinking error indicator), which the physical busy word
+  -- already covers -- so mask each drive's LED with its mode bit, otherwise an
+  -- Internal->Image switch would be spuriously blocked whenever the toggle lands in a
+  -- blink-ON phase. Slow, quasi-static levels, so a plain 2-FF sync into the diag clock
+  -- domain is sufficient.
+  img_drive_busy <= (c64_drive_led and not phys_1581_en) or cache_dirty;
 
   img_busy_sync_proc : process (c64_clk_sd_i)
   begin

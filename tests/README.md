@@ -51,9 +51,10 @@ while it is in "Internal 1581" mode, and no entry at all for a drive that is
   Settings persist across reboots.
 * SIMCRT regression: the HyperRAM map was retuned (M2M framework region 4 MB
   to 3 MB, adversarially validated against the ascal scaler footprint), the
-  CRT staging pool moved and grew to 2.91 MB. Load a small `.crt`, a 1 MB
-  EasyFlash `.crt` and a 2 MB MD2 `.crt` on an R3 machine while both drives
-  are mounted, and re-test SIMREU, to prove the regions do not overlap.
+  CRT staging pool moved and grew to 2.90 MB, and every region boundary now
+  has an explicit 8 kB guard window. Load a small `.crt`, a 1 MB EasyFlash
+  `.crt` and a 2 MB MD2 `.crt` on an R3 machine while both drives are
+  mounted, and re-test SIMREU, to prove the regions do not overlap.
 * Drive-steal stress (adversarial-review residuals, static analysis only so
   far): move `Internal 1581` back and forth between drives 8 and 9 many
   times, with and without a real disk in the physical drive, immediately

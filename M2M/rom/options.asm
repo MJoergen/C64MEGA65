@@ -569,23 +569,9 @@ _HLP_S5         MOVE    R10, R9                 ; OPTM_G_START on an item
 
 _HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
                 MOVE    R9, @R0
-
-                ; sanity check the menu geometry: menu.asm draws without
-                ; clipping, so a menu view that is taller than the window
-                ; height (OPTM_DY) overflows the frame; this is an authoring
-                ; error in config.vhd, but a benign one, so only log it on
-                ; the serial console instead of going fatal
-                MOVE    SCR$OSM_O_DY, R8
-                MOVE    @R8, R8
-                SUB     2, R8                   ; net height: minus the frame
-                CMP     R10, R8                 ; largest view > net height?
-                RBRA    _HLP_DEPVAL, !N         ; no: all good
-                MOVE    R10, R0                 ; yes: log a warning
-                MOVE    LOG_STR_MENUHGT, R8
-                SYSCALL(puts, 1)
-                MOVE    R0, R8
-                SYSCALL(puthex, 1)
-                SYSCALL(crlf, 1)
+                MOVE    OPTM_MAXHT, R0          ; store largest structural view
+                MOVE    R10, @R0                ; height for the geometry check
+                                                ; after the deps validation
 
                 ; validate the dependent-menu-entry declarations (OPTM_DEP,
                 ; see optm_deps.asm) once at boot. The masked groups, the raw
@@ -603,7 +589,7 @@ _HLP_DEPVAL     MOVE    LOG_STR_DEPS, R8
                 MOVE    LOG_STR_CFG_OFF, R8     ; no: log and skip validation
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
-                RBRA    _HLP_S_RET, 1
+                RBRA    _HLP_HEIGHT0, 1         ; geometry check w/o dependencies
 _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
@@ -649,7 +635,7 @@ _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 MOVE    R10, R11                ; R11: special array (base+2N)
                 ADD     R7, R11
                 RSUB    OPTM_DEPS_VAL, 1
-                RBRA    _HLP_S_RET, !C          ; declarations are valid
+                RBRA    _HLP_HEIGHT, !C         ; valid: geometry check next
 
                 MOVE    R10, R0                 ; R0: offending item index
                 MOVE    R9, R1                  ; R1: error class
@@ -668,6 +654,45 @@ _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 MOVE    ERR_F_DEPSPECIAL, R8
 _HLP_DEPFAT     MOVE    R0, R9                  ; R9: offending index = err code
                 RBRA    FATAL, 1
+
+                ; sanity check the menu geometry: menu.asm draws without
+                ; clipping, so a menu view that is taller than the window
+                ; height (OPTM_DY) overflows the frame; this is an authoring
+                ; error in config.vhd, but a benign one, so only log it on
+                ; the serial console instead of going fatal.
+                ; Dependency-aware since format 2: mutually exclusive
+                ; dependent lines (e.g. the per-drive mount/status twins of
+                ; C64MEGA65 issue #93) must not count towards the required
+                ; height, so subtract the per-mother guaranteed-hidden
+                ; minima (OPTM_DEPS_MINHID, computed from the still-intact
+                ; validation scratch arrays). The global sum is a safe
+                ; under-approximation across views; the exact per-view
+                ; maximum is enforced at authoring time by the verify mode
+                ; of menu_test.py.
+_HLP_HEIGHT0    XOR     R11, R11                ; dependencies off: adjust by 0
+                RBRA    _HLP_HEIGHT1, 1
+_HLP_HEIGHT     MOVE    OPTM_ICOUNT, R10        ; R10: amount of menu items
+                MOVE    @R10, R10
+                MOVE    HEAP, R8                ; R8: masked groups scratch
+                ADD     OPTM_STRUCTSIZE, R8
+                MOVE    R8, R9                  ; R9: raw dependency scratch
+                ADD     R10, R9
+                RSUB    OPTM_DEPS_MINHID, 1
+                MOVE    R8, R11                 ; R11: height adjustment
+_HLP_HEIGHT1    MOVE    OPTM_MAXHT, R8          ; R8: largest structural view
+                MOVE    @R8, R8
+                SUB     R11, R8                 ; dependency-aware height
+                MOVE    SCR$OSM_O_DY, R9
+                MOVE    @R9, R9
+                SUB     2, R9                   ; net height: minus the frame
+                CMP     R8, R9                  ; view height > net height?
+                RBRA    _HLP_S_RET, !N          ; no: all good
+                MOVE    R8, R0                  ; yes: log a warning
+                MOVE    LOG_STR_MENUHGT, R8
+                SYSCALL(puts, 1)
+                MOVE    R0, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
 
 _HLP_S_RET      SYSCALL(leave, 1)
                 RET
