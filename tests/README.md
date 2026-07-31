@@ -22,10 +22,32 @@ half as loud as 100% (-10 dB), 25% a quarter (-20 dB) and 0% is silence.
 * Confirm 50% is roughly half as loud and 0% is fully muted.
 * Regression-check the OSM items whose control bits shifted by +10 when the ten
   extra volume steps were inserted: `CIA: Use 8521`, `OSM Scaling`,
-  `RTC for GEOS` and the `VIC-II model`. Their behavior must be unchanged.
+  `GEOS Real-Time-Clock` and the `VIC-II model`. Their behavior must be
+  unchanged.
 * Config file: `OPTM_SIZE` grew from 160 to 170, so any existing saved-settings
   config file must be regenerated with `M2M/tools/make_config.sh` or the
   on-screen settings will no longer persist across reboots.
+
+@TODO: Test the now switchable GEOS Real-Time-Clock (issues #133, #164 and
+#187). In "Advanced Settings" the item formerly labeled `RTC for GEOS` is now
+called `GEOS Real-Time-Clock` and it is actually wired: it connects the emulated
+PCF8583 to the cassette port. It defaults to off, so out of the box the core
+behaves like V5.1 and earlier, which had no RTC at all; V5.2 had it permanently
+on and no way to switch it off.
+
+* With the item **off**, the C64 must see an empty cassette port again. Re-run
+  the cases that regressed when the RTC was permanently on in V5.2: TRAP16 and
+  TRAP17 of the C64 Emulator Test Suite V2.15 (#133), the demo "Double Density"
+  (#164), the demo "Old Men in Used Cars" (#135) and the game "Jupiter Fracture"
+  (#187).
+* With the item **on**, GEOS must pick up date and time from the MEGA65 RTC
+  again (install the F83 driver, then check the GEOS clock; see
+  `doc/GEOS_WITH_THE_C64_CORE.pdf` and `doc/RTC.md`).
+* Toggling the item must take effect without a core restart, and the setting
+  must survive a reboot once the settings are saved.
+* Note that while the RTC is on, the tape-port incompatibilities above are
+  expected to come back - that is exactly why the switch exists and why it
+  defaults to off.
 
 Version WIP-V6-A18X2 - 2026-07-18
 ---------------------------------

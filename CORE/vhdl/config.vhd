@@ -560,7 +560,7 @@ constant OPTM_ITEMS        : string :=
    " Advanced Settings\n"       &  -- Advanced Settings submenu
    " Advanced Settings\n"       &
    "\n"                         &
-   " RTC for GEOS\n"            &  -- not yet wired in mega65.vhd
+   " GEOS Real-Time-Clock\n"    &  -- emulated PCF8583 on the tape port, see #133, #164 and #187
 
    " OSM: %s\n"                 &  -- OSM Scaling submenu, nested inside Advanced Settings
    " OSM Scaling\n"             &
@@ -624,7 +624,7 @@ constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes; not
 constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF; not yet wired
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
-constant OPTM_G_RTC_GEOS      : integer := 29;  -- not yet wired
+constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 constant OPTM_G_INT1581       : integer := 31;  -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
 
@@ -786,7 +786,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SUBMENU,                          -- open "Advanced Settings"
                                              OPTM_G_HEADLINE,                         -- Advanced Settings
                                              OPTM_G_LINE,
-                                             OPTM_G_RTC_GEOS      + OPTM_G_SINGLESEL, -- RTC for GEOS
+                                             OPTM_G_RTC_GEOS      + OPTM_G_SINGLESEL, -- GEOS Real-Time-Clock
 
                                              OPTM_G_SUBMENU,                          -- open "OSM: %s", nested
                                              OPTM_G_HEADLINE,                         -- OSM Scaling

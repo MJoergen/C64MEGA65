@@ -1282,13 +1282,13 @@ P1581_OSM_TICK  .BLOCK 1                        ; last IO$CYC_MID value observed
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
 ; 3072 words comfortably fit the current menu: 170 items, 10 submenus and a
-; 1655-character OPTM_ITEMS string give budget 1 = 22 + 1655 + 4*170 = 2357
+; 1663-character OPTM_ITEMS string give budget 1 = 22 + 1663 + 4*170 = 2365
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (VDRIVES_NUM + submenus +
 ; CRTROM_MAN_NUM + 1) * OSM width = 14 x 27 = 378 words for the "%s" replacement
 ; strings; it depends only on those counts, NOT on the item count, so only
-; budget 1 grows when menu lines are added. Peak use is 2357 + 378 = 2735,
-; leaving about 337 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
+; budget 1 grows when menu lines are added. Peak use is 2365 + 378 = 2743,
+; leaving about 329 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
 ; console for the live numbers). Keep this as small as it safely can be: every
 ; word reserved here is one word less for the (sorted) file browser heap.
 MENU_HEAP_SIZE  .EQU 3072

@@ -225,7 +225,7 @@ V6_MENU = [
     (" Advanced Settings",       None, OPEN),            # region 8
     (" Advanced Settings",       None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
-    (" RTC for GEOS",            "RTC_GEOS", ["SINGLESEL"]),
+    (" GEOS Real-Time-Clock",    "RTC_GEOS", ["SINGLESEL"]),
     (" OSM: %s",                 None, OPEN),            # region 9 (in 8)
     (" OSM Scaling",             None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
@@ -1201,7 +1201,7 @@ def nav_script():
     s.until(KEY_DOWN, 137)          # to "Advanced Settings"
     s.feed(KEY_SELECT)              # enter region 8
     assert (s.level, s.cursor) == (8, 140)
-    s.feed(KEY_SELECT)              # single-select RTC for GEOS on
+    s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
     s.until(KEY_DOWN, 156)          # to "VIC-II: %s"
     s.feed(KEY_SELECT)              # enter region 10 (depth 2)

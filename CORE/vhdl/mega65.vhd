@@ -432,8 +432,8 @@ constant C_MENU_KERNAL_JIFFY  : natural := 108;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
 subtype C_MENU_VOLUME is natural range 134 downto 114;
--- Advanced Settings submenu (RTC for GEOS and the VIC-II model are not yet wired)
-constant C_MENU_RTC_GEOS      : natural := 140;
+-- Advanced Settings submenu (the VIC-II model is not yet wired)
+constant C_MENU_RTC_GEOS      : natural := 140;         -- GEOS Real-Time-Clock, see #133, #164 and #187
 subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
 constant C_MENU_8521          : natural := 155;
 constant C_MENU_VICII_NMOS    : natural := 159;
@@ -690,6 +690,11 @@ begin
          c64_sid_ver_i          => sid_setup,
          c64_sid_port_i         => to_unsigned(sid_port, 3),
          c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),
+
+         -- GEOS Real-Time-Clock: connects the emulated PCF8583 to the cassette port. Defaults to
+         -- off, because a connected RTC looks like an attached datasette to the C64 and that
+         -- breaks some software. See issues #133, #164 and #187.
+         c64_rtc_geos_i         => main_osm_control_i(C_MENU_RTC_GEOS),
 
          -- Master volume (OSM "Volume" slider): 0..20 step index = 0%..100%
          audio_volume_i         => main_volume,

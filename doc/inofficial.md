@@ -32,7 +32,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A18    | 07/03/26 | 3d80b81 | Simulate 1581 drive and add support for D81 disk images (issue #91)
 | WIP-V6-A18X1  | 07/18/26 | 95eae0f | Read-only support MEGA65's built-in floppy drive as 1581 (issue #90)
 | WIP-V6-A18X2  | 07/18/26 | d94fa73 | Fixed a regression that prevented simulated D81 images to work
-| WIP-V6-A19    | <date>   | <tbd>   | Simulate RR-Net (issue #234). Audio level control (issue #85). Config file has now .cfg file-extension (issue #239).
+| WIP-V6-A19    | <date>   | <tbd>   | Simulate RR-Net (issue #234). Switchable GEOS Real-Time-Clock (issues #133, #164 and #187). Audio level control (issue #85). Config file has now .cfg file-extension (issue #239).
 
 ## Version 5.2
 

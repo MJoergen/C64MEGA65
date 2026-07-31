@@ -63,6 +63,11 @@ entity main is
     c64_sid_port_i         : in    unsigned(2 downto 0);         -- Right SID Port: 0=same as left, 1=DE00, 2=D420, 3=D500, 4=DF00
     c64_cia_ver_i          : in    std_logic;                    -- CIA version: 0=6526 "old", 1=8521 "new"
 
+    -- GEOS Real-Time-Clock: the emulated PCF8583 hangs off the cassette port, so switching it on
+    -- makes the C64 see a datasette. That breaks software which expects an empty tape port, which
+    -- is why this is an OSM option that defaults to off. See issues #133, #164 and #187.
+    c64_rtc_geos_i         : in    std_logic;                    -- 1 = connect the RTC to the cassette port
+
     -- Master volume from the OSM "Volume" slider (5% steps): 0..20 = 0%..100%.
     -- Applied as a perceptual, loudness-linear attenuation to the final audio
     -- mix below, so it affects the HDMI and the analog audio output equally.
@@ -748,6 +753,7 @@ architecture synthesis of main is
   signal   cass_write : std_logic;
   signal   cass_motor : std_logic;
   signal   cass_rtc   : std_logic;
+  signal   cass_sense : std_logic;
   signal   rtcf83_sda : std_logic;
 
   -- Verilog file from MiSTer core
@@ -1092,17 +1098,15 @@ begin
       cass_write    => cass_write,         -- output
       cass_motor    => cass_motor,         -- output
 
-      -- @TODO: This is a temporary fix for https://github.com/MJoergen/C64MEGA65/issues/187
-      -- We need to make the RTC configurable and then either connect cass_rtc to cass_sense when
-      -- the user activates the RTC in the OSM or '1' (since low active) when it is NOT active.
-      -- cass_sense  => cass_rtc,         -- input
-      cass_sense    => '1',
+      -- The emulated PCF8583 real-time-clock for GEOS answers on this line; it is only
+      -- connected when the user switches the RTC on in the OSM (see cass_sense below).
+      cass_sense    => cass_sense,        -- input
 
       -- On a real C64 the cassette read line and the IEC SRQ line share the same PCB trace and
       -- both feed CIA1's /FLAG pin (edge-triggered IRQ source). We route the IEC SRQ here so that
       -- IEC devices using SRQ (e.g. the Meatloaf modem emulation) work. Both lines are low active,
-      -- so we AND them; the cassette read line is still hardcoded '1' (inactive) until #187 wires it.
-      -- See https://github.com/MJoergen/C64MEGA65/issues/219
+      -- so we AND them; the cassette read line is hardcoded '1' (inactive) as we do not emulate
+      -- a datasette. See https://github.com/MJoergen/C64MEGA65/issues/219
       cass_read     => hw_iec_srq_n_in and '1',
 
       -- Access custom Kernal: C64's Basic and DOS
@@ -2324,7 +2328,21 @@ begin
       m_avm_readdatavalid_i => avm_readdatavalid_i
     ); -- avm_cache_inst
 
-  -- Instantiate the PCF8583 RTC I2C emulator
+  -- Instantiate the PCF8583 RTC I2C emulator: GEOS uses it to read the date and time.
+  --
+  -- The chip is wired to the cassette port: the C64 clocks I2C out via the cassette write line
+  -- (SCL) and the cassette motor line (SDA out) and reads the answer back via the cassette sense
+  -- line (SDA in). All three are low active.
+  --
+  -- Since the sense line is also how the C64 detects a datasette, having the RTC permanently
+  -- connected makes every program believe that a tape is attached. That broke several demos and
+  -- games plus the TRAP16/TRAP17 tests of the C64 Emulator Test Suite, which is why the RTC is
+  -- switchable via the OSM and defaults to off: when it is off, the sense line is held at '1'
+  -- (inactive) and the C64 sees an empty cassette port.
+  --
+  -- See https://github.com/MJoergen/C64MEGA65/issues/133,
+  --     https://github.com/MJoergen/C64MEGA65/issues/164 and
+  --     https://github.com/MJoergen/C64MEGA65/issues/187
   rtcf83_inst : component rtcf83
     generic map (
       CLOCK_RATE => CORE_CLK_SPEED,
@@ -2340,6 +2358,7 @@ begin
       sda_o => rtcf83_sda
     ); -- rtcF83_inst
 
-  cass_rtc <= not (rtcf83_sda and cass_motor);
+  cass_rtc   <= not (rtcf83_sda and cass_motor);
+  cass_sense <= cass_rtc when c64_rtc_geos_i = '1' else '1';
 
 end architecture synthesis;
