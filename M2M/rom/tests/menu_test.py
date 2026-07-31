@@ -76,7 +76,7 @@ G = dict(
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
-    RTC_GEOS=29, VICII_MODEL=30, INT1581=31, SIM_RRNET=32,
+    RTC_GEOS=29, INT1581=31, SIM_RRNET=32,
 )
 
 OPEN = ("SUBMENU",)
@@ -241,14 +241,6 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 9
     (" CIA: Use 8521 (C64C)",    "CIA_8521", ["SINGLESEL"]),
-    (" VIC-II: %s",              None, OPEN),            # region 10 (in 8)
-    (" VIC-II model",            None, ["HEADLINE"]),
-    ("",                         None, ["LINE"]),
-    (" 656x/NMOS",               "VICII_MODEL", ["STDSEL"]),
-    (" 856x/HMOS",               "VICII_MODEL", []),
-    (" 856x/old HMOS",           "VICII_MODEL", []),
-    ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 10
     ("",                         None, ["LINE"]),
     (" RR-Net",                  None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
@@ -1177,8 +1169,8 @@ def nav_script():
                labels=[t for t, _, _ in V6_MENU])
 
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (176)
-    assert s.cursor == 176
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (168)
+    assert s.cursor == 168
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 15)           # to "Model: %s"
@@ -1210,18 +1202,18 @@ def nav_script():
     assert (s.level, s.cursor) == (8, 140)
     s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 156)          # to "VIC-II: %s"
-    s.feed(KEY_SELECT)              # enter region 10 (depth 2)
-    assert (s.level, s.cursor) == (10, 159)
+    s.until(KEY_DOWN, 141)          # to "OSM: %s"
+    s.feed(KEY_SELECT)              # enter region 9 (depth 2)
+    assert (s.level, s.cursor) == (9, 144)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 163          # lands on the closer line
+    assert s.cursor == 154          # lands on the closer line
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (10, 163)
+    assert (s.level, s.cursor) == (9, 154)
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 8
-    assert (s.level, s.cursor) == (8, 156)
+    assert (s.level, s.cursor) == (8, 141)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 137)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
@@ -1518,9 +1510,6 @@ C_MENU = [
     ("C_MENU_TURBO_3X",     "TURBO_SPEED", 1),
     ("C_MENU_TURBO_4X",     "TURBO_SPEED", 2),
     ("C_MENU_RTC_GEOS",     "RTC_GEOS", 0),
-    ("C_MENU_VICII_NMOS",   "VICII_MODEL", 0),
-    ("C_MENU_VICII_HMOS",   "VICII_MODEL", 1),
-    ("C_MENU_VICII_OLDHMOS", "VICII_MODEL", 2),
     ("C_MENU_RRNET_OFF",        "SIM_RRNET", 0),
     ("C_MENU_RRNET_MK2",        "SIM_RRNET", 1),
     ("C_MENU_RRNET_MK3_STD",    "SIM_RRNET", 2),

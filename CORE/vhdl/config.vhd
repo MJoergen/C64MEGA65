@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 177; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 169; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -579,15 +579,6 @@ constant OPTM_ITEMS        : string :=
 
    " CIA: Use 8521 (C64C)\n"    &
 
-   " VIC-II: %s\n"              &  -- VIC-II submenu, nested inside Advanced Settings
-   " VIC-II model\n"            &
-   "\n"                         &
-   " 656x/NMOS\n"               &  -- not yet wired in mega65.vhd
-   " 856x/HMOS\n"               &
-   " 856x/old HMOS\n"           &
-   "\n"                         &
-   " Back\n"                    &  -- returns to Advanced Settings
-
    "\n"                         &
    " RR-Net\n"                  &  -- RR-Net section within Advanced Settings
    "\n"                         &
@@ -633,7 +624,8 @@ constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF; 
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
-constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
+-- 30 is unused: it belonged to the VIC-II model submenu, which was removed again because we stick
+-- to the hardcoded old-HMOS variant. See issue #120 and doc/vic_ii_variants.md
 constant OPTM_G_INT1581       : integer := 31;  -- internal MEGA65 1581 physical drive backs drive 8 (issue #90)
 constant OPTM_G_SIM_RRNET     : integer := 32;  -- simulated RR-Net: only Off vs. On is wired, the MK2/MK3 variants are not, yet
 
@@ -813,15 +805,6 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "OSM: %s"
 
                                              OPTM_G_CIA_8521      + OPTM_G_SINGLESEL,
-
-                                             OPTM_G_SUBMENU,                          -- open "VIC-II: %s", nested
-                                             OPTM_G_HEADLINE,                         -- VIC-II model
-                                             OPTM_G_LINE,
-                                             OPTM_G_VICII_MODEL   + OPTM_G_STDSEL,    -- 656x/NMOS
-                                             OPTM_G_VICII_MODEL,                      -- 856x/HMOS
-                                             OPTM_G_VICII_MODEL,                      -- 856x/old HMOS
-                                             OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "VIC-II: %s"
 
                                              OPTM_G_LINE,
                                              OPTM_G_HEADLINE,                         -- RR-Net

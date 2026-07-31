@@ -23,7 +23,9 @@ Any combination of the two axes is technically possible in the RTL. The
 wrapper `fpga64_sid_iec.vhd` currently reduces axis 1 to the single
 `ntscMode` bit (`mode6569 <= not ntscMode`, `mode6567R8 <= ntscMode`, the
 other two hardcoded to `'0'`) and hardcodes axis 2 to `variant => "10"`
-(old HMOS). Both places carry `@TODO sy2002` tags pointing at issue #120.
+(old HMOS). Both places carry `@TODO sy2002` tags pointing at issue #120;
+that issue has since been closed with the decision to keep both hardcoded,
+so the tags no longer describe pending work.
 Note that even the submodule top `c64.sv` (the MiSTer OSD we do not use)
 exposes only the PAL/NTSC toggle — old NTSC, PAL-N and the variant selection
 are RTL-only capabilities.
@@ -106,12 +108,9 @@ everything, adding a third or fourth machine later stays cheap. Old NTSC
 then comes almost for free (same clock, different geometry, but the 61 Hz
 output problem remains), while PAL-N costs one more MMCM frequency.
 
-## Fabrication variant: the "VIC-II model" OSM submenu
+## Fabrication variant: the `variant` input
 
-The OSM already contains a "VIC-II model" submenu under Advanced Settings
-with the three options 656x/NMOS, 856x/HMOS and 856x/old HMOS
-(`OPTM_G_VICII_MODEL` in `config.vhd`, not yet wired). It targets the
-`variant` input, which changes exactly one thing: how color-register writes
+The `variant` input changes exactly one thing: how color-register writes
 (`$D020`-`$D02E`) latch within a cycle. This is the mechanism behind the
 famous "grey dot bug" of HMOS VIC-IIs (see MiSTer issue
 [#160](https://github.com/MiSTer-devel/C64_MiSTer/issues/160)). From
@@ -128,18 +127,21 @@ famous "grey dot bug" of HMOS VIC-IIs (see MiSTer issue
   entire PHI-high phase instead of only at the pixel tick — mid-line color
   changes take effect a pixel earlier than on NMOS, without the grey flash.
 
-For the user the choice is essentially: pixel-clean bread-bin look (NMOS)
-versus authentic C64C artifacts (HMOS variants). Our port currently
-hardcodes old HMOS because the large regression-testing session by paich64
+For the user the choice would essentially be: pixel-clean bread-bin look
+(NMOS) versus authentic C64C artifacts (HMOS variants). Our port hardcodes
+old HMOS because the large regression-testing session by paich64
 ([MiSTer issue #160
 comment](https://github.com/MiSTer-devel/C64_MiSTer/issues/160#issuecomment-1873249673))
-ran with that setting; when the submenu gets wired, old HMOS should stay the
-default to preserve the tested baseline.
+ran with that setting, so it is the tested baseline.
 
-Unlike the machine-mode axis, wiring `variant` to the OSM is nearly free:
-three menu bits reduced into a 2-bit signal, no clock or video pipeline work
-at all. That is why it is a legitimate "Advanced Settings" item while
-PAL/NTSC is a whole project.
+Wiring `variant` to the OSM would be nearly free — three menu bits reduced
+into a 2-bit signal, no clock or video pipeline work at all — but issue
+[#120](https://github.com/MJoergen/C64MEGA65/issues/120) was closed with the
+decision not to offer the choice at all: the differences are too subtle to
+be worth the extra menu surface, and deviating from the tested baseline
+mostly buys confusion. There is therefore deliberately no "VIC-II model"
+submenu in the OSM, and `mode6567old` and `mode6572` stay hardcoded to `'0'`
+for the same reason.
 
 ## Orthogonal, but historically correlated
 
@@ -152,8 +154,8 @@ coherent chip sets:
 | C64C           | 8565/8562 HMOS-II | 8521 | 8580 |
 
 Some combinations never existed in silicon: old NTSC predates HMOS entirely,
-and the Drean's 6572 was NMOS. The OSM's independent switches (VIC-II model,
-CIA 8521, SID 6581/8580, and eventually PAL/NTSC) let users mix freely, but
+and the Drean's 6572 was NMOS. The OSM's independent switches (CIA 8521,
+SID 6581/8580, and eventually PAL/NTSC) let users mix freely, but
 the compatibility personas people actually want are clusters — bread-bin
 PAL, C64C PAL, NTSC machines — which is an argument for eventually offering
 machine presets on top of the individual toggles, the way VICE names whole
@@ -166,4 +168,4 @@ machine models rather than individual chips.
 | PAL/NTSC (`ntscMode`) | `mega65.vhd` drives `c64_ntsc_i`, hardcoded to PAL | OSM Model submenu exists, not wired (#181) |
 | Old NTSC (`mode6567old`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
 | PAL-N (`mode6572`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
-| VIC variant (`variant`) | `fpga64_sid_iec.vhd`, hardcoded `"10"` (old HMOS) | OSM VIC-II model submenu exists, not wired (#120) |
+| VIC variant (`variant`) | `fpga64_sid_iec.vhd`, hardcoded `"10"` (old HMOS) | Deliberately not in the OSM (#120) |

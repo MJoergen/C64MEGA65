@@ -444,20 +444,19 @@ constant C_MENU_KERNAL_JIFFY  : natural := 108;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
 subtype C_MENU_VOLUME is natural range 134 downto 114;
--- Advanced Settings submenu (the VIC-II model is not yet wired)
+-- Advanced Settings submenu
 constant C_MENU_RTC_GEOS      : natural := 140;         -- GEOS Real-Time-Clock, see #133, #164 and #187
 subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
 constant C_MENU_8521          : natural := 155;
-constant C_MENU_VICII_NMOS    : natural := 159;
-constant C_MENU_VICII_HMOS    : natural := 160;
-constant C_MENU_VICII_OLDHMOS : natural := 161;
+-- There is deliberately no VIC-II model selection: we stick to the hardcoded old-HMOS variant
+-- of fpga64_sid_iec.vhd. See issue #120 and doc/vic_ii_variants.md
 -- Simulated RR-Net (issue #234): the three "On" variants all switch the very same
 -- simulated CS8900A on; telling MK2 from MK3 (the MK3 adds an 8 kB ROM at $8000,
 -- mapped via $DE80/$DE88, either the standard or a custom one) is not wired, yet
-constant C_MENU_RRNET_OFF        : natural := 167;
-constant C_MENU_RRNET_MK2        : natural := 168;
-constant C_MENU_RRNET_MK3_STD    : natural := 169;
-constant C_MENU_RRNET_MK3_CUSTOM : natural := 170;
+constant C_MENU_RRNET_OFF        : natural := 159;
+constant C_MENU_RRNET_MK2        : natural := 160;
+constant C_MENU_RRNET_MK3_STD    : natural := 161;
+constant C_MENU_RRNET_MK3_CUSTOM : natural := 162;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;

@@ -65,8 +65,30 @@ below a yellow `RR-Net` headline: `Off` (the default), `On: MK2`,
 * No wired menu item moved: every `C_MENU_*` control bit sits below the new
   block, so only the items after it shifted. A quick sanity pass over
   `About & Help` and `Close Menu` is enough.
-* Config file: the new lines grew `OPTM_SIZE` further to 177, so the
-  regeneration note above applies to this change as well.
+* Config file: the new lines grew `OPTM_SIZE` further, so the regeneration
+  note above applies to this change as well. See the VIC-II item below for
+  the final count.
+
+@TODO: Test that the removed VIC-II submenu left nothing behind (issue #120).
+"Advanced Settings" no longer has a `VIC-II: %s` entry with its `656x/NMOS`,
+`856x/HMOS` and `856x/old HMOS` options. The submenu was never wired, so the
+picture must be bit-identical to before: the core keeps the hardcoded old-HMOS
+`variant` that paich64 regression-tested, and `mode6567old`/`mode6572` stay at
+`'0'`. Background is in `doc/vic_ii_variants.md`.
+
+* Confirm "Advanced Settings" now reads `GEOS Real-Time-Clock`, `OSM: %s`,
+  `CIA: Use 8521 (C64C)`, the `RR-Net` block and then `Back` - with no VIC-II
+  entry between the CIA line and the RR-Net block.
+* Confirm the remaining nested submenu `OSM: %s` still opens, scales the OSM
+  and returns via its own `Back`, since it is now the only region nested
+  inside Advanced Settings.
+* Regression-check the OSM items whose control bits shifted down by 8 when the
+  eight VIC-II lines were removed: the four `RR-Net` entries are the only wired
+  ones, everything above `CIA: Use 8521` is unaffected.
+* Confirm no color-rendering change: mid-line border/background color writes
+  (the "grey dot" scenarios) must look exactly as they did before this change.
+* Config file: `OPTM_SIZE` ends up at 169 for this release, so regenerate the
+  config file with `M2M/tools/make_config.sh` as noted above.
 
 Version WIP-V6-A18X2 - 2026-07-18
 ---------------------------------
