@@ -269,6 +269,12 @@ entity main is
     c1541rom_data_i        : in    std_logic_vector(7 downto 0);
     c1541rom_data_o        : out   std_logic_vector(7 downto 0);
 
+    -- Custom RRNET MK3 ROM (in QNICE clock domain via c64_clk_sd_i)
+    rrnetmk3_we_i          : in    std_logic;
+    rrnetmk3_addr_i        : in    std_logic_vector(12 downto 0);
+    rrnetmk3_data_i        : in    std_logic_vector(7 downto 0);
+    rrnetmk3_data_o        : out   std_logic_vector(7 downto 0);
+
     -- Ethernet interface
     eth_rx_ready_o         : out   std_logic;                    -- One-cycle strobe per received byte
     eth_rx_valid_i         : in    std_logic;                    -- One-cycle strobe per received byte
@@ -727,8 +733,10 @@ architecture synthesis of main is
   signal   reu_dout      : unsigned(7 downto 0);
 
   -- SIM_RRNET
-  signal   rrnet_ioe     : std_logic;
-  signal   rrnet_dout    : std_logic_vector(7 downto 0);
+  signal   rrnet_ioe         : std_logic;
+  signal   rrnet_dout        : std_logic_vector(7 downto 0);
+  signal   rrnet_mk3_enabled : std_logic;
+  signal   rrnet_mk3_rd_data : std_logic_vector(7 downto 0);
 
   -- Signals from the cartridge.vhd module (software defined cartridges)
   signal   crt_io_rom     : std_logic;
@@ -956,6 +964,10 @@ begin
     if hard_reset_n = '0' and c64_ram_addr_o(15 downto 12) = x"8" and cold_start_done = '1' then
       c64_ram_data <= x"00";
 
+    -- Access the MK3 ROM
+    elsif c64_exp_port_mode_i(C_SIM_RRNET) = '1' and cart_out_roml_n = '0' and rrnet_mk3_enabled = '1' then
+      c64_ram_data <= unsigned(rrnet_mk3_rd_data);
+
     -- Access the hardware cartridge
     elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_umax_unmapped = '1') then
       c64_ram_data <= cart_in_data;
@@ -967,12 +979,12 @@ begin
                       unsigned(crt_lo_ram_data_i( 7 downto 0)) when cart_out_roml_n = '0' and crt_addr_bus_o(0) = '0'                           else
                       unsigned(crt_hi_ram_data_i(15 downto 8)) when cart_out_romh_n = '0' and crt_addr_bus_o(0) = '1'                           else
                       unsigned(crt_hi_ram_data_i( 7 downto 0)) when cart_out_romh_n = '0' and crt_addr_bus_o(0) = '0'                           else
-                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_ioe    = '1' and crt_addr_bus_o(0) = '1' and  crt_ioe_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_ioe    = '1' and crt_addr_bus_o(0) = '0' and  crt_ioe_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_iof    = '1' and crt_addr_bus_o(0) = '1' and  crt_iof_wr_ena = '0' else
-                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_iof    = '1' and crt_addr_bus_o(0) = '0' and  crt_iof_wr_ena = '0' else
-                      unsigned(crt_ioe_ram_data_i)             when core_ioe    = '1'                             and  crt_ioe_wr_ena = '1' else
-                      unsigned(crt_iof_ram_data_i)             when core_iof    = '1'                             and  crt_iof_wr_ena = '1' else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_ioe        = '1' and crt_addr_bus_o(0) = '1' and  crt_ioe_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_ioe        = '1' and crt_addr_bus_o(0) = '0' and  crt_ioe_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i(15 downto 8)) when core_iof        = '1' and crt_addr_bus_o(0) = '1' and  crt_iof_wr_ena = '0' else
+                      unsigned(crt_lo_ram_data_i( 7 downto 0)) when core_iof        = '1' and crt_addr_bus_o(0) = '0' and  crt_iof_wr_ena = '0' else
+                      unsigned(crt_ioe_ram_data_i)             when core_ioe        = '1'                             and  crt_ioe_wr_ena = '1' else
+                      unsigned(crt_iof_ram_data_i)             when core_iof        = '1'                             and  crt_iof_wr_ena = '1' else
                       x"EE";
 
     -- Standard access to the C64's RAM
@@ -1433,6 +1445,11 @@ begin
         core_io_data <= unsigned(rrnet_dout);
         rrnet_ioe    <= core_ioe;
       end if;
+
+      if rrnet_mk3_enabled = '1' then
+        core_game_n  <= '1';
+        core_exrom_n <= '0';
+      end if;
     end if;
 
     if c64_exp_port_mode_i(C_SIM_REU) = '1' then
@@ -1470,6 +1487,47 @@ begin
       eth_tx_last_o  => eth_tx_last_o,
       eth_tx_data_o  => eth_tx_data_o
     ); -- rrnet_inst
+
+  -- Switch on/off the RRNET MK3 ROM
+  rrnet_mk3_enabled_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      if c64_ram_we = '1' and c64_ram_addr_o = X"DE80" then
+        rrnet_mk3_enabled <= '1';
+      end if;
+      if c64_ram_we = '1' and c64_ram_addr_o = X"DE88" then
+        rrnet_mk3_enabled <= '0';
+      end if;
+      if reset_soft_i = '1' then
+        rrnet_mk3_enabled <= '1';
+      end if;
+      if c64_exp_port_mode_i(C_SIM_RRNET) = '0' then
+        rrnet_mk3_enabled <= '0';
+      end if;
+    end if;
+  end process rrnet_mk3_enabled_proc;
+
+  -- RRNET MK3 ROM ($8000 - $9FFF, Ultimax mode)
+  tdp_ram_inst : entity work.tdp_ram
+    generic map (
+      ADDR_WIDTH   => 13,
+      DATA_WIDTH   => 8,
+      ROM_PRELOAD  => true,
+      ROM_FILE     => "../../CORE/rn-mk3.bin.hex",
+      ROM_FILE_HEX => true
+    )
+    port map (
+      clock_a   => clk_main_i,
+      address_a => std_logic_vector(c64_ram_addr_o(12 downto 0)),
+      data_a    => std_logic_vector(c64_ram_data_o),
+      wren_a    => c64_ram_we and core_roml,
+      q_a       => rrnet_mk3_rd_data,
+      clock_b   => c64_clk_sd_i,
+      address_b => rrnetmk3_addr_i,
+      data_b    => rrnetmk3_data_i,
+      wren_b    => rrnetmk3_we_i,
+      q_b       => rrnetmk3_data_o
+    ); -- tdp_ram_inst
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
   cartridge_heuristics_inst : entity work.cartridge_heuristics

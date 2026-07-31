@@ -138,7 +138,9 @@ architecture rtl of rrnet is
   -- PP word addresses (12-bit RAM index, i.e. byte offset / 2) for the
   -- registers whose live-status bits we overlay on CPU reads.
   constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#138# / 2, 11);
+  constant C_PP_LINE_ST_ADDR  : unsigned(11 downto 1)                  := to_unsigned(16#134# / 2, 11);
   constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#124# / 2, 11);
+  constant C_PP_SELF_CTL_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#114# / 2, 11);
 
   ----------------------------------------------------------
   -- CPU-visible registers
@@ -665,7 +667,16 @@ begin
               rd_data_o <= std_logic_vector(reg_pp_ptr(15 downto 8));
 
             when C_PP_DATA_0 =>
-              rd_data_o <= pp_rddat(7 downto 0);
+              -- low-byte read: apply live-status overlays before returning.
+              if reg_pp_ptr(11 downto 1) = C_PP_SELF_CTL_ADDR then
+                -- Self Control. RESET (bit 6) always reads zero.
+                rd_data_o <= pp_rddat(7 downto 0) and X"BF";
+              elsif reg_pp_ptr(11 downto 1) = C_PP_LINE_ST_ADDR then
+                -- LineST $0134: LinkOK (bit 7) always reads one.
+                rd_data_o <= pp_rddat(7 downto 0) or X"80";
+              else
+                rd_data_o <= pp_rddat(7 downto 0);
+              end if;
 
             when C_PP_DATA_0 + 1 =>
               -- High-byte read: apply live-status overlays before returning.

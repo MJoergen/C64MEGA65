@@ -463,13 +463,19 @@ signal qnice_mnt_qnice_wait         : std_logic;
 signal qnice_c64rom_we              : std_logic;
 signal qnice_c64rom_addr            : std_logic_vector(13 downto 0);
 signal qnice_c64rom_data_to         : std_logic_vector(7 downto 0);
-signal qnice_c64rom_data_from	      : std_logic_vector(7 downto 0);
+signal qnice_c64rom_data_from       : std_logic_vector(7 downto 0);
 
 -- Custom DOS access: Simulated C1541
 signal qnice_c1541rom_we            : std_logic;
 signal qnice_c1541rom_addr          : std_logic_vector(15 downto 0);
 signal qnice_c1541rom_data_to       : std_logic_vector(7 downto 0);
-signal qnice_c1541rom_data_from	   : std_logic_vector(7 downto 0);
+signal qnice_c1541rom_data_from     : std_logic_vector(7 downto 0);
+
+-- Custom RR-NET MK3 ROM (simulated)
+signal qnice_rrnetmk3_we            : std_logic;
+signal qnice_rrnetmk3_addr          : std_logic_vector(12 downto 0);
+signal qnice_rrnetmk3_data_to       : std_logic_vector(7 downto 0);
+signal qnice_rrnetmk3_data_from     : std_logic_vector(7 downto 0);
 
 -- Physical internal 1581 read-only diagnostic device (issue #90; C_DEV_C64_PHYS1581)
 signal phys_diag_ce                 : std_logic;
@@ -909,6 +915,12 @@ begin
          c1541rom_data_i        => qnice_c1541rom_data_to,
          c1541rom_data_o        => qnice_c1541rom_data_from,
 
+         -- Custom RRNET MK3 ROM (simulated)
+         rrnetmk3_we_i          => qnice_rrnetmk3_we,
+         rrnetmk3_addr_i        => qnice_rrnetmk3_addr,
+         rrnetmk3_data_i        => qnice_rrnetmk3_data_to,
+         rrnetmk3_data_o        => qnice_rrnetmk3_data_from,
+
          eth_rx_ready_o         => eth_rx_ready_o,
          eth_rx_valid_i         => eth_rx_valid_i,
          eth_rx_last_i          => eth_rx_last_i,
@@ -1061,6 +1073,13 @@ begin
          when C_DEV_C64_PHYS1581 =>
             phys_diag_ce               <= qnice_dev_ce_i;
             qnice_dev_data_o           <= phys_diag_data;
+
+         -- Custom RRNET MK3 ROM (simulated)
+         when C_DEV_C64_RRNET_MK3 =>
+            qnice_rrnetmk3_addr        <= qnice_dev_addr_i(12 downto 0);
+            qnice_rrnetmk3_we          <= qnice_dev_we_i;
+            qnice_dev_data_o           <= x"00" & qnice_rrnetmk3_data_from;
+            qnice_rrnetmk3_data_to     <= qnice_dev_data_i(7 downto 0);
 
          when others => null;
       end case;
