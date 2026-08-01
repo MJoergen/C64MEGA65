@@ -1069,13 +1069,13 @@ _OSM_PRE_MODE1  MOVE    R1, R8
                                                  ; cannot judge nor revert
 
                 ; The gate, scoped to this drive (hardware-testing finding:
-                ; a global gate lets drive 9's lingering physical activity --
+                ; a global gate lets lingering physical activity of drive 9
                 ; e.g. the 1581 DOS re-spinning the motor after every reset of
                 ; a reset storm -- permanently veto harmless drive-8 mode
                 ; changes):
                 ;  (a) the PHYSICAL mechanism only gates changes that enter
                 ;      or leave "Internal 1581" (radio item 2);
-                ;  (b) the image side only gates with THIS drive's own bit
+                ;  (b) the image side only gates with THIS own bit of the drv
                 ;      (engine activity or dirty write cache).
 _OSM_PRE_MODE2  MOVE    M2M$RAMROM_DEV, R2
                 MOVE    P1581_DIAG_DEV, @R2      ; select the diag device
