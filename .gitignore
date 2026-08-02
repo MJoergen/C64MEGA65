@@ -45,5 +45,5 @@ __pycache__
 
 # ghdl simulation artifacts
 CORE/vhdl/e~*.o
-CORE/vhdl/video_filters_tb
+CORE/vhdl/tb_video_filters
 work-obj*.cf
