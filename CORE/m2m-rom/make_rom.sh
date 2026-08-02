@@ -134,6 +134,99 @@ print_file_handles "HNDL_VD_FILES" "HANDLE_VD_FILE" $vdrives_max
 print_file_handles "HNDL_RM_FILES" "HANDLE_RM_FILE" $crtrom_man_max
 
 ##############################################################################
+# C64 specific: Generate ../vhdl/video_filters.rom
+#
+# The core-only polyphase coefficient blobs used to be #included into the Shell
+# ROM, where 3 x 256 words of pure data ate into the 28672-word budget even
+# though the CPU never executes them: they are only ever copied into the ascal
+# polyphase RAM. They now live in a block RAM (../vhdl/video_filters.vhd) that
+# QNICE reads as device C_DEV_C64_VFILTERS.
+#
+# The blob sources stay at framework level; this only re-serializes them into
+# the 16-binary-digits-per-line format that qasm2rom produces and that
+# M2M/QNICE/vhdl/block_rom.vhd + M2M/vhdl/2port2clk_ram.vhd read back.
+#
+# LANCZOS2_12 and SCAN_BR_110_80 are NOT here: they come in through
+# M2M/rom/filters.asm and M2M/rom/gencfg.asm calls LOAD_ASCAL_FLT for them, so
+# they have to stay in the Shell ROM as long as the framework is untouched.
+#
+# Slot order is the contract with HDMI_FLT_TABLE in m2m-rom.asm - do not
+# reorder without changing the C64_FLT_* constants there.
+##############################################################################
+
+VFILTER_ROM=../vhdl/video_filters.rom
+VFILTER_SRC="../../M2M/video_filters/GS_Sharpness_050.asm
+../../M2M/video_filters/CRT_Sim_Composite_H.asm
+../../M2M/video_filters/CRT_Sim_SVideo_H.asm"
+
+: > "$VFILTER_ROM"
+VFILTER_SLOT=0
+for f in $VFILTER_SRC; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: video filter source $f not found."
+        rm -f "$VFILTER_ROM"
+        exit 1
+    fi
+    # Portability: no strtonum() and no 0x literals -- both are gawk extensions
+    # and POSIX awk silently evaluates 0x0100 as 0. Errors go to stdout because
+    # /dev/stderr is not guaranteed. CRLF tolerated.
+    if ! awk '
+    function hex(s,   i, c, v, d) {
+        v = 0; s = toupper(s); sub(/^0X/, "", s)
+        if (length(s) == 0) return -1
+        for (i = 1; i <= length(s); i++) {
+            c = substr(s, i, 1); d = index("0123456789ABCDEF", c) - 1
+            if (d < 0) return -1
+            v = v * 16 + d
+        }
+        return v
+    }
+    function bin(v,   i, s) {
+        s = ""
+        for (i = 15; i >= 0; i--) s = s (int(v / (2 ^ i)) % 2)
+        return s
+    }
+    { sub(/\r$/, "") }
+    /^[ \t]*\.DW/ {
+        line = $0
+        sub(/;.*/, "", line)
+        sub(/^[ \t]*\.DW[ \t]*/, "", line)
+        n = split(line, t, ",")
+        for (i = 1; i <= n; i++) {
+            gsub(/[ \t]/, "", t[i])
+            if (t[i] == "") continue
+            v = hex(t[i])
+            if (v < 0)    { err = "unparsable coefficient >>" t[i] "<< in line " NR; exit 1 }
+            if (v > 1023) { err = "coefficient " t[i] " in line " NR " exceeds the 10-bit range"; exit 1 }
+            print bin(v)
+            words++
+        }
+    }
+    END {
+        if (err != "")    { print "ERROR: " err; exit 1 }
+        if (words != 256) { print "ERROR: expected 256 coefficients, found " words + 0; exit 1 }
+    }' "$f" > "$VFILTER_ROM.tmp"; then
+        # the awk diagnostics land on ITS stdout, so they are in the temp file:
+        # print them instead of appending them to the ROM image and losing them
+        cat "$VFILTER_ROM.tmp"
+        echo "ERROR: cannot serialize video filter $f."
+        rm -f "$VFILTER_ROM" "$VFILTER_ROM.tmp"
+        exit 1
+    fi
+    cat "$VFILTER_ROM.tmp" >> "$VFILTER_ROM"
+    rm -f "$VFILTER_ROM.tmp"
+    VFILTER_SLOT=$((VFILTER_SLOT + 1))
+done
+
+VFILTER_WORDS=$(wc -l < "$VFILTER_ROM" | tr -d ' ')
+if [ "$VFILTER_WORDS" -ne 768 ]; then
+    echo "ERROR: ${VFILTER_ROM} has ${VFILTER_WORDS} words, expected 768 (3 slots x 256)."
+    rm -f "$VFILTER_ROM"
+    exit 1
+fi
+echo "Video filter ROM: ${VFILTER_WORDS} words in ${VFILTER_SLOT} slots."
+
+##############################################################################
 # M2M framework: Assemble and generate various output files:
 #   m2m-rom.def: QNICE Monitor operating system calls
 #   m2m-rom.lis: List file containing the complete listing & assembled code

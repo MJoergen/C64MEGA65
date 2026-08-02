@@ -503,6 +503,9 @@ signal qnice_c1541rom_data_from	   : std_logic_vector(7 downto 0);
 signal phys_diag_ce                 : std_logic;
 signal phys_diag_data               : std_logic_vector(15 downto 0);
 
+-- Core-only polyphase filter coefficients (C_DEV_C64_VFILTERS, video_filters.vhd)
+signal qnice_vfilters_data          : std_logic_vector(15 downto 0);
+
 -- Signals for multiplexing the C64's RAM between C_DEV_C64_RAM and C_DEV_C64_PRG
 signal qnice_c64_ramx_we            : std_logic;
 signal qnice_c64_ramx_addr          : std_logic_vector(15 downto 0);
@@ -1118,6 +1121,13 @@ begin
             phys_diag_ce               <= qnice_dev_ce_i;
             qnice_dev_data_o           <= phys_diag_data;
 
+         -- Core-only polyphase filter coefficients (video_filters.vhd): read-only
+         -- block RAM, 3 slots of 256 words. Same no-wait-state pattern as the C64
+         -- RAM device above; the Shell stages a slot into RAM and then hands it to
+         -- M2M$LOAD_POLYPHASE.
+         when C_DEV_C64_VFILTERS =>
+            qnice_dev_data_o           <= qnice_vfilters_data;
+
          when others => null;
       end case;
    end process core_specific_devices;
@@ -1192,6 +1202,15 @@ begin
 
    -- C64's RAM modelled as dual clock & dual port RAM so that the Commodore 64 core
    -- as well as QNICE can access it
+   -- Core-only polyphase filter coefficients, preloaded from video_filters.rom
+   -- which make_rom.sh regenerates from M2M/video_filters/ on every build.
+   i_video_filters : entity work.video_filters
+      port map (
+         qnice_clk_i       => qnice_clk_i,
+         qnice_addr_i      => qnice_dev_addr_i(9 downto 0),
+         qnice_data_o      => qnice_vfilters_data
+      ); -- i_video_filters
+
    c64_ram : entity work.dualport_2clk_ram
       generic map (
          ROM_FILE          => "../../CORE/ram_init.hex",

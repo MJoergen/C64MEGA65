@@ -1292,7 +1292,7 @@ _LHF_LOOP       MOVE    @R0++, R8               ; R8 = OSM bit for this option
                 RSUB    M2M$GET_SETTING, 1
                 CMP     1, R9                   ; selected?
                 RBRA    _LHF_FOUND, Z           ; yes -> apply this row
-                ADD     3, R0                   ; no -> skip MODE, H, V
+                ADD     4, R0                   ; no -> skip MODE, H, V, HSRC
                 SUB     1, R1
                 RBRA    _LHF_LOOP, !Z
 
@@ -1309,14 +1309,94 @@ _LHF_FOUND      MOVE    @R0++, R3               ; R3 = ASCAL_MODE word
                 MOVE    M2M$ASCAL_MODE, R2
                 MOVE    R3, @R2                 ; write mode register
                 MOVE    @R0++, R8               ; R8 = H label (0 = sentinel)
-                MOVE    @R0,   R9               ; R9 = V label (0 = sentinel)
+                MOVE    @R0++, R9               ; R9 = V label (0 = sentinel)
+                MOVE    R9, R5                  ; keep V across the staging call
+                MOVE    @R0,   R4               ; R4 = HSRC (0 = H is in ROM)
+                ; HSRC is checked first: on a BRAM row the H column is unused
+                ; and holds 0, which would otherwise look like the native-mode
+                ; sentinel and skip the polyphase write altogether.
+                CMP     0, R4                   ; H in the video-filter BRAM?
+                RBRA    _LHF_BRAM, !Z           ; yes -> stage it
                 CMP     0, R8                   ; native-mode sentinel?
                 RBRA    _LHF_RET, Z             ; yes -> done, no RAM write
-                RSUB    M2M$LOAD_POLYPHASE, 1
+                RBRA    _LHF_GO, 1              ; no -> H and V are ROM pointers
+
+                ; H lives in the video-filter BRAM. Stream it straight into the
+                ; ascal polyphase RAM instead of staging it in a QNICE RAM
+                ; buffer: RAM is as tight as ROM here. The variables sit
+                ; directly below the Shell heap, so a 256-word buffer would push
+                ; HEAP up by 256 and eat the stack margin that coreinfo.asm
+                ; reports as "Free QNICE memory" (which had only 163 words of
+                ; slack), for no gain over copying word by word.
+_LHF_BRAM       SUB     1, R4                   ; R4 = BRAM slot
+                MOVE    R4, R8
+                MOVE    M2M$ASCAL_PP_HORIZ, R9
+                RSUB    _LHF_STREAM, 1          ; H half -> ascal
+                CMP     C64_FLT_SAME, R5        ; V = the same blob as H?
+                RBRA    _LHF_BRAM_V, !Z         ; no -> V is a ROM pointer
+                MOVE    R4, R8                  ; yes -> stream the same slot
+                MOVE    M2M$ASCAL_PP_VERT, R9
+                RSUB    _LHF_STREAM, 1
+                RBRA    _LHF_RET, 1
+
+                ; V still lives in the Shell ROM: copy it the framework way.
+                ; R0 holds the table pointer, so use R6 for the device register.
+_LHF_BRAM_V     MOVE    M2M$RAMROM_DEV, R6
+                MOVE    M2M$ASCAL_PPHASE, @R6
+                MOVE    M2M$RAMROM_4KWIN, R6
+                MOVE    0, @R6
+                MOVE    R5, R8                  ; R8 = V pointer (Shell ROM)
+                MOVE    M2M$RAMROM_DATA, R9
+                ADD     M2M$ASCAL_PP_VERT, R9
+                MOVE    ASCAL_FILTER_LEN, R10
+                SYSCALL(memcpy, 1)
+                RBRA    _LHF_RET, 1
+
+_LHF_GO         RSUB    M2M$LOAD_POLYPHASE, 1
 
 _LHF_RET        XOR     R8, R8
                 XOR     R9, R9
                 DECRB
+                RET
+
+; _LHF_STREAM Copy one 256-word coefficient blob from the video-filter BRAM
+;             (C_DEV_C64_VFILTERS) straight into the ascal polyphase RAM, one
+;             word at a time, flipping the QNICE device select between the two.
+;
+;             M2M$LOAD_POLYPHASE cannot do this for us: it takes ordinary
+;             memory pointers and claims the 4K window for the ascal device
+;             itself, and only one device can be selected at a time. Copying
+;             word by word avoids the 256-word RAM staging buffer that the
+;             alternative would need. The blob sits at slot * 0x100 inside
+;             window 0, matching ../vhdl/video_filters.vhd and make_rom.sh.
+;
+;             M2M$RAMROM_4KWIN is a single global register, not per device, so
+;             it is set once; only the device select alternates in the loop.
+;
+; Input:  R8 = BRAM slot (0 .. 2)
+;         R9 = ascal offset (M2M$ASCAL_PP_HORIZ or M2M$ASCAL_PP_VERT)
+; Output: -   (enter/leave preserve R8..R12 for the caller)
+_LHF_STREAM     SYSCALL(enter, 1)
+
+                MOVE    M2M$RAMROM_4KWIN, R0    ; both devices use window 0
+                MOVE    0, @R0
+                MOVE    M2M$RAMROM_DEV, R0      ; R0 = device select register
+
+                MOVE    R8, R1                  ; R1 = source pointer
+                SHL     8, R1                   ; slot * 0x100
+                ADD     M2M$RAMROM_DATA, R1
+                MOVE    M2M$RAMROM_DATA, R2     ; R2 = destination pointer
+                ADD     R9, R2
+                MOVE    ASCAL_FILTER_LEN, R3    ; R3 = words to go
+
+_LHF_STRM_L     MOVE    VFILTERS_DEV, @R0       ; select the filter BRAM
+                MOVE    @R1++, R5               ; read one coefficient
+                MOVE    M2M$ASCAL_PPHASE, @R0   ; select the ascal polyphase RAM
+                MOVE    R5, @R2++               ; write it
+                SUB     1, R3
+                RBRA    _LHF_STRM_L, !Z
+
+                SYSCALL(leave, 1)
                 RET
 
 ; Filter table: (OSM_bit, ASCAL_MODE_word, H_label, V_label) per option, in
@@ -1328,12 +1408,12 @@ _LHF_RET        XOR     R8, R8
 ;
 ; See M2M/video_filters/README.md for per-blob perceptual notes and
 ; CORE/vhdl/config.vhd for the OPTM_ITEMS / OPTM_GROUPS structure.
-HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,                   0
-                .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0
-                .DW C64_OSM_HDMI_FLT_BICUBIC,       M2M$ASCAL_BICUBIC,   0,                   0
-                .DW C64_OSM_HDMI_FLT_SMOOTH,        M2M$ASCAL_POLYPHASE, GS_SHARPNESS_050,    GS_SHARPNESS_050
-                .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12
-                .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80
+HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,                   0,                C64_FLT_ROM
+                .DW C64_OSM_HDMI_FLT_SHARP,         M2M$ASCAL_SBILINEAR, 0,                   0,                C64_FLT_ROM
+                .DW C64_OSM_HDMI_FLT_BICUBIC,       M2M$ASCAL_BICUBIC,   0,                   0,                C64_FLT_ROM
+                .DW C64_OSM_HDMI_FLT_SMOOTH,        M2M$ASCAL_POLYPHASE, 0,                   C64_FLT_SAME,     C64_FLT_GS_SHARP
+                .DW C64_OSM_HDMI_FLT_LANCZOS,       M2M$ASCAL_POLYPHASE, LANCZOS2_12,         LANCZOS2_12,      C64_FLT_ROM
+                .DW C64_OSM_HDMI_FLT_SCANLINES,     M2M$ASCAL_POLYPHASE, LANCZOS2_12,         SCAN_BR_110_80,   C64_FLT_ROM
 
                 ; As long as we are not supporting the full filter and
                 ; post-processing chain of MiSTer:
@@ -1347,15 +1427,26 @@ HDMI_FLT_TABLE  .DW C64_OSM_HDMI_FLT_NO_FILTER,     M2M$ASCAL_NEAREST,   0,     
                 ; horizontal blur, S-Video has mild softening), so swapping only
                 ; the V file preserves the perceptual distinction while restoring
                 ; near-unity mean brightness.
-                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, CRT_SIM_SVIDEO_H,    SCAN_BR_110_80
-                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, CRT_SIM_COMPOSITE_H, SCAN_BR_110_80
+                .DW C64_OSM_HDMI_FLT_CRT_SVIDEO,    M2M$ASCAL_POLYPHASE, 0,                   SCAN_BR_110_80,   C64_FLT_CRT_SVID
+                .DW C64_OSM_HDMI_FLT_CRT_COMPOSITE, M2M$ASCAL_POLYPHASE, 0,                   SCAN_BR_110_80,   C64_FLT_CRT_COMP
 
-; Filter coefficient blobs for the 5 polyphase-based options. LANCZOS2_12 and
-; SCAN_BR_110_80 are already linked via the M2M framework file
-; M2M/rom/filters.asm (included from M2M/rom/shell.asm).
-#include "../../M2M/video_filters/GS_Sharpness_050.asm"
-#include "../../M2M/video_filters/CRT_Sim_Composite_H.asm"
-#include "../../M2M/video_filters/CRT_Sim_SVideo_H.asm"
+; Coefficient blob sources for the 5 polyphase options.
+;
+; LANCZOS2_12 and SCAN_BR_110_80 stay in the Shell ROM: they are linked via the
+; M2M framework file M2M/rom/filters.asm (included from M2M/rom/shell.asm) and
+; M2M/rom/gencfg.asm calls LOAD_ASCAL_FLT for them at boot, so they cannot be
+; removed without touching the framework.
+;
+; The three core-only blobs moved into the video-filter BRAM
+; (../vhdl/video_filters.vhd, generated as ../vhdl/video_filters.rom by
+; make_rom.sh), which freed 768 words of Shell ROM. Their HSRC values below are
+; slot + 1, because 0 means "H is an ordinary memory pointer".
+C64_FLT_ROM         .EQU 0x0000     ; H column is a memory pointer (or 0 = native)
+C64_FLT_GS_SHARP    .EQU 0x0001     ; BRAM slot 0: GS_Sharpness_050
+C64_FLT_CRT_COMP    .EQU 0x0002     ; BRAM slot 1: CRT_Sim_Composite_H
+C64_FLT_CRT_SVID    .EQU 0x0003     ; BRAM slot 2: CRT_Sim_SVideo_H
+C64_FLT_SAME        .EQU 0xFFFF     ; V column: use the same staged blob as H
+VFILTERS_DEV        .EQU 0x010A     ; C_DEV_C64_VFILTERS in ../vhdl/globals.vhd
 
 ; This needs to be the last thing before the "Variables" sections starts
 END_OF_ROM      .DW 0

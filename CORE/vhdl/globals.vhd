@@ -92,6 +92,7 @@ constant C_DEV_C64_KERNAL_C1541  : std_logic_vector(15 downto 0) := x"0106";    
 constant C_DEV_C64_KERNAL_C1581  : std_logic_vector(15 downto 0) := x"0107";     -- Custom Kernal: (simulated) C1581 (D81 enable)
 constant C_DEV_C64_PHYS1581      : std_logic_vector(15 downto 0) := x"0108";     -- Physical internal 1581: read-only diag register bank (issue #90)
 constant C_DEV_C64_MOUNT2        : std_logic_vector(15 downto 0) := x"0109";     -- RAM to buffer disk images: drive 9 (issue #93)
+constant C_DEV_C64_VFILTERS      : std_logic_vector(15 downto 0) := x"010A";     -- Core-only polyphase filter coefficients (read-only BRAM, video_filters.vhd)
 
 ----------------------------------------------------------------------------------------------------------
 -- HyperRAM memory map (in units of 4 kW = 8 kB)
