@@ -42,3 +42,8 @@ M2M/video_filters/*.out
 __pycache__
 .claude
 .codex
+
+# ghdl simulation artifacts
+CORE/vhdl/e~*.o
+CORE/vhdl/video_filters_tb
+work-obj*.cf

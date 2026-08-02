@@ -1,0 +1,67 @@
+-- Testbench for video_filters.vhd (ghdl only; not part of any Vivado run)
+--
+-- Reads all 768 words out of the preloaded BRAM the way QNICE does and prints
+-- them as "<index> <value>". Proves that video_filters.rom is serialized and
+-- read back bit-exactly: file format and bit order, the preload itself, the
+-- slot addressing, and the falling-edge port-B read.
+--
+-- Run it from THIS directory, so the ROM_FILE path inside video_filters.vhd
+-- resolves the same way it does during synthesis:
+--
+--   cd CORE/vhdl
+--   W=$(mktemp -d)
+--   ghdl -a --std=08 --workdir=$W ../../M2M/vhdl/tdp_ram.vhd \
+--        ../../M2M/vhdl/2port2clk_ram.vhd video_filters.vhd video_filters_tb.vhd
+--   ghdl --elab-run --std=08 --workdir=$W video_filters_tb --stop-time=100us
+--
+-- Slot 0 = GS_Sharpness_050, slot 1 = CRT_Sim_Composite_H,
+-- slot 2 = CRT_Sim_SVideo_H; each is 256 words starting at slot * 256, and
+-- must match the .DW rows of the matching file in M2M/video_filters/.
+--
+-- done by MJoergen and sy2002 in 2026 and licensed under GPL v3
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use std.textio.all;
+
+entity video_filters_tb is
+end entity video_filters_tb;
+
+architecture sim of video_filters_tb is
+   signal clk   : std_logic := '0';
+   signal addr  : std_logic_vector(9 downto 0) := (others => '0');
+   signal data  : std_logic_vector(15 downto 0);
+   signal done  : boolean := false;
+begin
+
+   clk <= not clk after 5 ns when not done else '0';
+
+   dut : entity work.video_filters
+      port map (
+         qnice_clk_i  => clk,
+         qnice_addr_i => addr,
+         qnice_data_o => data
+      );
+
+   stim : process
+      variable l : line;
+      variable v : integer;
+   begin
+      -- port B is a falling-edge read, so present the address, wait for the
+      -- falling edge to latch it, then sample after the output register settles
+      for i in 0 to 767 loop
+         addr <= std_logic_vector(to_unsigned(i, 10));
+         wait until falling_edge(clk);
+         wait for 1 ns;
+         v := to_integer(unsigned(data));
+         write(l, i);
+         write(l, string'(" "));
+         write(l, v);
+         writeline(output, l);
+      end loop;
+      done <= true;
+      wait;
+   end process stim;
+
+end architecture sim;
