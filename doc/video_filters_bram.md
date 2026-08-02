@@ -45,9 +45,9 @@ editing the framework and would change behavior for every other M2M core
 | `LANCZOS2_12` | `M2M/rom/filters.asm` | stays in Shell ROM |
 | `SCAN_BR_110_80` | `M2M/rom/filters.asm` | stays in Shell ROM |
 
-**Expected saving: 768 words gross**, minus a handful of words for the staging
-buffer copy loop and the widened dispatcher table. Target: about 730 words net,
-taking the Shell ROM to roughly 26,900 and the headroom to roughly 1,750 words.
+**Saving: 768 words gross**, minus the copy loop and the widened dispatcher
+table: **684 words net**, taking the Shell ROM to 26,961 and the headroom to
+1,711 words.
 
 **The M2M framework is not modified by this change.**
 
@@ -70,22 +70,25 @@ Consequence: a blob living in another QNICE device cannot be handed to
 `M2M$LOAD_POLYPHASE` directly - the window can only select one device at a
 time.
 
-The obvious answer is to stage the blob into a 256-word RAM buffer first, and
-that is what the first implementation did. It was wrong: RAM here is as tight
-as ROM. The QNICE variables sit directly below the Shell heap, so the buffer
-pushed `HEAP` up by 256 words and consumed a margin that was only 163 words,
-leaving heap + declared stack no longer fitting below `VAR$STACK_START`. The
-framework self-check in `coreinfo.asm` then printed its "Free QNICE memory"
-figure as 65443, i.e. -93 rendered unsigned. No corruption was reachable - the
-file browser has its own separate stack and its heap is hard-bounded - but the
-budget invariant and the telemetry that polices it were both broken.
+The core therefore copies the blob **straight from the BRAM into the ascal
+polyphase RAM, one word at a time**, flipping the device select between the two
+windows (`_LHF_STREAM`). This runs once per filter selection and is not
+performance critical, so there is nothing to gain from buffering a whole blob
+in QNICE RAM first - and a 256-word buffer would cost real headroom:
 
-The shipped version therefore copies the blob **straight from the BRAM into the
-ascal polyphase RAM, one word at a time**, flipping the device select between
-the two windows (`_LHF_STREAM`). No RAM buffer, so the RAM layout is
-byte-for-byte what it was before the refactor. `M2M$RAMROM_4KWIN` is a single
-global register rather than one per device, so it is set once outside the loop.
-The extra cost is about 30 ROM words against the 256 RAM words saved.
+> RAM here is as tight as ROM. The QNICE variables sit directly below the
+> Shell heap, so any variable added pushes `HEAP` up by the same amount and
+> comes straight out of the margin between the heap ceiling and
+> `VAR$STACK_START`. That margin is 163 words. Spend more than that and heap
+> plus declared stack no longer fit, and the framework self-check in
+> `coreinfo.asm` reports its "Free QNICE memory" figure as a large number
+> (an unsigned-rendered negative). Nothing enforces `STACK_SIZE` at runtime,
+> so that diagnostic is the only thing that flags it.
+
+Streaming adds no RAM variables at all, so the RAM layout is byte-for-byte what
+it was before this change. `M2M$RAMROM_4KWIN` is a single global register
+rather than one per device, so it is set once outside the loop and only the
+device select alternates.
 
 Looking at the five polyphase rows of `HDMI_FLT_TABLE`, the BRAM blobs only
 ever appear in the **H** position, so the V half is either the same slot
@@ -100,8 +103,8 @@ framework's own `memcpy` into the V slot):
 | CRT S-Video | `CRT_SIM_SVIDEO_H` (BRAM) | `SCAN_BR_110_80` (ROM) |
 | CRT Composite | `CRT_SIM_COMPOSITE_H` (BRAM) | `SCAN_BR_110_80` (ROM) |
 
-So the loader stages at most one blob per selection, and the Smooth row simply
-passes the same buffer pointer twice.
+So the loader touches at most one BRAM slot per selection, and the Smooth row
+simply streams that slot into both the H and the V half.
 
 ## 4. Design
 
@@ -211,7 +214,7 @@ CORE/vhdl/video_filters.vhd      new: BRAM ROM + QNICE read port
 CORE/vhdl/video_filters.rom      new: generated, 768 lines
 CORE/vhdl/mega65.vhd             device decode / read mux
 CORE/m2m-rom/make_rom.sh         .rom generator + validation
-CORE/m2m-rom/m2m-rom.asm         includes, HDMI_FLT_TABLE, LOAD_HDMI_FILTER, FLT_BUF
+CORE/m2m-rom/m2m-rom.asm         includes, HDMI_FLT_TABLE, LOAD_HDMI_FILTER, _LHF_STREAM
 CORE/CORE-R*.xpr                 add video_filters.vhd to the file list
 ```
 
@@ -243,28 +246,30 @@ so a wrong path is a fatal elaboration error, not a silent zero-fill.
 - [x] `.xpr` file lists (all four board revisions)
 - [x] equivalence verification: all 8 menu rows deliver identical coefficients;
       regression suites, emulator boot and dead-code set unchanged
-- [x] adversarial multi-agent audit: 22 agents, 17 findings raised, 6 survived
-      refutation, all addressed (see below)
+- [x] adversarial multi-agent audit (22 agents, 6 findings survived refutation)
 - [ ] hardware check of the three affected menu rows
 
 Result: Shell ROM 27,645 -> 26,961 words, **684 words saved**, headroom 1,711
 words, and the RAM layout byte-for-byte unchanged.
 
-## 9. What the adversarial audit changed
+## 9. Invariants to keep
 
-Two real defects survived refutation, both in the first implementation:
+Anyone touching this later should preserve these, because nothing enforces them
+automatically:
 
-1. **RAM budget** (major). The 256-word staging buffer pushed `HEAP` up and
-   broke the heap/stack budget invariant; the framework self-check reported
-   "Free QNICE memory" as 65443 (-93 unsigned). Fixed by removing the buffer
-   entirely in favour of the word-by-word stream described in section 3. The
-   more alarming variant of this finding - directory browsing corrupting the
-   heap - was refuted: the file browser runs on its own 768-word stack and its
-   heap is hard-bounded by `DIRBROWSE_READ`.
-2. **Build diagnostics** (minor). The generator wrote its own error messages to
-   stdout, which was redirected into `video_filters.rom` and then deleted, so a
-   malformed blob failed with "(see above)" and nothing above. Fixed by
-   serializing through a temp file and printing the diagnostic on failure.
-
-Also fixed: `CORE/vhdl/video_filters.rom` is a generated artifact and is now
-listed in `.gitignore` next to the other generated ROM files.
+- **No new QNICE RAM variables for the filter path.** See the RAM-margin note
+  in section 3; the boot diagnostic in `coreinfo.asm` is the only warning.
+- **The slot order is a three-way contract** between the generator in
+  `make_rom.sh`, the layout comment in `video_filters.vhd` and the
+  `C64_FLT_*` constants in `m2m-rom.asm`. Reordering one silently swaps
+  filters.
+- **`HSRC` is tested before the native-mode `0` sentinel** in
+  `LOAD_HDMI_FILTER`. On a BRAM row the H column is unused and holds `0`;
+  testing the sentinel first would skip the polyphase write and silently drop
+  the filter.
+- **The generator must fail closed.** Its diagnostics go to stdout, so they are
+  captured to a temp file and printed on failure rather than being appended to
+  the ROM image; `synth_pre.tcl` uses Tcl `exec`, which turns the non-zero exit
+  into an aborted synthesis.
+- `CORE/vhdl/video_filters.rom` is generated and is listed in `.gitignore`
+  alongside the other generated ROM files.

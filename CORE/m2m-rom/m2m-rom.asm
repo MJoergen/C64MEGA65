@@ -1310,24 +1310,22 @@ _LHF_FOUND      MOVE    @R0++, R3               ; R3 = ASCAL_MODE word
                 MOVE    R3, @R2                 ; write mode register
                 MOVE    @R0++, R8               ; R8 = H label (0 = sentinel)
                 MOVE    @R0++, R9               ; R9 = V label (0 = sentinel)
-                MOVE    R9, R5                  ; keep V across the staging call
+                MOVE    R9, R5                  ; R9 is reused below, keep V
                 MOVE    @R0,   R4               ; R4 = HSRC (0 = H is in ROM)
                 ; HSRC is checked first: on a BRAM row the H column is unused
                 ; and holds 0, which would otherwise look like the native-mode
                 ; sentinel and skip the polyphase write altogether.
                 CMP     0, R4                   ; H in the video-filter BRAM?
-                RBRA    _LHF_BRAM, !Z           ; yes -> stage it
+                RBRA    _LHF_BRAM, !Z           ; yes -> stream it into ascal
                 CMP     0, R8                   ; native-mode sentinel?
                 RBRA    _LHF_RET, Z             ; yes -> done, no RAM write
                 RBRA    _LHF_GO, 1              ; no -> H and V are ROM pointers
 
-                ; H lives in the video-filter BRAM. Stream it straight into the
-                ; ascal polyphase RAM instead of staging it in a QNICE RAM
-                ; buffer: RAM is as tight as ROM here. The variables sit
-                ; directly below the Shell heap, so a 256-word buffer would push
-                ; HEAP up by 256 and eat the stack margin that coreinfo.asm
-                ; reports as "Free QNICE memory" (which had only 163 words of
-                ; slack), for no gain over copying word by word.
+                ; H lives in the video-filter BRAM: stream it into the ascal
+                ; polyphase RAM. This runs once per filter selection and is not
+                ; performance critical, so it copies word by word rather than
+                ; buffering a blob in QNICE RAM, which would cost 256 words of
+                ; a RAM budget that has far less slack than it looks.
 _LHF_BRAM       SUB     1, R4                   ; R4 = BRAM slot
                 MOVE    R4, R8
                 MOVE    M2M$ASCAL_PP_HORIZ, R9
@@ -1365,10 +1363,9 @@ _LHF_RET        XOR     R8, R8
 ;
 ;             M2M$LOAD_POLYPHASE cannot do this for us: it takes ordinary
 ;             memory pointers and claims the 4K window for the ascal device
-;             itself, and only one device can be selected at a time. Copying
-;             word by word avoids the 256-word RAM staging buffer that the
-;             alternative would need. The blob sits at slot * 0x100 inside
-;             window 0, matching ../vhdl/video_filters.vhd and make_rom.sh.
+;             itself, and only one device can be selected at a time. The blob
+;             sits at slot * 0x100 inside window 0, matching the layout in
+;             ../vhdl/video_filters.vhd and the generator in make_rom.sh.
 ;
 ;             M2M$RAMROM_4KWIN is a single global register, not per device, so
 ;             it is set once; only the device select alternates in the loop.
