@@ -145,10 +145,31 @@ print_file_handles "HNDL_RM_FILES" "HANDLE_RM_FILE" $crtrom_man_max
 ASM_RC=$?
 
 ##############################################################################
-# Guard the Shell-ROM budget. QNICE reserves 0x7000-0x7FFF for memory-mapped
-# I/O, so the usable ROM is 0x0000-0x6FFF = 28672 words. The assembler does NOT
-# check this; an overflow would otherwise fail obscurely later (in Vivado). The
-# m2m-rom.rom holds exactly one 16-bit word (binary) per line.
+# Trim the variables off the ROM image and guard the Shell-ROM budget.
+#
+# QNICE reserves 0x7000-0x7FFF for memory-mapped I/O, so the usable ROM is
+# 0x0000-0x6FFF = 28672 words. The assembler does NOT check this; an overflow
+# would otherwise fail obscurely later (in Vivado).
+#
+# qasm2rom serializes every word of the .out file in source order and ignores
+# addresses, so the words that ".ORG 0x8000" and ".ORG 0xFEE0" reserve for the
+# variables get appended to the ROM image as zero words. They land at ROM
+# addresses the CPU can never read, but they inflate the image and made a plain
+# "wc -l" report a full ROM ~600 words too early.
+#
+# m2m-rom.rom line N holds the word of m2m-rom.out line N, and BROM (see
+# M2M/QNICE/vhdl/block_rom.vhd) loads file line N into ROM address N. So inside
+# the ROM the address of a record always equals its line number minus one, and
+# the ROM image is exactly the leading run of .out records for which that holds.
+# Everything after that run has to be a variable (address >= 0x7000); anything
+# else means the source layout changed in a way qasm2rom cannot serialize
+# correctly at all, so fail loudly instead of truncating something real.
+#
+# The listing knows the same number independently: END_OF_ROM is by convention
+# the last ROM item, directly before the variables. Cross-checking both catches
+# a module that was accidentally included after that marker -- which would also
+# silently corrupt the free-ROM figure that the Shell logs at boot (it computes
+# M2M$RAMROM_DATA - END_OF_ROM).
 ##############################################################################
 ROM_MAX_WORDS=28672
 
@@ -160,7 +181,77 @@ if [ "$ASM_RC" -ne 0 ] || [ ! -f m2m-rom.rom ]; then
     exit 1
 fi
 
-ROM_WORDS=$(wc -l < m2m-rom.rom | tr -d ' ')
+if [ ! -f m2m-rom.lis ]; then
+    echo "ERROR: m2m-rom.lis was not produced; cannot verify the ROM image."
+    exit 1
+fi
+
+# The ROM image size, derived from the addresses that qasm2rom serialized.
+# Portability: no strtonum() and no 0x literals -- both are gawk extensions and
+# POSIX awk silently evaluates 0x7000 as 0. No /dev/stderr either, so errors are
+# printed on stdout and echoed by the caller. Tolerates CRLF line endings.
+if ! ROM_WORDS=$(awk '
+function hex(s,   i, c, v, d) {
+    v = 0; s = toupper(s); sub(/^0X/, "", s)
+    for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1); d = index("0123456789ABCDEF", c) - 1
+        if (d < 0) return -1
+        v = v * 16 + d
+    }
+    return v
+}
+{ sub(/\r$/, "") }
+{
+    a = hex($1)
+    if (a < 0)                { err = "unparsable address in line " NR ": " $1; exit 1 }
+    if (!done && a == NR - 1) { n = NR; next }
+    done = 1
+    if (a < 28672)            { err = "address " $1 " (line " NR ") is inside the ROM but outside the contiguous image"; exit 1 }
+}
+END {
+    if (err != "")  { print "ERROR: m2m-rom.out cannot be trimmed: " err; exit 1 }
+    if (n + 0 == 0) { print "ERROR: m2m-rom.out contains no ROM words."; exit 1 }
+    print n + 0
+}' m2m-rom.out); then
+    echo "$ROM_WORDS"
+    exit 1
+fi
+
+# The same number according to the END_OF_ROM marker in the listing.
+EOR_ADDR=$(awk '
+{ sub(/\r$/, "") }
+/^Label-list:/ { inlist = 1; next }
+inlist {
+    line = $0
+    gsub(/:/, " ", line)
+    n = split(line, t, /[ \t]+/)
+    for (i = 1; i < n; i++)
+        if (t[i] == "END_OF_ROM") { print t[i + 1]; exit }
+}' m2m-rom.lis)
+
+case "$EOR_ADDR" in
+    0x[0-9A-Fa-f]*) ;;
+    *)  echo "ERROR: END_OF_ROM not found in the label list of m2m-rom.lis."
+        echo "       It has to stay the last ROM item, directly before the"
+        echo "       variables section (.ORG 0x8000) in m2m-rom.asm."
+        exit 1 ;;
+esac
+
+EOR_WORDS=$(( EOR_ADDR + 1 ))
+if [ "$EOR_WORDS" -ne "$ROM_WORDS" ]; then
+    echo "ERROR: the ROM image is ${ROM_WORDS} words but END_OF_ROM (${EOR_ADDR}) says"
+    echo "       ${EOR_WORDS}. Something is emitted into ROM after the END_OF_ROM marker."
+    echo "       Move it before the marker, or the ROM image loses those words."
+    exit 1
+fi
+
+if [ "$(wc -l < m2m-rom.out | tr -d ' ')" -ne "$(wc -l < m2m-rom.rom | tr -d ' ')" ]; then
+    echo "ERROR: m2m-rom.out and m2m-rom.rom differ in length; cannot map words to addresses."
+    exit 1
+fi
+
+head -n "$ROM_WORDS" m2m-rom.rom > m2m-rom.rom.tmp && mv m2m-rom.rom.tmp m2m-rom.rom
+
 if [ "$ROM_WORDS" -gt "$ROM_MAX_WORDS" ]; then
     echo "ERROR: m2m-rom.rom is ${ROM_WORDS} words, exceeds the ${ROM_MAX_WORDS}-word"
     echo "       Shell-ROM budget (0x0000-0x6FFF; 0x7000+ is QNICE MMIO)."
