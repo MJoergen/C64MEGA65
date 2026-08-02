@@ -135,7 +135,10 @@ LOG_STR_RNOMNT  .ASCII_P "Automatic ROM loading failed: Cannot mount SD card."
 ; ----------------------------------------------------------------------------
 
 STR_INITWAIT    .ASCII_W "Initializing. Please wait..."
-STR_SPACE       .ASCII_W "Press Space to continue."
+
+; Shared closing prompt. Every warning that waits for SPACE prints this one
+; instead of carrying its own copy, so do not repeat it inside a message.
+STR_SPACE       .ASCII_W "Press SPACE to continue."
 
 ; ----------------------------------------------------------------------------
 ; Warnings
@@ -146,8 +149,7 @@ WRN_MAXFILES    .ASCII_P "Warning: This directory contains more\n"
                 .ASCII_P "memory.\n\n"
                 .ASCII_P "Split the files into multiple folders.\n\n"
                 .ASCII_P "If you continue by pressing SPACE, be\n"
-                .ASCII_P "aware that random files will be missing.\n\n"
-                .ASCII_W "Press SPACE to continue.\n"
+                .ASCII_W "aware that random files will be missing.\n\n"
 
 WRN_EMPTY_BRW   .ASCII_P "The root directory of the SD card contains\n"
                 .ASCII_P "no sub-directories that might contain any\n"
@@ -155,8 +157,7 @@ WRN_EMPTY_BRW   .ASCII_P "The root directory of the SD card contains\n"
                 .ASCII_P "And the root directory itself also does not\n"
                 .ASCII_P "contain any files that match the criteria\n"
                 .ASCII_P "of this core.\n\n"
-                .ASCII_P "Nothing to browse.\n\n"
-                .ASCII_W "Press Space to continue."
+                .ASCII_W "Nothing to browse.\n\n"
 
 ; ----------------------------------------------------------------------------
 ; Error Messages

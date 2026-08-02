@@ -1179,13 +1179,11 @@ _CUSTOM_MSG_RET DECRB
 WRN_WRONG_IMG   .ASCII_P "\n\nA D64 disk image must be exactly 174848\n"
                 .ASCII_P "bytes (35 tracks) or 196608 bytes (40\n"
                 .ASCII_P "tracks). A D81 must be exactly 819200 bytes\n"
-                .ASCII_P "(error-info variants are not supported)."
-                .ASCII_W "\n\nPress SPACE to continue.\n"
+                .ASCII_W "(error-info variants are not supported).\n"
 
 ; Warning: the .crt file is larger than the SIMCRT HyperRAM pool
 WRN_CRT_TOO_BIG .ASCII_P "\n\nThis .crt file is too large: it does not\n"
-                .ASCII_P "fit into the simulated-cartridge memory pool."
-                .ASCII_W "\n\nPress SPACE to continue.\n"
+                .ASCII_W "fit into the simulated-cartridge memory pool.\n"
 
 ; Warning: Nothing to browse
 WRN_NO_D64      .ASCII_P "This core uses D64 and D81 disk images.\n\n"
@@ -1197,8 +1195,7 @@ WRN_NO_D64      .ASCII_P "This core uses D64 and D81 disk images.\n\n"
                 .ASCII_P "You can use long file names and you can\n"
                 .ASCII_P "also use nested sub-directories to nicely\n"
                 .ASCII_P "order your collection of disk images.\n\n"
-                .ASCII_P "Nothing to browse.\n\n"
-                .ASCII_W "Press Space to continue."
+                .ASCII_W "Nothing to browse.\n\n"
 
 ; JiffyDOS status report, printed to the debug console by PREP_START when
 ; JiffyDOS is the selected Kernal. The component value ("JiffyDOS") and the
