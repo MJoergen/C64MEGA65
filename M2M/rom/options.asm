@@ -562,10 +562,10 @@ _HLP_S3         MOVE    M2M$RAMROM_DEV, R0
                 RBRA    _HLP_S5, Z
                 MOVE    R10, R9                 ; unbalanced submenu flags
                 MOVE    ERR_F_MENUSUB, R8       ; R9: offending item index
-                RBRA    FATAL, 1
+                RBRA    FATAL_IDX, 1
 _HLP_S5         MOVE    R10, R9                 ; OPTM_G_START on an item
                 MOVE    ERR_F_MENUSTRT2, R8     ; invisible in the main menu
-                RBRA    FATAL, 1                ; R9: offending item index
+                RBRA    FATAL_IDX, 1            ; R9: offending item index
 
 _HLP_S4         MOVE    OPTM_SCOUNT, R0         ; store amount of submenus
                 MOVE    R9, @R0
@@ -653,7 +653,7 @@ _HLP_DEP_ON     MOVE    LOG_STR_CFG_ON, R8
                 RBRA    _HLP_DEPFAT, Z
                 MOVE    ERR_F_DEPSPECIAL, R8
 _HLP_DEPFAT     MOVE    R0, R9                  ; R9: offending index = err code
-                RBRA    FATAL, 1
+                RBRA    FATAL_IDX, 1
 
                 ; sanity check the menu geometry: menu.asm draws without
                 ; clipping, so a menu view that is taller than the window
@@ -1587,7 +1587,7 @@ OPTM_CB_SHOW    SYSCALL(enter, 1)
                 RBRA    _OPTM_CBS_B, !Z
                 MOVE    ERR_F_MENUSUB, R8       ; reached the end of the
                 MOVE    R5, R9                  ; whole menu: broken
-                RBRA    FATAL, 1                ; menu structure
+                RBRA    FATAL_IDX, 1            ; menu structure
 _OPTM_CBS_B     MOVE    ERR_F_MENUNGRP, R8      ; reached the end of the
                 MOVE    R5, R9                  ; submenu: no selected menu
                 RBRA    FATAL, 1                ; group item inside

@@ -158,46 +158,43 @@ WRN_EMPTY_BRW   .ASCII_P "The root directory of the SD card contains\n"
                 .ASCII_P "Nothing to browse.\n\n"
                 .ASCII_W "Press Space to continue."
 
-WRN_ERROR_CODE  .ASCII_W "Error code: "
-
 ; ----------------------------------------------------------------------------
 ; Error Messages
 ; ----------------------------------------------------------------------------
 
 ERR_FATAL       .ASCII_W "\nFATAL ERROR:\n\n"
-ERR_CODE        .ASCII_W "Error code: "
+ERR_CODE        .ASCII_W "Error code: "     ; also used for warnings
 ERR_FATAL_STOP  .ASCII_W "\nCore stopped. Please reset the machine.\n"
+
+; Shared closing line of every message that is raised via FATAL_IDX. Keeping it
+; here once instead of repeating it inside each message saves 27 words apiece.
+ERR_ITEMIDX     .ASCII_W "Item index = error code.\n"
 
 ERR_F_MENUSIZE  .ASCII_P "config.vhd: Illegal menu size (OPTM_SIZE):\n"
                 .ASCII_W "Must be between 1 and 254\n"
 ERR_F_MENUSTART .ASCII_P "config.vhd: No start menu item tag\n"
                 .ASCII_W "(OPTM_G_START) found in OPTM_GROUPS\n"
+; The messages below are raised via FATAL_IDX, which appends ERR_ITEMIDX, so
+; they must not repeat that sentence themselves.
 ERR_F_MENUSTRT2 .ASCII_P "config.vhd: OPTM_G_START must be on a menu\n"
                 .ASCII_P "item that is visible in the main menu and\n"
-                .ASCII_P "not on an item inside a submenu.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "not on an item inside a submenu.\n"
 ERR_F_MENUSUB   .ASCII_P "config.vhd: The submenus in OPTM_GROUPS\n"
                 .ASCII_P "are not balanced: every OPTM_G_SUBMENU\n"
                 .ASCII_P "needs a matching ending\n"
-                .ASCII_P "OPTM_G_SUBMENU + OPTM_G_CLOSE.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "OPTM_G_SUBMENU + OPTM_G_CLOSE.\n"
 ERR_F_MENUNGRP  .ASCII_P "config.vhd: No selected menu group item\n"
                 .ASCII_W "found within submenu.\n"
 ERR_F_DEPMOTHER .ASCII_P "config.vhd: An OPTM_DEP() refers to a\n"
-                .ASCII_P "mother group that does not exist.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "mother group that does not exist.\n"
 ERR_F_DEPIDX    .ASCII_P "config.vhd: An OPTM_DEP() item index is\n"
-                .ASCII_P "out of range for its mother group.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "out of range for its mother group.\n"
 ERR_F_DEPMIX    .ASCII_P "config.vhd: The members of one menu group\n"
-                .ASCII_P "must all carry the same OPTM_DEP() tag.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "must all carry the same OPTM_DEP() tag.\n"
 ERR_F_DEPCHAIN  .ASCII_P "config.vhd: A mother group of an OPTM_DEP()\n"
-                .ASCII_P "must not be dependent itself (no chains).\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "must not be dependent itself (no chains).\n"
 ERR_F_DEPSPECIAL .ASCII_P "config.vhd: OPTM_DEP() is not allowed on a\n"
-                .ASCII_P "submenu, mount, load, help or start line.\n"
-                .ASCII_W "Item index = error code.\n"
+                .ASCII_W "submenu, mount, load, help or start line.\n"
 ERR_F_NEWLINE   .ASCII_P "config.vhd: Each line in OPTM_ITEMS needs\n"
                 .ASCII_W "to be terminated by a newline character.\n"
 ERR_F_MENUDRV   .ASCII_P "config.vhd: More menu items have the\n"

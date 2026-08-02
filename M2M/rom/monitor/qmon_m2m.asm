@@ -281,7 +281,7 @@ QMON$M_MAYBE_F  CMP     'F', R8
                 RSUB    IO$PUTS, 1
                 RSUB    IO$GET_W_HEX, 1
                 MOVE    R8, R0
-                MOVE    QMON$CG_M_F2, R8
+                MOVE    QMON$CG_M_D2, R8        ; shared " END ADDRESS=" prompt
                 RSUB    IO$PUTS, 1
                 RSUB    IO$GET_W_HEX, 1
                 MOVE    R8, R1
@@ -333,7 +333,7 @@ QMON$M_MAYBE_S  CMP     'S', R8
                 RSUB    IO$PUTS, 1
                 RSUB    IO$GET_W_HEX, 1         ; Get start address
                 MOVE    R8, R0                  ; Remember start address in R8
-                MOVE    QMON$CG_M_S2, R8        ; Print prompt for end address
+                MOVE    QMON$CG_M_D2, R8        ; Print prompt for end address
                 RSUB    IO$PUTS, 1
                 RSUB    IO$GET_W_HEX, 1         ; Get end address
                 RSUB    IO$PUT_CRLF, 1
@@ -676,17 +676,15 @@ QMON$CG_M_C     .ASCII_W    "CHANGE ADDRESS="
 QMON$CG_M_C1    .ASCII_W    " CURRENT VALUE="
 QMON$CG_M_C2    .ASCII_W    " NEW VALUE="
 QMON$CG_M_D     .ASCII_W    "DUMP START ADDRESS="
-QMON$CG_M_D2    .ASCII_W    " END ADDRESS="
+QMON$CG_M_D2    .ASCII_W    " END ADDRESS="     ; shared by DUMP/FILL/DISASSEMBLE
 QMON$CG_M_E     .ASCII_W    "EXAMINE ADDRESS="
 QMON$CG_M_F     .ASCII_W    "FILL START ADDRESS="
-QMON$CG_M_F2    .ASCII_W    " END ADDRESS="
 QMON$CG_M_F3    .ASCII_W    " VALUE="
 QMON$CG_M_L     .ASCII_W    "LOAD - ENTER ADDRESS/VALUE PAIRS, TERMINATE WITH CTRL-E\n"
 QMON$CG_M_M     .ASCII_W    "MOVE FROM="
 QMON$CG_M_M2    .ASCII_W    " TO="
 QMON$CG_M_M3    .ASCII_W    " LENGTH="
 QMON$CG_M_S     .ASCII_W    "DISASSEMBLE START ADDRESS="
-QMON$CG_M_S2    .ASCII_W    " END ADDRESS="
 QMON$CG_F       .ASCII_W    "ILE/"
 QMON$CG_F_D     .ASCII_W    "LIST DIRECTORY\n"
 QMON$CG_F_EMNT  .ASCII_W    "Error mounting device: SD Card. Error code: "

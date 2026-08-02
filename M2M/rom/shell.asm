@@ -481,7 +481,7 @@ _HM_SDMOUNTED5  MOVE    SCR$OSM_O_DX, R8        ; set "%s is replaced" flag
                 RSUB    SCR$CLRINNER, 1         ; print error message
                 MOVE    R8, R0
                 MOVE    R9, R1
-                MOVE    WRN_ERROR_CODE, R8
+                MOVE    ERR_CODE, R8
                 RSUB    SCR$PRINTSTR, 1
                 MOVE    R0, R8
                 MOVE    SCRATCH_HEX, R9
@@ -1432,11 +1432,25 @@ _START_MON_GO   DECRB
 ; QNICE Monitor. This is invisible to end users but might be helpful for
 ; debugging purposes, if you are able to connect a JTAG interface.
 ;
+; FATAL_IDX behaves exactly like FATAL but prints the shared sentence
+; "Item index = error code." directly after the message. Many config.vhd
+; sanity checks report the offending item index as the error code and used to
+; repeat that sentence inside every single message, which cost 27 ROM words
+; per message. Enter here instead and leave the sentence out of the message.
+;
 ; R8: Pointer to error message
 ; R9: if not zero: contains an error code for additional debugging info
 ; ----------------------------------------------------------------------------
 
-FATAL           MOVE    R8, R0
+FATAL_IDX       MOVE    ERR_ITEMIDX, R1         ; hint printed after the msg
+                RBRA    _FATAL_START, 1
+
+FATAL           XOR     R1, R1                  ; no hint
+
+                ; R0/R1 are safe here: every routine called below banks its
+                ; registers via the enter syscall or INCRB, and FATAL never
+                ; returns, so clobbering the register bank of the caller is OK
+_FATAL_START    MOVE    R8, R0
 
                 ; make sure we have a large window where we can print
                 ; the error message
@@ -1454,7 +1468,13 @@ FATAL           MOVE    R8, R0
                 RSUB    SCR$PRINTSTR, 1
                 SYSCALL(puts, 1)
 
-                CMP     0, R9
+                CMP     0, R1                   ; optional shared hint line
+                RBRA    _FATAL_CODE, Z
+                MOVE    R1, R8
+                RSUB    SCR$PRINTSTR, 1
+                SYSCALL(puts, 1)
+
+_FATAL_CODE     CMP     0, R9
                 RBRA    _FATAL_END, Z
                 MOVE    ERR_CODE, R8
                 RSUB    SCR$PRINTSTR, 1
