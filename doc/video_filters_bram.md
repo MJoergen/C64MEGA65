@@ -247,10 +247,23 @@ so a wrong path is a fatal elaboration error, not a silent zero-fill.
 - [x] equivalence verification: all 8 menu rows deliver identical coefficients;
       regression suites, emulator boot and dead-code set unchanged
 - [x] adversarial multi-agent audit (22 agents, 6 findings survived refutation)
-- [ ] hardware check of the three affected menu rows
+- [x] ghdl unit test: all 768 words read back out of the preloaded BRAM are
+      bit-identical to the coefficients the assembler used to emit
+      (`CORE/vhdl/test/tb_video_filters/`)
+- [x] hardware check on R3, 03-Aug-2026: all eight filter rows look correct,
+      the polyphase ones and the native ascal ones alike
 
 Result: Shell ROM 27,645 -> 26,961 words, **684 words saved**, headroom 1,711
 words, and the RAM layout byte-for-byte unchanged.
+
+The R3 synthesis log also settles the two things that could not be checked
+without a build: `video_filters` elaborates as
+`dualport_2clk_ram -> tdp_ram` with `ADDR_WIDTH=10, DATA_WIDTH=16,
+ROM_PRELOAD=1, ROM_FILE_HEX=0, FALLING_B=1`, and `ROM_FILE` binds to
+`../../CORE/vhdl/video_filters.rom` without a file error - `file_open` has no
+status parameter, so a path that did not resolve would have aborted
+elaboration. `write_bitstream completed successfully`, 0 errors, 0 critical
+warnings, block RAM at 175 of 365 tiles.
 
 ## 9. Invariants to keep
 
