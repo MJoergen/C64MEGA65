@@ -178,7 +178,10 @@ Version 6 - MONTH DAY, 2026
 
 ## Bugfixes
 
-* @TODO: Add bugfixes here
+* Fixed a silent disk image corruption that could occur when the file browser
+  was opened or an image was mounted while a drive was still saving its cache
+  to the SD card ("yellow drive led"): the affected drive lost the bytes it
+  had buffered at that moment.
 
 Version 5.2 - April 28, 2025
 ============================
