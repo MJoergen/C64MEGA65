@@ -35,6 +35,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A19    | <date>   | <tbd>   | Simulate RR-Net (issue #234). Switchable GEOS Real-Time-Clock (issues #133, #164 and #187). Audio level control (issue #85). Config file has now .cfg file-extension (issue #239).
 | WIP-V6-A20    | 08/01/26 | e9e8699 | Added drive 9; both drives can now be used either as simulated drives or one of them using the built-in floppy drive as 1581 (issues #93 and #237). Configurable drive activation (issue #88). Configurable un-mount on reset (issue #81).
 | WIP-V6-A20X1  | 08/03/26 | 5673e57 | Fixed rare disk image corruption (commit c546c7c). Speed-up of disk image background saving (commit 5673e57). Refactored firmware & vhdl to save ROM space (commits d9f3307, 0145262, e29094e, f1d1600).
+| WIP-V6-A20X2  | <date>   | <tbd>   | Default is one drive 8; drive 9 is invisible.
 
 ## Version 5.2
 

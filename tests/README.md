@@ -14,8 +14,20 @@ dependent entries per drive: `8:<Mount Drive>` / `9:<Mount Drive>` while the
 drive is in one of the two "Disk Image" modes, `8:Internal 1581` /
 `9:Internal 1581` (with the live physical-drive status in the trailing field)
 while it is in "Internal 1581" mode, and no entry at all for a drive that is
-`Off`. Factory defaults: drive 8 = `Disk Image: If mounted`, drive 9 =
-`Internal 1581`, both `Unmount on reset` items on.
+`Off`. Factory defaults (since A20X2): drive 8 = `Disk Image: If mounted`,
+drive 9 = `Off`, both `Unmount on reset` items on. So out of the box there is
+exactly one drive on the IEC bus and the main menu shows no drive-9 entry at
+all - multi-drive is a conscious choice the user has to make in
+`Drive Settings`, because some fastloaders and demos do not cope with a second
+device on the bus.
+
+* Out-of-the-box regression (the reason for the A20X2 default change): with a
+  freshly generated config file, the core must behave exactly like the
+  single-drive builds up to A18X2. Re-run the fastloader and demo tests from
+  [demos.md](demos.md) that are known to be sensitive to a second IEC device,
+  plus a JiffyDOS load, and compare against A18X2. Then switch drive 9 to a
+  `Disk Image` mode and confirm the affected titles fail the same way they do
+  on a real C64 with two drives attached - that is expected, not a bug.
 
 * Mount D64 and D81 images on drive 8, on drive 9, and on both at the same
   time. LOAD and SAVE on both drives and verify on the SD card that the data
@@ -46,7 +58,8 @@ while it is in "Internal 1581" mode, and no entry at all for a drive that is
   (reset button short press and OSM-triggered resets) with the menu still
   showing the image name; a long-press hard reset must always unmount.
 * Config file: `OPTM_SIZE` grew from 170 to 190 and the version changed, so a
-  new config file (`c64mega65-WIP-V6-A20.cfg`) must be generated with
+  new config file (named after the current `CORE_VERSION`, e.g.
+  `c64mega65-WIP-V6-A20X2.cfg`) must be generated with
   `M2M/tools/make_config.sh` - verify all settings incl. the new Drive
   Settings persist across reboots.
 * SIMCRT regression: the HyperRAM map was retuned (M2M framework region 4 MB

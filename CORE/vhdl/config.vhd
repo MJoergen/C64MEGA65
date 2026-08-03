@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A20X1";
+constant CORE_VERSION : string := "WIP-V6-A20X2";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -652,7 +652,7 @@ constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by 
 constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
 constant OPTM_G_DRV8_MODE     : integer := 31;  -- drive 8 mode: Disk Image (If mounted/Always), Internal 1581, Off (issue #93)
 constant OPTM_G_DRV8_UNMOUNT  : integer := 32;  -- drive 8: unmount the disk image on a soft core reset (on = pre-V6 behavior)
-constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Internal 1581" is the factory default here (issue #93)
+constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Off" is the factory default here (issue #93)
 constant OPTM_G_DRV9_UNMOUNT  : integer := 34;  -- drive 9: unmount the disk image on a soft core reset
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
@@ -692,8 +692,14 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_LINE,
                                              OPTM_G_DRV9_MODE,                        -- Disk Image: If mounted
                                              OPTM_G_DRV9_MODE,                        -- Disk Image: Always
-                                             OPTM_G_DRV9_MODE     + OPTM_G_STDSEL,    -- Internal 1581 (default for drive 9)
-                                             OPTM_G_DRV9_MODE,                        -- Off
+                                             OPTM_G_DRV9_MODE,                        -- Internal 1581
+                                             OPTM_G_DRV9_MODE     + OPTM_G_STDSEL,    -- Off (default for drive 9: one single
+                                                                                      -- drive 8 out of the box, so that the
+                                                                                      -- IEC bus looks exactly like it did
+                                                                                      -- before drive 9 existed; multi-drive
+                                                                                      -- needs to be a conscious choice
+                                                                                      -- because some fastloaders and demos
+                                                                                      -- do not cope with a second device)
                                              OPTM_G_DRV9_UNMOUNT  + OPTM_G_SINGLESEL + OPTM_G_STDSEL, -- Unmount on reset (default: on)
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Drive Settings"

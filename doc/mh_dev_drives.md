@@ -67,7 +67,8 @@ skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates.
      (fix: size-0 unmount strobe).
    * Full A20 gate list: `tests/README.md`, incl. drive-steal stress and
      corrupt-config one-hot case.
-   * Config file: regenerate `/c64/c64mega65-WIP-V6-A20.cfg` via
+   * Config file: regenerate `/c64/c64mega65-<CORE_VERSION>.cfg` (currently
+     `c64mega65-WIP-V6-A20X2.cfg`) via
      `M2M/tools/make_config.sh <name> auto` (OPTM_SIZE is 190).
 
 ## 3. What the feature is (user-visible)
@@ -79,8 +80,12 @@ skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates.
   when Off. Then `PRG:<Load>`, then submenu **Drive Settings**: per drive
   a radio group (Disk Image: If mounted / Disk Image: Always /
   Internal 1581 / Off) + single-select "Unmount on reset".
-* Defaults: drive 8 = If mounted, drive 9 = Internal 1581, both unmount
-  checkboxes ON (= pre-V6 behavior).
+* Defaults (A20X2): drive 8 = If mounted, drive 9 = **Off**, both unmount
+  checkboxes ON (= pre-V6 behavior). Multi-drive is opt-in: with a second
+  device on the IEC bus some fastloaders and demos stop working, so out of
+  the box the bus carries exactly one drive and both drive-9 main-menu
+  lines are hidden, just like in the single-drive builds up to A18X2. The
+  user enables drive 9 consciously in `Drive Settings`.
 * Semantics: "Always" = drive answers on IEC without a disk (MiSTer
   parity). Off = engine held in reset, IEC device number free for real
   hardware. Internal 1581 on at most one drive; selecting it on the other
@@ -88,7 +93,7 @@ skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates.
   clear-before-set in `OSM_SEL_PRE`, `_OSM_PRE_STEAL`). Unmount-on-reset
   OFF keeps the image mounted across SOFT resets only; hard reset always
   unmounts. Mounts survive mode switches. Both drives take D64 + D81.
-* Version `WIP-V6-A20`; `doc/inofficial.md` has the row.
+* Version `WIP-V6-A20X2`; `doc/inofficial.md` has the rows.
 
 ## 4. Architecture decisions and key facts
 

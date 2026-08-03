@@ -106,8 +106,8 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Disk Image: If mounted",  "DRV9_MODE", []),
     (" Disk Image: Always",      "DRV9_MODE", []),
-    (" Internal 1581",           "DRV9_MODE", ["STDSEL"]),
-    (" Off",                     "DRV9_MODE", []),
+    (" Internal 1581",           "DRV9_MODE", []),
+    (" Off",                     "DRV9_MODE", ["STDSEL"]),
     (" Unmount on reset",        "DRV9_UNMOUNT", ["SINGLESEL", "STDSEL"]),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 1
