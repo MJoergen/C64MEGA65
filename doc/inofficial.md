@@ -34,7 +34,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A18X2  | 07/18/26 | d94fa73 | Fixed a regression that prevented simulated D81 images to work
 | WIP-V6-A19    | <date>   | <tbd>   | Simulate RR-Net (issue #234). Switchable GEOS Real-Time-Clock (issues #133, #164 and #187). Audio level control (issue #85). Config file has now .cfg file-extension (issue #239).
 | WIP-V6-A20    | 08/01/26 | e9e8699 | Added drive 9; both drives can now be used either as simulated drives or one of them using the built-in floppy drive as 1581 (issues #93 and #237). Configurable drive activation (issue #88). Configurable un-mount on reset (issue #81).
-| WIP-V6-A20X1  | <date>   | <tbd>   | Refactored firmware & vhdl to save ROM space (commits d9f3307, 0145262, e29094e, f1d1600). Fixed a silent disk image corruption that could occur when the file browser was opened or an image was mounted while a drive was still saving its cache to the SD card: the affected drive lost the bytes it had buffered at that moment (QNICE FAT32 shared sector buffer).
+| WIP-V6-A20X1  | <date>   | <tbd>   | Refactored firmware & vhdl to save ROM space (commits d9f3307, 0145262, e29094e, f1d1600). Fixed a silent disk image corruption that could occur when the file browser was opened or an image was mounted while a drive was still saving its cache to the SD card: the affected drive lost the bytes it had buffered at that moment (QNICE FAT32 shared sector buffer). Background saving now writes one drive at a time instead of alternating between them, which removes roughly five times the SD card traffic when both drives save at once and keeps the timing behavior the core sees identical to a single drive; this matters even more for the large D81 images.
 
 ## Version 5.2
 
