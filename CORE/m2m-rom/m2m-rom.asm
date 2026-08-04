@@ -827,6 +827,7 @@ OSM_SEL_POST    INCRB
                 ;   * Kernal mode
                 ;   * Expansion port mode (HW slot vs. simulated cartridge)
                 ;   * Simulated 1750 REU
+                ;   * Simulated RR-Net
                 ;
                 ; This is a soft reset (M2M$CSR_RESET is a strict subset of
                 ; a short MEGA65 reset-button press), so a loaded cartridge
@@ -837,6 +838,8 @@ OSM_SEL_POST    INCRB
                 CMP     C64_OPTM_G_EXP_PORT, R8
                 RBRA    _OSM_SP_RESET, Z
                 CMP     C64_OPTM_G_REU, R8
+                RBRA    _OSM_SP_RESET, Z
+                CMP     C64_OPTM_G_SIM_RRNET, R8
                 RBRA    _OSM_SP_RESET, Z
                 RBRA    _OSM_SEL_POST_R, 1
 
