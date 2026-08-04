@@ -257,10 +257,10 @@ architecture synthesis of MEGA65_Core is
 signal c64_rom                    : std_logic_vector(1 downto 0); -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
 signal c64_ntsc                   : std_logic;               -- global switch: 0 = PAL mode, 1 = NTSC mode
 signal c64_clock_speed            : natural;                 -- clock speed depending on PAL/NTSC
-signal c64_exp_port_mode          : std_logic_vector(2 downto 0);
-                                                             -- bit 0: Simulate cartridge (.CRT file)
-                                                             -- bit 1: Simulate REU
-                                                             -- bit 2: Simulate RR-NET
+signal c64_exp_port_mode          : std_logic_vector(3 downto 0);
+                                                             -- bit    0: Simulate cartridge (.CRT file)
+                                                             -- bit    1: Simulate REU
+                                                             -- bits 3-2: Simulate RR-NET
 signal phys_1581_en               : std_logic;               -- 1 = drive 8 backed by the physical internal 1581 (issue #90)
 
 -- C64 config settings
@@ -450,13 +450,7 @@ subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
 constant C_MENU_8521          : natural := 155;
 -- There is deliberately no VIC-II model selection: we stick to the hardcoded old-HMOS variant
 -- of fpga64_sid_iec.vhd. See issue #120 and doc/vic_ii_variants.md
--- Simulated RR-Net (issue #234): the three "On" variants all switch the very same
--- simulated CS8900A on; telling MK2 from MK3 (the MK3 adds an 8 kB ROM at $8000,
--- mapped via $DE80/$DE88, either the standard or a custom one) is not wired, yet
-constant C_MENU_RRNET_OFF        : natural := 159;
-constant C_MENU_RRNET_MK2        : natural := 160;
-constant C_MENU_RRNET_MK3_STD    : natural := 161;
-constant C_MENU_RRNET_MK3_CUSTOM : natural := 162;
+subtype R_MENU_RRNET is natural range 162 downto 160;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -627,12 +621,14 @@ begin
    -- bit 0 = 1: Simulate a cartridge by using a cartridge from from the SD card (.crt file)
    -- bit 1 = 0: No simulated REU
    -- bit 1 = 1: Simulate a 1750 REU with 512KB
-   -- bit 2 = 1: Simulate an RR-Net ethernet cartridge (any of the "On" variants)
+   -- bits  3-2: Simulated RR-Net ethernet cartridge
    c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
    c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
-   c64_exp_port_mode(2) <= main_osm_control_i(C_MENU_RRNET_MK2)     or
-                           main_osm_control_i(C_MENU_RRNET_MK3_STD) or
-                           main_osm_control_i(C_MENU_RRNET_MK3_CUSTOM);
+   c64_exp_port_mode(3 downto 2) <=
+     "01" when main_osm_control_i(R_MENU_RRNET) = "001" else -- Enabled, no MK3 ROM
+     "10" when main_osm_control_i(R_MENU_RRNET) = "010" else -- Enabled, standard MK3 ROM
+     "11" when main_osm_control_i(R_MENU_RRNET) = "100" else -- Enabled, custom MK3 ROM
+     "00";                                                   -- Disabled
 
    -- Physical internal 1581 (issue #90): drive 8 uses the real internal floppy
    phys_1581_en <= main_osm_control_i(C_MENU_INTERNAL_1581);

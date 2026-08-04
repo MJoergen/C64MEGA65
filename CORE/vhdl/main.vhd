@@ -76,8 +76,12 @@ entity main is
     -- Mode selection for Expansion Port (aka Cartridge Port):
     -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port
     -- bit 1: Simulate REU
-    -- bit 2: Simulate RR-NET
-    c64_exp_port_mode_i    : in    std_logic_vector(2 downto 0);
+    -- bits 3-2: Simulate RR-NET:
+    --   "00": Disabled
+    --   "01": Enabled, no MK3 ROM
+    --   "10": Enabled, standard MK3 ROM
+    --   "11": Enabled, custom MK3 ROM
+    c64_exp_port_mode_i    : in    std_logic_vector(3 downto 0);
 
     ---------------------------
     -- Commodore 64 I/O ports
@@ -363,7 +367,11 @@ architecture synthesis of main is
   -- Bit positions in c64_exp_port_mode_i
   constant C_SIM_CRT   : natural := 0;
   constant C_SIM_REU   : natural := 1;
-  constant C_SIM_RRNET : natural := 2;
+  subtype R_SIM_RRNET is natural range 3 downto 2;
+  constant C_SIM_RRNET_DISABLED     : std_logic_vector(1 downto 0) := "00";
+  constant C_SIM_RRNET_NO_MK3       : std_logic_vector(1 downto 0) := "01";
+  constant C_SIM_RRNET_STANDARD_MK3 : std_logic_vector(1 downto 0) := "10";
+  constant C_SIM_RRNET_CUSTOM_MK3   : std_logic_vector(1 downto 0) := "11";
 
   -- signals for RAM
   signal   c64_ram_ce   : std_logic;
@@ -738,10 +746,11 @@ architecture synthesis of main is
   signal   reu_dout      : unsigned(7 downto 0);
 
   -- SIM_RRNET
-  signal   rrnet_ioe         : std_logic;
-  signal   rrnet_dout        : std_logic_vector(7 downto 0);
-  signal   rrnet_mk3_enabled : std_logic;
-  signal   rrnet_mk3_rd_data : std_logic_vector(7 downto 0);
+  signal   rrnet_ioe                  : std_logic;
+  signal   rrnet_dout                 : std_logic_vector(7 downto 0);
+  signal   rrnet_mk3_enabled          : std_logic;
+  signal   rrnet_mk3_standard_rd_data : std_logic_vector(7 downto 0);
+  signal   rrnet_mk3_custom_rd_data   : std_logic_vector(7 downto 0);
 
   -- Signals from the cartridge.vhd module (software defined cartridges)
   signal   crt_io_rom     : std_logic;
@@ -826,6 +835,16 @@ architecture synthesis of main is
       sda_o : out   std_logic
     );
   end component rtcf83;
+
+  -- Convert boolean to std_logic (active high)
+  pure function to_sl(arg : boolean) return std_logic is
+  begin
+    if arg then
+      return '1';
+    else
+      return '0';
+    end if;
+  end function to_sl;
 
 begin
 
@@ -971,8 +990,11 @@ begin
       c64_ram_data <= x"00";
 
     -- Access the MK3 ROM
-    elsif c64_exp_port_mode_i(C_SIM_RRNET) = '1' and cart_out_roml_n = '0' and rrnet_mk3_enabled = '1' then
-      c64_ram_data <= unsigned(rrnet_mk3_rd_data);
+    elsif c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_STANDARD_MK3 and cart_out_roml_n = '0' and rrnet_mk3_enabled = '1' then
+      c64_ram_data <= unsigned(rrnet_mk3_standard_rd_data);
+
+    elsif c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_CUSTOM_MK3 and cart_out_roml_n = '0' and rrnet_mk3_enabled = '1' then
+      c64_ram_data <= unsigned(rrnet_mk3_custom_rd_data);
 
     -- Access the hardware cartridge
     elsif c64_exp_port_mode_i(C_SIM_CRT) = '0' and (cart_out_roml_n = '0' or cart_out_romh_n = '0' or core_umax_unmapped = '1') then
@@ -1440,7 +1462,7 @@ begin
       core_dma_v   := not cart_in_dma_n; -- a hardware cart asserts /DMA (active low) to request a CPU DMA hold
     end if;
 
-    if c64_exp_port_mode_i(C_SIM_RRNET) = '1' then
+    if c64_exp_port_mode_i(R_SIM_RRNET) /= C_SIM_RRNET_DISABLED then
       if c64_ram_addr_o >= X"DE02" and c64_ram_addr_o <= X"DE0F" then
         -- Address range $DE02 to $DE0F is forwarded to SIM_RRNET.
         -- See issue #234.
@@ -1475,7 +1497,7 @@ begin
   rrnet_inst : entity work.rrnet
     port map (
       clk_i          => clk_main_i,
-      rst_i          => not c64_exp_port_mode_i(C_SIM_RRNET),
+      rst_i          => to_sl(c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED),
       cs_i           => rrnet_ioe,
       addr_i         => std_logiC_vector(c64_ram_addr_o(7 downto 0)),
       we_i           => c64_ram_we,
@@ -1505,14 +1527,16 @@ begin
       if reset_soft_i = '1' then
         rrnet_mk3_enabled <= '1';
       end if;
-      if c64_exp_port_mode_i(C_SIM_RRNET) = '0' then
+      if c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED or
+         c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_NO_MK3 then
         rrnet_mk3_enabled <= '0';
       end if;
     end if;
   end process rrnet_mk3_enabled_proc;
 
-  -- RRNET MK3 ROM ($8000 - $9FFF, Ultimax mode)
-  tdp_ram_inst : entity work.tdp_ram
+  -- RRNET MK3 ROM ($8000 - $9FFF) - Standard
+  -- Baked into bitstream, read-only
+  mk3_rom_standard_inst : entity work.tdp_ram
     generic map (
       ADDR_WIDTH   => 13,
       DATA_WIDTH   => 8,
@@ -1525,13 +1549,34 @@ begin
       address_a => std_logic_vector(c64_ram_addr_o(12 downto 0)),
       data_a    => std_logic_vector(c64_ram_data_o),
       wren_a    => c64_ram_we and core_roml,
-      q_a       => rrnet_mk3_rd_data,
+      q_a       => rrnet_mk3_standard_rd_data,
+      clock_b   => '0',
+      address_b => (others => '0'),
+      data_b    => (others => '0'),
+      wren_b    => '0',
+      q_b       => open
+    ); -- mk3_rom_standard_inst
+
+  -- RRNET MK3 ROM ($8000 - $9FFF) - Custom
+  -- Read from SD card (optional)
+  mk3_rom_custom_inst : entity work.tdp_ram
+    generic map (
+      ADDR_WIDTH   => 13,
+      DATA_WIDTH   => 8,
+      ROM_PRELOAD  => false
+    )
+    port map (
+      clock_a   => clk_main_i,
+      address_a => std_logic_vector(c64_ram_addr_o(12 downto 0)),
+      data_a    => std_logic_vector(c64_ram_data_o),
+      wren_a    => c64_ram_we and core_roml,
+      q_a       => rrnet_mk3_custom_rd_data,
       clock_b   => c64_clk_sd_i,
       address_b => rrnetmk3_addr_i,
       data_b    => rrnetmk3_data_i,
       wren_b    => rrnetmk3_we_i,
       q_b       => rrnetmk3_data_o
-    ); -- tdp_ram_inst
+    ); -- mk3_rom_custom_inst
 
   -- Detect certain hardware cartridges that need a special treatment due to unidirectional reset, irq or nmi signals
   cartridge_heuristics_inst : entity work.cartridge_heuristics
