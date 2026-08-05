@@ -213,6 +213,18 @@ with our features — check them before blaming multi-drive:
   the clocked process; they used to be driven concurrently from a registered
   address). That changes read-during-write behavior for every user, including
   the `.crt` bank cache in `sw_cartridge_wrapper.vhd`.
+* The same commit added an `INIT_VAL` generic to `tdp_ram.vhd` **constrained to
+  the full RAM size**, plus an unconditional `2**ADDR_WIDTH` slice loop in
+  `InitRAM`. Only `rrnet.vhd` passes a pattern (2048 x 8), but every other
+  instance still had to elaborate the constant and unroll the loop — for the
+  32k x 16 `.crt` bank cache that is a 512 kbit constant and 32768 iterations,
+  and it drove Vivado's `synth_design` into an out-of-memory kill on R3 and R6
+  alike (`tcmalloc: allocation failed`, `Killed`, `RESULT <board> FAILED
+  synth_1`). Fixed here by making the generic unconstrained with an empty
+  default and guarding the loop on `INIT_VAL'length`, so only real users pay.
+  This is an M2M framework change and belongs in the sy2002/MiSTer2MEGA65#63
+  list. **Note the failure signature: the Vivado log contains no `ERROR` line
+  at all — grep for `Killed` / `tcmalloc` / `FAILED synth_1` instead.**
 
 ### Upstream M2M bugs fixed locally (reliance-checked: nothing depended on them)
 
