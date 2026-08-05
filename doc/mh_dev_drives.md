@@ -315,9 +315,11 @@ From the adversarial hunt (all pre-existing, exposed by reset storms; in
   cursor normalization; vdrives ports + dirty-keep + ghost-disk strobe;
   qnice2hyperram watchdog; #52/#57/#58/#73 fixes; gencfg R7;
   OPTM_DEPS_MINHID + dep-aware height; framework-assert suggestion).
-  ANY new M2M-side change must be added there (user's standing order). Still
-  to add from this round: the shared-string/SPACE-prompt ROM savings and the
-  `menu_test.py` `R_MENU_RRNET` range check.
+  ANY new M2M-side change must be added there (user's standing order). The
+  `tdp_ram.vhd` `INIT_VAL` fix is documented in
+  https://github.com/sy2002/MiSTer2MEGA65/issues/63#issuecomment-5196943588 .
+  Still to add from this round: the shared-string/SPACE-prompt ROM savings and
+  the `menu_test.py` `R_MENU_RRNET` range check.
 * Commit style: no Claude co-author trailer (repo convention). VERSIONS.md
   and release docs are updated at release time, not per-alpha.
 
