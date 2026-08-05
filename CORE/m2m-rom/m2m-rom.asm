@@ -859,6 +859,7 @@ OSM_SEL_POST    INCRB
                 ;   * Kernal mode
                 ;   * Expansion port mode (HW slot vs. simulated cartridge)
                 ;   * Simulated 1750 REU
+                ;   * Simulated RR-Net
                 ;
                 ; This is a soft reset (M2M$CSR_RESET is a strict subset of
                 ; a short MEGA65 reset-button press), so a loaded cartridge
@@ -869,6 +870,8 @@ OSM_SEL_POST    INCRB
                 CMP     C64_OPTM_G_EXP_PORT, R8
                 RBRA    _OSM_SP_RESET, Z
                 CMP     C64_OPTM_G_REU, R8
+                RBRA    _OSM_SP_RESET, Z
+                CMP     C64_OPTM_G_SIM_RRNET, R8
                 RBRA    _OSM_SP_RESET, Z
                 RBRA    _OSM_SEL_POST_R, 1
 
@@ -1486,14 +1489,14 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; Example: If your HEAP_SIZE would be 30208, then you write 30208-3456=26752
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 3456 words comfortably fit the current menu: 190 items, 11 submenus and a
-; 1922-character OPTM_ITEMS string give budget 1 = 22 + 1922 + 4*190 = 2704
+; 3456 words comfortably fit the current menu: 189 items, 10 submenus and a
+; 1915-character OPTM_ITEMS string give budget 1 = 22 + 1915 + 4*189 = 2693
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (VDRIVES_NUM + submenus +
-; CRTROM_MAN_NUM + 1) * OSM width = 16 x 27 = 432 words for the "%s" replacement
+; CRTROM_MAN_NUM + 1) * OSM width = 15 x 27 = 405 words for the "%s" replacement
 ; strings; it depends only on those counts, NOT on the item count, so only
-; budget 1 grows when menu lines are added. Peak use is 2704 + 432 = 3136,
-; leaving about 320 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
+; budget 1 grows when menu lines are added. Peak use is 2693 + 405 = 3098,
+; leaving about 358 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
 ; console for the live numbers). Keep this as small as it safely can be: every
 ; word reserved here is one word less for the (sorted) file browser heap.
 MENU_HEAP_SIZE  .EQU 3456

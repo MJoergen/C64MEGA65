@@ -11,7 +11,8 @@ entity tdp_ram is
       DATA_WIDTH   : positive;
       ROM_PRELOAD  : boolean := false;
       ROM_FILE     : string  := "";
-      ROM_FILE_HEX : boolean := false
+      ROM_FILE_HEX : boolean := false;
+      INIT_VAL     : std_logic_vector((2**ADDR_WIDTH) * DATA_WIDTH - 1 downto 0) := (others => '0')
    );
    port (
       clock_a   : in  std_logic;
@@ -59,17 +60,19 @@ architecture synthesis of tdp_ram is
 
    -- Vivado 2019.2 crashes, if we are not using this indirection
    impure function InitRAM(ramfile: string) return t_ram is
+     variable ret_v : t_ram := (others => (others => '0'));
    begin
       if ROM_PRELOAD then
          return InitRamFromFile(ramfile);
       else
-         return (others => (others => '0'));
+         for i in 0 to 2**ADDR_WIDTH-1 loop
+            ret_v(i) := INIT_VAL(DATA_WIDTH * i + DATA_WIDTH - 1 downto DATA_WIDTH * i);
+         end loop;
+         return ret_v;
       end if;
    end;
 
    signal ram           : t_ram := InitRAM(ROM_FILE);
-   signal address_a_reg : std_logic_vector(ADDR_WIDTH-1 downto 0);
-   signal address_b_reg : std_logic_vector(ADDR_WIDTH-1 downto 0);
 
 begin
 
@@ -81,7 +84,7 @@ begin
                ram(to_integer(unsigned(address_a))) <= data_a;
             end if;
 
-            address_a_reg <= address_a;
+            q_a <= ram(to_integer(unsigned(address_a)));
          end if;
       end if;
 
@@ -91,13 +94,10 @@ begin
                ram(to_integer(unsigned(address_b))) <= data_b;
             end if;
 
-            address_b_reg <= address_b;
+            q_b <= ram(to_integer(unsigned(address_b)));
          end if;
       end if;
    end process ram_proc;
-
-   q_a <= ram(to_integer(unsigned(address_a_reg)));
-   q_b <= ram(to_integer(unsigned(address_b_reg)));
 
 end architecture synthesis;
 

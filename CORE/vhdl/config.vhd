@@ -391,7 +391,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 190; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 189; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -603,14 +603,13 @@ constant OPTM_ITEMS        : string :=
 
    " CIA: Use 8521 (C64C)\n"    &
 
-   " VIC-II: %s\n"              &  -- VIC-II submenu, nested inside Advanced Settings
-   " VIC-II model\n"            &
    "\n"                         &
-   " 656x/NMOS\n"               &  -- not yet wired in mega65.vhd
-   " 856x/HMOS\n"               &
-   " 856x/old HMOS\n"           &
+   " RR-Net\n"                  &  -- RR-Net section within Advanced Settings
    "\n"                         &
-   " Back\n"                    &  -- returns to Advanced Settings
+   " Off\n"                     &
+   " On: MK2\n"                 &  -- the MK2/MK3 distinction is not yet wired in mega65.vhd:
+   " On: MK3 & Std ROM\n"       &  -- for now every "On" variant just switches the simulated
+   " On: MK3 & Custom ROM\n"    &  -- RR-Net on (see C_MENU_RRNET_* in mega65.vhd)
 
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
@@ -649,11 +648,13 @@ constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF; 
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
-constant OPTM_G_VICII_MODEL   : integer := 30;  -- not yet wired
+-- 30 is unused: it belonged to the VIC-II model submenu, which was removed again because we stick
+-- to the hardcoded old-HMOS variant. See issue #120 and doc/vic_ii_variants.md
 constant OPTM_G_DRV8_MODE     : integer := 31;  -- drive 8 mode: Disk Image (If mounted/Always), Internal 1581, Off (issue #93)
 constant OPTM_G_DRV8_UNMOUNT  : integer := 32;  -- drive 8: unmount the disk image on a soft core reset (on = pre-V6 behavior)
 constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Off" is the factory default here (issue #93)
 constant OPTM_G_DRV9_UNMOUNT  : integer := 34;  -- drive 9: unmount the disk image on a soft core reset
+constant OPTM_G_SIM_RRNET     : integer := 35;  -- simulated RR-Net: only Off vs. On is wired, the MK2/MK3 variants are not, yet
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
 -- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
@@ -869,14 +870,13 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
 
                                              OPTM_G_CIA_8521      + OPTM_G_SINGLESEL,
 
-                                             OPTM_G_SUBMENU,                          -- open "VIC-II: %s", nested
-                                             OPTM_G_HEADLINE,                         -- VIC-II model
                                              OPTM_G_LINE,
-                                             OPTM_G_VICII_MODEL   + OPTM_G_STDSEL,    -- 656x/NMOS
-                                             OPTM_G_VICII_MODEL,                      -- 856x/HMOS
-                                             OPTM_G_VICII_MODEL,                      -- 856x/old HMOS
+                                             OPTM_G_HEADLINE,                         -- RR-Net
                                              OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "VIC-II: %s"
+                                             OPTM_G_SIM_RRNET     + OPTM_G_STDSEL,    -- Off
+                                             OPTM_G_SIM_RRNET,                        -- On: MK2
+                                             OPTM_G_SIM_RRNET,                        -- On: MK3 & Std ROM
+                                             OPTM_G_SIM_RRNET,                        -- On: MK3 & Custom ROM
 
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Advanced Settings"

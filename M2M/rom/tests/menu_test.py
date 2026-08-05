@@ -76,8 +76,8 @@ G = dict(
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
-    RTC_GEOS=29, VICII_MODEL=30, DRV8_MODE=31, DRV8_UNMOUNT=32,
-    DRV9_MODE=33, DRV9_UNMOUNT=34,
+    RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
+    DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35,
 )
 
 OPEN = ("SUBMENU",)
@@ -262,14 +262,13 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 10
     (" CIA: Use 8521 (C64C)",    "CIA_8521", ["SINGLESEL"]),
-    (" VIC-II: %s",              None, OPEN),            # region 11 (in 9)
-    (" VIC-II model",            None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
-    (" 656x/NMOS",               "VICII_MODEL", ["STDSEL"]),
-    (" 856x/HMOS",               "VICII_MODEL", []),
-    (" 856x/old HMOS",           "VICII_MODEL", []),
+    (" RR-Net",                  None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 11
+    (" Off",                     "SIM_RRNET", ["STDSEL"]),
+    (" On: MK2",                 "SIM_RRNET", []),
+    (" On: MK3 & Std ROM",       "SIM_RRNET", []),
+    (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 9
     ("",                         None, ["LINE"]),
@@ -1454,8 +1453,8 @@ def nav_script():
 
     s.run_start()                   # the testbed draws before OPTM_RUN
     assert s.cursor == 2            # start line: visible and selectable
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (189)
-    assert s.cursor == 189
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (188)
+    assert s.cursor == 188
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 7)            # to "Drive Settings" (issue #93)
@@ -1494,18 +1493,18 @@ def nav_script():
     assert (s.level, s.cursor) == (9, 160)
     s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 176)          # to "VIC-II: %s"
-    s.feed(KEY_SELECT)              # enter region 11 (depth 2)
-    assert (s.level, s.cursor) == (11, 179)
+    s.until(KEY_DOWN, 161)          # to "OSM: %s"
+    s.feed(KEY_SELECT)              # enter region 10 (depth 2)
+    assert (s.level, s.cursor) == (10, 164)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 183          # lands on the closer line
+    assert s.cursor == 174          # lands on the closer line
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (11, 183)
+    assert (s.level, s.cursor) == (10, 174)
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 9
-    assert (s.level, s.cursor) == (9, 176)
+    assert (s.level, s.cursor) == (9, 161)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 157)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
@@ -1820,9 +1819,8 @@ C_MENU = [
     ("C_MENU_TURBO_3X",     "TURBO_SPEED", 1),
     ("C_MENU_TURBO_4X",     "TURBO_SPEED", 2),
     ("C_MENU_RTC_GEOS",     "RTC_GEOS", 0),
-    ("C_MENU_VICII_NMOS",   "VICII_MODEL", 0),
-    ("C_MENU_VICII_HMOS",   "VICII_MODEL", 1),
-    ("C_MENU_VICII_OLDHMOS", "VICII_MODEL", 2),
+    # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
+    # decodes its three "On" items as one slice, see rrnet_range() below
 ]
 
 
@@ -1848,6 +1846,27 @@ def osm_scaling_range():
     m = group_members(V6_MENU, "OSM_MODE")
     assert m == list(range(m[0], m[0] + len(m)))
     return (m[-1], m[0])
+
+
+def rrnet_range():
+    """The three "On" items of the simulated RR-Net radio group, as the
+    (hi, lo) slice mega65.vhd decodes (R_MENU_RRNET). Item 0 of the group is
+    "Off" and is encoded as "none of the three bits set", so it stays outside
+    the slice.
+
+    The slice is positional, so the encoding silently inverts if the group is
+    ever reordered. Pin the layout down here: four contiguous items, "Off"
+    first and carrying the default selection, then MK2, MK3 standard ROM and
+    MK3 custom ROM in the order mega65.vhd decodes as "001"/"010"/"100"."""
+    m = group_members(V6_MENU, "SIM_RRNET")
+    assert m == list(range(m[0], m[0] + len(m))), "RR-Net group is not contiguous"
+    labels = [V6_MENU[i][0] for i in m]
+    assert labels == [" Off", " On: MK2", " On: MK3 & Std ROM",
+                      " On: MK3 & Custom ROM"], \
+        "RR-Net group reordered/renamed: %r - R_MENU_RRNET no longer decodes " \
+        "the same modes, see mega65.vhd" % (labels,)
+    assert "STDSEL" in V6_MENU[m[0]][2], "RR-Net default is no longer \" Off\""
+    return (m[-1], m[1])
 
 
 def vhdl_tb_vectors():
@@ -1997,6 +2016,9 @@ def vhdl_blocks():
     vol = volume_indices()
     out.append("subtype C_MENU_VOLUME is natural range %d downto %d;"
                % (vol[-1], vol[0]))
+    rhi, rlo = rrnet_range()
+    out.append("subtype R_MENU_RRNET is natural range %d downto %d;"
+               % (rhi, rlo))
     return "\n".join(out)
 
 
@@ -2168,6 +2190,12 @@ def verify():
     if not m or (int(m.group(1)), int(m.group(2))) != (vol[-1], vol[0]):
         errors.append("C_MENU_VOLUME range mismatch: model says "
                       "%d downto %d" % (vol[-1], vol[0]))
+    m = re.search(r"subtype\s+R_MENU_RRNET\s+is\s+natural\s+range\s+"
+                  r"(\d+)\s+downto\s+(\d+)", mega)
+    hi, lo = rrnet_range()
+    if not m or (int(m.group(1)), int(m.group(2))) != (hi, lo):
+        errors.append("R_MENU_RRNET range mismatch: model says "
+                      "%d downto %d" % (hi, lo))
 
     if errors:
         print("VERIFY FAIL (%d errors):" % len(errors))

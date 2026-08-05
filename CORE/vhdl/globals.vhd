@@ -8,8 +8,9 @@
 ----------------------------------------------------------------------------------
 
 library IEEE;
-use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.NUMERIC_STD.ALL;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use ieee.numeric_std_unsigned.all;
 
 library work;
 use work.qnice_tools.all;
@@ -93,6 +94,7 @@ constant C_DEV_C64_KERNAL_C1581  : std_logic_vector(15 downto 0) := x"0107";    
 constant C_DEV_C64_PHYS1581      : std_logic_vector(15 downto 0) := x"0108";     -- Physical internal 1581: read-only diag register bank (issue #90)
 constant C_DEV_C64_MOUNT2        : std_logic_vector(15 downto 0) := x"0109";     -- RAM to buffer disk images: drive 9 (issue #93)
 constant C_DEV_C64_VFILTERS      : std_logic_vector(15 downto 0) := x"010A";     -- Core-only polyphase filter coefficients (read-only BRAM, video_filters.vhd)
+constant C_DEV_C64_RRNET_MK3     : std_logic_vector(15 downto 0) := x"010B";     -- RR-NET MK3 ROM (simulated)
 
 ----------------------------------------------------------------------------------------------------------
 -- HyperRAM memory map (in units of 4 kW = 8 kB)
@@ -215,19 +217,22 @@ constant C_CRTROMS_MAN           : crtrom_buf_array := ( C_CRTROMTYPE_DEVICE, C_
 -- jd-c64.bin). It is APPENDED as auto-load entry #2 so the existing #0/#1 JiffyDOS check in
 -- PREP_START is untouched and a missing jd-c1581.bin degrades gracefully (the 1581 then runs
 -- its INITFILE'd standard DOS -- see c1581_multi.sv).
-constant JIFFY_DOS_C64           : string  := "/c64/jd-c64.bin" & ENDSTR;
+constant JIFFY_DOS_C64           : string  := "/c64/jd-c64.bin"   & ENDSTR;
 constant JIFFY_DOS_C1541         : string  := "/c64/jd-c1541.bin" & ENDSTR;
 constant JIFFY_DOS_C1581         : string  := "/c64/jd-c1581.bin" & ENDSTR;
+constant RRNET_MK3               : string  := "/c64/rn-mk3.bin"   & ENDSTR;
 constant JIFFY_DOS_C64_START     : std_logic_vector(15 downto 0) := x"0000";
-constant JIFFY_DOS_C1541_START   : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(JIFFY_DOS_C64'length, 16));
-constant JIFFY_DOS_C1581_START   : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(JIFFY_DOS_C64'length + JIFFY_DOS_C1541'length, 16));
+constant JIFFY_DOS_C1541_START   : std_logic_vector(15 downto 0) := JIFFY_DOS_C64_START   + std_logic_vector(to_unsigned(JIFFY_DOS_C64'length, 16));
+constant JIFFY_DOS_C1581_START   : std_logic_vector(15 downto 0) := JIFFY_DOS_C1541_START + std_logic_vector(to_unsigned(JIFFY_DOS_C1541'length, 16));
+constant RRNET_MK3_START         : std_logic_vector(15 downto 0) := JIFFY_DOS_C1581_START + std_logic_vector(to_unsigned(JIFFY_DOS_C1581'length, 16));
 
 -- M2M framework constants
-constant C_CRTROMS_AUTO_NUM      : natural := 3;                                       -- Amount of automatically loadable ROMs and carts, maximum is 16
-constant C_CRTROMS_AUTO_NAMES    : string  := JIFFY_DOS_C64 & JIFFY_DOS_C1541 & JIFFY_DOS_C1581;
+constant C_CRTROMS_AUTO_NUM      : natural := 4;                                       -- Amount of automatically loadable ROMs and carts, maximum is 16
+constant C_CRTROMS_AUTO_NAMES    : string  := JIFFY_DOS_C64 & JIFFY_DOS_C1541 & JIFFY_DOS_C1581 & RRNET_MK3;
 constant C_CRTROMS_AUTO          : crtrom_buf_array := ( C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C64,   C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C64_START,
                                                          C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C1541, C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C1541_START,
                                                          C_CRTROMTYPE_DEVICE, C_DEV_C64_KERNAL_C1581, C_CRTROMTYPE_OPTIONAL, JIFFY_DOS_C1581_START,
+                                                         C_CRTROMTYPE_DEVICE, C_DEV_C64_RRNET_MK3,    C_CRTROMTYPE_OPTIONAL, RRNET_MK3_START,
                                                          x"EEEE");                     -- Always finish the array using x"EEEE"
 
 ----------------------------------------------------------------------------------------------------------
@@ -248,5 +253,9 @@ constant audio_cy1      : std_logic_vector(23 downto 0) := std_logic_vector(to_s
 constant audio_cy2      : std_logic_vector(23 downto 0) := std_logic_vector(to_signed(-2023767, 24));
 constant audio_att      : std_logic_vector( 4 downto 0) := "00000";
 constant audio_mix      : std_logic_vector( 1 downto 0) := "00"; -- 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
-                                                   
+
+-- Ethernet reception FIFO size.
+-- The total number of bytes in the FIFO is 2**ETH_FIFO_ADDR_BITS.
+constant ETH_FIFO_ADDR_BITS : natural := 12;
+
 end package globals;

@@ -57,7 +57,7 @@ device on the bus.
 * `Unmount on reset` switched off: a mounted image must survive a soft reset
   (reset button short press and OSM-triggered resets) with the menu still
   showing the image name; a long-press hard reset must always unmount.
-* Config file: `OPTM_SIZE` grew from 170 to 190 and the version changed, so a
+* Config file: `OPTM_SIZE` grew from 170 to 189 and the version changed, so a
   new config file (named after the current `CORE_VERSION`, e.g.
   `c64mega65-WIP-V6-A20X2.cfg`) must be generated with
   `M2M/tools/make_config.sh` - verify all settings incl. the new Drive
@@ -126,6 +126,48 @@ on and no way to switch it off.
 * Note that while the RTC is on, the tape-port incompatibilities above are
   expected to come back - that is exactly why the switch exists and why it
   defaults to off.
+
+@TODO: Test the simulated RR-Net (issue #234) and its new OSM section. In
+"Advanced Settings" the former single `SIM-RRNET` checkbox became a radio group
+below a yellow `RR-Net` headline: `Off` (the default), `On: MK2`,
+`On: MK3 & Std ROM` and `On: MK3 & Custom ROM`.
+
+* Confirm that each of the three `On` entries switches the simulated CS8900A on
+  and that `Off` switches it off again. Only `Off` versus `On` is wired so far,
+  so the three `On` entries are expected to behave identically; the MK3 extras
+  (the 8 KB ROM at `\$8000`, mapped via `\$DE80`/`\$DE88`, standard or custom)
+  are not implemented, yet.
+* Confirm the radio behavior itself: exactly one entry selected at a time, `Off`
+  after a fresh config file, and the choice surviving a reboot once the settings
+  are saved.
+* No wired menu item moved: every `C_MENU_*` control bit sits below the new
+  block, so only the items after it shifted. A quick sanity pass over
+  `About & Help` and `Close Menu` is enough.
+* Config file: the new lines grew `OPTM_SIZE` further, so the regeneration
+  note above applies to this change as well. See the VIC-II item below for
+  the final count.
+
+@TODO: Test that the removed VIC-II submenu left nothing behind (issue #120).
+"Advanced Settings" no longer has a `VIC-II: %s` entry with its `656x/NMOS`,
+`856x/HMOS` and `856x/old HMOS` options. The submenu was never wired, so the
+picture must be bit-identical to before: the core keeps the hardcoded old-HMOS
+`variant` that paich64 regression-tested, and `mode6567old`/`mode6572` stay at
+`'0'`. Background is in `doc/vic_ii_variants.md`.
+
+* Confirm "Advanced Settings" now reads `GEOS Real-Time-Clock`, `OSM: %s`,
+  `CIA: Use 8521 (C64C)`, the `RR-Net` block and then `Back` - with no VIC-II
+  entry between the CIA line and the RR-Net block.
+* Confirm the remaining nested submenu `OSM: %s` still opens, scales the OSM
+  and returns via its own `Back`, since it is now the only region nested
+  inside Advanced Settings.
+* Regression-check the OSM items whose control bits moved when the eight
+  VIC-II lines gave way to the seven `RR-Net` lines: the four `RR-Net` entries
+  are the only wired ones in that block, everything above `CIA: Use 8521` is
+  unaffected and everything below it shifted down by one.
+* Confirm no color-rendering change: mid-line border/background color writes
+  (the "grey dot" scenarios) must look exactly as they did before this change.
+* Config file: `OPTM_SIZE` ends up at 189 for this release, so regenerate the
+  config file with `M2M/tools/make_config.sh` as noted above.
 
 Version WIP-V6-A18X2 - 2026-07-18
 ---------------------------------

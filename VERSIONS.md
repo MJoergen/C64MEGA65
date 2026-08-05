@@ -36,6 +36,12 @@ Version 6 - MONTH DAY, 2026
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
 
+* Simulated RR-Net: The MEGA65's Ethernet port can now be used from the C64,
+  so network software such as the Contiki BBS server runs on the core. Three
+  choices: Mk2 is the plain RR-Net, Mk3 includes the ROM and its CodeNet
+  server and you can also use your own custom ROM in `/c64/rn-mk3.bin`.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/234)
+
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)
   and CRT (Composite).
@@ -527,8 +533,8 @@ for Paddles.
   that due to the low-active nature of the User Port these games detected
   "ghost activities" on the (not existent) joystick connected via User Port.
 
-* Zero Page register $01 has the correct default value $37 now. It had the
-  wrong value $C7 due to two bugs that have been fixed:
+* Zero Page register `$01` has the correct default value `$37` now. It had the
+  wrong value `$C7` due to two bugs that have been fixed:
   (a) The Cassette Port's s SENSE and READ input are low active.
   (b) The wrapper code that turns the 6502 into a 6510 contained a bug.
 

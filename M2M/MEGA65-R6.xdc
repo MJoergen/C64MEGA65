@@ -390,3 +390,8 @@ create_pblock pblock_sr
 add_cells_to_pblock pblock_sr [get_cells [list i_framework/sdram_gen.sdram_inst]]
 resize_pblock pblock_sr -add {SLICE_X156Y100:SLICE_X163Y149}
 
+# Place Ethernet controller
+create_pblock pblock_eth
+add_cells_to_pblock pblock_eth [get_cells [list i_framework/eth_wrapper_inst/eth_rmii_inst]]
+resize_pblock pblock_eth -add {SLICE_X156Y152:SLICE_X163Y174}
+
