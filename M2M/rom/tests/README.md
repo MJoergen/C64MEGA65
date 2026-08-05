@@ -51,6 +51,7 @@ If you build your own M2M core, you define your menu in `CORE/vhdl/config.vhd` (
 The other testbeds
 ------------------
 
+* **`rosm_save_test.asm`** plus its runner **`rosm_save_test.py`** — regression gate for the write-cache loop of `ROSM_SAVE` (`../options.asm`), which walks all virtual drives before the on-screen-menu settings are saved. `VD_DRV_READ` returns its result in R8, the very register that carries the virtual drive number into it, so using R8 as the loop counter froze QNICE the moment the menu was closed on a core with two or more virtual drives (upstream M2M issue #58). The testbed replays the loop against a stub that reproduces that destructive R8 behavior and is built in two variants: the current loop must terminate for 1 to 15 drives and must still detect a dirty write cache, while the pre-fix loop must terminate for one drive and hang for two. Run it with `python3 rosm_save_test.py`.
 * **`llist_test.asm`** — testbed for the sorted doubly-linked list (`../llist.asm`) used by the file browser: inserts 500 fixed test strings, prints them unsorted, ascending and descending. Runs headlessly.
 * **`dirbrowse_test.asm`** — development testbed for the directory browser (`../dirbrowse.asm`). Needs SD-card/FAT32 hardware devices, so it is meant for the MEGA65 hardware or a full-system simulation, not for the plain emulator.
 * **`keyboard_test.asm`** — development testbed for the MEGA65 keyboard driver (`../keyboard.asm`). Hardware-bound like `dirbrowse_test.asm`.

@@ -59,7 +59,7 @@ device on the bus.
   showing the image name; a long-press hard reset must always unmount.
 * Config file: `OPTM_SIZE` grew from 170 to 189 and the version changed, so a
   new config file (named after the current `CORE_VERSION`, e.g.
-  `c64mega65-WIP-V6-A20X2.cfg`) must be generated with
+  `c64mega65-WIP-V6-A20X3.cfg`) must be generated with
   `M2M/tools/make_config.sh` - verify all settings incl. the new Drive
   Settings persist across reboots.
 * SIMCRT regression: the HyperRAM map was retuned (M2M framework region 4 MB

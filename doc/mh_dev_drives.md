@@ -66,7 +66,7 @@ acting; skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates
      corrupt-config one-hot case; plus the A19 RR-Net gates that came in with
      the merge.
    * Config file: regenerate `/c64/c64mega65-<CORE_VERSION>.cfg` (currently
-     `c64mega65-WIP-V6-A20X2.cfg`) via
+     `c64mega65-WIP-V6-A20X3.cfg`) via
      `M2M/tools/make_config.sh <name> auto`. `OPTM_SIZE` is **189** after the
      merge, so a `.cfg` generated before it is the wrong size and will be
      rejected.
@@ -100,7 +100,7 @@ acting; skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates
   group (`Off` / `On: MK2` / `On: MK3 & Std ROM` / `On: MK3 & Custom ROM`) and
   no longer carries the `VIC-II: %s` submenu; the VIC-II RTL is untouched and
   stays hardcoded to old HMOS (`variant => "10"`, see `doc/vic_ii_variants.md`).
-* Version `WIP-V6-A20X2`; `doc/inofficial.md` has the rows.
+* Version `WIP-V6-A20X3`; `doc/inofficial.md` has the rows.
 
 ## 4. Architecture decisions and key facts
 
