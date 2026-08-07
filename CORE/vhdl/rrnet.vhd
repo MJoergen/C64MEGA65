@@ -121,13 +121,13 @@ architecture rtl of rrnet is
   ----------------------------------------------------------
   -- CPU-side I/O register offsets (relative to $DE00)
   ----------------------------------------------------------
-  constant C_PP_PTR     : unsigned(7 downto 0)                         := x"02";
-  constant C_PP_DATA_0  : unsigned(7 downto 0)                         := x"04";
-  constant C_PP_DATA_1  : unsigned(7 downto 0)                         := x"06"; -- Not used
-  constant C_RXTX_REG_0 : unsigned(7 downto 0)                         := x"08";
-  constant C_RXTX_REG_1 : unsigned(7 downto 0)                         := x"0A"; -- Not used
-  constant C_TX_CMD     : unsigned(7 downto 0)                         := x"0C";
-  constant C_TX_LENGTH  : unsigned(7 downto 0)                         := x"0E";
+  constant C_PP_PTR     : unsigned(7 downto 0)                         := X"02";
+  constant C_PP_DATA_0  : unsigned(7 downto 0)                         := X"04";
+  constant C_PP_DATA_1  : unsigned(7 downto 0)                         := X"06"; -- Not used
+  constant C_RXTX_REG_0 : unsigned(7 downto 0)                         := X"08";
+  constant C_RXTX_REG_1 : unsigned(7 downto 0)                         := X"0A"; -- Not used
+  constant C_TX_CMD     : unsigned(7 downto 0)                         := X"0C";
+  constant C_TX_LENGTH  : unsigned(7 downto 0)                         := X"0E";
 
   ----------------------------------------------------------
   -- PacketPage buffer locations (byte addresses in RAM)
@@ -205,11 +205,11 @@ architecture rtl of rrnet is
   begin
     -- Note: Addresses are divided by two, to convert from byte to word addressing.
     -- EISA registration number for Crystal Semiconductor
-    ram_v(C_PP_ISA_ID / 2)  := x"630E";
+    ram_v(C_PP_ISA_ID / 2)  := X"630E";
     -- Product ID and Revision number
-    ram_v(C_PP_PROD_ID / 2) := x"0700";
+    ram_v(C_PP_PROD_ID / 2) := X"0700";
     -- Bus Status (set 'Rdy4TxNOW').
-    ram_v(C_PP_BUS_ST / 2)  := x"0118";
+    ram_v(C_PP_BUS_ST / 2)  := X"0118";
 
     for i in 0 to 2047 loop
       ret_v(8 * i + 7 downto 8 * i)                        := ram_v(i)(7 downto 0);
@@ -447,7 +447,7 @@ begin
             rx_addr        <= C_RX_BUF_START;                       -- $0400
             -- RxStatus: bit 8 = RxOK. All other bits zero for now
             -- (extend here to expose more per-frame status bits).
-            rx_wrdat       <= "0000000" & rx_ok & x"00";
+            rx_wrdat       <= "0000000" & rx_ok & X"00";
             rx_we          <= "11";
             rx_byte_cnt(0) <= '1';
           else
