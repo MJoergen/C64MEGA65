@@ -343,6 +343,11 @@ begin
             else
               eth_tx_data_o <= rxtx_rddat(15 downto 8);
             end if;
+            -- Undersize frames must be padded with zeros.
+            -- Fixes issue #252, item R6.
+            if tx_addr >= reg_tx_ptr then
+              eth_tx_data_o <= (others => '0');
+            end if;
             eth_tx_valid_o <= '1';
             tx_addr        <= tx_addr + 1;
             if tx_addr + 1 >= C_TX_BUF_START + reg_tx_length then
