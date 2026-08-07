@@ -85,8 +85,8 @@ entity avm_decrease is
 
     --------------------------------------------------------------------------
     -- Master port (faces downstream Avalon-MM slave) — narrow side.
-    -- m_avm_burstcount_o is held stable for the whole burst. m_avm_byteenable_o is
-    -- updated per beat from the corresponding slice of s_avm_byteenable.
+    -- m_avm_byteenable_o is updated per beat from the corresponding slice of
+    -- s_avm_byteenable.
     --------------------------------------------------------------------------
     m_avm_waitrequest_i   : in    std_logic;
     m_avm_write_o         : out   std_logic;
@@ -136,8 +136,8 @@ architecture rtl of avm_decrease is
   --                   WRITING_ST comments).
   --   WRITING_ST    : driving narrow write beats 0..C_RATIO-2 of the current
   --                   wide write.
-  --   READ_DRAIN_ST : holding off new requests until the currently in-flight
-  --                   read burst has been fully reassembled.
+  --   READ_DRAIN_ST : holding off new requests until the next wide-word
+  --                   boundary.
   type     state_type is (
     IDLE_ST,
     WRITING_ST,
@@ -175,10 +175,12 @@ begin
   -- Also implicitly cross-checks the slave/master address-width difference
   -- against the data-size ratio.
   assert C_RATIO = 2 ** C_ADDR_SHIFT
+    report "avm_decrease: data bus ratio must be power of two"
     severity failure;
 
   -- Confirm the integer division above was exact.
   assert G_SLAVE_DATA_SIZE = C_RATIO * G_MASTER_DATA_SIZE
+    report "avm_decrease: data bus ratio must be integer"
     severity failure;
 
 
@@ -240,6 +242,10 @@ begin
         -- inside WRITING_ST for why that is safe.
         when IDLE_ST =>
           if (s_avm_write_i = '1' or s_avm_read_i = '1') and s_avm_waitrequest_o = '0' then
+            assert unsigned(s_avm_burstcount_i) /= 0 or rst_i = '1'
+              report "Avalon-MM: burstcount must be >= 1"
+              severity failure;
+
             -- Latch the new transaction. Note: s_avm_writedata, s_avm_byteenable,
             -- s_avm_address
             -- are still being read this same cycle to drive the FINAL beat of the

@@ -16,10 +16,10 @@
 --     contain fewer than C_RATIO populated sub-slots.
 --
 -- Write burst handling:
---   * Avalon-MM requires all write beats belonging to a write burst to appear
---     on consecutive accepted master-side beats.
+--   * The M2M SDRAM controller (and potentially other strict slaves) requires
+--     gap-free write bursts
 --   * To guarantee this, slave-side write data is first packed into complete
---     wide master beats and stored in an internal AXIS FIFO.
+--     wide master beats and stored in an internal axi_fifo_small.
 --   * The master write burst is issued only after the complete slave write
 --     burst has been accepted and packed.
 --   * During the master write burst, data is streamed from the FIFO without
@@ -324,11 +324,11 @@ begin
 
         when IDLE_ST =>
           if s_avm_write_i = '1' and s_avm_waitrequest_o = '0' then
-            assert unsigned(s_avm_burstcount_i) /= 0
+            assert unsigned(s_avm_burstcount_i) /= 0 or rst_i = '1'
               report "Avalon-MM: write burstcount must be >= 1"
               severity failure;
 
-            assert s_avm_read_i = '0'
+            assert s_avm_read_i = '0' or rst_i = '1'
               report "Simultaneous read+write not allowed"
               severity failure;
 
@@ -365,7 +365,7 @@ begin
 
             if unsigned(s_avm_burstcount_i) = 1 then
               -- The complete write burst has been packed, but the write FIFO
-              -- has one clock of output latency. Wait until wr_fifo_m_valid is
+              -- has two clocks of output latency. Wait until wr_fifo_m_valid is
               -- asserted before starting the Avalon-MM master write burst.
               state <= WAIT_WRITE_FIFO_ST;
             else
@@ -374,11 +374,11 @@ begin
               state            <= WRITING_ST;
             end if;
           elsif s_avm_read_i = '1' and s_avm_waitrequest_o = '0' then
-            assert unsigned(s_avm_burstcount_i) /= 0
+            assert unsigned(s_avm_burstcount_i) /= 0 or rst_i = '1'
               report "Avalon-MM: read burstcount must be >= 1"
               severity failure;
 
-            assert s_avm_write_i = '0'
+            assert s_avm_write_i = '0' or rst_i = '1'
               report "Simultaneous read+write not allowed"
               severity failure;
 
@@ -401,11 +401,11 @@ begin
         --------------------------------------------------------------------
 
         when WRITING_ST =>
-          assert s_avm_read_i = '0'
+          assert s_avm_read_i = '0' or rst_i = '1'
             report "Read not allowed during burst write"
             severity failure;
 
-          assert rst_i = '1' or unsigned(s_avm_burstcount) > 0
+          assert unsigned(s_avm_burstcount) > 0 or rst_i = '1'
             report "Internal error: WRITING_ST: s_avm_burstcount must be greater than zero"
             severity failure;
 
@@ -436,8 +436,9 @@ begin
 
             if unsigned(s_avm_burstcount) = 1 then
               -- The complete slave write burst is now packed into the write
-              -- FIFO. Do not enter EMIT_WRITE_ST immediately, because axis_fifo
-              -- has one clock of latency from s_valid_i to m_valid_o.
+              -- FIFO. Do not enter EMIT_WRITE_ST immediately, because
+              -- axi_fifo_small has two clocks of latency from s_valid_i to
+              -- m_valid_o.
               --
               -- WAIT_WRITE_FIFO_ST prevents the Avalon-MM master write burst
               -- from starting until the first packed master word is actually
@@ -451,7 +452,7 @@ begin
         -- WAIT_WRITE_FIFO_ST
         --
         -- The complete slave-side write burst has been packed into the write
-        -- FIFO, but axis_fifo has registered output latency. Wait here until
+        -- FIFO, but axi_fifo_small has registered output latency. Wait here until
         -- the first FIFO output word is valid.
         --
         -- Avalon-MM write burst timing starts only when m_avm_write_o is asserted.
@@ -460,7 +461,7 @@ begin
         --------------------------------------------------------------------
 
         when WAIT_WRITE_FIFO_ST =>
-          assert unsigned(m_avm_write_remaining) /= 0
+          assert unsigned(m_avm_write_remaining) /= 0 or rst_i = '1'
             report "Internal error: WAIT_WRITE_FIFO_ST entered with no master write beats remaining"
             severity failure;
 
@@ -479,7 +480,7 @@ begin
         --------------------------------------------------------------------
 
         when EMIT_WRITE_ST =>
-          assert wr_fifo_m_valid = '1' or unsigned(m_avm_write_remaining) = 0
+          assert wr_fifo_m_valid = '1' or unsigned(m_avm_write_remaining) = 0 or rst_i = '1'
             report "Write FIFO underflow: master write burst would contain a bubble"
             severity failure;
 
@@ -570,8 +571,8 @@ begin
 
   read_fifo_overflow_check_proc : process (clk_i)
   begin
-    if rising_edge(clk_i) and rst_i = '0' then
-      assert m_avm_readdatavalid_i = '0' or rd_fifo_s_ready = '1'
+    if rising_edge(clk_i) then
+      assert m_avm_readdatavalid_i = '0' or rd_fifo_s_ready = '1' or rst_i = '1'
         report "Read FIFO overflow: downstream slave returned data while read FIFO not ready"
         severity failure;
     end if;
@@ -579,9 +580,9 @@ begin
 
   write_fifo_bubble_check_proc : process (clk_i)
   begin
-    if rising_edge(clk_i) and rst_i = '0' then
+    if rising_edge(clk_i) then
       if state = EMIT_WRITE_ST and unsigned(m_avm_write_remaining) /= 0 then
-        assert wr_fifo_m_valid = '1'
+        assert wr_fifo_m_valid = '1' or rst_i = '1'
           report "Write FIFO underflow: Avalon-MM write burst would not be consecutive"
           severity failure;
       end if;
