@@ -1010,6 +1010,9 @@ begin
       qnice_c1541rom_we          <= '0';
       qnice_c1541rom_addr        <= (others => '0');
       qnice_c1541rom_data_to     <= (others => '0');
+      qnice_rrnetmk3_we          <= '0';
+      qnice_rrnetmk3_addr        <= (others => '0');
+      qnice_rrnetmk3_data_to     <= (others => '0');
       phys_diag_ce               <= '0';
 
       case qnice_dev_id_i is
