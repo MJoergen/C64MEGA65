@@ -45,31 +45,31 @@ library ieee;
 
 entity eth_rmii is
   port (
-    eth_clk_i   : in    std_logic;                     -- Must be 50 MHz, same as PHY reference clock
-    eth_rst_i   : in    std_logic;                     -- Synchronous, active-high reset
+    eth_clk_i   : in    std_logic;                    -- Must be 50 MHz, same as PHY reference clock
+    eth_rst_i   : in    std_logic;                    -- Synchronous, active-high reset
 
     -- Client Rx interface (byte-strobe; no back-pressure)
-    rx_valid_o  : out   std_logic;                     -- One-cycle strobe per received byte
-    rx_last_o   : out   std_logic;                     -- Last byte of frame
-    rx_ok_o     : out   std_logic;                     -- Only meaningful when rx_last_o = '1'
-    rx_data_o   : out   std_logic_vector(7 downto 0);  -- Received byte
+    rx_valid_o  : out   std_logic;                    -- One-cycle strobe per received byte
+    rx_last_o   : out   std_logic;                    -- Last byte of frame
+    rx_ok_o     : out   std_logic;                    -- Only meaningful when rx_last_o = '1'
+    rx_data_o   : out   std_logic_vector(7 downto 0); -- Received byte
 
     -- Client Tx interface (valid/ready handshake, one handshake per byte-time)
-    tx_ready_o  : out   std_logic;                     -- Pulses '1' on the byte-boundary cycle
-    tx_valid_i  : in    std_logic;                     -- Client presents a byte
-    tx_last_i   : in    std_logic;                     -- Client marks the last byte
-    tx_data_i   : in    std_logic_vector(7 downto 0);  -- Byte to transmit
+    tx_ready_o  : out   std_logic;                    -- Pulses '1' on the byte-boundary cycle
+    tx_valid_i  : in    std_logic;                    -- Client presents a byte
+    tx_last_i   : in    std_logic;                    -- Client marks the last byte
+    tx_data_i   : in    std_logic_vector(7 downto 0); -- Byte to transmit
 
     -- PHY-side RMII signals
-    eth_rxd_i   : in    std_logic_vector(1 downto 0);  -- Rx dibit from PHY
-    eth_rxerr_i : in    std_logic;                     -- Rx error from PHY
-    eth_crsdv_i : in    std_logic;                     -- Carrier-sense + data-valid from PHY
-    eth_txd_o   : out   std_logic_vector(1 downto 0);  -- Tx dibit to PHY
-    eth_txen_o  : out   std_logic                      -- Tx enable to PHY
+    eth_rxd_i   : in    std_logic_vector(1 downto 0); -- Rx dibit from PHY
+    eth_rxerr_i : in    std_logic;                    -- Rx error from PHY
+    eth_crsdv_i : in    std_logic;                    -- Carrier-sense + data-valid from PHY
+    eth_txd_o   : out   std_logic_vector(1 downto 0); -- Tx dibit to PHY
+    eth_txen_o  : out   std_logic                     -- Tx enable to PHY
   );
 end entity eth_rmii;
 
-architecture synthesis of eth_rmii is
+architecture rtl of eth_rmii is
 
   -- CRC-32 generating polynomial for Ethernet (IEEE 802.3, section 3.2.9).
   -- Reference: https://en.wikipedia.org/wiki/Cyclic_redundancy_check
@@ -89,93 +89,93 @@ architecture synthesis of eth_rmii is
   -- Receive path
   -------------------------------------------
 
-  type   rx_fsm_state_type is (
-    RX_IDLE_ST,    -- Waiting for a new frame (crsdv rising)
-    RX_PRE_ST,     -- Consuming preamble; watching for SFD (0xD5)
-    RX_PAYLOAD_ST  -- Streaming payload bytes (includes FCS, stripped later)
+  type     rx_fsm_state_type is (
+    RX_IDLE_ST,                           -- Waiting for a new frame (crsdv rising)
+    RX_PRE_ST,                            -- Consuming preamble; watching for SFD (0xD5)
+    RX_PAYLOAD_ST                         -- Streaming payload bytes (includes FCS, stripped later)
   );
-  signal rx_fsm_state : rx_fsm_state_type              := RX_IDLE_ST;
+  signal   rx_fsm_state : rx_fsm_state_type              := RX_IDLE_ST;
 
   -- Byte-in-progress shift register. Dibits from eth_rxd_i are shifted into
   -- the MSB end (positional convention below); after 4 dibits a full byte
   -- is present in rx_byte.
-  signal rx_byte      : std_logic_vector(7 downto 0)   := (others => '0');
+  signal   rx_byte : std_logic_vector(7 downto 0)        := (others => '0');
 
   -- Dibit position within the current byte (0..3). Wrapped modulo 4.
-  signal rx_dibit_cnt : natural range 0 to 3           := 0;
+  signal   rx_dibit_cnt : natural range 0 to 3           := 0;
 
   -- Running Ethernet CRC. Initialised to all-ones at the start of every
   -- frame (see RX_IDLE_ST -> RX_PRE_ST transition) so leftover residue
   -- from a previous frame cannot leak into the current one.
-  signal rx_crc       : std_logic_vector(31 downto 0)  := (others => '1');
+  signal   rx_crc : std_logic_vector(31 downto 0)        := (others => '1');
 
   -- Registered previous crsdv value: some PHYs toggle crsdv during the FCS
   -- portion of a frame, so end-of-carrier is only declared when BOTH the
   -- current and previous crsdv samples are '0'.
-  signal eth_crsdv_d  : std_logic                      := '0';
+  signal   eth_crsdv_d : std_logic                       := '0';
 
   -- Rx pipeline stage payload.
-  type   rx_stage_type is record
-    valid : std_logic;                                 -- Byte strobe (1 cycle)
-    last  : std_logic;                                 -- End of frame
-    ok    : std_logic;                                 -- Valid only when last = '1'
-    data  : std_logic_vector(7 downto 0);              -- Byte value
+  type     rx_stage_type is record
+    valid : std_logic;                    -- Byte strobe (1 cycle)
+    last  : std_logic;                    -- End of frame
+    ok    : std_logic;                    -- Valid only when last = '1'
+    data  : std_logic_vector(7 downto 0); -- Byte value
   end record rx_stage_type;
 
-  type   rx_stage_vector_type is array (natural range <>) of rx_stage_type;
+  type     rx_stage_vector_type is array (natural range <>) of rx_stage_type;
 
   -- Six-stage byte pipeline. Stages 1..4 are used to hold back four bytes so
   -- that when a byte arrives at stage 0 marked as the last raw byte of the
   -- frame (i.e. the last CRC byte), stage 4 holds the last PAYLOAD byte.
   -- The end-of-frame indication is then promoted to stage 5 while stages
   -- 1..4 are silenced, effectively stripping the 4-byte FCS from the output.
-  signal rx_stages : rx_stage_vector_type(5 downto 0)  :=
-    (others => (valid => '0', last => '0', ok => '0', data => (others => '0')));
+  signal   rx_stages : rx_stage_vector_type(5 downto 0)  :=
+        (others => (valid => '0', last => '0', ok => '0', data => (others => '0')));
 
   -------------------------------------------
   -- Transmit path
   -------------------------------------------
 
-  type   tx_fsm_state_type is (
-    TX_IDLE_ST,     -- Idle; tx_ready_o asserted on byte boundaries
-    TX_PRE1_ST,     -- Emitting 7 preamble bytes (0x55)
-    TX_PRE2_ST,     -- Emitting the SFD byte (0xD5)
-    TX_PAYLOAD_ST,  -- Emitting payload bytes; CRC accumulator running
-    TX_LAST_ST,     -- First FCS byte (freezes CRC value)
-    TX_CRC_ST,      -- Remaining 3 FCS bytes
-    TX_IFG_ST       -- Inter-frame gap (line idle for 11 more byte-times)
+  type     tx_fsm_state_type is (
+    TX_IDLE_ST,                           -- Idle; tx_ready_o asserted on byte boundaries
+    TX_PRE1_ST,                           -- Emitting 7 preamble bytes (0x55)
+    TX_PRE2_ST,                           -- Emitting the SFD byte (0xD5)
+    TX_PAYLOAD_ST,                        -- Emitting payload bytes; CRC accumulator running
+    TX_LAST_ST,                           -- First FCS byte (freezes CRC value)
+    TX_CRC_ST,                            -- Remaining 3 FCS bytes
+    TX_IFG_ST                             -- Inter-frame gap (line idle for 11 more byte-times)
   );
-  signal tx_fsm_state  : tx_fsm_state_type             := TX_IDLE_ST;
+  signal   tx_fsm_state : tx_fsm_state_type              := TX_IDLE_ST;
 
   -- 8-bit shift register for the byte currently being transmitted. Loaded
   -- on the byte-boundary cycle (tx_twobit_cnt = 0), shifted right by 2 on
   -- every other cycle so that tx_shift(1 downto 0) always carries the
   -- next dibit to drive onto the PHY. Only bits 1:0 leave the module.
-  signal tx_shift      : std_logic_vector(7 downto 0)  := (others => '0');
+  signal   tx_shift : std_logic_vector(7 downto 0)       := (others => '0');
 
   -- First payload byte, captured at IDLE_ST when the client's tx_valid_i
   -- first goes high. See the IDLE_ST comment for why this is needed.
-  signal tx_data       : std_logic_vector(7 downto 0)  := (others => '0');
+  signal   tx_data : std_logic_vector(7 downto 0)        := (others => '0');
 
   -- Multi-purpose byte counter: preamble countdown in TX_PRE1_ST, FCS
   -- byte countdown in TX_CRC_ST, IFG byte countdown in TX_IFG_ST.
-  signal tx_byte_cnt   : natural range 0 to 12         := 0;
+  signal   tx_byte_cnt : natural range 0 to 12           := 0;
 
   -- Dibit position within the current byte (0..3). Free-running; wraps
   -- automatically because it is a 2-bit vector.
-  signal tx_twobit_cnt : std_logic_vector(1 downto 0)  := (others => '0');
+  signal   tx_twobit_cnt : std_logic_vector(1 downto 0)  := (others => '0');
 
   -- Running Ethernet CRC over the outgoing payload. Held at all-ones
   -- (init value) whenever tx_crc_enable = '0'.
-  signal tx_crc        : std_logic_vector(31 downto 0) := (others => '1');
+  signal   tx_crc : std_logic_vector(31 downto 0)        := (others => '1');
 
   -- Snapshot of the CRC captured at end-of-payload, from which the four
   -- FCS bytes are shifted out one per byte-time in TX_LAST_ST + TX_CRC_ST.
-  signal tx_crc_reg    : std_logic_vector(31 downto 0) := (others => '0');
+  signal   tx_crc_reg : std_logic_vector(31 downto 0)    := (others => '0');
 
   -- Gates CRC accumulation. Set at end of preamble; cleared at end of
   -- payload (which also re-initialises tx_crc to all-ones for the next frame).
-  signal tx_crc_enable : std_logic                     := '0';
+  signal   tx_crc_enable : std_logic                     := '0';
 
 begin
 
@@ -188,10 +188,9 @@ begin
     variable rx_newdata_v : std_logic_vector(7 downto 0);
   begin
     if rising_edge(eth_clk_i) then
-
       -- Some PHYs toggle crsdv during FCS/end-of-frame, so end-of-carrier
       -- is only trusted when both the current and previous crsdv are '0'.
-      eth_crsdv_d        <= eth_crsdv_i;
+      eth_crsdv_d  <= eth_crsdv_i;
 
       -- Default: no new byte offered to the pipeline this cycle. The FSM
       -- may override these below.
@@ -206,7 +205,7 @@ begin
 
         -- Consume two bits of data into the CRC. Bit 0 first (LSB-first
         -- within a byte, per Ethernet convention), then bit 1.
-        rx_crc_v := rx_crc;
+        rx_crc_v     := rx_crc;
 
         for i in 0 to 1 loop
           if eth_rxd_i(i) = rx_crc_v(31) then
@@ -318,7 +317,6 @@ begin
   rx_strip_crc_proc : process (eth_clk_i)
   begin
     if rising_edge(eth_clk_i) then
-
       -- Default: no output beat this cycle (byte-strobe behaviour).
       rx_stages(5) <= (valid => '0', last => '0', ok => '0', data => (others => '0'));
 
@@ -365,16 +363,15 @@ begin
   -- the FSM is willing to accept a new byte: either at frame start
   -- (TX_IDLE_ST) or between payload bytes (TX_PAYLOAD_ST).
   tx_ready_o <= '1' when (tx_fsm_state = TX_IDLE_ST or
-                          tx_fsm_state = TX_PAYLOAD_ST) and
-                          tx_twobit_cnt = 0 and
-                          eth_rst_i = '0' else
+                           tx_fsm_state = TX_PAYLOAD_ST) and
+                           tx_twobit_cnt = 0 and
+                           eth_rst_i = '0' else
                 '0';
 
   tx_proc : process (eth_clk_i)
     variable tx_crc_v : std_logic_vector(31 downto 0);
   begin
     if rising_edge(eth_clk_i) then
-
       -- CRC accumulator: consume the two bits currently at the LSB end of
       -- tx_shift (which are the two bits being placed on the wire this
       -- cycle) while tx_crc_enable = '1'. When disabled the CRC is held
@@ -528,7 +525,7 @@ begin
   end process tx_proc;
 
   -- Drive the two Tx dibit lines from the low bits of the shift register.
-  eth_txd_o <= tx_shift(1 downto 0);
+  eth_txd_o  <= tx_shift(1 downto 0);
 
-end architecture synthesis;
+end architecture rtl;
 
