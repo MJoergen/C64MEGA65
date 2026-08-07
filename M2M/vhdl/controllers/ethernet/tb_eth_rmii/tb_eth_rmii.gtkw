@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Sat Jul  4 08:05:10 2026
+[*] Fri Aug  7 07:50:23 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.ghw"
-[dumpfile_mtime] "Sat Jul  4 08:03:04 2026"
-[dumpfile_size] 11725997
-[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.gtkw"
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.ghw"
+[dumpfile_mtime] "Fri Aug  7 07:49:25 2026"
+[dumpfile_size] 216902
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/M2M/vhdl/controllers/ethernet/tb_eth_rmii/tb_eth_rmii.gtkw"
 [timestart] 0
 [size] 1276 835
-[pos] -1600 42
-*-36.278175 136640000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] 2105 87
+*-33.040085 136640000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_eth_rmii.
 [treeopen] top.tb_eth_rmii.eth_rmii_inst.
@@ -22,13 +22,16 @@
 @28
 top.tb_eth_rmii.eth_rmii_inst.eth_clk_i
 top.tb_eth_rmii.eth_rmii_inst.eth_rst_i
+[color] 2
 top.tb_eth_rmii.eth_rmii_inst.rx_valid_o
 top.tb_eth_rmii.eth_rmii_inst.rx_last_o
 top.tb_eth_rmii.eth_rmii_inst.rx_ok_o
 @22
 #{top.tb_eth_rmii.eth_rmii_inst.rx_data_o[7:0]} top.tb_eth_rmii.eth_rmii_inst.rx_data_o[7] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[6] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[5] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[4] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[3] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[2] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[1] top.tb_eth_rmii.eth_rmii_inst.rx_data_o[0]
 @28
+[color] 6
 top.tb_eth_rmii.eth_rmii_inst.tx_ready_o
+[color] 2
 top.tb_eth_rmii.eth_rmii_inst.tx_valid_i
 top.tb_eth_rmii.eth_rmii_inst.tx_last_i
 @22
@@ -39,6 +42,8 @@ top.tb_eth_rmii.eth_rmii_inst.eth_rxerr_i
 top.tb_eth_rmii.eth_rmii_inst.eth_crsdv_i
 #{top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[1:0]} top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[1] top.tb_eth_rmii.eth_rmii_inst.eth_txd_o[0]
 top.tb_eth_rmii.eth_rmii_inst.eth_txen_o
+@c00200
+-Internal
 @420
 top.tb_eth_rmii.eth_rmii_inst.rx_fsm_state
 @22
@@ -63,6 +68,8 @@ top.tb_eth_rmii.eth_rmii_inst.tx_byte_cnt
 #{top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[31:0]} top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[31] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[30] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[29] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[28] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[27] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[26] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[25] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[24] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[23] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[22] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[21] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[20] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[19] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[18] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[17] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[16] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[15] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[14] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[13] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[12] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[11] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[10] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[9] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[8] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[7] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[6] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[5] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[4] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[3] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[2] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[1] top.tb_eth_rmii.eth_rmii_inst.tx_crc_reg[0]
 @28
 top.tb_eth_rmii.eth_rmii_inst.tx_crc_enable
+@1401200
+-Internal
 @1000200
 -eth_rmii
 [pattern_trace] 1

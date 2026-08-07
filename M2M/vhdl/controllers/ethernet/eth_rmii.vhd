@@ -188,8 +188,13 @@ begin
     variable rx_newdata_v : std_logic_vector(7 downto 0);
   begin
     if rising_edge(eth_clk_i) then
-      -- Some PHYs toggle crsdv during FCS/end-of-frame, so end-of-carrier
-      -- is only trusted when both the current and previous crsdv are '0'.
+      -- NOTE: When considering RMII Specification 1.2 and 1.0, the behavior of
+      -- CRS_DV is different. For RMII 1.0, CRS_DV remains asserted until the final
+      -- data is clocked in, while for RMII 1.2, it will toggle at the end of the
+      -- packet while data is being transferred.
+
+      -- Therefore, end-of-carrier is only trusted when both the current and
+      -- previous crsdv are '0'.
       eth_crsdv_d  <= eth_crsdv_i;
 
       -- Default: no new byte offered to the pipeline this cycle. The FSM
@@ -256,22 +261,15 @@ begin
 
         -- Stream payload bytes (including the 4-byte FCS) into the
         -- pipeline. Two exit conditions are handled with priority:
-        --   1. Premature end-of-carrier or PHY error: emit an error beat.
-        --   2. Byte boundary (rx_dibit_cnt = 3): emit a valid byte, with
+        --   1. Byte boundary (rx_dibit_cnt = 3): emit a valid byte, with
         --      last/ok set if the CRC has just become correct AND the PHY
         --      has just de-asserted crsdv (i.e., FCS just clocked in).
+        --   2. Premature end-of-carrier or PHY error: emit an error beat.
         -- Note the elsif: if a premature-end and a byte boundary happen
-        -- in the same cycle, the error indication wins so the client
-        -- always sees exactly one last=1 beat per frame.
+        -- in the same cycle, the byte boundary wins so the client always sees
+        -- exactly one last=1 beat per frame.
         when RX_PAYLOAD_ST =>
-          if (eth_crsdv_i = '0' and eth_crsdv_d = '0') or eth_rxerr_i = '1' then
-            -- Premature end of frame or PHY-reported error.
-            rx_stages(0).valid <= '1';
-            rx_stages(0).last  <= '1';
-            rx_stages(0).ok    <= '0';
-            rx_stages(0).data  <= rx_byte;
-            rx_fsm_state       <= RX_IDLE_ST;
-          elsif rx_dibit_cnt = 3 then
+          if rx_dibit_cnt = 3 then
             -- Full byte assembled: forward it to the pipeline.
             rx_stages(0).valid <= '1';
             rx_stages(0).last  <= '0';
@@ -286,6 +284,13 @@ begin
               rx_stages(0).ok   <= '1';
               rx_fsm_state      <= RX_IDLE_ST;
             end if;
+          elsif (eth_crsdv_i = '0' and eth_crsdv_d = '0') or eth_rxerr_i = '1' then
+            -- Premature end of frame or PHY-reported error.
+            rx_stages(0).valid <= '1';
+            rx_stages(0).last  <= '1';
+            rx_stages(0).ok    <= '0';
+            rx_stages(0).data  <= rx_byte;
+            rx_fsm_state       <= RX_IDLE_ST;
           end if;
 
       end case;
