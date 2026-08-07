@@ -1,6 +1,6 @@
 # Makefile for verifying the RR-NET emulator
 # Simply type 'make' to run the test.
-# The test compiles a short assembly program (in rrnet.s) to generate the stimuli.
+# The test compiles a short assembly program (in rrnet.asm) to generate the stimuli.
 
 DUT ?= rrnet
 SRC += ../../rrnet.vhd
