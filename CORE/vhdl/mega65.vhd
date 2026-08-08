@@ -450,7 +450,7 @@ subtype C_MENU_OSM_SCALING is natural range 152 downto 144;
 constant C_MENU_8521          : natural := 155;
 -- There is deliberately no VIC-II model selection: we stick to the hardcoded old-HMOS variant
 -- of fpga64_sid_iec.vhd. See issue #120 and doc/vic_ii_variants.md
-subtype R_MENU_RRNET is natural range 162 downto 160;
+subtype R_MENU_RRNET is natural range 162 downto 159;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -625,10 +625,10 @@ begin
    c64_exp_port_mode(0) <= main_osm_control_i(C_MENU_SIM_CRT);
    c64_exp_port_mode(1) <= main_osm_control_i(C_MENU_SIM_REU);
    c64_exp_port_mode(3 downto 2) <=
-     "01" when main_osm_control_i(R_MENU_RRNET) = "001" else -- Enabled, no MK3 ROM
-     "10" when main_osm_control_i(R_MENU_RRNET) = "010" else -- Enabled, standard MK3 ROM
-     "11" when main_osm_control_i(R_MENU_RRNET) = "100" else -- Enabled, custom MK3 ROM
-     "00";                                                   -- Disabled
+     "01" when main_osm_control_i(R_MENU_RRNET) = "0010" else -- Enabled, no MK3 ROM
+     "10" when main_osm_control_i(R_MENU_RRNET) = "0100" else -- Enabled, standard MK3 ROM
+     "11" when main_osm_control_i(R_MENU_RRNET) = "1000" else -- Enabled, custom MK3 ROM
+     "00";                                                    -- Disabled
 
    -- Physical internal 1581 (issue #90): drive 8 uses the real internal floppy
    phys_1581_en <= main_osm_control_i(C_MENU_INTERNAL_1581);

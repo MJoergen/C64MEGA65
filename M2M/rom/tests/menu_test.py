@@ -1510,10 +1510,6 @@ C_MENU = [
     ("C_MENU_TURBO_3X",     "TURBO_SPEED", 1),
     ("C_MENU_TURBO_4X",     "TURBO_SPEED", 2),
     ("C_MENU_RTC_GEOS",     "RTC_GEOS", 0),
-    ("C_MENU_RRNET_OFF",        "SIM_RRNET", 0),
-    ("C_MENU_RRNET_MK2",        "SIM_RRNET", 1),
-    ("C_MENU_RRNET_MK3_STD",    "SIM_RRNET", 2),
-    ("C_MENU_RRNET_MK3_CUSTOM", "SIM_RRNET", 3),
 ]
 
 
@@ -1539,6 +1535,10 @@ def osm_scaling_range():
     m = group_members(V6_MENU, "OSM_MODE")
     assert m == list(range(m[0], m[0] + len(m)))
     return (m[-1], m[0])
+
+
+def rrnet_indices():
+    return group_members(V6_MENU, "SIM_RRNET")
 
 
 def vhdl_tb_vectors():
@@ -1682,6 +1682,9 @@ def vhdl_blocks():
     vol = volume_indices()
     out.append("subtype C_MENU_VOLUME is natural range %d downto %d;"
                % (vol[-1], vol[0]))
+    rrnet = rrnet_indices()
+    out.append("subtype R_MENU_RRNET is natural range %d downto %d;"
+               % (rrnet[-1], rrnet[0]))
     return "\n".join(out)
 
 
