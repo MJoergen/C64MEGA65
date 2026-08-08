@@ -137,11 +137,13 @@ architecture rtl of rrnet is
 
   -- PP word addresses (12-bit RAM index, i.e. byte offset / 2) for the
   -- registers whose live-status bits we overlay on CPU reads.
-  constant C_PP_RX_CFG_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#102# / 2, 11);
-  constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#138# / 2, 11);
-  constant C_PP_LINE_ST_ADDR  : unsigned(11 downto 1)                  := to_unsigned(16#134# / 2, 11);
-  constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#124# / 2, 11);
-  constant C_PP_SELF_CTL_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#114# / 2, 11);
+  constant C_PP_RX_CFG_ADDR    : unsigned(11 downto 1)                 := to_unsigned(16#102# / 2, 11);
+  constant C_PP_SELF_CTL_ADDR  : unsigned(11 downto 1)                 := to_unsigned(16#114# / 2, 11);
+  constant C_PP_RX_EVENT_ADDR  : unsigned(11 downto 1)                 := to_unsigned(16#124# / 2, 11);
+  constant C_PP_LINE_ST_ADDR   : unsigned(11 downto 1)                 := to_unsigned(16#134# / 2, 11);
+  constant C_PP_BUS_ST_ADDR    : unsigned(11 downto 1)                 := to_unsigned(16#138# / 2, 11);
+  constant C_PP_TX_CMD_ADDR    : unsigned(11 downto 1)                 := to_unsigned(16#144# / 2, 11);
+  constant C_PP_TX_LENGTH_ADDR : unsigned(11 downto 1)                 := to_unsigned(16#146# / 2, 11);
 
   -- Ethernet packet length range, excluding CRC
   constant C_MAC_MIN_LENGTH : unsigned(15 downto 0)                    := to_unsigned(60, 16);
@@ -630,6 +632,11 @@ begin
                   rx_frame_consumed <= '1';
                   reg_rx_ptr        <= (others => '0');
                 end if;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_TX_CMD_ADDR then
+                reg_tx_cmd(7 downto 0) <= unsigned(wr_data_i);
+                reg_tx_ptr             <= C_TX_BUF_START;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_TX_LENGTH_ADDR then
+                reg_tx_length(7 downto 0) <= unsigned(wr_data_i);
               end if;
 
             when C_PP_DATA_0 + 1 =>
@@ -643,6 +650,10 @@ begin
                  rx_state = RX_READY_ST then
                 rx_frame_consumed <= '1';
                 reg_rx_ptr        <= (others => '0');
+              elsif reg_pp_ptr(11 downto 1) = C_PP_TX_CMD_ADDR then
+                reg_tx_cmd(15 downto 8) <= unsigned(wr_data_i);
+              elsif reg_pp_ptr(11 downto 1) = C_PP_TX_LENGTH_ADDR then
+                reg_tx_length(15 downto 8) <= unsigned(wr_data_i);
               end if;
 
             when C_RXTX_REG_0 =>
