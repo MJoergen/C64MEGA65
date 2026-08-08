@@ -87,9 +87,6 @@ entity rrnet is
     --                 the 4-byte FCS is already stripped).
     --               * eth_rx_ok_i is valid only on the beat with rx_last_i = '1'; it is
     --                 '1' if the frame passed CRC and had no PHY error, '0' otherwise.
-    --               * There is NO back-pressure on the Rx side (no eth_rx_ready_o). The
-    --                 client must consume every valid beat; frames arriving while the
-    --                 emulator's single Rx buffer is unavailable are silently dropped.
     --
     -- Tx contract : * Standard valid/ready handshake, sampled once per byte-time on the
     --                 cycle eth_tx_ready_i = '1'. The client must present each new byte on
@@ -218,6 +215,7 @@ architecture rtl of rrnet is
     -- Bus Status (set 'Rdy4TxNOW').
     ram_v(C_PP_BUS_ST / 2)  := X"0118";
 
+    -- Split into MSB and LSB
     for i in 0 to 2047 loop
       ret_v(8 * i + 7 downto 8 * i)                        := ram_v(i)(7 downto 0);
       ret_v(8 * i + 7 + 2048 * 8 downto 8 * i + 2048 * 8 ) := ram_v(i)(15 downto 8);

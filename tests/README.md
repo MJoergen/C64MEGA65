@@ -55,10 +55,8 @@ below a yellow `RR-Net` headline: `Off` (the default), `On: MK2`,
 `On: MK3 & Std ROM` and `On: MK3 & Custom ROM`.
 
 * Confirm that each of the three `On` entries switches the simulated CS8900A on
-  and that `Off` switches it off again. Only `Off` versus `On` is wired so far,
-  so the three `On` entries are expected to behave identically; the MK3 extras
-  (the 8 KB ROM at `\$8000`, mapped via `\$DE80`/`\$DE88`, standard or custom)
-  are not implemented, yet.
+  and that `Off` switches it off again. Changing any of these force a core
+  reset.
 * Confirm the radio behavior itself: exactly one entry selected at a time, `Off`
   after a fresh config file, and the choice surviving a reboot once the settings
   are saved.

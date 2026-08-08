@@ -105,6 +105,9 @@ Version 6 - MONTH DAY, 2026
   some original software quite a bit. This also fixes Q-Bert.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
 
+* Added support for Simulated RR-NET (MK2 and MK3)
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/234)
+
 * Hardware support for these cartridges:
 
   - 1541 Ultimate II+

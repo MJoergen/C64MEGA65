@@ -583,9 +583,9 @@ constant OPTM_ITEMS        : string :=
    " RR-Net\n"                  &  -- RR-Net section within Advanced Settings
    "\n"                         &
    " Off\n"                     &
-   " On: MK2\n"                 &  -- the MK2/MK3 distinction is not yet wired in mega65.vhd:
-   " On: MK3 & Std ROM\n"       &  -- for now every "On" variant just switches the simulated
-   " On: MK3 & Custom ROM\n"    &  -- RR-Net on (see C_MENU_RRNET_* in mega65.vhd)
+   " On: MK2\n"                 &
+   " On: MK3 & Std ROM\n"       &
+   " On: MK3 & Custom ROM\n"    &
 
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
