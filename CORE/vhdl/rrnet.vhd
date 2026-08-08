@@ -137,6 +137,7 @@ architecture rtl of rrnet is
 
   -- PP word addresses (12-bit RAM index, i.e. byte offset / 2) for the
   -- registers whose live-status bits we overlay on CPU reads.
+  constant C_PP_RX_CFG_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#102# / 2, 11);
   constant C_PP_BUS_ST_ADDR   : unsigned(11 downto 1)                  := to_unsigned(16#138# / 2, 11);
   constant C_PP_LINE_ST_ADDR  : unsigned(11 downto 1)                  := to_unsigned(16#134# / 2, 11);
   constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#124# / 2, 11);
@@ -615,13 +616,20 @@ begin
               pp_wrdat <= wr_data_i & wr_data_i;
               pp_we    <= "01";
 
-              -- Explicit RxEvent acknowledgement: a CPU write to $0124/25
-              -- clears RxOK and re-arms the receiver. Matches drivers that
-              -- clear-by-write rather than clear-by-read.
-              if reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR and
-                 rx_state = RX_READY_ST then
-                rx_frame_consumed <= '1';
-                reg_rx_ptr        <= (others => '0');
+              if reg_pp_ptr(11 downto 1) = C_PP_RX_CFG_ADDR then
+                -- Handle Skip_1
+                if wr_data_i(6) = '1' then
+                  rx_frame_consumed <= '1';
+                  reg_rx_ptr        <= (others => '0');
+                end if;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR then
+                -- Explicit RxEvent acknowledgement: a CPU write to $0124/25
+                -- clears RxOK and re-arms the receiver. Matches drivers that
+                -- clear-by-write rather than clear-by-read.
+                if rx_state = RX_READY_ST then
+                  rx_frame_consumed <= '1';
+                  reg_rx_ptr        <= (others => '0');
+                end if;
               end if;
 
             when C_PP_DATA_0 + 1 =>
