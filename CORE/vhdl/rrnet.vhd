@@ -55,6 +55,8 @@
 -- Drivers must not initiate a Tx transaction while draining an Rx frame
 -- via $DE08/09, or the Rx read will observe Tx-buffer data. The FSM
 -- warns on this via a runtime assertion.
+--
+-- SPDX-License-Identifier: GPL v3
 -- ----------------------------------------------------------
 
 

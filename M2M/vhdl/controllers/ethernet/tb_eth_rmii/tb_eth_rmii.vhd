@@ -58,7 +58,7 @@ architecture tb of tb_eth_rmii is
 
 begin
 
-  clk  <= not clk after 5 ns;
+  clk  <= not clk after 10 ns; -- 50 MHz
   rst  <= '1', '0' after 100 ns;
 
   ----------------------------------------------------------------

@@ -36,7 +36,7 @@
 -- I/O         : I/O buffering and timing constraints must be handled at the
 --               top level; this module is pure synthesizable RTL.
 --
--- SPDX-License-Identifier: MIT
+-- SPDX-License-Identifier: GPL v3
 -- ---------------------------------------------------------------------------------------
 
 library ieee;
@@ -419,7 +419,7 @@ begin
             tx_shift   <= x"00";
             if tx_valid_i = '1' then
               tx_data      <= tx_data_i;
-              tx_byte_cnt  <= 7;
+              tx_byte_cnt  <= 6;
               tx_fsm_state <= TX_PRE1_ST;
               eth_txen_o   <= '1';
               tx_shift     <= x"55";

@@ -1,5 +1,5 @@
 -- ------------------------------------------------
--- Description: Encapsulate low-level communoication with
+-- Description: Encapsulate low-level communication with
 -- ethernet PHY. The core clock must be at least 12.5 MHz,
 -- to allow back-to-back byte transfers.
 -- ------------------------------------------------

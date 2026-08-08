@@ -1,6 +1,6 @@
 # Author:  Michael Jørgensen
 #
-# Description: Makefile for simulating the axi_wbus.vhd file.
+# Description: Makefile for simulating the eth_rmii.vhd file.
 
 # List of source files
 SRC += ../eth_rmii.vhd
@@ -12,7 +12,7 @@ SRC += tb_eth_rmii.vhd
 DUT = eth_rmii
 
 # Test duration
-STOP_TIME = 300us
+STOP_TIME = 600us
 
 # Test bench configuration
 GENERIC += -gG_TOGGLE_DIBITS=5

@@ -66,7 +66,7 @@
 --     view of the pointers and may glitch during pointer advance; if a
 --     consumer needs a clean value it should register it locally.
 --
--- SPDX-License-Identifier: MIT
+-- SPDX-License-Identifier: GPL v3
 -------------------------------------------------------------
 
 library ieee;

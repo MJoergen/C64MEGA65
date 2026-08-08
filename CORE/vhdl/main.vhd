@@ -1499,7 +1499,7 @@ begin
       clk_i          => clk_main_i,
       rst_i          => to_sl(c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED),
       cs_i           => rrnet_ioe,
-      addr_i         => std_logiC_vector(c64_ram_addr_o(7 downto 0)),
+      addr_i         => std_logic_vector(c64_ram_addr_o(7 downto 0)),
       we_i           => c64_ram_we,
       wr_data_i      => std_logic_vector(c64_ram_data_o),
       rd_data_o      => rrnet_dout,
