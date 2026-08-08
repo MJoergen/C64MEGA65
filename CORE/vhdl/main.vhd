@@ -1547,8 +1547,8 @@ begin
     port map (
       clock_a   => clk_main_i,
       address_a => std_logic_vector(c64_ram_addr_o(12 downto 0)),
-      data_a    => std_logic_vector(c64_ram_data_o),
-      wren_a    => c64_ram_we and core_roml,
+      data_a    => (others => '0'),
+      wren_a    => '0',
       q_a       => rrnet_mk3_standard_rd_data,
       clock_b   => '0',
       address_b => (others => '0'),
@@ -1568,8 +1568,8 @@ begin
     port map (
       clock_a   => clk_main_i,
       address_a => std_logic_vector(c64_ram_addr_o(12 downto 0)),
-      data_a    => std_logic_vector(c64_ram_data_o),
-      wren_a    => c64_ram_we and core_roml,
+      data_a    => (others => '0'),
+      wren_a    => '0',
       q_a       => rrnet_mk3_custom_rd_data,
       clock_b   => c64_clk_sd_i,
       address_b => rrnetmk3_addr_i,
