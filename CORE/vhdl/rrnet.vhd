@@ -437,10 +437,10 @@ begin
               if eth_rx_ok_i = '1' then
                 rx_length   <= rx_byte_cnt + 1;
                 rx_state    <= RX_HEADER_ST;
-                rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+                rx_byte_cnt <= (others => '0');                                    -- reused as header sub-state
               else
                 -- Frame has errors, so drop it.
-                rx_state    <= RX_IDLE_ST;
+                rx_state <= RX_IDLE_ST;
               end if;
             elsif rx_wr_addr + 2 >= C_TX_BUF_START then
               -- Frame is not finished yet, and next byte will spill out of the
@@ -459,14 +459,14 @@ begin
           -- Two clocks: first write RxStatus at $0400, then RxLength at $0402.
           -- rx_byte_cnt(0) is used as a 1-bit sub-state.
           if rx_byte_cnt(0) = '0' then
-            rx_addr        <= C_RX_BUF_START;                       -- $0400
+            rx_addr        <= C_RX_BUF_START;                                      -- $0400
             -- RxStatus: bit 8 = RxOK. All other bits zero for now
             -- (extend here to expose more per-frame status bits).
             rx_wrdat       <= X"0100";
             rx_we          <= "11";
             rx_byte_cnt(0) <= '1';
           else
-            rx_addr  <= C_RX_BUF_START + 2;                         -- $0402
+            rx_addr  <= C_RX_BUF_START + 2;                                        -- $0402
             rx_wrdat <= std_logic_vector(rx_length);
             rx_we    <= "11";
             rx_state <= RX_READY_ST;
@@ -572,11 +572,16 @@ begin
       cs_d              <= cs_i;
       cs_dd             <= cs_d;
 
+      -- autoincrement
+      if pp_we = "10" and reg_pp_ptr(15) = '1' then
+        reg_pp_ptr <= reg_pp_ptr + 2;
+      end if;
+
       -- End-of-frame byte address for autoincrement detection: header
       -- occupies $0400..$0403, payload starts at $0404, ends at
       -- $0404 + rx_length - 1. When the pointer has advanced to or past
       -- $0404 + rx_length, the frame is considered consumed.
-      rx_end_ptr_v      := C_RX_BUF_START + 4 + rx_length(11 downto 0);
+      rx_end_ptr_v := C_RX_BUF_START + 4 + rx_length(11 downto 0);
 
       -- On entering RX_READY_ST, reset the RxTx-window read pointer so
       -- $DE08/09 reads start at $0400 (RxStatus low byte). We spot the
@@ -635,14 +640,12 @@ begin
             when C_PP_DATA_0 + 1 =>
               pp_wrdat <= wr_data_i & wr_data_i;
               pp_we    <= "10";
-              if reg_pp_ptr(15) = '1' then
-                reg_pp_ptr <= reg_pp_ptr + 2;
-              end if;
 
-              if reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR and
-                 rx_state = RX_READY_ST then
-                rx_frame_consumed <= '1';
-                reg_rx_ptr        <= (others => '0');
+              if reg_pp_ptr(11 downto 1) = C_PP_RX_EVENT_ADDR then
+                if rx_state = RX_READY_ST then
+                  rx_frame_consumed <= '1';
+                  reg_rx_ptr        <= (others => '0');
+                end if;
               elsif reg_pp_ptr(11 downto 1) = C_PP_TX_CMD_ADDR then
                 reg_tx_cmd(15 downto 8) <= unsigned(wr_data_i);
               elsif reg_pp_ptr(11 downto 1) = C_PP_TX_LENGTH_ADDR then

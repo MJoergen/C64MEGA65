@@ -1,0 +1,132 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Sat Aug  8 15:46:06 2026
+[*]
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet_probe/rrnet_probe.ghw"
+[dumpfile_mtime] "Sat Aug  8 15:40:58 2026"
+[dumpfile_size] 195446
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet_probe/rrnet_probe.gtkw"
+[timestart] 0
+[size] 1228 913
+[pos] -1682 -5
+*-30.702364 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.tb_rrnet_probe.
+[treeopen] top.tb_rrnet_probe.rrnet_inst.
+[treeopen] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.
+[sst_width] 239
+[signals_width] 259
+[sst_expanded] 1
+[sst_vpaned_height] 268
+@800200
+-rrnet
+@28
+top.tb_rrnet_probe.rrnet_inst.clk_i
+top.tb_rrnet_probe.rrnet_inst.rst_i
+top.tb_rrnet_probe.rrnet_inst.cs_i
+@22
+#{top.tb_rrnet_probe.rrnet_inst.addr_i[7:0]} top.tb_rrnet_probe.rrnet_inst.addr_i[7] top.tb_rrnet_probe.rrnet_inst.addr_i[6] top.tb_rrnet_probe.rrnet_inst.addr_i[5] top.tb_rrnet_probe.rrnet_inst.addr_i[4] top.tb_rrnet_probe.rrnet_inst.addr_i[3] top.tb_rrnet_probe.rrnet_inst.addr_i[2] top.tb_rrnet_probe.rrnet_inst.addr_i[1] top.tb_rrnet_probe.rrnet_inst.addr_i[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.we_i
+@22
+#{top.tb_rrnet_probe.rrnet_inst.wr_data_i[7:0]} top.tb_rrnet_probe.rrnet_inst.wr_data_i[7] top.tb_rrnet_probe.rrnet_inst.wr_data_i[6] top.tb_rrnet_probe.rrnet_inst.wr_data_i[5] top.tb_rrnet_probe.rrnet_inst.wr_data_i[4] top.tb_rrnet_probe.rrnet_inst.wr_data_i[3] top.tb_rrnet_probe.rrnet_inst.wr_data_i[2] top.tb_rrnet_probe.rrnet_inst.wr_data_i[1] top.tb_rrnet_probe.rrnet_inst.wr_data_i[0]
+#{top.tb_rrnet_probe.rrnet_inst.rd_data_o[7:0]} top.tb_rrnet_probe.rrnet_inst.rd_data_o[7] top.tb_rrnet_probe.rrnet_inst.rd_data_o[6] top.tb_rrnet_probe.rrnet_inst.rd_data_o[5] top.tb_rrnet_probe.rrnet_inst.rd_data_o[4] top.tb_rrnet_probe.rrnet_inst.rd_data_o[3] top.tb_rrnet_probe.rrnet_inst.rd_data_o[2] top.tb_rrnet_probe.rrnet_inst.rd_data_o[1] top.tb_rrnet_probe.rrnet_inst.rd_data_o[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.eth_rx_ready_o
+top.tb_rrnet_probe.rrnet_inst.eth_rx_valid_i
+top.tb_rrnet_probe.rrnet_inst.eth_rx_last_i
+top.tb_rrnet_probe.rrnet_inst.eth_rx_ok_i
+@22
+#{top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[7:0]} top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[7] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[6] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[5] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[4] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[3] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[2] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[1] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.eth_tx_ready_i
+top.tb_rrnet_probe.rrnet_inst.eth_tx_valid_o
+top.tb_rrnet_probe.rrnet_inst.eth_tx_last_o
+@c00022
+#{top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[7:0]} top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[7] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[6] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[5] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[4] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[3] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[2] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[1] top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[7]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[6]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[5]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[4]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[3]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[2]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[1]
+top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[0]
+@1401200
+-group_end
+@c00200
+-Internal
+@22
+#{top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[15:0]} top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[15] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[14] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[13] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[12] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[11] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[10] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[9] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[8] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[7] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[6] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[5] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[4] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[3] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[2] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[1] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[0]
+#{top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[15:0]} top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[15] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[14] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[13] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[12] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[11] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[10] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[9] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[8] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[7] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[6] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[5] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[4] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[3] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[2] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[1] top.tb_rrnet_probe.rrnet_inst.reg_tx_cmd[0]
+#{top.tb_rrnet_probe.rrnet_inst.reg_tx_length[15:0]} top.tb_rrnet_probe.rrnet_inst.reg_tx_length[15] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[14] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[13] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[12] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[11] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[10] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[9] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[8] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[7] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[6] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[5] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[4] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[3] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[2] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[1] top.tb_rrnet_probe.rrnet_inst.reg_tx_length[0]
+#{top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[11:0]} top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[11] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[10] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[9] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[8] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[7] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[6] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[5] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[4] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[3] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[2] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[1] top.tb_rrnet_probe.rrnet_inst.reg_tx_ptr[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.reg_tx_start
+@22
+#{top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[11:0]} top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[11] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[10] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[9] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[8] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[7] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[6] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[5] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[4] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[3] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[2] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[1] top.tb_rrnet_probe.rrnet_inst.reg_rx_ptr[0]
+@28
+#{top.tb_rrnet_probe.rrnet_inst.pp_we[1:0]} top.tb_rrnet_probe.rrnet_inst.pp_we[1] top.tb_rrnet_probe.rrnet_inst.pp_we[0]
+@22
+#{top.tb_rrnet_probe.rrnet_inst.pp_wrdat[15:0]} top.tb_rrnet_probe.rrnet_inst.pp_wrdat[15] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[14] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[13] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[12] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[11] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[10] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[9] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[8] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[7] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[6] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[5] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[4] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[3] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[2] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[1] top.tb_rrnet_probe.rrnet_inst.pp_wrdat[0]
+#{top.tb_rrnet_probe.rrnet_inst.rxtx_addr[11:0]} top.tb_rrnet_probe.rrnet_inst.rxtx_addr[11] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[10] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[9] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[8] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[7] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[6] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[5] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[4] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[3] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[2] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[1] top.tb_rrnet_probe.rrnet_inst.rxtx_addr[0]
+@28
+#{top.tb_rrnet_probe.rrnet_inst.rxtx_we[1:0]} top.tb_rrnet_probe.rrnet_inst.rxtx_we[1] top.tb_rrnet_probe.rrnet_inst.rxtx_we[0]
+@22
+#{top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[15:0]} top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[15] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[14] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[13] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[12] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[11] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[10] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[9] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[8] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[7] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[6] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[5] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[4] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[3] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[2] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[1] top.tb_rrnet_probe.rrnet_inst.rxtx_wrdat[0]
+#{top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[15:0]} top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[15] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[14] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[13] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[12] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[11] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[10] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[9] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[8] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[7] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[6] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[5] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[4] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[3] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[2] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[1] top.tb_rrnet_probe.rrnet_inst.rxtx_rddat[0]
+#{top.tb_rrnet_probe.rrnet_inst.tx_addr[11:0]} top.tb_rrnet_probe.rrnet_inst.tx_addr[11] top.tb_rrnet_probe.rrnet_inst.tx_addr[10] top.tb_rrnet_probe.rrnet_inst.tx_addr[9] top.tb_rrnet_probe.rrnet_inst.tx_addr[8] top.tb_rrnet_probe.rrnet_inst.tx_addr[7] top.tb_rrnet_probe.rrnet_inst.tx_addr[6] top.tb_rrnet_probe.rrnet_inst.tx_addr[5] top.tb_rrnet_probe.rrnet_inst.tx_addr[4] top.tb_rrnet_probe.rrnet_inst.tx_addr[3] top.tb_rrnet_probe.rrnet_inst.tx_addr[2] top.tb_rrnet_probe.rrnet_inst.tx_addr[1] top.tb_rrnet_probe.rrnet_inst.tx_addr[0]
+#{top.tb_rrnet_probe.rrnet_inst.rx_addr[11:0]} top.tb_rrnet_probe.rrnet_inst.rx_addr[11] top.tb_rrnet_probe.rrnet_inst.rx_addr[10] top.tb_rrnet_probe.rrnet_inst.rx_addr[9] top.tb_rrnet_probe.rrnet_inst.rx_addr[8] top.tb_rrnet_probe.rrnet_inst.rx_addr[7] top.tb_rrnet_probe.rrnet_inst.rx_addr[6] top.tb_rrnet_probe.rrnet_inst.rx_addr[5] top.tb_rrnet_probe.rrnet_inst.rx_addr[4] top.tb_rrnet_probe.rrnet_inst.rx_addr[3] top.tb_rrnet_probe.rrnet_inst.rx_addr[2] top.tb_rrnet_probe.rrnet_inst.rx_addr[1] top.tb_rrnet_probe.rrnet_inst.rx_addr[0]
+@28
+#{top.tb_rrnet_probe.rrnet_inst.rx_we[1:0]} top.tb_rrnet_probe.rrnet_inst.rx_we[1] top.tb_rrnet_probe.rrnet_inst.rx_we[0]
+@22
+#{top.tb_rrnet_probe.rrnet_inst.rx_wrdat[15:0]} top.tb_rrnet_probe.rrnet_inst.rx_wrdat[15] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[14] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[13] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[12] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[11] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[10] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[9] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[8] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[7] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[6] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[5] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[4] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[3] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[2] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[1] top.tb_rrnet_probe.rrnet_inst.rx_wrdat[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.cs_d
+top.tb_rrnet_probe.rrnet_inst.cs_dd
+@420
+top.tb_rrnet_probe.rrnet_inst.tx_state
+@28
+top.tb_rrnet_probe.rrnet_inst.rdy_4_tx_now
+top.tb_rrnet_probe.rrnet_inst.tx_bid_err
+@420
+top.tb_rrnet_probe.rrnet_inst.rx_state
+@22
+#{top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[11:0]} top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[11] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[10] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[9] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[8] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[7] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[6] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[5] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[4] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[3] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[2] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[1] top.tb_rrnet_probe.rrnet_inst.rx_wr_addr[0]
+#{top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[15:0]} top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[15] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[14] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[13] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[12] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[11] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[10] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[9] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[8] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[7] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[6] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[5] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[4] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[3] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[2] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[1] top.tb_rrnet_probe.rrnet_inst.rx_byte_cnt[0]
+#{top.tb_rrnet_probe.rrnet_inst.rx_length[15:0]} top.tb_rrnet_probe.rrnet_inst.rx_length[15] top.tb_rrnet_probe.rrnet_inst.rx_length[14] top.tb_rrnet_probe.rrnet_inst.rx_length[13] top.tb_rrnet_probe.rrnet_inst.rx_length[12] top.tb_rrnet_probe.rrnet_inst.rx_length[11] top.tb_rrnet_probe.rrnet_inst.rx_length[10] top.tb_rrnet_probe.rrnet_inst.rx_length[9] top.tb_rrnet_probe.rrnet_inst.rx_length[8] top.tb_rrnet_probe.rrnet_inst.rx_length[7] top.tb_rrnet_probe.rrnet_inst.rx_length[6] top.tb_rrnet_probe.rrnet_inst.rx_length[5] top.tb_rrnet_probe.rrnet_inst.rx_length[4] top.tb_rrnet_probe.rrnet_inst.rx_length[3] top.tb_rrnet_probe.rrnet_inst.rx_length[2] top.tb_rrnet_probe.rrnet_inst.rx_length[1] top.tb_rrnet_probe.rrnet_inst.rx_length[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.rx_frame_ready
+top.tb_rrnet_probe.rrnet_inst.rx_accept
+top.tb_rrnet_probe.rrnet_inst.rx_frame_consumed
+@1401200
+-Internal
+@1000200
+-rrnet
+@800200
+-tdp_ram_msb
+@28
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clock_a
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clen_a
+@22
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[10:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[10] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[9] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[8] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_a[0]
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[7:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_a[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.wren_a
+@22
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[7:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_a[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clock_b
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clen_b
+@22
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[10:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[10] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[9] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[8] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.address_b[0]
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[7:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.data_b[0]
+@28
+top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.wren_b
+@22
+#{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[7:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[0]
+@1000200
+-tdp_ram_msb
+[pattern_trace] 1
+[pattern_trace] 0
