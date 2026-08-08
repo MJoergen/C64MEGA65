@@ -241,11 +241,12 @@ architecture rtl of rrnet is
   --   RX_IDLE_ST    : waiting for a frame; incoming bytes accepted only
   --                   if rx_accept = '1'.
   --   RX_DATA_ST    : streaming payload bytes into $0404+.
+  --   RX_DROP_ST    : discarding remainder of long frame.
   --   RX_HEADER_ST  : writing RxStatus at $0400 and RxLength at $0402.
   --                   Two clock cycles (one word per cycle).
   --   RX_READY_ST   : frame available; RxOK visible via RxEvent overlay.
   --                   Waits until rx_frame_consumed pulses.
-  type     rx_state_type is (RX_IDLE_ST, RX_DATA_ST, RX_HEADER_ST, RX_READY_ST);
+  type     rx_state_type is (RX_IDLE_ST, RX_DATA_ST, RX_DROP_ST, RX_HEADER_ST, RX_READY_ST);
   signal   rx_state : rx_state_type                                    := RX_IDLE_ST;
 
   -- Byte-granular write pointer into the RAM.
@@ -380,7 +381,9 @@ begin
   -- pulses, at which point the receiver re-arms.
   ----------------------------------------------------------
 
-  eth_rx_ready_o <= rx_accept when rx_state = RX_IDLE_ST or rx_state = RX_DATA_ST else
+  eth_rx_ready_o <= rx_accept when rx_state = RX_IDLE_ST or
+                                   rx_state = RX_DATA_ST or
+                                   rx_state = RX_DROP_ST else
                     '0';
 
   rx_proc : process (clk_i)
@@ -437,7 +440,17 @@ begin
               rx_ok       <= eth_rx_ok_i;
               rx_state    <= RX_HEADER_ST;
               rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+            elsif rx_wr_addr + 2 >= C_TX_BUF_START then
+              -- Frame is not finished yet, and next byte will spill out of the
+              -- Rx buffer. We drop the remainder of this frame.
+              rx_state <= RX_DROP_ST;
             end if;
+          end if;
+
+        when RX_DROP_ST =>
+          -- Wait until end of frame, then return to RX_IDLE_ST.
+          if eth_rx_valid_i = '1' and eth_rx_last_i = '1' then
+            rx_state <= RX_IDLE_ST;
           end if;
 
         when RX_HEADER_ST =>
