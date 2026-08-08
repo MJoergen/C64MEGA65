@@ -319,7 +319,7 @@ begin
                     tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
-                      unsigned(addr_i) = C_RXTX_REG_0 + 1) else
+                                                  unsigned(addr_i) = C_RXTX_REG_0 + 1) else
                     rx_addr;
   rxtx_we        <= rx_we when tx_state = TX_IDLE_ST else
                     (others => '0');
@@ -456,20 +456,22 @@ begin
           end if;
 
         when RX_HEADER_ST =>
-          -- Two clocks: first write RxStatus at $0400, then RxLength at $0402.
-          -- rx_byte_cnt(0) is used as a 1-bit sub-state.
-          if rx_byte_cnt(0) = '0' then
-            rx_addr        <= C_RX_BUF_START;                                      -- $0400
-            -- RxStatus: bit 8 = RxOK. All other bits zero for now
-            -- (extend here to expose more per-frame status bits).
-            rx_wrdat       <= X"0100";
-            rx_we          <= "11";
-            rx_byte_cnt(0) <= '1';
-          else
-            rx_addr  <= C_RX_BUF_START + 2;                                        -- $0402
-            rx_wrdat <= std_logic_vector(rx_length);
-            rx_we    <= "11";
-            rx_state <= RX_READY_ST;
+          if cs_i = '0' and rx_accept = '1' then
+            -- Two clocks: first write RxStatus at $0400, then RxLength at $0402.
+            -- rx_byte_cnt(0) is used as a 1-bit sub-state.
+            if rx_byte_cnt(0) = '0' then
+              rx_addr        <= C_RX_BUF_START;                                      -- $0400
+              -- RxStatus: bit 8 = RxOK. All other bits zero for now
+              -- (extend here to expose more per-frame status bits).
+              rx_wrdat       <= X"0100";
+              rx_we          <= "11";
+              rx_byte_cnt(0) <= '1';
+            else
+              rx_addr  <= C_RX_BUF_START + 2;                                        -- $0402
+              rx_wrdat <= std_logic_vector(rx_length);
+              rx_we    <= "11";
+              rx_state <= RX_READY_ST;
+            end if;
           end if;
 
         when RX_READY_ST =>
