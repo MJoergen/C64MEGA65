@@ -1524,7 +1524,7 @@ begin
       if c64_ram_we = '1' and c64_ram_addr_o = X"DE88" then
         rrnet_mk3_enabled <= '0';
       end if;
-      if reset_soft_i = '1' then
+      if reset_core_n = '0' then
         rrnet_mk3_enabled <= '1';
       end if;
       if c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED or
