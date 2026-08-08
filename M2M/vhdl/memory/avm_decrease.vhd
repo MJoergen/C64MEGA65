@@ -27,7 +27,7 @@
 -- Read path:
 --   * A wide read is launched in IDLE_ST and immediately propagated; the master
 --     issues a burst of C_RATIO narrow reads.
---   * Returning narrow words are reassembled into s_avm_readdata_o using s_avm_read_pos
+--   * Returning narrow words are reassembled into s_avm_readdata_o using s_read_pos
 --     as the sub-word index; s_avm_readdatavalid_o pulses once per completed wide
 --     word.
 --   * READ_DRAIN_ST blocks new requests if a new burst would overlap an in-
@@ -146,15 +146,15 @@ architecture rtl of avm_decrease is
   signal   state : state_type                                           := IDLE_ST;
 
   -- Sub-word indices into the wide slave word.
-  --   s_avm_write_pos selects which narrow slice of s_avm_writedata / s_avm_byteenable is
+  --   s_write_pos selects which narrow slice of s_avm_writedata / s_avm_byteenable is
   --   driven onto the master in the current cycle. Advances on each accepted
   --   master beat; wraps to 0 on the first beat of a new burst.
   --
-  --   s_avm_read_pos selects which narrow slice of s_avm_readdata_o is written with the
+  --   s_read_pos selects which narrow slice of s_avm_readdata_o is written with the
   --   next m_avm_readdata_i. Advances on each master read response; rollover from
   --   C_RATIO-1 to 0 pulses s_avm_readdatavalid_o.
-  signal   s_avm_write_pos : integer range 0 to C_RATIO - 1             := 0;
-  signal   s_avm_read_pos  : integer range 0 to C_RATIO - 1             := 0;
+  signal   s_write_pos : integer range 0 to C_RATIO - 1                 := 0;
+  signal   s_read_pos  : integer range 0 to C_RATIO - 1                 := 0;
 
 begin
 
@@ -191,7 +191,7 @@ begin
   --   1. Output/handshake defaults (s_avm_readdatavalid_o pulse,
   --   s_avm_write/s_avm_read
   --      clear on accepted beat).
-  --   2. Read-response reassembly (independent of FSM state; uses s_avm_read_pos
+  --   2. Read-response reassembly (independent of FSM state; uses s_read_pos
   --      as the destination slice index).
   --   3. State machine (accepts new transactions, issues write beats,
   --      drains overlapping read bursts).
@@ -219,19 +219,19 @@ begin
       end if;
 
       -- Read-response reassembly:
-      -- Each narrow read response is written into the s_avm_read_pos slice of
+      -- Each narrow read response is written into the s_read_pos slice of
       -- s_avm_readdata_o. When the final (C_RATIO-1) slice is filled, the wide
-      -- word is complete: emit s_avm_readdatavalid_o and wrap s_avm_read_pos to 0
+      -- word is complete: emit s_avm_readdatavalid_o and wrap s_read_pos to 0
       -- ready for the next wide read.
       if m_avm_readdatavalid_i = '1' then
-        s_avm_readdata_o(G_MASTER_DATA_SIZE * s_avm_read_pos + G_MASTER_DATA_SIZE - 1
-        downto G_MASTER_DATA_SIZE * s_avm_read_pos) <= m_avm_readdata_i;
+        s_avm_readdata_o(G_MASTER_DATA_SIZE * s_read_pos + G_MASTER_DATA_SIZE - 1
+        downto G_MASTER_DATA_SIZE * s_read_pos) <= m_avm_readdata_i;
 
-        if s_avm_read_pos = C_RATIO - 1 then
-          s_avm_read_pos        <= 0;
+        if s_read_pos = C_RATIO - 1 then
+          s_read_pos            <= 0;
           s_avm_readdatavalid_o <= '1';
         else
-          s_avm_read_pos <= s_avm_read_pos + 1;
+          s_read_pos <= s_read_pos + 1;
         end if;
       end if;
 
@@ -249,7 +249,7 @@ begin
             -- Latch the new transaction. Note: s_avm_writedata, s_avm_byteenable,
             -- s_avm_address
             -- are still being read this same cycle to drive the FINAL beat of the
-            -- previous burst (s_avm_write_pos = C_RATIO - 1). This works because the
+            -- previous burst (s_write_pos = C_RATIO - 1). This works because the
             -- write to these signals registers for the next cycle, while the read
             -- for output gets the pre-edge value. See "back-to-back bursts" in the
             -- header.
@@ -269,11 +269,11 @@ begin
 
             if s_avm_write_i = '1' then
               -- Begin a new write burst at sub-word 0.
-              s_avm_write_pos <= 0;
-              state           <= WRITING_ST;
-            elsif s_avm_read_pos /= 0 or m_avm_readdatavalid_i = '1' then
+              s_write_pos <= 0;
+              state       <= WRITING_ST;
+            elsif s_read_pos /= 0 or m_avm_readdatavalid_i = '1' then
               -- A previous read burst is still being reassembled
-              -- (s_avm_read_pos has advanced past 0, or a response is
+              -- (s_read_pos has advanced past 0, or a response is
               -- arriving on this very edge). Issue this new read
               -- immediately, but block further requests until the
               -- in-flight burst finishes so the two cannot interleave.
@@ -288,22 +288,22 @@ begin
         when WRITING_ST =>
           if m_avm_waitrequest_i = '0' then
             -- Advance to the next sub-word slice of the wide write.
-            s_avm_write_pos <= s_avm_write_pos + 1;
+            s_write_pos <= s_write_pos + 1;
 
             -- Override the default "deassert s_avm_write on accepted beat"
             -- handshake above so that m_avm_write_o remains asserted across
             -- all C_RATIO beats of the burst.
             --
-            -- Note: the final beat (s_avm_write_pos = C_RATIO - 1) is
+            -- Note: the final beat (s_write_pos = C_RATIO - 1) is
             -- intentionally issued in IDLE_ST. The outputs in that cycle
             -- are driven by the registered s_avm_writedata / s_avm_address /
             -- s_avm_byteenable captured *before* the previous edge, so they
             -- remain correct even if a new transaction is latched on the
             -- same edge. This permits back-to-back bursts with zero idle
             -- cycles between them.
-            s_avm_write     <= s_avm_write;
+            s_avm_write <= s_avm_write;
 
-            if s_avm_write_pos = C_RATIO - 2 then
+            if s_write_pos = C_RATIO - 2 then
               state <= IDLE_ST;
             end if;
           end if;
@@ -311,11 +311,11 @@ begin
         -- READ_DRAIN_ST: a new request was accepted while a previous read
         -- burst was still in flight. Hold s_avm_waitrequest_o = '1' (via the
         -- assignment below the process) until the in-flight burst has
-        -- fully reassembled, i.e. s_avm_read_pos has wrapped back to 0. This
+        -- fully reassembled, i.e. s_read_pos has wrapped back to 0. This
         -- avoids issuing two overlapping read bursts whose responses
         -- would race into the same reassembly counter.
         when READ_DRAIN_ST =>
-          if s_avm_read_pos = 0 then
+          if s_read_pos = 0 then
             state <= IDLE_ST;
           end if;
 
@@ -329,8 +329,8 @@ begin
       if rst_i = '1' then
         s_avm_write           <= '0';
         s_avm_read            <= '0';
-        s_avm_read_pos        <= 0;
-        s_avm_write_pos       <= 0;
+        s_read_pos            <= 0;
+        s_write_pos           <= 0;
         s_avm_readdatavalid_o <= '0';
         state                 <= IDLE_ST;
       end if;
@@ -341,7 +341,7 @@ begin
   -- Combinational master-side outputs
   --
   -- All driven directly from the registered transaction. m_avm_writedata_o and
-  -- m_avm_byteenable_o are sliced by s_avm_write_pos so a different narrow slice
+  -- m_avm_byteenable_o are sliced by s_write_pos so a different narrow slice
   -- of the wide word is presented on each burst beat.
   --------------------------------------------------------------------------
 
@@ -353,15 +353,15 @@ begin
   -- the address per beat.
   m_avm_address_o     <= s_avm_address & C_ZERO_ADDRESS;
 
-  -- Select the s_avm_write_pos-th narrow slice of the wide write data.
-  m_avm_writedata_o   <= s_avm_writedata(G_MASTER_DATA_SIZE * s_avm_write_pos +
+  -- Select the s_write_pos-th narrow slice of the wide write data.
+  m_avm_writedata_o   <= s_avm_writedata(G_MASTER_DATA_SIZE * s_write_pos +
                                          G_MASTER_DATA_SIZE - 1 downto G_MASTER_DATA_SIZE *
-                                         s_avm_write_pos);
+                                         s_write_pos);
 
   -- Same slicing for byte enables (G_MASTER_DATA_SIZE / 8 bytes per beat).
-  m_avm_byteenable_o  <= s_avm_byteenable(G_MASTER_DATA_SIZE / 8 * s_avm_write_pos
+  m_avm_byteenable_o  <= s_avm_byteenable(G_MASTER_DATA_SIZE / 8 * s_write_pos
                                           + G_MASTER_DATA_SIZE / 8 - 1 downto G_MASTER_DATA_SIZE
-                                          / 8 * s_avm_write_pos);
+                                          / 8 * s_write_pos);
 
   -- Master burstcount is held for the full burst (already the multiplied
   -- value computed in IDLE_ST).
