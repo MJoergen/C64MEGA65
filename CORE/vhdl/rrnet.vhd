@@ -266,7 +266,6 @@ architecture rtl of rrnet is
 
   -- Frame length (payload bytes, no FCS) and OK flag, latched at end-of-frame.
   signal   rx_length : unsigned(15 downto 0)                           := (others => '0');
-  signal   rx_ok     : std_logic                                       := '0';
 
   -- Live "frame available" flag exposed to software as the RxOK bit of
   -- the CS8900A RxEvent register at PP offset $0124 (bit 8).
@@ -408,7 +407,7 @@ begin
           rx_byte_cnt <= (others => '0');
           rx_addr     <= C_RX_BUF_START + 4;
 
-          if eth_rx_valid_i = '1' and rx_accept = '1' then
+          if eth_rx_valid_i = '1' and rx_accept = '1' and eth_rx_last_i = '0' then
             -- First byte of a new frame lands in the low half of the word
             -- at $0404 (byte address bit 0 = '0').
             rx_addr     <= C_RX_BUF_START + 4;
@@ -417,15 +416,6 @@ begin
             rx_wr_addr  <= C_RX_BUF_START + 5;
             rx_byte_cnt <= to_unsigned(1, rx_byte_cnt'length);
             rx_state    <= RX_DATA_ST;
-
-            -- Pathological single-byte frame: end-of-frame on the very
-            -- first byte. Latch length and fall through to header write.
-            if eth_rx_last_i = '1' then
-              rx_length   <= to_unsigned(1, rx_length'length);
-              rx_ok       <= eth_rx_ok_i;
-              rx_state    <= RX_HEADER_ST;
-              rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
-            end if;
           end if;
 
         when RX_DATA_ST =>
@@ -444,10 +434,14 @@ begin
             rx_byte_cnt <= rx_byte_cnt + 1;
 
             if eth_rx_last_i = '1' then
-              rx_length   <= rx_byte_cnt + 1;
-              rx_ok       <= eth_rx_ok_i;
-              rx_state    <= RX_HEADER_ST;
-              rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+              if eth_rx_ok_i = '1' then
+                rx_length   <= rx_byte_cnt + 1;
+                rx_state    <= RX_HEADER_ST;
+                rx_byte_cnt <= (others => '0');                       -- reused as header sub-state
+              else
+                -- Frame has errors, so drop it.
+                rx_state    <= RX_IDLE_ST;
+              end if;
             elsif rx_wr_addr + 2 >= C_TX_BUF_START then
               -- Frame is not finished yet, and next byte will spill out of the
               -- Rx buffer. We drop the remainder of this frame.
@@ -468,7 +462,7 @@ begin
             rx_addr        <= C_RX_BUF_START;                       -- $0400
             -- RxStatus: bit 8 = RxOK. All other bits zero for now
             -- (extend here to expose more per-frame status bits).
-            rx_wrdat       <= "0000000" & rx_ok & X"00";
+            rx_wrdat       <= X"0100";
             rx_we          <= "11";
             rx_byte_cnt(0) <= '1';
           else
@@ -492,7 +486,6 @@ begin
         rx_wr_addr  <= C_RX_BUF_START + 4;
         rx_byte_cnt <= (others => '0');
         rx_length   <= (others => '0');
-        rx_ok       <= '0';
         rx_we       <= (others => '0');
       end if;
     end if;
