@@ -142,6 +142,10 @@ architecture rtl of rrnet is
   constant C_PP_RX_EVENT_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#124# / 2, 11);
   constant C_PP_SELF_CTL_ADDR : unsigned(11 downto 1)                  := to_unsigned(16#114# / 2, 11);
 
+  -- Ethernet packet length range, excluding CRC
+  constant C_MAC_MIN_LENGTH : unsigned(15 downto 0)                    := to_unsigned(60, 16);
+  constant C_MAC_MAX_LENGTH : unsigned(15 downto 0)                    := to_unsigned(1514, 16);
+
   ----------------------------------------------------------
   -- CPU-visible registers
   ----------------------------------------------------------
@@ -232,6 +236,7 @@ architecture rtl of rrnet is
   -- Live "buffer ready" flag exposed to software as the Rdy4TxNOW bit of
   -- the CS8900A Bus Status register at PP offset $0138 (bit 8).
   signal   rdy_4_tx_now : std_logic;
+  signal   tx_bid_err   : std_logic;
 
   ----------------------------------------------------------
   -- Rx path state
@@ -633,21 +638,32 @@ begin
               end if;
 
             when C_RXTX_REG_0 =>
-              reg_pp_ptr <= "0000" & reg_tx_ptr;
-              pp_wrdat   <= wr_data_i & wr_data_i;
-              pp_we      <= "01";
+              if reg_tx_length < C_MAC_MIN_LENGTH then
+                reg_tx_length <= C_MAC_MIN_LENGTH;
+              end if;
+              if reg_tx_length > C_MAC_MAX_LENGTH then
+                tx_bid_err <= '1';
+              else
+                reg_pp_ptr <= "0000" & reg_tx_ptr;
+                pp_wrdat   <= wr_data_i & wr_data_i;
+                pp_we      <= "01";
+                tx_bid_err <= '0';
+              end if;
 
             when C_RXTX_REG_0 + 1 =>
-              reg_pp_ptr <= "0000" & reg_tx_ptr;
-              reg_tx_ptr <= reg_tx_ptr + 2;
-              pp_wrdat   <= wr_data_i & wr_data_i;
-              pp_we      <= "10";
+              if reg_tx_length < C_MAC_MIN_LENGTH then
+                reg_tx_length <= C_MAC_MIN_LENGTH;
+              end if;
+              if reg_tx_length > C_MAC_MAX_LENGTH then
+                tx_bid_err <= '1';
+              else
+                reg_pp_ptr <= "0000" & reg_tx_ptr;
+                pp_wrdat   <= wr_data_i & wr_data_i;
+                pp_we      <= "10";
+                tx_bid_err <= '0';
+                reg_tx_ptr <= reg_tx_ptr + 2;
+              end if;
               if reg_tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
-                -- Minimum frame length is 60 bytes
-                -- Here we append the frame with extra random bytes. They will be ignored by receiver.
-                if reg_tx_length < 60 then
-                  reg_tx_length <= to_unsigned(60, 16);
-                end if;
                 reg_tx_start <= '1';
               end if;
 
@@ -686,7 +702,10 @@ begin
 
             when C_PP_DATA_0 =>
               -- low-byte read: apply live-status overlays before returning.
-              if reg_pp_ptr(11 downto 1) = C_PP_SELF_CTL_ADDR then
+              if reg_pp_ptr(11 downto 1) = C_PP_BUS_ST_ADDR then
+                -- Bus Status $0138: overlay TxBidErr at bit 7
+                rd_data_o <= tx_bid_err & pp_rddat(6 downto 0);
+              elsif reg_pp_ptr(11 downto 1) = C_PP_SELF_CTL_ADDR then
                 -- Self Control. RESET (bit 6) always reads zero.
                 rd_data_o <= pp_rddat(7 downto 0) and X"BF";
               elsif reg_pp_ptr(11 downto 1) = C_PP_LINE_ST_ADDR then
@@ -796,6 +815,7 @@ begin
         reg_tx_start      <= '0';
         reg_rx_ptr        <= (others => '0');
         rx_frame_consumed <= '0';
+        tx_bid_err        <= '0';
       end if;
     end if;
   end process fsm_proc;
