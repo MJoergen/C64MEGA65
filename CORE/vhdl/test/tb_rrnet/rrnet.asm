@@ -21,10 +21,82 @@ eth = $f800
 .endstruct
 
 
+packetpp        := $DE02
+ppdata          := $DE04
+
+err_init:
+        ; Invalid instruction signals a failure
+        .byte $02
+
+packetpp_a1:
+        ldx #$01
+        sta packetpp
+        stx packetpp+1
+        rts
+
 cpu_reset:
         sei
         ldx #$FF
         txs
+
+        ; Check reset values of Control and Configuration Bits
+        ; $0100 to $011E
+        lda #$00
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$01
+        bne err_init
+        cpx #$00
+        bne err_init
+
+        lda #$02
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$03
+        bne err_init
+        cpx #$00
+        bne err_init
+
+        lda #$04
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$05
+        bne err_init
+        cpx #$00
+        bne err_init
+
+        ; Check reset values of Status and Event Bits
+        ; $0120 to $013E
+        lda #$20
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$00
+        bne err_init
+        cpx #$00
+        bne err_init
+
+        lda #$22
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$02
+        bne err_init
+        cpx #$00
+        bne err_init
+
+        lda #$24
+        jsr packetpp_a1
+        lda ppdata
+        ldx ppdata+1
+        cmp #$04
+        bne err_init
+        cpx #$00
+        bne err_init
+
         ; Initialize driver
         jsr eth+driver::init
         bcc :+

@@ -207,13 +207,28 @@ architecture rtl of rrnet is
     -- PacketPage memory map
     constant C_PP_ISA_ID  : natural                                 := 16#000#;
     constant C_PP_PROD_ID : natural                                 := 16#002#;
+    constant C_PP_SELF_ST : natural                                 := 16#136#;
     constant C_PP_BUS_ST  : natural                                 := 16#138#;
   begin
+    -- Reset values of Control and Configuration Bits
+    -- Note, the loop writes twice to each element, so only the second (i.e.
+    -- odd) value written is used.
+    for i in 16#100# to 16#11E# loop
+      ram_v(i/2) := std_logic_vector(to_unsigned(i, 16)) and X"003F";
+    end loop;
+
+    -- Reset values of Status and Event Bits
+    for i in 16#120# to 16#13E# loop
+      ram_v(i/2) := std_logic_vector(to_unsigned(i - 33, 16)) and X"003F";
+    end loop;
+
     -- Note: Addresses are divided by two, to convert from byte to word addressing.
     -- EISA registration number for Crystal Semiconductor
     ram_v(C_PP_ISA_ID / 2)  := X"630E";
     -- Product ID and Revision number
     ram_v(C_PP_PROD_ID / 2) := X"0700";
+    -- Self Status (set 'INITD').
+    ram_v(C_PP_SELF_ST / 2)  := X"0096";
     -- Bus Status (set 'Rdy4TxNOW').
     ram_v(C_PP_BUS_ST / 2)  := X"0118";
 
@@ -610,7 +625,7 @@ begin
               reg_pp_ptr(7 downto 0) <= unsigned(wr_data_i);
 
             when C_PP_PTR + 1 =>
-              reg_pp_ptr(15 downto 8) <= unsigned(wr_data_i);
+              reg_pp_ptr(15 downto 8) <= unsigned(wr_data_i) or X"30";
 
             when C_PP_DATA_0 =>
               -- Replicate the byte into both halves of the 16-bit word; the pp_we
@@ -661,7 +676,7 @@ begin
               if reg_tx_length > C_MAC_MAX_LENGTH then
                 tx_bid_err <= '1';
               else
-                reg_pp_ptr <= "0000" & reg_tx_ptr;
+                reg_pp_ptr <= "0011" & reg_tx_ptr;
                 pp_wrdat   <= wr_data_i & wr_data_i;
                 pp_we      <= "01";
                 tx_bid_err <= '0';
@@ -674,7 +689,7 @@ begin
               if reg_tx_length > C_MAC_MAX_LENGTH then
                 tx_bid_err <= '1';
               else
-                reg_pp_ptr <= "0000" & reg_tx_ptr;
+                reg_pp_ptr <= "0011" & reg_tx_ptr;
                 pp_wrdat   <= wr_data_i & wr_data_i;
                 pp_we      <= "10";
                 tx_bid_err <= '0';
@@ -825,7 +840,7 @@ begin
         cs_d              <= '0';
         cs_dd             <= '0';
         pp_we             <= (others => '0');
-        reg_pp_ptr        <= (others => '0');
+        reg_pp_ptr        <= X"3000";
         reg_tx_cmd        <= (others => '0');
         reg_tx_length     <= (others => '0');
         reg_tx_ptr        <= C_TX_BUF_START;
