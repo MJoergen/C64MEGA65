@@ -769,6 +769,7 @@ begin
                 -- receiver. Compare against the address that WILL be in
                 -- reg_pp_ptr on the next cycle (reg_pp_ptr + 2).
                 if rx_state = RX_READY_ST and
+                   (reg_pp_ptr(11 downto 0) + 2) < C_TX_BUF_START and
                    (reg_pp_ptr(11 downto 0) + 2) >= rx_end_ptr_v then
                   rx_frame_consumed <= '1';
                   reg_rx_ptr        <= (others => '0');
