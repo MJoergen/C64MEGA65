@@ -143,6 +143,7 @@ architecture rtl of rrnet is
   constant C_PP_BUS_ST_ADDR    : unsigned(11 downto 1)                 := to_unsigned(16#138# / 2, 11);
   constant C_PP_TX_CMD_ADDR    : unsigned(11 downto 1)                 := to_unsigned(16#144# / 2, 11);
   constant C_PP_TX_LENGTH_ADDR : unsigned(11 downto 1)                 := to_unsigned(16#146# / 2, 11);
+  constant C_PP_AF_IA_ADDR     : unsigned(11 downto 1)                 := to_unsigned(16#158# / 2, 11);
 
   -- Ethernet packet length range, excluding CRC
   constant C_MAC_MIN_LENGTH : unsigned(15 downto 0)                    := to_unsigned(60, 16);
@@ -214,12 +215,12 @@ architecture rtl of rrnet is
     -- Note, the loop writes twice to each element, so only the second (i.e.
     -- odd) value written is used.
     for i in 16#100# to 16#11E# loop
-      ram_v(i/2) := std_logic_vector(to_unsigned(i, 16)) and X"003F";
+      ram_v(i / 2) := std_logic_vector(to_unsigned(i, 16)) and X"003F";
     end loop;
 
     -- Reset values of Status and Event Bits
     for i in 16#120# to 16#13E# loop
-      ram_v(i/2) := std_logic_vector(to_unsigned(i - 33, 16)) and X"003F";
+      ram_v(i / 2) := std_logic_vector(to_unsigned(i - 33, 16)) and X"003F";
     end loop;
 
     -- Note: Addresses are divided by two, to convert from byte to word addressing.
@@ -228,7 +229,7 @@ architecture rtl of rrnet is
     -- Product ID and Revision number
     ram_v(C_PP_PROD_ID / 2) := X"0700";
     -- Self Status (set 'INITD').
-    ram_v(C_PP_SELF_ST / 2)  := X"0096";
+    ram_v(C_PP_SELF_ST / 2) := X"0096";
     -- Bus Status (set 'Rdy4TxNOW').
     ram_v(C_PP_BUS_ST / 2)  := X"0118";
 
@@ -294,6 +295,9 @@ architecture rtl of rrnet is
   -- Asserted by fsm_proc on any of the three consumption paths.
   signal   rx_frame_consumed : std_logic                               := '0';
 
+  -- Our MAC address. Must be configured by software via PP $0158 to $015D.
+  signal   mac_address : std_logic_vector(47 downto 0)                 := (others => '0');
+
 begin
 
   ----------------------------------------------------------
@@ -334,7 +338,7 @@ begin
                     tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
-                                                  unsigned(addr_i) = C_RXTX_REG_0 + 1) else
+                      unsigned(addr_i) = C_RXTX_REG_0 + 1) else
                     rx_addr;
   rxtx_we        <= rx_we when tx_state = TX_IDLE_ST else
                     (others => '0');
@@ -431,6 +435,17 @@ begin
             rx_wr_addr  <= C_RX_BUF_START + 5;
             rx_byte_cnt <= to_unsigned(1, rx_byte_cnt'length);
             rx_state    <= RX_DATA_ST;
+
+            -- Very simple packet filtering. We will only accept packets whose
+            -- first octet matches that of our MAC address or matches the value
+            -- $FF (i.e. first octet of a broadcast frame).  There is no check
+            -- for the remaining five bytes of the MAC address.  This is
+            -- intentional, as the purpose of MAC address filtering is to
+            -- offload the CPU, and a single-byte filter is sufficient as a
+            -- first approximation.
+            if eth_rx_data_i /= X"FF" and eth_rx_data_i /= mac_address(47 downto 40) then
+              rx_state <= RX_DROP_ST;
+            end if;
           end if;
 
         when RX_DATA_ST =>
@@ -452,7 +467,7 @@ begin
               if eth_rx_ok_i = '1' then
                 rx_length   <= rx_byte_cnt + 1;
                 rx_state    <= RX_HEADER_ST;
-                rx_byte_cnt <= (others => '0');                                    -- reused as header sub-state
+                rx_byte_cnt <= (others => '0');                                      -- reused as header sub-state
               else
                 -- Frame has errors, so drop it.
                 rx_state <= RX_IDLE_ST;
@@ -652,6 +667,13 @@ begin
                 reg_tx_ptr             <= C_TX_BUF_START;
               elsif reg_pp_ptr(11 downto 1) = C_PP_TX_LENGTH_ADDR then
                 reg_tx_length(7 downto 0) <= unsigned(wr_data_i);
+              -- Store MAC address separately
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR then
+                mac_address(47 downto 40) <= wr_data_i;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR + 1 then
+                mac_address(31 downto 24) <= wr_data_i;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR + 2 then
+                mac_address(15 downto 8) <= wr_data_i;
               end if;
 
             when C_PP_DATA_0 + 1 =>
@@ -667,6 +689,13 @@ begin
                 reg_tx_cmd(15 downto 8) <= unsigned(wr_data_i);
               elsif reg_pp_ptr(11 downto 1) = C_PP_TX_LENGTH_ADDR then
                 reg_tx_length(15 downto 8) <= unsigned(wr_data_i);
+              -- Store MAC address separately
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR then
+                mac_address(39 downto 32) <= wr_data_i;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR + 1 then
+                mac_address(23 downto 16) <= wr_data_i;
+              elsif reg_pp_ptr(11 downto 1) = C_PP_AF_IA_ADDR + 2 then
+                mac_address(7 downto 0) <= wr_data_i;
               end if;
 
             when C_RXTX_REG_0 =>

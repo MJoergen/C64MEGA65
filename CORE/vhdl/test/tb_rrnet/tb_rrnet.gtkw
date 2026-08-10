@@ -1,20 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Sun Jul 19 08:43:14 2026
+[*] Sun Aug  9 19:43:00 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/CORE/vhdl/test/tb_rrnet/tb_rrnet.ghw"
-[dumpfile_mtime] "Sun Jul 19 08:41:35 2026"
-[dumpfile_size] 11758393
-[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_eth/CORE/vhdl/test/tb_rrnet/tb_rrnet.gtkw"
-[timestart] 188927400000
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet/tb_rrnet.ghw"
+[dumpfile_mtime] "Sun Aug  9 19:42:53 2026"
+[dumpfile_size] 9336942
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet/tb_rrnet.gtkw"
+[timestart] 16296000000
 [size] 1835 1033
 [pos] -1 -1
-*-25.529358 189044500000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-27.958696 17080000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_rrnet.
 [treeopen] top.tb_rrnet.rrnet_inst.
 [sst_width] 276
-[signals_width] 280
+[signals_width] 290
 [sst_expanded] 1
 [sst_vpaned_height] 333
 @c00200
@@ -95,9 +95,7 @@ top.tb_rrnet.rrnet_inst.reg_tx_start
 @22
 #{top.tb_rrnet.rrnet_inst.pp_wrdat[15:0]} top.tb_rrnet.rrnet_inst.pp_wrdat[15] top.tb_rrnet.rrnet_inst.pp_wrdat[14] top.tb_rrnet.rrnet_inst.pp_wrdat[13] top.tb_rrnet.rrnet_inst.pp_wrdat[12] top.tb_rrnet.rrnet_inst.pp_wrdat[11] top.tb_rrnet.rrnet_inst.pp_wrdat[10] top.tb_rrnet.rrnet_inst.pp_wrdat[9] top.tb_rrnet.rrnet_inst.pp_wrdat[8] top.tb_rrnet.rrnet_inst.pp_wrdat[7] top.tb_rrnet.rrnet_inst.pp_wrdat[6] top.tb_rrnet.rrnet_inst.pp_wrdat[5] top.tb_rrnet.rrnet_inst.pp_wrdat[4] top.tb_rrnet.rrnet_inst.pp_wrdat[3] top.tb_rrnet.rrnet_inst.pp_wrdat[2] top.tb_rrnet.rrnet_inst.pp_wrdat[1] top.tb_rrnet.rrnet_inst.pp_wrdat[0]
 #{top.tb_rrnet.rrnet_inst.pp_rddat[15:0]} top.tb_rrnet.rrnet_inst.pp_rddat[15] top.tb_rrnet.rrnet_inst.pp_rddat[14] top.tb_rrnet.rrnet_inst.pp_rddat[13] top.tb_rrnet.rrnet_inst.pp_rddat[12] top.tb_rrnet.rrnet_inst.pp_rddat[11] top.tb_rrnet.rrnet_inst.pp_rddat[10] top.tb_rrnet.rrnet_inst.pp_rddat[9] top.tb_rrnet.rrnet_inst.pp_rddat[8] top.tb_rrnet.rrnet_inst.pp_rddat[7] top.tb_rrnet.rrnet_inst.pp_rddat[6] top.tb_rrnet.rrnet_inst.pp_rddat[5] top.tb_rrnet.rrnet_inst.pp_rddat[4] top.tb_rrnet.rrnet_inst.pp_rddat[3] top.tb_rrnet.rrnet_inst.pp_rddat[2] top.tb_rrnet.rrnet_inst.pp_rddat[1] top.tb_rrnet.rrnet_inst.pp_rddat[0]
-@23
 #{top.tb_rrnet.rrnet_inst.tx_addr[11:0]} top.tb_rrnet.rrnet_inst.tx_addr[11] top.tb_rrnet.rrnet_inst.tx_addr[10] top.tb_rrnet.rrnet_inst.tx_addr[9] top.tb_rrnet.rrnet_inst.tx_addr[8] top.tb_rrnet.rrnet_inst.tx_addr[7] top.tb_rrnet.rrnet_inst.tx_addr[6] top.tb_rrnet.rrnet_inst.tx_addr[5] top.tb_rrnet.rrnet_inst.tx_addr[4] top.tb_rrnet.rrnet_inst.tx_addr[3] top.tb_rrnet.rrnet_inst.tx_addr[2] top.tb_rrnet.rrnet_inst.tx_addr[1] top.tb_rrnet.rrnet_inst.tx_addr[0]
-@22
 #{top.tb_rrnet.rrnet_inst.rxtx_addr[11:0]} top.tb_rrnet.rrnet_inst.rxtx_addr[11] top.tb_rrnet.rrnet_inst.rxtx_addr[10] top.tb_rrnet.rrnet_inst.rxtx_addr[9] top.tb_rrnet.rrnet_inst.rxtx_addr[8] top.tb_rrnet.rrnet_inst.rxtx_addr[7] top.tb_rrnet.rrnet_inst.rxtx_addr[6] top.tb_rrnet.rrnet_inst.rxtx_addr[5] top.tb_rrnet.rrnet_inst.rxtx_addr[4] top.tb_rrnet.rrnet_inst.rxtx_addr[3] top.tb_rrnet.rrnet_inst.rxtx_addr[2] top.tb_rrnet.rrnet_inst.rxtx_addr[1] top.tb_rrnet.rrnet_inst.rxtx_addr[0]
 @28
 #{top.tb_rrnet.rrnet_inst.rxtx_we[1:0]} top.tb_rrnet.rrnet_inst.rxtx_we[1] top.tb_rrnet.rrnet_inst.rxtx_we[0]
@@ -117,10 +115,11 @@ top.tb_rrnet.rrnet_inst.rx_state
 #{top.tb_rrnet.rrnet_inst.rx_byte_cnt[15:0]} top.tb_rrnet.rrnet_inst.rx_byte_cnt[15] top.tb_rrnet.rrnet_inst.rx_byte_cnt[14] top.tb_rrnet.rrnet_inst.rx_byte_cnt[13] top.tb_rrnet.rrnet_inst.rx_byte_cnt[12] top.tb_rrnet.rrnet_inst.rx_byte_cnt[11] top.tb_rrnet.rrnet_inst.rx_byte_cnt[10] top.tb_rrnet.rrnet_inst.rx_byte_cnt[9] top.tb_rrnet.rrnet_inst.rx_byte_cnt[8] top.tb_rrnet.rrnet_inst.rx_byte_cnt[7] top.tb_rrnet.rrnet_inst.rx_byte_cnt[6] top.tb_rrnet.rrnet_inst.rx_byte_cnt[5] top.tb_rrnet.rrnet_inst.rx_byte_cnt[4] top.tb_rrnet.rrnet_inst.rx_byte_cnt[3] top.tb_rrnet.rrnet_inst.rx_byte_cnt[2] top.tb_rrnet.rrnet_inst.rx_byte_cnt[1] top.tb_rrnet.rrnet_inst.rx_byte_cnt[0]
 #{top.tb_rrnet.rrnet_inst.rx_length[15:0]} top.tb_rrnet.rrnet_inst.rx_length[15] top.tb_rrnet.rrnet_inst.rx_length[14] top.tb_rrnet.rrnet_inst.rx_length[13] top.tb_rrnet.rrnet_inst.rx_length[12] top.tb_rrnet.rrnet_inst.rx_length[11] top.tb_rrnet.rrnet_inst.rx_length[10] top.tb_rrnet.rrnet_inst.rx_length[9] top.tb_rrnet.rrnet_inst.rx_length[8] top.tb_rrnet.rrnet_inst.rx_length[7] top.tb_rrnet.rrnet_inst.rx_length[6] top.tb_rrnet.rrnet_inst.rx_length[5] top.tb_rrnet.rrnet_inst.rx_length[4] top.tb_rrnet.rrnet_inst.rx_length[3] top.tb_rrnet.rrnet_inst.rx_length[2] top.tb_rrnet.rrnet_inst.rx_length[1] top.tb_rrnet.rrnet_inst.rx_length[0]
 @28
-top.tb_rrnet.rrnet_inst.rx_ok
 top.tb_rrnet.rrnet_inst.rx_frame_ready
 top.tb_rrnet.rrnet_inst.rx_accept
 top.tb_rrnet.rrnet_inst.rx_frame_consumed
+@23
+#{top.tb_rrnet.rrnet_inst.mac_address[47:0]} top.tb_rrnet.rrnet_inst.mac_address[47] top.tb_rrnet.rrnet_inst.mac_address[46] top.tb_rrnet.rrnet_inst.mac_address[45] top.tb_rrnet.rrnet_inst.mac_address[44] top.tb_rrnet.rrnet_inst.mac_address[43] top.tb_rrnet.rrnet_inst.mac_address[42] top.tb_rrnet.rrnet_inst.mac_address[41] top.tb_rrnet.rrnet_inst.mac_address[40] top.tb_rrnet.rrnet_inst.mac_address[39] top.tb_rrnet.rrnet_inst.mac_address[38] top.tb_rrnet.rrnet_inst.mac_address[37] top.tb_rrnet.rrnet_inst.mac_address[36] top.tb_rrnet.rrnet_inst.mac_address[35] top.tb_rrnet.rrnet_inst.mac_address[34] top.tb_rrnet.rrnet_inst.mac_address[33] top.tb_rrnet.rrnet_inst.mac_address[32] top.tb_rrnet.rrnet_inst.mac_address[31] top.tb_rrnet.rrnet_inst.mac_address[30] top.tb_rrnet.rrnet_inst.mac_address[29] top.tb_rrnet.rrnet_inst.mac_address[28] top.tb_rrnet.rrnet_inst.mac_address[27] top.tb_rrnet.rrnet_inst.mac_address[26] top.tb_rrnet.rrnet_inst.mac_address[25] top.tb_rrnet.rrnet_inst.mac_address[24] top.tb_rrnet.rrnet_inst.mac_address[23] top.tb_rrnet.rrnet_inst.mac_address[22] top.tb_rrnet.rrnet_inst.mac_address[21] top.tb_rrnet.rrnet_inst.mac_address[20] top.tb_rrnet.rrnet_inst.mac_address[19] top.tb_rrnet.rrnet_inst.mac_address[18] top.tb_rrnet.rrnet_inst.mac_address[17] top.tb_rrnet.rrnet_inst.mac_address[16] top.tb_rrnet.rrnet_inst.mac_address[15] top.tb_rrnet.rrnet_inst.mac_address[14] top.tb_rrnet.rrnet_inst.mac_address[13] top.tb_rrnet.rrnet_inst.mac_address[12] top.tb_rrnet.rrnet_inst.mac_address[11] top.tb_rrnet.rrnet_inst.mac_address[10] top.tb_rrnet.rrnet_inst.mac_address[9] top.tb_rrnet.rrnet_inst.mac_address[8] top.tb_rrnet.rrnet_inst.mac_address[7] top.tb_rrnet.rrnet_inst.mac_address[6] top.tb_rrnet.rrnet_inst.mac_address[5] top.tb_rrnet.rrnet_inst.mac_address[4] top.tb_rrnet.rrnet_inst.mac_address[3] top.tb_rrnet.rrnet_inst.mac_address[2] top.tb_rrnet.rrnet_inst.mac_address[1] top.tb_rrnet.rrnet_inst.mac_address[0]
 @1000200
 -Internal
 -rrnet
