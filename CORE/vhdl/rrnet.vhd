@@ -699,9 +699,6 @@ begin
               end if;
 
             when C_RXTX_REG_0 =>
-              if reg_tx_length < C_MAC_MIN_LENGTH then
-                reg_tx_length <= C_MAC_MIN_LENGTH;
-              end if;
               if reg_tx_length > C_MAC_MAX_LENGTH then
                 tx_bid_err <= '1';
               else
@@ -712,9 +709,6 @@ begin
               end if;
 
             when C_RXTX_REG_0 + 1 =>
-              if reg_tx_length < C_MAC_MIN_LENGTH then
-                reg_tx_length <= C_MAC_MIN_LENGTH;
-              end if;
               if reg_tx_length > C_MAC_MAX_LENGTH then
                 tx_bid_err <= '1';
               else
@@ -725,6 +719,9 @@ begin
                 reg_tx_ptr <= reg_tx_ptr + 2;
               end if;
               if reg_tx_ptr + 2 >= C_TX_BUF_START + reg_tx_length then
+                if reg_tx_length < C_MAC_MIN_LENGTH then
+                  reg_tx_length <= C_MAC_MIN_LENGTH;
+                end if;
                 reg_tx_start <= '1';
               end if;
 
