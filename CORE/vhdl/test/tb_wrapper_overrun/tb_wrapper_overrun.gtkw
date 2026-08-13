@@ -1,0 +1,63 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Thu Aug 13 06:33:20 2026
+[*]
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.ghw"
+[dumpfile_mtime] "Thu Aug 13 06:30:48 2026"
+[dumpfile_size] 21130090
+[savefile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.gtkw"
+[timestart] 0
+[size] 1478 851
+[pos] -1 -1
+*-39.080620 620000000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top.
+[treeopen] top.tb_wrapper_overrun.
+[treeopen] top.tb_wrapper_overrun.eth_wrapper_inst.
+[sst_width] 276
+[signals_width] 220
+[sst_expanded] 1
+[sst_vpaned_height] 243
+@800200
+-eth_wrapper
+@28
+top.tb_wrapper_overrun.eth_wrapper_inst.core_clk_i
+top.tb_wrapper_overrun.eth_wrapper_inst.core_rst_i
+[color] 6
+top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_ready_i
+[color] 2
+top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_valid_o
+@22
+#{top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[7:0]} top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[7] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[6] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[5] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[4] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[3] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[2] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[1] top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_data_o[0]
+@28
+top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_last_o
+top.tb_wrapper_overrun.eth_wrapper_inst.core_rx_ok_o
+[color] 6
+top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_ready_o
+[color] 2
+top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_valid_i
+@22
+#{top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[7:0]} top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[7] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[6] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[5] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[4] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[3] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[2] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[1] top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_data_i[0]
+@28
+top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_last_i
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_fifo_overrun
+[color] 6
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_ready
+[color] 2
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_valid
+@22
+#{top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[7:0]} top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[7] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[6] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[5] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[4] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[3] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[2] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[1] top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_data[0]
+@28
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_last
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_ok
+[color] 6
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_ready
+[color] 2
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_valid
+@22
+#{top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[7:0]} top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[7] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[6] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[5] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[4] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[3] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[2] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[1] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[0]
+@28
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_last
+@1000200
+-eth_wrapper
+[pattern_trace] 1
+[pattern_trace] 0
