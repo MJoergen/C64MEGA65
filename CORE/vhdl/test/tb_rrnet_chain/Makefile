@@ -12,17 +12,20 @@ TB_SRC += ../../../../M2M/vhdl/axis_fifo_async.vhd
 TB = tb_$(DUT)
 TB_SRC += $(TB).vhd
 
+WAVE = $(DUT).ghw
+
 STOPTIME = 20ms
 
 sim: $(SRC) $(TB_SRC)
 	ghdl -i --std=08 --work=work $(SRC) $(TB_SRC)
 	ghdl -m --std=08 -fexplicit $(TB)
-	ghdl -r --std=08 $(TB) -gG_LENGTH=60 --stop-time=$(STOPTIME)
-	ghdl -r --std=08 $(TB) -gG_LENGTH=100 --stop-time=$(STOPTIME)
-	ghdl -r --std=08 $(TB) -gG_LENGTH=1500 --stop-time=$(STOPTIME)
-	ghdl -r --std=08 $(TB) -gG_LENGTH=1518 --stop-time=$(STOPTIME)
+	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_LENGTH=60 --stop-time=$(STOPTIME)
+	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_LENGTH=100 --stop-time=$(STOPTIME)
+	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_LENGTH=1500 --stop-time=$(STOPTIME)
+	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_LENGTH=1514 --stop-time=$(STOPTIME)
 
 clean:
 	rm -rf work-obj08.cf
+	rm -rf $(WAVE)
 
 

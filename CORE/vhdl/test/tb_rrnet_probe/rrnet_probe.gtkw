@@ -1,15 +1,13 @@
 [*]
-[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Sat Aug  8 15:46:06 2026
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Wed Aug 19 08:04:43 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet_probe/rrnet_probe.ghw"
-[dumpfile_mtime] "Sat Aug  8 15:40:58 2026"
-[dumpfile_size] 195446
-[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet_probe/rrnet_probe.gtkw"
+[dumpfile] "(null)"
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_rrnet_probe/rrnet_probe.gtkw"
 [timestart] 0
-[size] 1228 913
-[pos] -1682 -5
-*-30.702364 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[size] 1389 1024
+[pos] -1 -1
+*-29.238117 115000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_rrnet_probe.
 [treeopen] top.tb_rrnet_probe.rrnet_inst.
@@ -17,7 +15,7 @@
 [sst_width] 239
 [signals_width] 259
 [sst_expanded] 1
-[sst_vpaned_height] 268
+[sst_vpaned_height] 308
 @800200
 -rrnet
 @28
@@ -32,14 +30,20 @@ top.tb_rrnet_probe.rrnet_inst.we_i
 #{top.tb_rrnet_probe.rrnet_inst.wr_data_i[7:0]} top.tb_rrnet_probe.rrnet_inst.wr_data_i[7] top.tb_rrnet_probe.rrnet_inst.wr_data_i[6] top.tb_rrnet_probe.rrnet_inst.wr_data_i[5] top.tb_rrnet_probe.rrnet_inst.wr_data_i[4] top.tb_rrnet_probe.rrnet_inst.wr_data_i[3] top.tb_rrnet_probe.rrnet_inst.wr_data_i[2] top.tb_rrnet_probe.rrnet_inst.wr_data_i[1] top.tb_rrnet_probe.rrnet_inst.wr_data_i[0]
 #{top.tb_rrnet_probe.rrnet_inst.rd_data_o[7:0]} top.tb_rrnet_probe.rrnet_inst.rd_data_o[7] top.tb_rrnet_probe.rrnet_inst.rd_data_o[6] top.tb_rrnet_probe.rrnet_inst.rd_data_o[5] top.tb_rrnet_probe.rrnet_inst.rd_data_o[4] top.tb_rrnet_probe.rrnet_inst.rd_data_o[3] top.tb_rrnet_probe.rrnet_inst.rd_data_o[2] top.tb_rrnet_probe.rrnet_inst.rd_data_o[1] top.tb_rrnet_probe.rrnet_inst.rd_data_o[0]
 @28
+[color] 6
 top.tb_rrnet_probe.rrnet_inst.eth_rx_ready_o
+[color] 2
 top.tb_rrnet_probe.rrnet_inst.eth_rx_valid_i
+@29
 top.tb_rrnet_probe.rrnet_inst.eth_rx_last_i
+@28
 top.tb_rrnet_probe.rrnet_inst.eth_rx_ok_i
 @22
 #{top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[7:0]} top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[7] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[6] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[5] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[4] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[3] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[2] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[1] top.tb_rrnet_probe.rrnet_inst.eth_rx_data_i[0]
 @28
+[color] 6
 top.tb_rrnet_probe.rrnet_inst.eth_tx_ready_i
+[color] 2
 top.tb_rrnet_probe.rrnet_inst.eth_tx_valid_o
 top.tb_rrnet_probe.rrnet_inst.eth_tx_last_o
 @c00022
@@ -55,7 +59,7 @@ top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[1]
 top.tb_rrnet_probe.rrnet_inst.eth_tx_data_o[0]
 @1401200
 -group_end
-@c00200
+@800200
 -Internal
 @22
 #{top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[15:0]} top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[15] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[14] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[13] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[12] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[11] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[10] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[9] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[8] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[7] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[6] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[5] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[4] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[3] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[2] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[1] top.tb_rrnet_probe.rrnet_inst.reg_pp_ptr[0]
@@ -100,11 +104,10 @@ top.tb_rrnet_probe.rrnet_inst.rx_state
 top.tb_rrnet_probe.rrnet_inst.rx_frame_ready
 top.tb_rrnet_probe.rrnet_inst.rx_accept
 top.tb_rrnet_probe.rrnet_inst.rx_frame_consumed
-@1401200
--Internal
 @1000200
+-Internal
 -rrnet
-@800200
+@c00200
 -tdp_ram_msb
 @28
 top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clock_a
@@ -126,7 +129,7 @@ top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.clen_b
 top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.wren_b
 @22
 #{top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[7:0]} top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[7] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[6] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[5] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[4] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[3] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[2] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[1] top.tb_rrnet_probe.rrnet_inst.tdp_ram_msb_inst.q_b[0]
-@1000200
+@1401200
 -tdp_ram_msb
 [pattern_trace] 1
 [pattern_trace] 0

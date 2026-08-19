@@ -198,7 +198,7 @@ begin
     end procedure set_pp;
 
     variable d, dhi, dlo : std_logic_vector(7 downto 0);
-    variable len_v, exp_v, bad_v : natural;
+    variable len_v, exp_v : natural;
 
   begin
     wait until rst = '0';
@@ -211,7 +211,10 @@ begin
     cpu_write(16#0D#, 16#00#);
     cpu_write(16#0E#, G_LENGTH mod 256);
     cpu_write(16#0F#, G_LENGTH / 256);
-    for i in 0 to G_LENGTH / 2 - 1 loop
+    -- First two bytes are 0xFF
+    cpu_write(16#08#, 16#FF#);
+    cpu_write(16#09#, 16#FF#);
+    for i in 0 to G_LENGTH / 2 - 2 loop
       cpu_write(16#08#, (2 * i * 3 + 11) mod 256);
       cpu_write(16#09#, ((2 * i + 1) * 3 + 11) mod 256);
     end loop;
@@ -224,48 +227,48 @@ begin
     -- 'poll'
     set_pp(16#0124#);
     cpu_read(16#05#, d);
-    report "CHAIN: RxEvent hi = " & integer'image(to_integer(unsigned(d))) &
-           " (bit0 must be 1)";
-    if d(0) /= '1' then
-      report "CHAIN: NO FRAME RECEIVED" severity failure;
-    end if;
+    assert d(0) = '1'
+      report "CHAIN: RxEvent hi = " & integer'image(to_integer(unsigned(d))) &
+             " (bit0 must be 1)"
+        severity failure;
 
     cpu_read(16#09#, dhi);
     cpu_read(16#08#, dlo);
-    report "CHAIN: RxStatus = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-           integer'image(to_integer(unsigned(dlo))) & "  (hi bit0 = RxOK from the MAC CRC check)";
+    assert dhi(0) = '1'
+      report "CHAIN: RxStatus = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+             integer'image(to_integer(unsigned(dlo))) & "  (hi bit0 = RxOK from the MAC CRC check)"
+        severity failure;
 
     cpu_read(16#09#, dhi);
     cpu_read(16#08#, dlo);
     len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-    report "CHAIN: RxLength = " & integer'image(len_v) &
-           " (expected " & integer'image(G_LENGTH) & ")";
+    assert G_LENGTH = len_v
+      report "CHAIN: RxLength = " & integer'image(len_v) &
+             " (expected " & integer'image(G_LENGTH) & ")"
+        severity failure;
 
-    bad_v := 0;
-    for i in 0 to G_LENGTH / 2 - 1 loop
+    cpu_read(16#08#, dlo);
+    cpu_read(16#09#, dhi);
+    assert unsigned(dlo) = 16#FF# and unsigned(dhi) = 16#FF#
+      report "First two bytes are wrong"
+        severity failure;
+
+    for i in 0 to G_LENGTH / 2 - 2 loop
       cpu_read(16#08#, dlo);
       cpu_read(16#09#, dhi);
       exp_v := (2 * i * 3 + 11) mod 256;
-      if to_integer(unsigned(dlo)) /= exp_v then
-        if bad_v < 6 then
-          report "CHAIN mismatch byte " & integer'image(2 * i) &
-                 " got " & integer'image(to_integer(unsigned(dlo))) &
-                 " expected " & integer'image(exp_v) severity warning;
-        end if;
-        bad_v := bad_v + 1;
-      end if;
+      assert to_integer(unsigned(dlo)) = exp_v
+        report "CHAIN mismatch byte " & integer'image(2 * i) &
+               " got " & integer'image(to_integer(unsigned(dlo))) &
+               " expected " & integer'image(exp_v)
+          severity failure;
       exp_v := ((2 * i + 1) * 3 + 11) mod 256;
-      if to_integer(unsigned(dhi)) /= exp_v then
-        if bad_v < 6 then
-          report "CHAIN mismatch byte " & integer'image(2 * i + 1) &
-                 " got " & integer'image(to_integer(unsigned(dhi))) &
-                 " expected " & integer'image(exp_v) severity warning;
-        end if;
-        bad_v := bad_v + 1;
-      end if;
+      assert to_integer(unsigned(dhi)) = exp_v
+        report "CHAIN mismatch byte " & integer'image(2 * i + 1) &
+               " got " & integer'image(to_integer(unsigned(dhi))) &
+               " expected " & integer'image(exp_v)
+          severity failure;
     end loop;
-    report "CHAIN: " & integer'image(bad_v) & " mismatching payload bytes out of " &
-           integer'image(G_LENGTH);
 
     report "=== CHAIN TEST COMPLETE ===";
     wait for 200 ns;

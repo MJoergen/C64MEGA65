@@ -155,7 +155,26 @@ begin
     -- pattern(i) = (i*7+3) mod 256, so it is reproducible.
     procedure rx_frame (len : in natural; mark_last : in boolean; seed : in natural) is
     begin
-      for i in 0 to len - 1 loop
+      -- Start frame with the byte pair 0xFFFF
+      eth_rx_data  <= (others => '1');
+      eth_rx_last  <= '0';
+      eth_rx_ok    <= '0';
+      eth_rx_valid <= '1';
+      loop
+        wait until rising_edge(clk);
+        exit when eth_rx_ready = '1';
+      end loop;
+
+      eth_rx_data  <= (others => '1');
+      eth_rx_last  <= '0';
+      eth_rx_ok    <= '0';
+      eth_rx_valid <= '1';
+      loop
+        wait until rising_edge(clk);
+        exit when eth_rx_ready = '1';
+      end loop;
+
+      for i in 2 to len - 1 loop
         eth_rx_data  <= std_logic_vector(to_unsigned((i * 7 + seed) mod 256, 8));
         eth_rx_last  <= '1' when (i = len - 1 and mark_last) else '0';
         eth_rx_ok    <= '1';
@@ -197,23 +216,16 @@ begin
       for i in 0 to 999 loop
         wait until rising_edge(clk);
       end loop;
-      report "T1: captured " & integer'image(tx_cap_cnt) & " bytes, " &
-             integer'image(tx_frames) & " frame(s)";
-      bad_v := 0;
+      assert tx_cap_cnt = 64
+        report "T1: WRONG BYTE COUNT " & integer'image(tx_cap_cnt) & " (expected 64)"
+          severity failure;
       for i in 0 to 63 loop
-        if tx_cap(i) /= std_logic_vector(to_unsigned(i mod 256, 8)) then
-          if bad_v < 8 then
-            report "T1 MISMATCH at byte " & integer'image(i) &
-                   ": got " & integer'image(to_integer(unsigned(tx_cap(i)))) &
-                   " expected " & integer'image(i mod 256) severity warning;
-          end if;
-          bad_v := bad_v + 1;
-        end if;
+        assert tx_cap(i) = std_logic_vector(to_unsigned(i mod 256, 8))
+          report "T1 MISMATCH at byte " & integer'image(i) &
+                 ": got " & integer'image(to_integer(unsigned(tx_cap(i)))) &
+                 " expected " & integer'image(i mod 256)
+            severity failure;
       end loop;
-      report "T1: " & integer'image(bad_v) & " mismatching bytes out of 64";
-      if tx_cap_cnt /= 64 then
-        report "T1: WRONG BYTE COUNT " & integer'image(tx_cap_cnt) & " (expected 64)" severity warning;
-      end if;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T2" then
@@ -226,53 +238,48 @@ begin
       -- poll: PACKETPP=$0124, read ppdata+1 ($DE05), test bit 0
       set_pp(16#0124#);
       cpu_read(16#05#, d);
-      report "T2: RxEvent hi = " & integer'image(to_integer(unsigned(d)));
-      if d(0) /= '1' then
-        report "T2: RxOK not set!" severity warning;
-      end if;
+      assert d(0) = '1'
+        report "T2: RxOK not set!"
+          severity failure;
       -- discard RxStatus: ldx rxtxreg+1 ; lda rxtxreg
       cpu_read(16#09#, dhi);
       cpu_read(16#08#, dlo);
-      report "T2: RxStatus = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo)));
       -- length: ldx rxtxreg+1 ; lda rxtxreg
       cpu_read(16#09#, dhi);
       cpu_read(16#08#, dlo);
       len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-      report "T2: RxLength = " & integer'image(len_v) & " (expected 100)";
-      if len_v /= 100 then
-        report "T2: WRONG LENGTH" severity warning;
-      end if;
+      assert len_v = 100
+        report "T2: WRONG LENGTH"
+          severity failure;
       -- payload loop: lda rxtxreg ; lda rxtxreg+1
-      bad_v := 0;
-      for i in 0 to 49 loop
+      cpu_read(16#08#, dlo);
+      cpu_read(16#09#, dhi);
+      assert unsigned(dhi) = X"FF" and unsigned(dlo) = X"FF"
+        report "Incorrect two first bytes"
+          severity failure;
+      for i in 1 to 49 loop
         cpu_read(16#08#, dlo);
         cpu_read(16#09#, dhi);
         exp_v := ((2 * i) * 7 + 3) mod 256;
-        if to_integer(unsigned(dlo)) /= exp_v then
-          if bad_v < 6 then
-            report "T2 payload MISMATCH at byte " & integer'image(2 * i) &
-                   ": got " & integer'image(to_integer(unsigned(dlo))) &
-                   " expected " & integer'image(exp_v) severity warning;
-          end if;
-          bad_v := bad_v + 1;
-        end if;
+        assert to_integer(unsigned(dlo)) = exp_v
+          report "T2 payload MISMATCH at byte " & integer'image(2 * i) &
+                 ": got " & integer'image(to_integer(unsigned(dlo))) &
+                 " expected " & integer'image(exp_v)
+            severity failure;
         exp_v := ((2 * i + 1) * 7 + 3) mod 256;
-        if to_integer(unsigned(dhi)) /= exp_v then
-          if bad_v < 6 then
-            report "T2 payload MISMATCH at byte " & integer'image(2 * i + 1) &
-                   ": got " & integer'image(to_integer(unsigned(dhi))) &
-                   " expected " & integer'image(exp_v) severity warning;
-          end if;
-          bad_v := bad_v + 1;
-        end if;
+        assert to_integer(unsigned(dhi)) = exp_v
+          report "T2 payload MISMATCH at byte " & integer'image(2 * i + 1) &
+                 ": got " & integer'image(to_integer(unsigned(dhi))) &
+                 " expected " & integer'image(exp_v)
+            severity failure;
       end loop;
-      report "T2: " & integer'image(bad_v) & " mismatching payload bytes out of 100";
       -- after draining, RxEvent must be clear again
       set_pp(16#0124#);
       cpu_read(16#05#, d);
-      report "T2: RxEvent hi after drain = " & integer'image(to_integer(unsigned(d))) &
-             " (bit0 should be 0)";
+      assert d(0) = '0'
+        report "T2: RxEvent hi after drain = " & integer'image(to_integer(unsigned(d))) &
+               " (bit0 should be 0)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T3" then
@@ -281,8 +288,10 @@ begin
       set_pp(16#0000#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "T3: EISA id BEFORE = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E)";
+      assert dhi = x"63" and dlo = x"0E"
+        report "T3: EISA id BEFORE = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+               integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E)"
+          severity failure;
       rx_frame(3500, true, 5);
       for i in 0 to 20 loop
         wait until rising_edge(clk);
@@ -292,9 +301,9 @@ begin
       cpu_read(16#05#, dhi);
       report "T3: EISA id AFTER  = " & integer'image(to_integer(unsigned(dhi))) & ":" &
              integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E)";
-      if not (dhi = x"63" and dlo = x"0E") then
-        report "T3: PACKETPAGE REGISTER AREA CORRUPTED BY OVERSIZED FRAME" severity warning;
-      end if;
+      assert dhi = x"63" and dlo = x"0E"
+        report "T3: PACKETPAGE REGISTER AREA CORRUPTED BY OVERSIZED FRAME"
+          severity failure;
       set_pp(16#0138#);
       cpu_read(16#05#, dhi);
       report "T3: BusST hi after = " & integer'image(to_integer(unsigned(dhi)));
@@ -310,8 +319,10 @@ begin
       set_pp(16#0000#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "T3: EISA id after RESET = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E if reset heals it)";
+      assert dhi = x"63" and dlo = x"0E"
+        report "T3: EISA id after RESET = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+               integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E if reset heals it)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T4" then
@@ -351,7 +362,9 @@ begin
       end loop;
       set_pp(16#0124#);
       cpu_read(16#05#, d);
-      report "T5: RxEvent hi before skip = " & integer'image(to_integer(unsigned(d)));
+      assert d(0) = '1'
+        report "T5: RxEvent hi before skip = " & integer'image(to_integer(unsigned(d)))
+          severity failure;
       -- skipframe: PACKETPP=$0102 ; PPDATA = PPDATA | $40  (low byte only)
       set_pp(16#0102#);
       cpu_read(16#04#, d);
@@ -361,11 +374,9 @@ begin
       end loop;
       set_pp(16#0124#);
       cpu_read(16#05#, d);
-      report "T5: RxEvent hi after  skip = " & integer'image(to_integer(unsigned(d))) &
-             " (bit0 should be 0 if the frame was discarded)";
-      if d(0) = '1' then
-        report "T5: skipframe DID NOT release the Rx buffer" severity warning;
-      end if;
+      assert d(0) = '0'
+        report "T5: skipframe DID NOT release the Rx buffer"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T6" then
@@ -382,7 +393,9 @@ begin
       cpu_read(16#08#, dlo);   -- RxLength lo
       cpu_read(16#09#, dhi);   -- RxLength hi
       len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-      report "T6: RxLength read lo-first = " & integer'image(len_v) & " (expect 100)";
+      assert len_v = 100
+        report "T6: RxLength read lo-first = " & integer'image(len_v) & " (expect 100)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T7" then
@@ -419,7 +432,9 @@ begin
       cpu_read(16#09#, dhi); cpu_read(16#08#, dlo);
       cpu_read(16#09#, dhi); cpu_read(16#08#, dlo);
       len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-      report "T7: frame 2 length = " & integer'image(len_v) & " (expect 70)";
+      assert len_v = 70
+        report "T7: frame 2 length = " & integer'image(len_v) & " (expect 70)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "T8" then
@@ -489,11 +504,9 @@ begin
       set_pp(16#0000#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "T9: EISA id AFTER  = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & " (expect 99:14 = $630E)";
-      if not (dhi = x"63" and dlo = x"0E") then
-        report "T9: PACKETPAGE REGISTER AREA CORRUPTED BY OVERSIZED TX FRAME" severity warning;
-      end if;
+      assert dhi = x"63" and dlo = x"0E"
+        report "T9: PACKETPAGE REGISTER AREA CORRUPTED BY OVERSIZED TX FRAME"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "TA" then
@@ -510,18 +523,24 @@ begin
       set_pp(16#0200#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "TA: PP $0200 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & "  (expect 18:52 = $1234)";
+      assert dhi = X"12" and dlo = X"34"
+        report "TA: PP $0200 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+               integer'image(to_integer(unsigned(dlo))) & "  (expect 18:52 = $1234)"
+          severity failure;
       set_pp(16#0202#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "TA: PP $0202 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & "  (expect 86:120 = $5678)";
+      assert dhi = X"56" and dlo = X"78"
+        report "TA: PP $0202 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+               integer'image(to_integer(unsigned(dlo))) & "  (expect 86:120 = $5678)"
+          severity failure;
       set_pp(16#0204#);
       cpu_read(16#04#, dlo);
       cpu_read(16#05#, dhi);
-      report "TA: PP $0204 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
-             integer'image(to_integer(unsigned(dlo))) & "  (expect 0:0 - anything else = high bytes landed too far)";
+      assert dhi = X"00" and dlo = X"00"
+        report "TA: PP $0204 = " & integer'image(to_integer(unsigned(dhi))) & ":" &
+               integer'image(to_integer(unsigned(dlo))) & "  (expect 0:0 - anything else = high bytes landed too far)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "TB" then
@@ -606,8 +625,10 @@ begin
       cpu_read(16#09#, dhi);
       cpu_read(16#08#, dlo);
       len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-      report "TC delay=" & integer'image(G_DELAY) & ": RxLength = " &
-             integer'image(len_v) & " (expect 40; 0 or stale = header write lost)";
+      assert len_v = 40
+        report "TC delay=" & integer'image(G_DELAY) & ": RxLength = " &
+               integer'image(len_v) & " (expect 40; 0 or stale = header write lost)"
+          severity failure;
 
     ----------------------------------------------------------------
     elsif G_TEST = "TD" then
@@ -654,3 +675,4 @@ begin
   end process main_proc;
 
 end architecture tb;
+
