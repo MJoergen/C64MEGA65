@@ -98,11 +98,6 @@ entity rrnet is
     --                 before accepting a new frame.
     --               * The FCS is automatically computed and appended before sending on
     --                 the wire.
-    --
-    -- Assumption: eth_tx_ready_i pulses at most once every 2 clock cycles,
-    -- which allows the 2-cycle port B RAM read latency to be absorbed
-    -- without stalling. With a 32 MHz clock speed, tx_ready_i pulses every
-    -- 32 / 12.5 = 2.56 clock cycles, so this is safe with margin.
     eth_rx_ready_o : out   std_logic;                    -- One-cycle strobe per received byte
     eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
     eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
