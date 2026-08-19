@@ -447,6 +447,7 @@ begin
             -- offload the CPU, and a single-byte filter is sufficient as a
             -- first approximation.
             if eth_rx_data_i /= X"FF" and eth_rx_data_i /= mac_address(47 downto 40) then
+              rx_we    <= "00";
               rx_state <= RX_DROP_ST;
             end if;
           end if;
