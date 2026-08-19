@@ -214,12 +214,12 @@ architecture rtl of rrnet is
     -- Reset values of Control and Configuration Bits
     -- Note, the loop writes twice to each element, so only the second (i.e.
     -- odd) value written is used.
-    for i in 16#100# to 16#11E# loop
+    for i in 16#100# to 16#11F# loop
       ram_v(i / 2) := std_logic_vector(to_unsigned(i, 16)) and X"003F";
     end loop;
 
     -- Reset values of Status and Event Bits
-    for i in 16#120# to 16#13E# loop
+    for i in 16#120# to 16#13F# loop
       ram_v(i / 2) := std_logic_vector(to_unsigned(i - 33, 16)) and X"003F";
     end loop;
 
