@@ -7,6 +7,7 @@ SAVE=$(TB).gtkw
 sim:
 	ghdl -a --std=08 -frelaxed --work=unisim unisim_stub.vhd
 	ghdl -a --std=08 -frelaxed -P. globals_min.vhd \
+		 $W/M2M/vhdl/axis_dropper.vhd \
 		 $W/M2M/vhdl/axis_fifo_async.vhd \
 		 $W/M2M/vhdl/controllers/ethernet/eth_rmii.vhd \
 		 $W/M2M/vhdl/controllers/ethernet/eth_wrapper.vhd \

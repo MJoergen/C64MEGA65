@@ -31,7 +31,6 @@ architecture tb of tb_rrnet_v2 is
   signal eth_rx_ready : std_logic;
   signal eth_rx_valid : std_logic := '0';
   signal eth_rx_last  : std_logic := '0';
-  signal eth_rx_ok    : std_logic := '1';
   signal eth_rx_data  : std_logic_vector(7 downto 0) := (others => '0');
 
   signal eth_tx_ready : std_logic := '0';
@@ -56,22 +55,22 @@ begin
   rrnet_inst : entity work.rrnet
     generic map (G_DEBUG => false)
     port map (
-      clk_i          => clk,
-      rst_i          => rst,
-      cs_i           => cs,
-      addr_i         => addr,
-      we_i           => we,
-      wr_data_i      => wr_data,
-      rd_data_o      => rd_data,
-      eth_rx_ready_o => eth_rx_ready,
-      eth_rx_valid_i => eth_rx_valid,
-      eth_rx_last_i  => eth_rx_last,
-      eth_rx_ok_i    => eth_rx_ok,
-      eth_rx_data_i  => eth_rx_data,
-      eth_tx_ready_i => eth_tx_ready,
-      eth_tx_valid_o => eth_tx_valid,
-      eth_tx_last_o  => eth_tx_last,
-      eth_tx_data_o  => eth_tx_data
+      clk_i             => clk,
+      rst_i             => rst,
+      cs_i              => cs,
+      addr_i            => addr,
+      we_i              => we,
+      wr_data_i         => wr_data,
+      rd_data_o         => rd_data,
+      eth_rx_ready_o    => eth_rx_ready,
+      eth_rx_valid_i    => eth_rx_valid,
+      eth_rx_last_i     => eth_rx_last,
+      eth_rx_data_i     => eth_rx_data,
+      eth_tx_ready_i    => eth_tx_ready,
+      eth_tx_valid_o    => eth_tx_valid,
+      eth_tx_last_o     => eth_tx_last,
+      eth_tx_data_o     => eth_tx_data,
+      eth_rx_cnt_drop_i => (others => '0')
     );
 
   tx_cap_proc : process (clk)
@@ -131,7 +130,7 @@ begin
 
     -- Inject a frame. Byte 0 = first_octet, remaining bytes = (i*7+seed) mod 256.
     procedure rx_frame (len : in natural; first_octet : in natural;
-                        mark_last : in boolean; seed : in natural; ok : in std_logic) is
+                        mark_last : in boolean; seed : in natural) is
     begin
       for i in 0 to len - 1 loop
         if i = 0 then
@@ -140,7 +139,6 @@ begin
           eth_rx_data <= std_logic_vector(to_unsigned((i * 7 + seed) mod 256, 8));
         end if;
         eth_rx_last  <= '1' when (i = len - 1 and mark_last) else '0';
-        eth_rx_ok    <= ok when (i = len - 1) else '1';
         eth_rx_valid <= '1';
         loop
           wait until rising_edge(clk);
@@ -174,7 +172,7 @@ begin
       -- Baseline: with the MAC programmed, is a frame received at all?
       report "=== M0: baseline Rx, first octet = " & integer'image(G_FIRST) & " ===";
       set_mac;
-      rx_frame(G_LEN, G_FIRST, true, 3, '1');
+      rx_frame(G_LEN, G_FIRST, true, 3);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#);
       cpu_read(16#05#, d);
@@ -211,7 +209,7 @@ begin
       -- Acceptance matrix for the new one-octet MAC filter.
       report "=== FILT: first octet " & integer'image(G_FIRST) & " ===";
       set_mac;
-      rx_frame(64, G_FIRST, true, 3, '1');
+      rx_frame(64, G_FIRST, true, 3);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#);
       cpu_read(16#05#, d);
@@ -230,7 +228,7 @@ begin
       cpu_read(16#04#, dlo); cpu_read(16#05#, dhi);
       report "R1: EISA before = " & integer'image(to_integer(unsigned(dhi))) & ":" &
              integer'image(to_integer(unsigned(dlo)));
-      rx_frame(G_LEN, 16#FF#, true, 5, '1');
+      rx_frame(G_LEN, 16#FF#, true, 5);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0000#);
       cpu_read(16#04#, dlo); cpu_read(16#05#, dhi);
@@ -248,7 +246,7 @@ begin
         report "R1: a frame WAS delivered, RxLength = " & integer'image(len_v);
       end if;
       -- receiver must still work afterwards
-      rx_frame(80, 16#FF#, true, 9, '1');
+      rx_frame(80, 16#FF#, true, 9);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#);
       cpu_read(16#05#, d);
@@ -259,32 +257,11 @@ begin
       chk(len_v = 80, "receiver recovered after an oversized frame");
 
     ------------------------------------------------------------------
-    elsif G_TEST = "P5" then
-      -- Frame with a CRC error must be discarded.
-      report "=== P5: frame with eth_rx_ok = 0 ===";
-      set_mac;
-      rx_frame(100, 16#FF#, true, 3, '0');
-      for i in 0 to 40 loop wait until rising_edge(clk); end loop;
-      set_pp(16#0124#);
-      cpu_read(16#05#, d);
-      report "P5: RxEvent hi after bad frame = " & integer'image(to_integer(unsigned(d)));
-      chk(d(0) = '0', "bad frame discarded");
-      rx_frame(70, 16#FF#, true, 9, '1');
-      for i in 0 to 40 loop wait until rising_edge(clk); end loop;
-      set_pp(16#0124#);
-      cpu_read(16#05#, d);
-      cpu_read(16#09#, dhi); cpu_read(16#08#, dlo);
-      cpu_read(16#09#, dhi); cpu_read(16#08#, dlo);
-      len_v := to_integer(unsigned(dhi)) * 256 + to_integer(unsigned(dlo));
-      report "P5: good frame after bad one, RxLength = " & integer'image(len_v) & " (expect 70)";
-      chk(len_v = 70, "receiver still works after a bad frame");
-
-    ------------------------------------------------------------------
     elsif G_TEST = "P1" then
       -- skipframe must now release the buffer.
       report "=== P1: skipframe (RxCFG $0102 bit 6) ===";
       set_mac;
-      rx_frame(100, 16#FF#, true, 3, '1');
+      rx_frame(100, 16#FF#, true, 3);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#); cpu_read(16#05#, d);
       chk(d(0) = '1', "frame is pending before skip");
@@ -295,7 +272,7 @@ begin
       set_pp(16#0124#); cpu_read(16#05#, d);
       report "P1: RxEvent hi after skip = " & integer'image(to_integer(unsigned(d)));
       chk(d(0) = '0', "skipframe released the buffer");
-      rx_frame(70, 16#FF#, true, 9, '1');
+      rx_frame(70, 16#FF#, true, 9);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#); cpu_read(16#05#, d);
       cpu_read(16#09#, dhi); cpu_read(16#08#, dlo);
@@ -321,7 +298,7 @@ begin
         else
           eth_rx_data <= std_logic_vector(to_unsigned((i * 7 + 3) mod 256, 8));
         end if;
-        eth_rx_last <= '0'; eth_rx_ok <= '1'; eth_rx_valid <= '1';
+        eth_rx_last <= '0'; eth_rx_valid <= '1';
         loop wait until rising_edge(clk); exit when eth_rx_ready = '1'; end loop;
       end loop;
       eth_rx_valid <= '0';
@@ -329,7 +306,7 @@ begin
       addr <= X"09"; wr_data <= X"FF"; we <= '1'; cs <= '1';
       for i in 1 to G_DELAY loop wait until rising_edge(clk); end loop;
       eth_rx_data <= std_logic_vector(to_unsigned((39 * 7 + 3) mod 256, 8));
-      eth_rx_last <= '1'; eth_rx_ok <= '1'; eth_rx_valid <= '1';
+      eth_rx_last <= '1'; eth_rx_valid <= '1';
       loop wait until rising_edge(clk); exit when eth_rx_ready = '1'; end loop;
       eth_rx_valid <= '0'; eth_rx_last <= '0';
       for i in 0 to 30 loop wait until rising_edge(clk); end loop;
@@ -404,7 +381,7 @@ begin
       -- An autoincrement PP read in the Tx-buffer area must NOT discard a frame.
       report "=== R5: autoincrement read at $0A00 with a frame pending ===";
       set_mac;
-      rx_frame(64, 16#FF#, true, 3, '1');
+      rx_frame(64, 16#FF#, true, 3);
       for i in 0 to 40 loop wait until rising_edge(clk); end loop;
       set_pp(16#0124#); cpu_read(16#05#, d);
       chk(d(0) = '1', "frame pending");

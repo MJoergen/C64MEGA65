@@ -285,15 +285,15 @@ entity main is
     rrnetmk3_data_o        : out   std_logic_vector(7 downto 0);
 
     -- Ethernet interface
-    eth_rx_ready_o         : out   std_logic;                    -- One-cycle strobe per received byte
-    eth_rx_valid_i         : in    std_logic;                    -- One-cycle strobe per received byte
-    eth_rx_last_i          : in    std_logic;                    -- Last byte of frame
-    eth_rx_ok_i            : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
-    eth_rx_data_i          : in    std_logic_vector(7 downto 0); -- Received byte
-    eth_tx_ready_i         : in    std_logic;                    -- Pulses '1' on the byte-boundary cycle
-    eth_tx_valid_o         : out   std_logic;                    -- Client presents a byte
-    eth_tx_last_o          : out   std_logic;                    -- Client marks the last byte
-    eth_tx_data_o          : out   std_logic_vector(7 downto 0); -- Byte to transmit
+    eth_rx_ready_o         : out   std_logic;                     -- One-cycle strobe per received byte
+    eth_rx_valid_i         : in    std_logic;                     -- One-cycle strobe per received byte
+    eth_rx_last_i          : in    std_logic;                     -- Last byte of frame
+    eth_rx_data_i          : in    std_logic_vector(7 downto 0);  -- Received byte
+    eth_tx_ready_i         : in    std_logic;                     -- Pulses '1' on the byte-boundary cycle
+    eth_tx_valid_o         : out   std_logic;                     -- Client presents a byte
+    eth_tx_last_o          : out   std_logic;                     -- Client marks the last byte
+    eth_tx_data_o          : out   std_logic_vector(7 downto 0);  -- Byte to transmit
+    eth_rx_cnt_drop_i      : in    std_logic_vector(15 downto 0); -- Number of Rx frames dropped (e.g. FIFO overrun or bad CRC)
 
     -- Contents of RTC (see user_io.cpp in Main_MiSTer):
     -- Bits  7 -  0 : Seconds    (BCD format, 0x00-0x60)
@@ -1496,22 +1496,22 @@ begin
   -- Simulate RRNET
   rrnet_inst : entity work.rrnet
     port map (
-      clk_i          => clk_main_i,
-      rst_i          => to_sl(c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED),
-      cs_i           => rrnet_ioe,
-      addr_i         => std_logic_vector(c64_ram_addr_o(7 downto 0)),
-      we_i           => c64_ram_we,
-      wr_data_i      => std_logic_vector(c64_ram_data_o),
-      rd_data_o      => rrnet_dout,
-      eth_rx_ready_o => eth_rx_ready_o,
-      eth_rx_valid_i => eth_rx_valid_i,
-      eth_rx_last_i  => eth_rx_last_i,
-      eth_rx_ok_i    => eth_rx_ok_i,
-      eth_rx_data_i  => eth_rx_data_i,
-      eth_tx_ready_i => eth_tx_ready_i,
-      eth_tx_valid_o => eth_tx_valid_o,
-      eth_tx_last_o  => eth_tx_last_o,
-      eth_tx_data_o  => eth_tx_data_o
+      clk_i             => clk_main_i,
+      rst_i             => to_sl(c64_exp_port_mode_i(R_SIM_RRNET) = C_SIM_RRNET_DISABLED),
+      cs_i              => rrnet_ioe,
+      addr_i            => std_logic_vector(c64_ram_addr_o(7 downto 0)),
+      we_i              => c64_ram_we,
+      wr_data_i         => std_logic_vector(c64_ram_data_o),
+      rd_data_o         => rrnet_dout,
+      eth_rx_ready_o    => eth_rx_ready_o,
+      eth_rx_valid_i    => eth_rx_valid_i,
+      eth_rx_last_i     => eth_rx_last_i,
+      eth_rx_data_i     => eth_rx_data_i,
+      eth_tx_ready_i    => eth_tx_ready_i,
+      eth_tx_valid_o    => eth_tx_valid_o,
+      eth_tx_last_o     => eth_tx_last_o,
+      eth_tx_data_o     => eth_tx_data_o,
+      eth_rx_cnt_drop_i => eth_rx_cnt_drop_i
     ); -- rrnet_inst
 
   -- Switch on/off the RRNET MK3 ROM

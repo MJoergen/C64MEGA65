@@ -10,7 +10,6 @@ sim:
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=M0   -gG_LEN=100 -gG_FIRST=255 --stop-time=10ms
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=FILT -gG_FIRST=1   --stop-time=5ms   # filter matrix
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=R1   -gG_LEN=1600  --stop-time=30ms  # oversized Rx
-	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=P5   --stop-time=20ms                # CRC-bad frame
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=P1   --stop-time=20ms                # skipframe
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=R5   --stop-time=20ms                # autoincrement read
 	ghdl -r --std=08 $(TB) --wave=$(WAVE) -gG_TEST=R4   -gG_DELAY=0 --stop-time=10ms    # sweep 0..16

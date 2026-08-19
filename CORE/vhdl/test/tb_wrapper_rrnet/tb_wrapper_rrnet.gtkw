@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Wed Aug 12 04:40:49 2026
+[*] Sun Aug 16 09:07:08 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_rrnet/tb_wrapper_rrnet.ghw"
-[dumpfile_mtime] "Wed Aug 12 04:40:49 2026"
-[dumpfile_size] 0
-[savefile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_rrnet/tb_wrapper_rrnet.ghw"
-[timestart] 6705300000000
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_wrapper_rrnet/tb_wrapper_rrnet.ghw"
+[dumpfile_mtime] "Sun Aug 16 09:07:08 2026"
+[dumpfile_size] 18512402
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_wrapper_rrnet/tb_wrapper_rrnet.gtkw"
+[timestart] 1074601000000
 [size] 1574 879
 [pos] -1 -1
-*-36.730732 6973890000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-29.888401 1076941580000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_wrapper_rrnet.
 [treeopen] top.tb_wrapper_rrnet.eth_wrapper_inst.
@@ -51,18 +51,13 @@ top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_en_o
 @800200
 -Internal
 @28
-top.tb_wrapper_rrnet.eth_wrapper_inst.eth_fifo_overrun
-[color] 6
-top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_ready
 [color] 2
 top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_valid
 @22
 #{top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[7:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[7] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[6] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[5] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[4] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[3] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[2] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[1] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_data[0]
 @28
 top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_last
-@29
 top.tb_wrapper_rrnet.eth_wrapper_inst.eth_rx_ok
-@28
 [color] 6
 top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_ready
 [color] 2
@@ -71,8 +66,47 @@ top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_valid
 #{top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[7:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[7] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[6] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[5] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[4] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[3] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[2] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[1] top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_data[0]
 @28
 top.tb_wrapper_rrnet.eth_wrapper_inst.eth_tx_last
+top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_ready
+top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_valid
+top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_last
+top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_ok
+@23
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[7:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[7] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[6] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[5] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[4] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[3] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[2] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[1] top.tb_wrapper_rrnet.eth_wrapper_inst.core_rx_data[0]
 @1000200
 -Internal
 -eth_wrapper
+@c00200
+-axip_fifo
+@28
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.clk_i
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rst_i
+@22
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[15:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[15] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[14] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[13] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[12] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[11] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[10] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[9] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[8] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.cnt_drop_o[0]
+@28
+[color] 6
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_ready_o
+[color] 2
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_valid_i
+@22
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[7:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_data_i[0]
+@28
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_drop_i
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.s_last_i
+[color] 6
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_ready_i
+[color] 2
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_valid_o
+@22
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[7:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_data_o[0]
+@28
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.m_last_o
+@420
+top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rx_state
+@22
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[11:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[11] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[10] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[9] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[8] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.start_ptr[0]
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[11:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[11] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[10] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[9] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[8] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.wr_ptr[0]
+#{top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[11:0]} top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[11] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[10] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[9] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[8] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[7] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[6] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[5] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[4] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[3] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[2] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[1] top.tb_wrapper_rrnet.eth_wrapper_inst.axip_fifo_inst.rd_ptr[0]
+@1401200
+-axip_fifo
 [pattern_trace] 1
 [pattern_trace] 0

@@ -369,15 +369,15 @@ architecture synthesis of mega65_r3 is
    signal i2c_scl                : std_logic := 'H';
 
    -- Ethernet
-   signal main_eth_rx_ready      : std_logic;                    -- One-cycle strobe per received byte
-   signal main_eth_rx_valid      : std_logic;                    -- One-cycle strobe per received byte
-   signal main_eth_rx_last       : std_logic;                    -- Last byte of frame
-   signal main_eth_rx_ok         : std_logic;                    -- Only meaningful when eth_rx_last = '1'
-   signal main_eth_rx_data       : std_logic_vector(7 downto 0); -- Received byte
-   signal main_eth_tx_ready      : std_logic;                    -- Pulses '1' on the byte-boundary cycle
-   signal main_eth_tx_valid      : std_logic;                    -- Client presents a byte
-   signal main_eth_tx_last       : std_logic;                    -- Client marks the last byte
-   signal main_eth_tx_data       : std_logic_vector(7 downto 0); -- Byte to transmit
+   signal main_eth_rx_ready      : std_logic;                     -- One-cycle strobe per received byte
+   signal main_eth_rx_valid      : std_logic;                     -- One-cycle strobe per received byte
+   signal main_eth_rx_last       : std_logic;                     -- Last byte of frame
+   signal main_eth_rx_data       : std_logic_vector(7 downto 0);  -- Received byte
+   signal main_eth_tx_ready      : std_logic;                     -- Pulses '1' on the byte-boundary cycle
+   signal main_eth_tx_valid      : std_logic;                     -- Client presents a byte
+   signal main_eth_tx_last       : std_logic;                     -- Client marks the last byte
+   signal main_eth_tx_data       : std_logic_vector(7 downto 0);  -- Byte to transmit
+   signal main_eth_rx_cnt_drop   : std_logic_vector(15 downto 0); -- Number of Rx frames dropped (e.g. FIFO overrun or bad CRC)
 
 begin
 
@@ -607,12 +607,12 @@ begin
       main_eth_rx_ready_i     => main_eth_rx_ready,
       main_eth_rx_valid_o     => main_eth_rx_valid,
       main_eth_rx_last_o      => main_eth_rx_last,
-      main_eth_rx_ok_o        => main_eth_rx_ok,
       main_eth_rx_data_o      => main_eth_rx_data,
       main_eth_tx_ready_o     => main_eth_tx_ready,
       main_eth_tx_valid_i     => main_eth_tx_valid,
       main_eth_tx_last_i      => main_eth_tx_last,
       main_eth_tx_data_i      => main_eth_tx_data,
+      main_eth_rx_cnt_drop_o  => main_eth_rx_cnt_drop,
 
       -- Provide HyperRAM to core (in HyperRAM clock domain)
       hr_clk_o                => hr_clk,
@@ -924,12 +924,12 @@ begin
          eth_rx_ready_o    => main_eth_rx_ready,
          eth_rx_valid_i    => main_eth_rx_valid,
          eth_rx_last_i     => main_eth_rx_last,
-         eth_rx_ok_i       => main_eth_rx_ok,
          eth_rx_data_i     => main_eth_rx_data,
          eth_tx_ready_i    => main_eth_tx_ready,
          eth_tx_valid_o    => main_eth_tx_valid,
          eth_tx_last_o     => main_eth_tx_last,
-         eth_tx_data_o     => main_eth_tx_data
+         eth_tx_data_o     => main_eth_tx_data,
+         eth_rx_cnt_drop_i => main_eth_rx_cnt_drop
       ); -- CORE
 
 end architecture synthesis;

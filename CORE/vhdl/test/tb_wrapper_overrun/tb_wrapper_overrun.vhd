@@ -40,7 +40,6 @@ architecture tb of tb_wrapper_overrun is
   signal core_rx_ready : std_logic := '0';
   signal core_rx_valid : std_logic;
   signal core_rx_last  : std_logic;
-  signal core_rx_ok    : std_logic;
   signal core_rx_data  : std_logic_vector(7 downto 0);
   signal core_tx_ready : std_logic;
   signal core_tx_valid : std_logic := '0';
@@ -61,7 +60,6 @@ architecture tb of tb_wrapper_overrun is
   signal beats        : natural := 0;   -- beats in the current frame
   signal frames_out   : natural := 0;
   signal bad_len      : natural := 0;
-  signal ok_flags_bad : natural := 0;
   signal total_beats  : natural := 0;
 
 begin
@@ -80,7 +78,6 @@ begin
       core_rx_ready_i => core_rx_ready,
       core_rx_valid_o => core_rx_valid,
       core_rx_last_o  => core_rx_last,
-      core_rx_ok_o    => core_rx_ok,
       core_rx_data_o  => core_rx_data,
       core_tx_ready_o => core_tx_ready,
       core_tx_valid_i => core_tx_valid,
@@ -111,12 +108,9 @@ begin
         if core_rx_last = '1' then
           frames_out <= frames_out + 1;
           report "  frame out #" & integer'image(frames_out + 1) &
-                 ": " & integer'image(beats + 1) & " bytes, ok=" & std_logic'image(core_rx_ok);
+                 ": " & integer'image(beats + 1) & " bytes";
           if beats + 1 /= G_LENGTH then
             bad_len <= bad_len + 1;
-          end if;
-          if core_rx_ok /= '1' then
-            ok_flags_bad <= ok_flags_bad + 1;
           end if;
           beats <= 0;
         else
@@ -176,14 +170,10 @@ begin
     report "SUMMARY: client saw " & integer'image(frames_out) &
            " complete frames, " & integer'image(total_beats) & " beats total";
     report "SUMMARY: frames with the WRONG length: " & integer'image(bad_len);
-    report "SUMMARY: frames delivered with ok/=1: " & integer'image(ok_flags_bad);
     report "SUMMARY: beats left over after the last 'last' marker: " &
            integer'image(beats) & "  (non-zero = a frame with no end marker)";
     assert bad_len = 0
       report "ERROR: bad_len"
-        severity error;
-    assert ok_flags_bad = 0
-      report "ERROR: ok_flags_bad"
         severity error;
     assert beats = 0
       report "ERROR: beats"

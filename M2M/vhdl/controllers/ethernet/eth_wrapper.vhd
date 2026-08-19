@@ -2,6 +2,8 @@
 -- Description: Encapsulate low-level communication with
 -- ethernet PHY. The core clock must be at least 12.5 MHz,
 -- to allow back-to-back byte transfers.
+-- Frames with errors (e.g. bad CRC) are discarded, and
+-- counted in core_rx_cnt_drop_o.
 -- ------------------------------------------------
 
 library ieee;
@@ -22,33 +24,33 @@ entity eth_wrapper is
   );
   port (
     -- Connect to CORE
-    core_clk_i      : in    std_logic; -- At least 12.5 MHz
-    core_rst_i      : in    std_logic; -- Synchronous, active high
-    core_rx_ready_i : in    std_logic;
-    core_rx_valid_o : out   std_logic;
-    core_rx_last_o  : out   std_logic;
-    core_rx_ok_o    : out   std_logic;
-    core_rx_data_o  : out   std_logic_vector(7 downto 0);
-    core_tx_ready_o : out   std_logic;
-    core_tx_valid_i : in    std_logic;
-    core_tx_last_i  : in    std_logic;
-    core_tx_data_i  : in    std_logic_vector(7 downto 0);
+    core_clk_i         : in    std_logic; -- At least 12.5 MHz
+    core_rst_i         : in    std_logic; -- Synchronous, active high
+    core_rx_ready_i    : in    std_logic;
+    core_rx_valid_o    : out   std_logic;
+    core_rx_last_o     : out   std_logic;
+    core_rx_data_o     : out   std_logic_vector(7 downto 0);
+    core_tx_ready_o    : out   std_logic;
+    core_tx_valid_i    : in    std_logic;
+    core_tx_last_i     : in    std_logic;
+    core_tx_data_i     : in    std_logic_vector(7 downto 0);
+    core_rx_cnt_drop_o : out   std_logic_vector(15 downto 0);
 
     -- Connect to framework
-    eth_clk_i       : in    std_logic; -- 50 MHz
-    eth_rst_i       : in    std_logic; -- Synchronous, active high
+    eth_clk_i          : in    std_logic; -- 50 MHz
+    eth_rst_i          : in    std_logic; -- Synchronous, active high
 
     -- Connected to the PHY
-    eth_clk_o       : out   std_logic;
-    eth_rst_n_o     : out   std_logic;
-    eth_led2_o      : out   std_logic;
-    eth_mdc_o       : out   std_logic;
-    eth_mdio_io     : inout std_logic;
-    eth_rx_d_i      : in    std_logic_vector(1 downto 0);
-    eth_crs_dv_i    : in    std_logic;
-    eth_rxer_i      : in    std_logic;
-    eth_tx_d_o      : out   std_logic_vector(1 downto 0);
-    eth_tx_en_o     : out   std_logic
+    eth_clk_o          : out   std_logic;
+    eth_rst_n_o        : out   std_logic;
+    eth_led2_o         : out   std_logic;
+    eth_mdc_o          : out   std_logic;
+    eth_mdio_io        : inout std_logic;
+    eth_rx_d_i         : in    std_logic_vector(1 downto 0);
+    eth_crs_dv_i       : in    std_logic;
+    eth_rxer_i         : in    std_logic;
+    eth_tx_d_o         : out   std_logic_vector(1 downto 0);
+    eth_tx_en_o        : out   std_logic
   );
 end entity eth_wrapper;
 
@@ -83,16 +85,20 @@ architecture rtl of eth_wrapper is
   constant C_LAST : natural          := 8;
   constant C_OK   : natural          := 9;
 
-  signal   eth_fifo_overrun : std_logic;
-  signal   eth_rx_ready     : std_logic;
-  signal   eth_rx_valid     : std_logic;
-  signal   eth_rx_last      : std_logic;
-  signal   eth_rx_ok        : std_logic;
-  signal   eth_rx_data      : std_logic_vector(7 downto 0);
-  signal   eth_tx_ready     : std_logic;
-  signal   eth_tx_valid     : std_logic;
-  signal   eth_tx_last      : std_logic;
-  signal   eth_tx_data      : std_logic_vector(7 downto 0);
+  signal   eth_rx_valid : std_logic;
+  signal   eth_rx_last  : std_logic;
+  signal   eth_rx_ok    : std_logic;
+  signal   eth_rx_data  : std_logic_vector(7 downto 0);
+  signal   eth_tx_ready : std_logic;
+  signal   eth_tx_valid : std_logic;
+  signal   eth_tx_last  : std_logic;
+  signal   eth_tx_data  : std_logic_vector(7 downto 0);
+
+  signal   core_rx_ready : std_logic;
+  signal   core_rx_valid : std_logic;
+  signal   core_rx_last  : std_logic;
+  signal   core_rx_ok    : std_logic;
+  signal   core_rx_data  : std_logic_vector(7 downto 0);
 
 begin
 
@@ -207,54 +213,59 @@ begin
 
 
   --------------------------------------------------
-  -- Drop whole frames if FIFO overrun
+  -- Packet buffer.
+  -- Frames are dropped either when buffer is full,
+  -- or in case of CRC errors.
   --------------------------------------------------
 
-  overrun_proc : process (eth_clk_i)
-  begin
-    if rising_edge(eth_clk_i) then
-      if eth_rx_valid = '1' then
-        if eth_rx_ready = '0' then
-          eth_fifo_overrun <= '1';
-        end if;
-
-        if eth_rx_last = '1' then
-          eth_fifo_overrun <= '0';
-        end if;
-      end if;
-
-      if eth_rst_i = '1' then
-        eth_fifo_overrun <= '0';
-      end if;
-    end if;
-  end process overrun_proc;
+  axis_dropper_inst : entity work.axis_dropper
+    generic map (
+      G_ADDR_BITS => ETH_FIFO_ADDR_BITS,
+      G_DATA_BITS => 8,
+      G_CNT_BITS  => 16,
+      G_RAM_STYLE => "block"
+    )
+    port map (
+      clk_i      => core_clk_i,
+      rst_i      => core_rst_i,
+      cnt_drop_o => core_rx_cnt_drop_o,
+      s_ready_o  => core_rx_ready,
+      s_valid_i  => core_rx_valid,
+      s_data_i   => core_rx_data,
+      s_drop_i   => (core_rx_valid and not core_rx_ready) or (core_rx_last and not core_rx_ok),
+      s_last_i   => core_rx_last,
+      m_ready_i  => core_rx_ready_i,
+      m_valid_o  => core_rx_valid_o,
+      m_data_o   => core_rx_data_o,
+      m_last_o   => core_rx_last_o
+    ); -- axis_dropper_inst
 
 
   --------------------------------------------------
-  -- Clock Domain Crossing + packet buffer
+  -- Clock Domain Crossing
   --------------------------------------------------
 
   axis_fifo_async_rx_inst : entity work.axis_fifo_async
     generic map (
-      G_ADDR_BITS => ETH_FIFO_ADDR_BITS,
+      G_ADDR_BITS => 2,
       G_DATA_BITS => 10,
-      G_RAM_STYLE => "block"
+      G_RAM_STYLE => "distributed"
     )
     port map (
       async_rst_i      => eth_rst,
       s_clk_i          => eth_clk_i,
-      s_ready_o        => eth_rx_ready,
+      s_ready_o        => open, -- Back-pressure here not supported
       s_valid_i        => eth_rx_valid,
       s_data_i(R_DATA) => eth_rx_data,
       s_data_i(C_LAST) => eth_rx_last,
-      s_data_i(C_OK)   => eth_rx_ok and not eth_fifo_overrun,
+      s_data_i(C_OK)   => eth_rx_ok,
       s_fill_o         => open,
       m_clk_i          => core_clk_i,
-      m_ready_i        => core_rx_ready_i,
-      m_valid_o        => core_rx_valid_o,
-      m_data_o(R_DATA) => core_rx_data_o,
-      m_data_o(C_LAST) => core_rx_last_o,
-      m_data_o(C_OK)   => core_rx_ok_o,
+      m_ready_i        => '1',  -- Back-pressure handled by axis_dropper
+      m_valid_o        => core_rx_valid,
+      m_data_o(R_DATA) => core_rx_data,
+      m_data_o(C_LAST) => core_rx_last,
+      m_data_o(C_OK)   => core_rx_ok,
       m_fill_o         => open
     ); -- axis_fifo_async_rx_inst
 

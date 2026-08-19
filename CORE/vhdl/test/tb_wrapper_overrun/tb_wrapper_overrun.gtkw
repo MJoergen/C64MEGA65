@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Thu Aug 13 06:33:20 2026
+[*] Sun Aug 16 08:22:21 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.ghw"
-[dumpfile_mtime] "Thu Aug 13 06:30:48 2026"
-[dumpfile_size] 21130090
-[savefile] "/home/mike/git/MJoergen/C64MEGA65/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.gtkw"
-[timestart] 0
+[dumpfile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.ghw"
+[dumpfile_mtime] "Sun Aug 16 08:22:10 2026"
+[dumpfile_size] 21130116
+[savefile] "/home/mike/git/MJoergen/C64MEGA65.mfj_rrnet_hardening/CORE/vhdl/test/tb_wrapper_overrun/tb_wrapper_overrun.gtkw"
+[timestart] 1201647000000
 [size] 1478 851
 [pos] -1 -1
-*-39.080620 620000000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-29.080620 1203010000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_wrapper_overrun.
 [treeopen] top.tb_wrapper_overrun.eth_wrapper_inst.
@@ -40,8 +40,10 @@ top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_valid_i
 @28
 top.tb_wrapper_overrun.eth_wrapper_inst.core_tx_last_i
 top.tb_wrapper_overrun.eth_wrapper_inst.eth_fifo_overrun
+@29
 [color] 6
 top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_ready
+@28
 [color] 2
 top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_valid
 @22
@@ -57,6 +59,7 @@ top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_valid
 #{top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[7:0]} top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[7] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[6] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[5] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[4] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[3] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[2] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[1] top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_data[0]
 @28
 top.tb_wrapper_overrun.eth_wrapper_inst.eth_tx_last
+top.tb_wrapper_overrun.eth_wrapper_inst.eth_rx_last_latch
 @1000200
 -eth_wrapper
 [pattern_trace] 1

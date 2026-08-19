@@ -39,7 +39,6 @@ architecture tb of tb_wrapper_rrnet is
   signal core_rx_ready : std_logic;
   signal core_rx_valid : std_logic;
   signal core_rx_last  : std_logic;
-  signal core_rx_ok    : std_logic;
   signal core_rx_data  : std_logic_vector(7 downto 0);
   signal core_tx_ready : std_logic;
   signal core_tx_valid : std_logic;
@@ -63,22 +62,22 @@ begin
   rrnet_inst : entity work.rrnet
     generic map (G_DEBUG => false)
     port map (
-      clk_i          => core_clk,
-      rst_i          => rst,
-      cs_i           => cs,
-      addr_i         => addr,
-      we_i           => we,
-      wr_data_i      => wr_data,
-      rd_data_o      => rd_data,
-      eth_rx_ready_o => core_rx_ready,
-      eth_rx_valid_i => core_rx_valid,
-      eth_rx_last_i  => core_rx_last,
-      eth_rx_ok_i    => core_rx_ok,
-      eth_rx_data_i  => core_rx_data,
-      eth_tx_ready_i => core_tx_ready,
-      eth_tx_valid_o => core_tx_valid,
-      eth_tx_last_o  => core_tx_last,
-      eth_tx_data_o  => core_tx_data
+      clk_i             => core_clk,
+      rst_i             => rst,
+      cs_i              => cs,
+      addr_i            => addr,
+      we_i              => we,
+      wr_data_i         => wr_data,
+      rd_data_o         => rd_data,
+      eth_rx_ready_o    => core_rx_ready,
+      eth_rx_valid_i    => core_rx_valid,
+      eth_rx_last_i     => core_rx_last,
+      eth_rx_data_i     => core_rx_data,
+      eth_tx_ready_i    => core_tx_ready,
+      eth_tx_valid_o    => core_tx_valid,
+      eth_tx_last_o     => core_tx_last,
+      eth_tx_data_o     => core_tx_data,
+      eth_rx_cnt_drop_i => (others => '0')
     );
 
   eth_wrapper_inst : entity work.eth_wrapper
@@ -89,7 +88,6 @@ begin
       core_rx_ready_i => core_rx_ready,
       core_rx_valid_o => core_rx_valid,
       core_rx_last_o  => core_rx_last,
-      core_rx_ok_o    => core_rx_ok,
       core_rx_data_o  => core_rx_data,
       core_tx_ready_o => core_tx_ready,
       core_tx_valid_i => core_tx_valid,

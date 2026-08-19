@@ -73,13 +73,13 @@ entity rrnet is
     -- It is assumed that cs_i is deasserted between each single transaction.
     -- It is further assumed that cs_i is asserted for at least two consecutive clock cycles,
     -- and that addr_i, we_i, and wr_data_i do not change while cs_i is asserted.
-    clk_i          : in    std_logic;
-    rst_i          : in    std_logic;
-    cs_i           : in    std_logic;                    -- Chip Select. Connect to IO1 ($DExx)
-    addr_i         : in    std_logic_vector(7 downto 0);
-    we_i           : in    std_logic;
-    wr_data_i      : in    std_logic_vector(7 downto 0);
-    rd_data_o      : out   std_logic_vector(7 downto 0);
+    clk_i             : in    std_logic;
+    rst_i             : in    std_logic;
+    cs_i              : in    std_logic;                    -- Chip Select. Connect to IO1 ($DExx)
+    addr_i            : in    std_logic_vector(7 downto 0);
+    we_i              : in    std_logic;
+    wr_data_i         : in    std_logic_vector(7 downto 0);
+    rd_data_o         : out   std_logic_vector(7 downto 0);
 
     -- Ethernet interface (byte streaming, same clock domain as CPU interface)
     -- Bytes are transferred at the frequency of 100 / 8 = 12.5 Mbytes per second.
@@ -87,8 +87,6 @@ entity rrnet is
     -- Rx contract : * eth_rx_valid_i pulses high for 1 clock cycle per byte (byte strobe).
     --               * eth_rx_last_i marks the last byte of a frame (client-visible payload;
     --                 the 4-byte FCS is already stripped).
-    --               * eth_rx_ok_i is valid only on the beat with rx_last_i = '1'; it is
-    --                 '1' if the frame passed CRC and had no PHY error, '0' otherwise.
     --
     -- Tx contract : * Standard valid/ready handshake, sampled once per byte-time on the
     --                 cycle eth_tx_ready_i = '1'. The client must present each new byte on
@@ -98,15 +96,15 @@ entity rrnet is
     --                 before accepting a new frame.
     --               * The FCS is automatically computed and appended before sending on
     --                 the wire.
-    eth_rx_ready_o : out   std_logic;                    -- One-cycle strobe per received byte
-    eth_rx_valid_i : in    std_logic;                    -- One-cycle strobe per received byte
-    eth_rx_last_i  : in    std_logic;                    -- Last byte of frame
-    eth_rx_ok_i    : in    std_logic;                    -- Only meaningful when rx_last_i = '1'
-    eth_rx_data_i  : in    std_logic_vector(7 downto 0); -- Received byte
-    eth_tx_ready_i : in    std_logic;                    -- Pulses '1' on the byte-boundary cycle
-    eth_tx_valid_o : out   std_logic;                    -- Client presents a byte
-    eth_tx_last_o  : out   std_logic;                    -- Client marks the last byte
-    eth_tx_data_o  : out   std_logic_vector(7 downto 0)  -- Byte to transmit
+    eth_rx_ready_o    : out   std_logic;                    -- One-cycle strobe per received byte
+    eth_rx_valid_i    : in    std_logic;                    -- One-cycle strobe per received byte
+    eth_rx_last_i     : in    std_logic;                    -- Last byte of frame
+    eth_rx_data_i     : in    std_logic_vector(7 downto 0); -- Received byte
+    eth_tx_ready_i    : in    std_logic;                    -- Pulses '1' on the byte-boundary cycle
+    eth_tx_valid_o    : out   std_logic;                    -- Client presents a byte
+    eth_tx_last_o     : out   std_logic;                    -- Client marks the last byte
+    eth_tx_data_o     : out   std_logic_vector(7 downto 0); -- Byte to transmit
+    eth_rx_cnt_drop_i : in    std_logic_vector(15 downto 0) -- Number of Rx frames dropped (e.g. FIFO overrun or bad CRC)
   );
 end entity rrnet;
 
@@ -463,14 +461,9 @@ begin
             rx_byte_cnt <= rx_byte_cnt + 1;
 
             if eth_rx_last_i = '1' then
-              if eth_rx_ok_i = '1' then
-                rx_length   <= rx_byte_cnt + 1;
-                rx_state    <= RX_HEADER_ST;
-                rx_byte_cnt <= (others => '0');                                      -- reused as header sub-state
-              else
-                -- Frame has errors, so drop it.
-                rx_state <= RX_IDLE_ST;
-              end if;
+              rx_length   <= rx_byte_cnt + 1;
+              rx_state    <= RX_HEADER_ST;
+              rx_byte_cnt <= (others => '0');                                      -- reused as header sub-state
             elsif rx_wr_addr + 2 >= C_TX_BUF_START then
               -- Frame is not finished yet, and next byte will spill out of the
               -- Rx buffer. We drop the remainder of this frame.

@@ -173,12 +173,12 @@ port (
    main_eth_rx_ready_i     : in    std_logic;
    main_eth_rx_valid_o     : out   std_logic;
    main_eth_rx_last_o      : out   std_logic;
-   main_eth_rx_ok_o        : out   std_logic;
    main_eth_rx_data_o      : out   std_logic_vector(7 downto 0);
    main_eth_tx_ready_o     : out   std_logic;
    main_eth_tx_valid_i     : in    std_logic;
    main_eth_tx_last_i      : in    std_logic;
    main_eth_tx_data_i      : in    std_logic_vector(7 downto 0);
+   main_eth_rx_cnt_drop_o  : out   std_logic_vector(15 downto 0);
 
    -- Audio
    audio_clk_o             : out   std_logic;
@@ -1188,29 +1188,29 @@ begin
 
    eth_wrapper_inst : entity work.eth_wrapper
       port map (
-         core_clk_i      => main_clk_i,
-         core_rst_i      => main_rst_i,
-         core_rx_ready_i => main_eth_rx_ready_i,
-         core_rx_valid_o => main_eth_rx_valid_o,
-         core_rx_last_o  => main_eth_rx_last_o,
-         core_rx_ok_o    => main_eth_rx_ok_o,
-         core_rx_data_o  => main_eth_rx_data_o,
-         core_tx_ready_o => main_eth_tx_ready_o,
-         core_tx_valid_i => main_eth_tx_valid_i,
-         core_tx_last_i  => main_eth_tx_last_i,
-         core_tx_data_i  => main_eth_tx_data_i,
-         eth_clk_i       => eth_clk,
-         eth_rst_i       => eth_rst,
-         eth_clk_o       => eth_clock_o,
-         eth_rst_n_o     => eth_reset_o,
-         eth_led2_o      => eth_led2_o,
-         eth_mdc_o       => eth_mdc_o,
-         eth_mdio_io     => eth_mdio_io,
-         eth_rx_d_i      => eth_rxd_i,
-         eth_rxer_i      => eth_rxer_i,
-         eth_crs_dv_i    => eth_rxdv_i,
-         eth_tx_d_o      => eth_txd_o,
-         eth_tx_en_o     => eth_txen_o
+         core_clk_i          => main_clk_i,
+         core_rst_i          => main_rst_i,
+         core_rx_ready_i     => main_eth_rx_ready_i,
+         core_rx_valid_o     => main_eth_rx_valid_o,
+         core_rx_last_o      => main_eth_rx_last_o,
+         core_rx_data_o      => main_eth_rx_data_o,
+         core_tx_ready_o     => main_eth_tx_ready_o,
+         core_tx_valid_i     => main_eth_tx_valid_i,
+         core_tx_last_i      => main_eth_tx_last_i,
+         core_tx_data_i      => main_eth_tx_data_i,
+         core_rx_cnt_drop_o  => main_eth_rx_cnt_drop_o,
+         eth_clk_i           => eth_clk,
+         eth_rst_i           => eth_rst,
+         eth_clk_o           => eth_clock_o,
+         eth_rst_n_o         => eth_reset_o,
+         eth_led2_o          => eth_led2_o,
+         eth_mdc_o           => eth_mdc_o,
+         eth_mdio_io         => eth_mdio_io,
+         eth_rx_d_i          => eth_rxd_i,
+         eth_rxer_i          => eth_rxer_i,
+         eth_crs_dv_i        => eth_rxdv_i,
+         eth_tx_d_o          => eth_txd_o,
+         eth_tx_en_o         => eth_txen_o
       ); -- eth_wrapper_inst
 
 end architecture synthesis;

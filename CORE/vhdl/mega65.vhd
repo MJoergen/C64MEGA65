@@ -238,12 +238,12 @@ port (
    eth_rx_ready_o          : out std_logic;                    -- One-cycle strobe per received byte
    eth_rx_valid_i          : in  std_logic;                    -- One-cycle strobe per received byte
    eth_rx_last_i           : in  std_logic;                    -- Last byte of frame
-   eth_rx_ok_i             : in  std_logic;                    -- Only meaningful when rx_last_i = '1'
    eth_rx_data_i           : in  std_logic_vector(7 downto 0); -- Received byte
    eth_tx_ready_i          : in  std_logic;                    -- Pulses '1' on the byte-boundary cycle
    eth_tx_valid_o          : out std_logic;                    -- Client presents a byte
    eth_tx_last_o           : out std_logic;                    -- Client marks the last byte
-   eth_tx_data_o           : out std_logic_vector(7 downto 0)  -- Byte to transmit
+   eth_tx_data_o           : out std_logic_vector(7 downto 0); -- Byte to transmit
+   eth_rx_cnt_drop_i       : in  std_logic_vector(15 downto 0) -- Number of Rx frames dropped (e.g. FIFO overrun or bad CRC)
 );
 end entity MEGA65_Core;
 
@@ -932,12 +932,12 @@ begin
          eth_rx_ready_o         => eth_rx_ready_o,
          eth_rx_valid_i         => eth_rx_valid_i,
          eth_rx_last_i          => eth_rx_last_i,
-         eth_rx_ok_i            => eth_rx_ok_i,
          eth_rx_data_i          => eth_rx_data_i,
          eth_tx_ready_i         => eth_tx_ready_i,
          eth_tx_valid_o         => eth_tx_valid_o,
          eth_tx_last_o          => eth_tx_last_o,
-         eth_tx_data_o          => eth_tx_data_o
+         eth_tx_data_o          => eth_tx_data_o,
+         eth_rx_cnt_drop_i      => eth_rx_cnt_drop_i
       ); -- i_main
 
    ---------------------------------------------------------------------------------------------

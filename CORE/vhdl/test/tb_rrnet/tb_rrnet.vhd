@@ -90,21 +90,21 @@ begin
       G_DEBUG => true
     )
     port map (
-      clk_i          => clk,
-      rst_i          => rst,
-      cs_i           => rrnet_cs,
-      addr_i         => cpu_addr(7 downto 0),
-      we_i           => cpu_wr_en,
-      wr_data_i      => cpu_wr_data,
-      rd_data_o      => rrnet_rd_data,
-      eth_rx_valid_i => fifo_valid and fifo_ready,
-      eth_rx_last_i  => fifo_last,
-      eth_rx_ok_i    => '1',
-      eth_rx_data_i  => fifo_data,
-      eth_tx_ready_i => eth_tx_ready and eth_tx_pause,
-      eth_tx_valid_o => eth_tx_valid,
-      eth_tx_last_o  => eth_tx_last,
-      eth_tx_data_o  => eth_tx_data
+      clk_i             => clk,
+      rst_i             => rst,
+      cs_i              => rrnet_cs,
+      addr_i            => cpu_addr(7 downto 0),
+      we_i              => cpu_wr_en,
+      wr_data_i         => cpu_wr_data,
+      rd_data_o         => rrnet_rd_data,
+      eth_rx_valid_i    => fifo_valid and fifo_ready,
+      eth_rx_last_i     => fifo_last,
+      eth_rx_data_i     => fifo_data,
+      eth_tx_ready_i    => eth_tx_ready and eth_tx_pause,
+      eth_tx_valid_o    => eth_tx_valid,
+      eth_tx_last_o     => eth_tx_last,
+      eth_tx_data_o     => eth_tx_data,
+      eth_rx_cnt_drop_i => (others => '0')
     ); -- rrnet_inst
 
   axi_fifo_small_inst : entity work.axi_fifo_small

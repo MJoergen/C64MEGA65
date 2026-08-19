@@ -29,7 +29,6 @@ architecture tb of tb_rrnet_probe is
   signal eth_rx_ready : std_logic;
   signal eth_rx_valid : std_logic := '0';
   signal eth_rx_last  : std_logic := '0';
-  signal eth_rx_ok    : std_logic := '1';
   signal eth_rx_data  : std_logic_vector(7 downto 0) := (others => '0');
 
   signal eth_tx_ready : std_logic := '0';
@@ -62,22 +61,22 @@ begin
       G_DEBUG => false
     )
     port map (
-      clk_i          => clk,
-      rst_i          => rst,
-      cs_i           => cs,
-      addr_i         => addr,
-      we_i           => we,
-      wr_data_i      => wr_data,
-      rd_data_o      => rd_data,
-      eth_rx_ready_o => eth_rx_ready,
-      eth_rx_valid_i => eth_rx_valid,
-      eth_rx_last_i  => eth_rx_last,
-      eth_rx_ok_i    => eth_rx_ok,
-      eth_rx_data_i  => eth_rx_data,
-      eth_tx_ready_i => eth_tx_ready,
-      eth_tx_valid_o => eth_tx_valid,
-      eth_tx_last_o  => eth_tx_last,
-      eth_tx_data_o  => eth_tx_data
+      clk_i             => clk,
+      rst_i             => rst,
+      cs_i              => cs,
+      addr_i            => addr,
+      we_i              => we,
+      wr_data_i         => wr_data,
+      rd_data_o         => rd_data,
+      eth_rx_ready_o    => eth_rx_ready,
+      eth_rx_valid_i    => eth_rx_valid,
+      eth_rx_last_i     => eth_rx_last,
+      eth_rx_data_i     => eth_rx_data,
+      eth_tx_ready_i    => eth_tx_ready,
+      eth_tx_valid_o    => eth_tx_valid,
+      eth_tx_last_o     => eth_tx_last,
+      eth_tx_data_o     => eth_tx_data,
+      eth_rx_cnt_drop_i => (others => '0')
     );
 
   ----------------------------------------------------------------
@@ -158,7 +157,6 @@ begin
       -- Start frame with the byte pair 0xFFFF
       eth_rx_data  <= (others => '1');
       eth_rx_last  <= '0';
-      eth_rx_ok    <= '0';
       eth_rx_valid <= '1';
       loop
         wait until rising_edge(clk);
@@ -167,7 +165,6 @@ begin
 
       eth_rx_data  <= (others => '1');
       eth_rx_last  <= '0';
-      eth_rx_ok    <= '0';
       eth_rx_valid <= '1';
       loop
         wait until rising_edge(clk);
@@ -177,7 +174,6 @@ begin
       for i in 2 to len - 1 loop
         eth_rx_data  <= std_logic_vector(to_unsigned((i * 7 + seed) mod 256, 8));
         eth_rx_last  <= '1' when (i = len - 1 and mark_last) else '0';
-        eth_rx_ok    <= '1';
         eth_rx_valid <= '1';
         loop
           wait until rising_edge(clk);
@@ -584,7 +580,6 @@ begin
       for i in 0 to 38 loop
         eth_rx_data  <= std_logic_vector(to_unsigned((i * 7 + 3) mod 256, 8));
         eth_rx_last  <= '0';
-        eth_rx_ok    <= '1';
         eth_rx_valid <= '1';
         loop
           wait until rising_edge(clk);
@@ -604,7 +599,6 @@ begin
       end loop;
       eth_rx_data  <= std_logic_vector(to_unsigned((39 * 7 + 3) mod 256, 8));
       eth_rx_last  <= '1';
-      eth_rx_ok    <= '1';
       eth_rx_valid <= '1';
       loop
         wait until rising_edge(clk);
