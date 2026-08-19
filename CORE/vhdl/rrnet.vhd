@@ -249,7 +249,7 @@ architecture rtl of rrnet is
   ----------------------------------------------------------
   -- Tx path state
   ----------------------------------------------------------
-  type     tx_state_type is (TX_IDLE_ST, TX_BUSY_ST);
+  type     tx_state_type is (TX_IDLE_ST, TX_PREP_ST, TX_BUSY_ST);
   signal   tx_state : tx_state_type                                    := TX_IDLE_ST;
 
   -- Live "buffer ready" flag exposed to software as the Rdy4TxNOW bit of
@@ -304,7 +304,7 @@ begin
   -- Live status flags (concurrent)
   ----------------------------------------------------------
 
-  rdy_4_tx_now   <= '1' when tx_state = TX_IDLE_ST else
+  rdy_4_tx_now   <= '1' when tx_state = TX_IDLE_ST and reg_tx_start = '0' else
                     '0';
   rx_frame_ready <= '1' when rx_state = RX_READY_ST else
                     '0';
@@ -312,7 +312,7 @@ begin
   -- Rx accepts new bytes only when the Tx path is idle;
   -- the gate exists mainly to arbitrate
   -- port B and to enforce the single-buffer contract from RX_IDLE_ST.
-  rx_accept      <= '1' when tx_state = TX_IDLE_ST else
+  rx_accept      <= '1' when tx_state = TX_IDLE_ST and reg_tx_start = '0' else
                     '0';
 
   ----------------------------------------------------------
@@ -335,7 +335,7 @@ begin
   ----------------------------------------------------------
 
   rxtx_addr      <= tx_addr + 1 when tx_state = TX_BUSY_ST and eth_tx_ready_i = '1' and eth_tx_valid_o = '1' else
-                    tx_addr when tx_state = TX_BUSY_ST or reg_tx_start = '1' else
+                    tx_addr when tx_state = TX_BUSY_ST or tx_state = TX_PREP_ST else
                     reg_rx_ptr(11 downto 0) when rx_state = RX_READY_ST and cs_i = '1' and we_i = '0' and
                                                  (unsigned(addr_i) = C_RXTX_REG_0 or
                       unsigned(addr_i) = C_RXTX_REG_0 + 1) else
@@ -360,8 +360,11 @@ begin
 
         when TX_IDLE_ST =>
           if reg_tx_start = '1' then
-            tx_state <= TX_BUSY_ST;
+            tx_state <= TX_PREP_ST;
           end if;
+
+        when TX_PREP_ST =>
+          tx_state <= TX_BUSY_ST;
 
         when TX_BUSY_ST =>
           if eth_tx_ready_i = '1' then
