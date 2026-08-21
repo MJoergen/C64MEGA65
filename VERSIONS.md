@@ -122,6 +122,9 @@ Version 6 - MONTH DAY, 2026
   - 1541 Ultimate II+
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/139)
 
+  - 64NIC+
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/115)
+
   - BackBit Cartridge
 
   - Chat64 Cartridge
