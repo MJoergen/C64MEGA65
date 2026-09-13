@@ -22,9 +22,25 @@ Version 6 - MONTH DAY, 2026
   which drive ROMs you install.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/91)
 
+* Added drive 9. Both drives 8 and 9 can be configured as simulated drives
+  and optionally one of them can also be the build-in floppy as 1581. You can
+  configure whether the drives are always on or (like in past) only active
+  when a disk image is mounted. The unmount-on-reset behavior can be
+  configured and one or both drives can also be switched off completely to
+  make room for physical IEC devices.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/81 and
+   https://github.com/MJoergen/C64MEGA65/issues/93 and
+   https://github.com/MJoergen/C64MEGA65/issues/237)
+
 * Full DMA support for hardware cartridges such as hardware REUs (for example
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)
+
+* Simulated RR-Net: The MEGA65's Ethernet port can now be used from the C64,
+  so network software such as the Contiki BBS server runs on the core. Three
+  choices: Mk2 is the plain RR-Net, Mk3 includes the ROM and its CodeNet
+  server and you can also use your own custom ROM in `/c64/rn-mk3.bin`.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/234)
 
 * Improved HDMI filter options: No Filter, Sharp Bilinear, Bicubic, Smooth,
   Lanczos, Scanlines (default setting and fka "CRT emulation"), CRT (S-Video)
@@ -41,10 +57,6 @@ Version 6 - MONTH DAY, 2026
   like A Pig's Quest and Mech Warrior Ultra.
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/136 and
    https://github.com/MJoergen/C64MEGA65/issues/198)
-
-  On 2024+ MEGA65s this feature works even better, smoother and more
-  compatible as it uses the built-in SDRAM instead of HyperRAM.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 * You can adjust the audio volume via the OSM. Implemented as a perceptual,
   loudness-linear attenuation: 50% means half as loud as 100%.
@@ -105,13 +117,13 @@ Version 6 - MONTH DAY, 2026
   some original software quite a bit. This also fixes Q-Bert.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/125)
 
-* Added support for Simulated RR-NET (MK2 and MK3)
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/234)
-
 * Hardware support for these cartridges:
 
   - 1541 Ultimate II+
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/139)
+
+  - 64NIC+
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/115)
 
   - BackBit Cartridge
 
@@ -164,9 +176,21 @@ Version 6 - MONTH DAY, 2026
   - Improved Ocean Type 1 compatibility, so that for example Wonderboy works
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/138)
 
+## Improvements for 2024+ MEGA65s (R6/R6A) only:
+
+* We moved the HDMI image scaler (aka ASCAL) to the SDRAM. This frees up
+  HyperRAM bandwidth for simulated cartridges (`.crt`) and the simulated REU.
+  While everything runs and continues to run very fine on older machines,
+  the newer machines benefit from slightly improved compatibility and an even
+  lower amount of glitches.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
+
 ## Bugfixes
 
-* @TODO: Add bugfixes here
+* Fixed a silent disk image corruption that could occur when the file browser
+  was opened or an image was mounted while a drive was still saving its cache
+  to the SD card ("yellow drive led"): the affected drive lost the bytes it
+  had buffered at that moment.
 
 Version 5.2 - April 28, 2025
 ============================
@@ -512,8 +536,8 @@ for Paddles.
   that due to the low-active nature of the User Port these games detected
   "ghost activities" on the (not existent) joystick connected via User Port.
 
-* Zero Page register $01 has the correct default value $37 now. It had the
-  wrong value $C7 due to two bugs that have been fixed:
+* Zero Page register `$01` has the correct default value `$37` now. It had the
+  wrong value `$C7` due to two bugs that have been fixed:
   (a) The Cassette Port's s SENSE and READ input are low active.
   (b) The wrapper code that turns the 6502 into a 6510 contained a bug.
 

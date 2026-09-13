@@ -65,12 +65,12 @@ awk '/constant C_VDNUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; 
 awk '/constant C_CRTROMS_MAN_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_MAN_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 awk '/constant C_CRTROMS_AUTO_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_AUT_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 
-# Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_VD0 - C_HMAP_CRT) windows * 8 KB,
-# so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never drift
-# from the HyperRAM map in globals.vhd when it is retuned.
+# Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_CRT_GUARD - C_HMAP_CRT) windows
+# * 8 KB, so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never
+# drift from the HyperRAM map in globals.vhd when it is retuned.
 crt_base=$(awk '/constant C_HMAP_CRT / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
-vd0_base=$(awk '/constant C_HMAP_VD0 / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
-crt_max=$(( (0x${vd0_base} - 0x${crt_base}) * 8192 ))
+crt_top=$(awk '/constant C_HMAP_CRT_GUARD / {gsub(/.*:= *x"|".*/, "", $0); print $0}' ../vhdl/globals.vhd)
+crt_max=$(( (0x${crt_top} - 0x${crt_base}) * 8192 ))
 printf 'C64_CRT_MAX_SIZE_HI         .EQU 0x%04X\n' $(( (crt_max >> 16) & 0xFFFF )) >> globals.asm
 printf 'C64_CRT_MAX_SIZE_LO         .EQU 0x%04X\n' $((  crt_max        & 0xFFFF )) >> globals.asm
 
@@ -134,6 +134,99 @@ print_file_handles "HNDL_VD_FILES" "HANDLE_VD_FILE" $vdrives_max
 print_file_handles "HNDL_RM_FILES" "HANDLE_RM_FILE" $crtrom_man_max
 
 ##############################################################################
+# C64 specific: Generate ../vhdl/video_filters.rom
+#
+# The core-only polyphase coefficient blobs used to be #included into the Shell
+# ROM, where 3 x 256 words of pure data ate into the 28672-word budget even
+# though the CPU never executes them: they are only ever copied into the ascal
+# polyphase RAM. They now live in a block RAM (../vhdl/video_filters.vhd) that
+# QNICE reads as device C_DEV_C64_VFILTERS.
+#
+# The blob sources stay at framework level; this only re-serializes them into
+# the 16-binary-digits-per-line format that qasm2rom produces and that
+# M2M/QNICE/vhdl/block_rom.vhd + M2M/vhdl/2port2clk_ram.vhd read back.
+#
+# LANCZOS2_12 and SCAN_BR_110_80 are NOT here: they come in through
+# M2M/rom/filters.asm and M2M/rom/gencfg.asm calls LOAD_ASCAL_FLT for them, so
+# they have to stay in the Shell ROM as long as the framework is untouched.
+#
+# Slot order is the contract with HDMI_FLT_TABLE in m2m-rom.asm - do not
+# reorder without changing the C64_FLT_* constants there.
+##############################################################################
+
+VFILTER_ROM=../vhdl/video_filters.rom
+VFILTER_SRC="../../M2M/video_filters/GS_Sharpness_050.asm
+../../M2M/video_filters/CRT_Sim_Composite_H.asm
+../../M2M/video_filters/CRT_Sim_SVideo_H.asm"
+
+: > "$VFILTER_ROM"
+VFILTER_SLOT=0
+for f in $VFILTER_SRC; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: video filter source $f not found."
+        rm -f "$VFILTER_ROM"
+        exit 1
+    fi
+    # Portability: no strtonum() and no 0x literals -- both are gawk extensions
+    # and POSIX awk silently evaluates 0x0100 as 0. Errors go to stdout because
+    # /dev/stderr is not guaranteed. CRLF tolerated.
+    if ! awk '
+    function hex(s,   i, c, v, d) {
+        v = 0; s = toupper(s); sub(/^0X/, "", s)
+        if (length(s) == 0) return -1
+        for (i = 1; i <= length(s); i++) {
+            c = substr(s, i, 1); d = index("0123456789ABCDEF", c) - 1
+            if (d < 0) return -1
+            v = v * 16 + d
+        }
+        return v
+    }
+    function bin(v,   i, s) {
+        s = ""
+        for (i = 15; i >= 0; i--) s = s (int(v / (2 ^ i)) % 2)
+        return s
+    }
+    { sub(/\r$/, "") }
+    /^[ \t]*\.DW/ {
+        line = $0
+        sub(/;.*/, "", line)
+        sub(/^[ \t]*\.DW[ \t]*/, "", line)
+        n = split(line, t, ",")
+        for (i = 1; i <= n; i++) {
+            gsub(/[ \t]/, "", t[i])
+            if (t[i] == "") continue
+            v = hex(t[i])
+            if (v < 0)    { err = "unparsable coefficient >>" t[i] "<< in line " NR; exit 1 }
+            if (v > 1023) { err = "coefficient " t[i] " in line " NR " exceeds the 10-bit range"; exit 1 }
+            print bin(v)
+            words++
+        }
+    }
+    END {
+        if (err != "")    { print "ERROR: " err; exit 1 }
+        if (words != 256) { print "ERROR: expected 256 coefficients, found " words + 0; exit 1 }
+    }' "$f" > "$VFILTER_ROM.tmp"; then
+        # the awk diagnostics land on ITS stdout, so they are in the temp file:
+        # print them instead of appending them to the ROM image and losing them
+        cat "$VFILTER_ROM.tmp"
+        echo "ERROR: cannot serialize video filter $f."
+        rm -f "$VFILTER_ROM" "$VFILTER_ROM.tmp"
+        exit 1
+    fi
+    cat "$VFILTER_ROM.tmp" >> "$VFILTER_ROM"
+    rm -f "$VFILTER_ROM.tmp"
+    VFILTER_SLOT=$((VFILTER_SLOT + 1))
+done
+
+VFILTER_WORDS=$(wc -l < "$VFILTER_ROM" | tr -d ' ')
+if [ "$VFILTER_WORDS" -ne 768 ]; then
+    echo "ERROR: ${VFILTER_ROM} has ${VFILTER_WORDS} words, expected 768 (3 slots x 256)."
+    rm -f "$VFILTER_ROM"
+    exit 1
+fi
+echo "Video filter ROM: ${VFILTER_WORDS} words in ${VFILTER_SLOT} slots."
+
+##############################################################################
 # M2M framework: Assemble and generate various output files:
 #   m2m-rom.def: QNICE Monitor operating system calls
 #   m2m-rom.lis: List file containing the complete listing & assembled code
@@ -145,10 +238,31 @@ print_file_handles "HNDL_RM_FILES" "HANDLE_RM_FILE" $crtrom_man_max
 ASM_RC=$?
 
 ##############################################################################
-# Guard the Shell-ROM budget. QNICE reserves 0x7000-0x7FFF for memory-mapped
-# I/O, so the usable ROM is 0x0000-0x6FFF = 28672 words. The assembler does NOT
-# check this; an overflow would otherwise fail obscurely later (in Vivado). The
-# m2m-rom.rom holds exactly one 16-bit word (binary) per line.
+# Trim the variables off the ROM image and guard the Shell-ROM budget.
+#
+# QNICE reserves 0x7000-0x7FFF for memory-mapped I/O, so the usable ROM is
+# 0x0000-0x6FFF = 28672 words. The assembler does NOT check this; an overflow
+# would otherwise fail obscurely later (in Vivado).
+#
+# qasm2rom serializes every word of the .out file in source order and ignores
+# addresses, so the words that ".ORG 0x8000" and ".ORG 0xFEE0" reserve for the
+# variables get appended to the ROM image as zero words. They land at ROM
+# addresses the CPU can never read, but they inflate the image and made a plain
+# "wc -l" report a full ROM ~600 words too early.
+#
+# m2m-rom.rom line N holds the word of m2m-rom.out line N, and BROM (see
+# M2M/QNICE/vhdl/block_rom.vhd) loads file line N into ROM address N. So inside
+# the ROM the address of a record always equals its line number minus one, and
+# the ROM image is exactly the leading run of .out records for which that holds.
+# Everything after that run has to be a variable (address >= 0x7000); anything
+# else means the source layout changed in a way qasm2rom cannot serialize
+# correctly at all, so fail loudly instead of truncating something real.
+#
+# The listing knows the same number independently: END_OF_ROM is by convention
+# the last ROM item, directly before the variables. Cross-checking both catches
+# a module that was accidentally included after that marker -- which would also
+# silently corrupt the free-ROM figure that the Shell logs at boot (it computes
+# M2M$RAMROM_DATA - END_OF_ROM).
 ##############################################################################
 ROM_MAX_WORDS=28672
 
@@ -160,7 +274,77 @@ if [ "$ASM_RC" -ne 0 ] || [ ! -f m2m-rom.rom ]; then
     exit 1
 fi
 
-ROM_WORDS=$(wc -l < m2m-rom.rom | tr -d ' ')
+if [ ! -f m2m-rom.lis ]; then
+    echo "ERROR: m2m-rom.lis was not produced; cannot verify the ROM image."
+    exit 1
+fi
+
+# The ROM image size, derived from the addresses that qasm2rom serialized.
+# Portability: no strtonum() and no 0x literals -- both are gawk extensions and
+# POSIX awk silently evaluates 0x7000 as 0. No /dev/stderr either, so errors are
+# printed on stdout and echoed by the caller. Tolerates CRLF line endings.
+if ! ROM_WORDS=$(awk '
+function hex(s,   i, c, v, d) {
+    v = 0; s = toupper(s); sub(/^0X/, "", s)
+    for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1); d = index("0123456789ABCDEF", c) - 1
+        if (d < 0) return -1
+        v = v * 16 + d
+    }
+    return v
+}
+{ sub(/\r$/, "") }
+{
+    a = hex($1)
+    if (a < 0)                { err = "unparsable address in line " NR ": " $1; exit 1 }
+    if (!done && a == NR - 1) { n = NR; next }
+    done = 1
+    if (a < 28672)            { err = "address " $1 " (line " NR ") is inside the ROM but outside the contiguous image"; exit 1 }
+}
+END {
+    if (err != "")  { print "ERROR: m2m-rom.out cannot be trimmed: " err; exit 1 }
+    if (n + 0 == 0) { print "ERROR: m2m-rom.out contains no ROM words."; exit 1 }
+    print n + 0
+}' m2m-rom.out); then
+    echo "$ROM_WORDS"
+    exit 1
+fi
+
+# The same number according to the END_OF_ROM marker in the listing.
+EOR_ADDR=$(awk '
+{ sub(/\r$/, "") }
+/^Label-list:/ { inlist = 1; next }
+inlist {
+    line = $0
+    gsub(/:/, " ", line)
+    n = split(line, t, /[ \t]+/)
+    for (i = 1; i < n; i++)
+        if (t[i] == "END_OF_ROM") { print t[i + 1]; exit }
+}' m2m-rom.lis)
+
+case "$EOR_ADDR" in
+    0x[0-9A-Fa-f]*) ;;
+    *)  echo "ERROR: END_OF_ROM not found in the label list of m2m-rom.lis."
+        echo "       It has to stay the last ROM item, directly before the"
+        echo "       variables section (.ORG 0x8000) in m2m-rom.asm."
+        exit 1 ;;
+esac
+
+EOR_WORDS=$(( EOR_ADDR + 1 ))
+if [ "$EOR_WORDS" -ne "$ROM_WORDS" ]; then
+    echo "ERROR: the ROM image is ${ROM_WORDS} words but END_OF_ROM (${EOR_ADDR}) says"
+    echo "       ${EOR_WORDS}. Something is emitted into ROM after the END_OF_ROM marker."
+    echo "       Move it before the marker, or the ROM image loses those words."
+    exit 1
+fi
+
+if [ "$(wc -l < m2m-rom.out | tr -d ' ')" -ne "$(wc -l < m2m-rom.rom | tr -d ' ')" ]; then
+    echo "ERROR: m2m-rom.out and m2m-rom.rom differ in length; cannot map words to addresses."
+    exit 1
+fi
+
+head -n "$ROM_WORDS" m2m-rom.rom > m2m-rom.rom.tmp && mv m2m-rom.rom.tmp m2m-rom.rom
+
 if [ "$ROM_WORDS" -gt "$ROM_MAX_WORDS" ]; then
     echo "ERROR: m2m-rom.rom is ${ROM_WORDS} words, exceeds the ${ROM_MAX_WORDS}-word"
     echo "       Shell-ROM budget (0x0000-0x6FFF; 0x7000+ is QNICE MMIO)."

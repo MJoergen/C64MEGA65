@@ -117,7 +117,7 @@ entity physical_1581_diag is
     -- source-toggle idle-gate (issue #90). Already synchronized into clk_i by
     -- the instantiating main.vhd; defaulted so older testbenches keep building.
     -----------------------------------------------------------------------------
-    img_drive_busy_i    : in  std_logic := '0';
+    img_drive_busy_i    : in  std_logic_vector(1 downto 0) := "00";  -- per drive: bit 0 = drive 8, bit 1 = drive 9 (issue #93)
 
     -----------------------------------------------------------------------------
     -- WD-dialogue trace taps (issue #90 bring-up): read-request accept strobe +
@@ -606,7 +606,7 @@ begin
       when RM_CNT_GAPERR_LO   => qnice_data_o <= lo16(cnt_gaperr);
       when RM_CNT_GAPERR_HI   => qnice_data_o <= hi16(cnt_gaperr);
 
-      when RM_IMG_DRIVE       => qnice_data_o <= x"000" & "000" & img_drive_busy_i;
+      when RM_IMG_DRIVE       => qnice_data_o <= x"000" & "00" & img_drive_busy_i;
       when RM_TRC_CNT         => qnice_data_o <= std_logic_vector(trc_cnt);
 
       when RM_FIFO_LEVEL      => qnice_data_o <= "000000" & std_logic_vector(fifo_level_i);

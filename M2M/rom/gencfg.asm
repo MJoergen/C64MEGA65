@@ -23,6 +23,10 @@ RP_SYSTEM_START INCRB
                 MOVE    M2M$RAMROM_4KWIN, R0    ; choose Reset/Pause handling
                 MOVE    M2M$CFG_GENERAL, @R0
 
+                MOVE    M2M$CSR, R7             ; R7: control and status register;
+                                                ; was uninitialized before and only
+                                                ; worked by register-bank residue
+
                 ; The QNICE CSR is in a sophisticated state when we arrive
                 ; here, and the core is in RESET state.
                 ; (See also CSR_DEFAULT in M2M/vhdl/QNICE/qnice.vhd)

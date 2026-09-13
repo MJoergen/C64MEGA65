@@ -98,6 +98,8 @@ _S_ERR_UNKNOWN  MOVE    ERR_BROWSE_UNKN, R8
                 ; warn, that we are not showing all files
 _S_WRN_MAX      MOVE    WRN_MAXFILES, R8        ; print warning message
                 RSUB    SCR$PRINTSTR, 1
+                MOVE    STR_SPACE, R8           ; and the shared SPACE prompt
+                RSUB    SCR$PRINTSTR, 1
 _S_WRN_WAIT     RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
                 MOVE    M2M$KEYBOARD, R8
                 AND     M2M$KEY_SPACE, @R8
@@ -527,6 +529,8 @@ _S_NOTHING      MOVE    CMSG_BROWSENOTHING, R8  ; situation
 
 _S_NOTHING_1    RSUB    SCR$CLRINNER, 1
                 RSUB    SCR$PRINTSTR, 1         ; print warning message
+                MOVE    STR_SPACE, R8           ; and the shared SPACE prompt
+                RSUB    SCR$PRINTSTR, 1
 _S_NOTHING_2    RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
                 MOVE    M2M$KEYBOARD, R8
                 AND     M2M$KEY_SPACE, @R8

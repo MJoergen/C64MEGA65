@@ -171,13 +171,46 @@ and the drive recognizes the one it wants as it flies past.
 
 Three more sensors complete the picture. An **index** sensor fires once per
 revolution, giving the electronics a fixed reference point on the otherwise
-featureless circle — on a 3.5-inch disk it detects a notch in the metal hub.
+featureless circle. On the 5.25-inch and 8-inch disks the idea came from, a
+hole punched through the medium passed an optical sensor once per turn. A
+3.5-inch disk has no such hole — the rectangular slot in its metal hub is a
+drive-pin socket that keys the disk to the spindle so it can only seat one way
+round — so the drive takes the pulse from its own spindle instead. Either way
+the digital side sees the same thing: one tick per revolution.
 A **track-0 switch** closes when the arm reaches the outermost cylinder, the
 only absolute position the drive can sense; every other position is reached by
 counting steps from there. And a **write-protect** sensor reads the little
 sliding tab on the disk shell. The spindle motor turns the disk at a fixed
 rate — 300 revolutions per minute for the drives in this book, one revolution
-every 200 milliseconds.
+every 200 milliseconds. *Fixed* means fixed in **angle**, not in linear speed:
+the motor does not change pace as the arm moves in. Every track, outermost or
+innermost, therefore passes under the head in the same 200 milliseconds and
+holds the same number of bits — squeezed into an ever shorter circumference
+the further in you go. Two things follow that later chapters lean on hard: a
+track's capacity is a constant of the *drive* rather than of the track, and
+the innermost tracks are the physically densest, which is where recording is
+hardest.
+
+Those words are easier to keep straight in a picture than in a sentence:
+
+```
+   one arm position  =  one CYLINDER  =  two TRACKS, one per side
+
+             side 0   ·······•·······     the track under the upper head
+                             ┊
+             side 1   ·······•·······     the track under the lower head
+
+   the stepper moves the arm between cylinders:
+
+      cylinder   0     1     2    ...    77    78    79
+                 │     │     │            │     │     │
+       outermost ┴─────┴─────┴─── ... ────┴─────┴─────┴ innermost
+                 ▲                                    ▲
+                 │                                    │
+      the track-0 switch closes here      the same bits squeezed into
+      — the only position the drive       the shortest circle: the
+      can sense directly                  hardest place to record
+```
 
 Notice what is *not* in this list: there is no "you are now at sector 5" wire,
 no bit clock, no byte boundary. The disk offers a spinning circle of timed
@@ -200,9 +233,10 @@ bit. The read becomes garbage.
 
 The cure is to make the data stream *self-clocking*: guarantee transitions
 often enough that the reader can continuously re-measure the writer's timing.
-The first scheme, **FM** (frequency modulation), is brute force: every bit
-cell begins with a clock transition, and a 1-bit adds a second transition in
-the middle of the cell. The clock is always there — and half the disk's
+The first scheme, **FM** (frequency modulation), is brute force. Divide the
+track into equal slices of time, one per data bit — call each slice a **bit
+cell** — and give every cell a transition at its start; a 1-bit adds a second
+transition in the middle. The clock is always there — and half the disk's
 capacity is spent on it.
 
 **MFM** (modified frequency modulation), the scheme all our disks use, is the
@@ -273,6 +307,28 @@ class names the rest of this book uses — and unfold the classification back
 into data bits. Three legal symbols. That's the entire alphabet of a double-density
 floppy disk.
 
+Unfolding is mechanical, and worth doing once by hand. Put a pointer on the
+half-cell grid and give every half-cell it passes a **slot**. A gap of *n*
+half-cells advances the pointer by *n*: write 0 into the *n*−1 slots it skips
+and 1 into the slot it lands on. Slots alternate — a clock slot at every cell
+boundary, a data slot at every cell center — so once you know which kind you
+are standing on, the data bits are simply every second slot. Run the four gaps
+we just measured back through that rule, starting from the transition that
+opened the example:
+
+```
+slots:      1 0 0 0 1 0 1 0 0 1 0 0 1
+slot kind:  d c d c d c d c d c d c d
+data bits:  1   0   1   1   0   0   1
+```
+
+Out comes `1 0 1 1 0 0 1`, the sequence we started with. This also shows why
+the gap classes alone are not enough: a short gap is `1 1` in one place and a
+run of zeros in another, and only the slot phase — am I standing on a center
+or on a boundary? — tells them apart. Everything the physical decoder of Part
+III does is this, plus the business of surviving gaps that do not measure
+4.000, 6.000 and 8.000 microseconds.
+
 The job description is small; the job is not, because real gaps are not 4.000,
 6.000, and 8.000 microseconds. Four things smear them:
 
@@ -289,11 +345,36 @@ The job description is small; the job is not, because real gaps are not 4.000,
 - **Damage and age**: weak magnetization, dropouts, and the write splice
   (Chapter 3's subject) produce gaps that were never legal MFM at all.
 
+Of those four, peak shift is the one a writer can fight, and drives of this era
+do. The distortion depends only on the neighbouring transitions — which the
+writing side knows, because it is about to write them — so it can shift a
+transition deliberately in the *opposite* direction and let the medium's own
+shove carry it back to where it belongs. The technique is **write
+precompensation**; the shift is a small fraction of a half-cell, and it is
+switched on for the inner cylinders, where crowding is worst. The consequence
+for everything that follows: the gaps a reader measures are not raw peak
+shift, they are the residue left after the drive that wrote the disk already
+tried to cancel it — smaller than the raw effect, never zero, and not the same
+on a disk written by some other drive.
+
 So classification needs windows, the windows need margins, and — as Part III
 will show in detail — deciding *where the windows sit and whether they may
 move* turns out to be one of the deepest design questions in this entire
 project. For now, hold the essential picture: a floppy read chain is a clock
 recovery problem wearing a storage costume.
+
+That problem has a classical name, and Part III will need it. The circuit that
+turns raw flux timing back into a clock and a data stream is a **data
+separator**, and for forty years the standard way to build one was a
+**phase-locked loop (PLL)**: an oscillator running at roughly the half-cell
+rate, nudged earlier or later by every arriving transition until it runs in
+step with the disk, its own edges then defining where the classification
+windows sit. A separator running in step is said to have **lock**; a stretch
+of unreadable flux that drags it out of step causes a **loss of lock** — a
+phrase that recurs throughout Part III. Every floppy controller of the era
+contains a data separator, the WD1772 of Chapter 4 included. Ours does not
+build one the classical way, and that difference is the subject of
+Chapter 13.
 
 One more consequence of MFM deserves its own paragraph, because Chapter 3
 builds on it. Since the encoding rule is deterministic, every byte value
@@ -328,8 +409,11 @@ fields.
 **Preamble.** Twelve bytes of `0x00` precede each field. In MFM a run of
 zeros produces the maximally regular pattern — a boundary clock at every bit
 cell, one shortest-legal 2-half-cell gap after another — the easiest possible
-signal for a clock-recovery circuit to lock onto. The preamble is a runway: by the time the meaningful bytes arrive, the
-reader's timing is synchronized.
+signal for a clock-recovery circuit to lock onto. The preamble is a runway —
+but a runway is for taking off cold, and a reader already flying over a track
+never landed. Gap bytes are ordinary MFM too, and carry transitions of their
+own, so the clock survives between fields without help; the preamble buys
+*margin*, not existence. Chapter 9 meets a formatter that spends that margin.
 
 **The sync mark.** After the preamble come three bytes of `0xA1` — but not
 ordinary `0xA1`. To see the trick, write a byte the way the disk sees it:
@@ -348,8 +432,11 @@ sync 0xA1:   0 1  0 0  0 1  0 0  1 0  0 0  1 0  0 1   reads: L M L M
 ```
 
 Read each slot row as flux — every 1 is a transition — and measure the gaps
-between them. Honest `0xA1` (raw word `0x44A9`) reads long, medium, short,
-short, medium. The doctored byte (raw word `0x4489`) reads **long, medium,
+between them. Read that same row instead as a sixteen-bit binary number, left
+to right, and you get the byte's **raw word**: the shape it actually takes on
+the disk, and the form in which this book quotes MFM patterns from here on.
+Honest `0xA1` becomes raw word `0x44A9` and reads long, medium, short, short,
+medium. The doctored byte (raw word `0x4489`) reads **long, medium,
 long, medium** — and that four-gap tail is the whole point, because legal
 data can never produce it. Chapter 2's rule makes the argument short: a
 long gap only ever runs cell center to cell center (`1 0 1`), and a medium
@@ -366,13 +453,23 @@ the train tells *what kind* of field follows; that byte is called the
 
 **Fields.** The grammar defines two. An **ID field** is the sector's label:
 address mark `0xFE`, then four bytes — cylinder, head, sector number, and a
-size code (**C, H, R, N** in Western Digital parlance; N is 2 for the
-512-byte sectors of our disks) — then a two-byte checksum. A **data field**
-is the payload: address mark `0xFB` (or `0xF8` for a "deleted" sector, a
-mostly vestigial feature), 512 data bytes, checksum. Every sector on the disk
-is an ID field followed, a moment later, by its data field. To read sector 7,
-a controller reads ID fields as they fly past until one says "R equals 7" with
-a valid checksum, then reads the very next data field.
+size code (**C, H, R, N** in Western Digital parlance; N is 2 for the 512-byte
+sectors of our disks) — then a two-byte checksum. A **data field** is the
+payload: address mark `0xFB` (or `0xF8` for a "deleted" sector, a mostly
+vestigial feature), 512 data bytes, checksum. Every sector on the disk is an
+ID field followed, a moment later, by its data field. To read sector 7, a
+controller reads ID fields as they fly past until one says "R equals 7" with a
+valid checksum, then reads the very next data field.
+
+Finding a sector by reading its label rather than by counting position has a
+consequence worth naming, because it explains a layout choice you will meet in
+real disks: the sectors need not be *stored* in numerical order, and often are
+not. A host that needs a moment to think between sectors will find, with a
+plain 1, 2, 3 layout, that sector 2 has already flown past by the time it is
+ready — costing a whole revolution. Spacing the numbers a few positions apart
+around the track so the next one arrives just in time is **sector interleave**.
+It is a decision made by whoever formatted the disk, not part of the grammar;
+the grammar simply does not care, because nothing reads by position.
 
 The checksum is a **CRC** (cyclic redundancy check), 16 bits wide, of the
 polynomial-division family — specifically the variant known as CRC-16/CCITT
@@ -401,22 +498,59 @@ vary the gap-byte counts slightly):
  4E ... (gap bytes, then the next sector's preamble)
 ```
 
-Ten such sectors, plus the gaps and a lead-in after the index, fill the 6,250
-bytes that fit on one double-density track at 300 revolutions per minute.
+Ten such sectors, plus the gap bytes and a lead-in after the index, fill the
+6,250 bytes that fit on one double-density track at 300 revolutions per
+minute. That figure is worth deriving rather than memorizing, because later
+chapters lean on both halves of it: at 250,000 bits per second one byte takes
+32 microseconds, and one 200-millisecond revolution divided by 32 microseconds
+is 6,250. That 32-microsecond **byte-time** is the drumbeat the whole system
+marches to — Chapter 4 is about what happens to a host that misses it.
+
+Ten sectors and their gap bytes do not divide 6,250 evenly, and they are not
+meant to: what is left over is slack, and the slack is the point. Drawn out
+flat, one whole track looks like this.
+
+```
+  one track, unrolled — the left and right edges are the same place on the disk
+
+      index                                                        index
+        ┊                                                            ┊
+        ▼                                                            ▼
+     ───┬──────┬──────┬────── ... ──────┬──────┬──────┬───────────┬───
+        │  1   │  2   │                 │  9   │  10  │   slack   │
+     ───┴──────┴──────┴────── ... ──────┴──────┴──────┴───────────┴───
+        │                                                │
+        │  each numbered block is one sector:            │  leftover gap
+        │  the ID + data grammar listed above            │  bytes, absorbing
+        │                                                │  motor-speed
+        └──── 6,250 bytes = one revolution = 200 ms ─────┘  variation
+```
+
+Two properties of that picture matter later. The slack exists because no two
+drives turn at exactly 300 revolutions per minute: a track written by a
+slightly fast drive is a little longer than one written by a slow one, and the
+leftover region is what absorbs the difference so that the tenth sector never
+collides with the first. And the head lands wherever it lands — mid-sector,
+mid-gap, it has no idea — then reads forward, wrapping past the index without
+noticing anything. Only the sector labels tell it where it is.
 
 One last inhabitant of the track must be introduced, because it haunts half
 the Appendix: the **write splice**. A drive never rewrites a whole track in
 normal operation; it rewrites one data field, switching its write current on
-just after the sector's ID field and off just after the checksum. At the
-switch-off point, newly written flux meets old flux mid-stream — with
-unrelated phase, arbitrary spacing, sometimes a half-formed transition. Every
-track that has ever been written to has these scars, and the format
-deliberately places them inside gap-byte regions where nothing needs to
+just after the sector's ID field and off just after the checksum. That leaves
+*two* scars per rewritten sector, not one — but only the second is dangerous.
+The switch-on scar is immediately followed by the new field's own preamble and
+sync train, which re-anchor the reader; the switch-off scar is followed by
+whatever the previous write left behind, at unrelated phase, with nothing to
+re-anchor against. At the switch-off point, newly written flux meets old flux
+mid-stream — with unrelated phase, arbitrary spacing, sometimes a half-formed
+transition. Every track that has ever been written to has these scars, and the
+format deliberately places them inside gap-byte regions where nothing needs to
 decode. But a reader flying over a splice still *sees* flux, and that flux
 can, by pure bad luck, imitate legal patterns — even a sync mark. A naive
 decoder trusts it and derails; a robust one is designed, from the start, with
-the splice as a first-class adversary. Chapter 13 shows how far that
-principle had to be taken.
+the splice as a first-class adversary. Chapter 13 shows how far that principle
+had to be taken.
 
 ### 4. The floppy disk controller
 
@@ -424,7 +558,11 @@ Between the drive's raw signals and a computer's tidy world of "read me sector
 7" sits the **floppy disk controller** — **FDC** from here on. An FDC is a
 small, single-purpose processor: it steps the head, watches the index pulse,
 decodes ID fields, matches sector numbers, checks CRCs, and moves sector bytes
-one at a time to and from its host. Our case study is the controller the 1581
+one at a time to and from its host. Before any of that it contains its own
+data separator — the clock-recovery circuit of Chapter 2 — because every other
+duty on that list presumes bytes rather than flux. That first duty is the one
+our implementation takes away from it, which is why the join between the two
+gets a name of its own in Part III. Our case study is the controller the 1581
 actually contains: the **Western Digital WD1772**, a 28-pin chip whose
 protocol, quirks included, our implementation reproduces down to details you
 would only notice when they break.
@@ -562,13 +700,19 @@ meet them individually.
 
 **The drive CPU** is a 6502 running at 2 MHz, twice the speed of a C64's
 processor. It executes the DOS from a 32-kilobyte ROM mapped at `$8000` and
-uses 8 kilobytes of RAM at `$0000` — enough to cache an entire track, a luxury
-the 1541 never had and one the DOS uses aggressively.
+uses 8 kilobytes of RAM at `$0000` — enough to cache an entire physical track
+(ten 512-byte sectors, 5,120 bytes), a luxury the 1541 never had and one the
+DOS uses aggressively. Chapter 7 will introduce the DOS's own *logical* track,
+which spans both sides of a cylinder and is twice that size; it is the
+physical track that fits.
 
 **The interface chip** is an 8520 **CIA** (Complex Interface Adapter, the same
 family as the C64's own I/O chips), mapped at `$4000`. Its two eight-bit ports
 are the drive's nervous system. Port B faces the IEC bus: the CLK and DATA
-lines in both directions, ATN in, plus an ATN-acknowledge line. Port A faces
+lines in both directions, ATN in, plus an ATN-acknowledge line — and one
+lodger that is not a bus signal at all. The **write-protect sense** rides on
+bit 6, which is why our implementation has to drive that bit from whichever
+medium is currently mounted, disk image or real mechanism. Port A faces
 the machine's body, one bit per bodily function — and because our
 implementation must feed each of these bits convincingly, they are worth
 listing precisely:
@@ -793,8 +937,12 @@ that a decoder must care about:
   `0x00` bytes before every sync train. The F011's formatter writes the ID
   field's A1 train *immediately* after the preceding gap bytes — no zero run
   at all. Data fields, by contrast, do get the twelve-zero preamble in both
-  dialects. (Remember this asymmetry: it decides the exact shape of a
-  qualification rule in Chapter 13.)
+  dialects. It gets away with this for the reason Chapter 3 gave: a reader
+  arriving out of the preceding gap bytes is already locked, and the preamble
+  was margin rather than a prerequisite — so a decoder that treats a preamble
+  as mandatory cannot read the MEGA65's own disks at all. (Remember this
+  asymmetry: it decides the exact shape of a qualification rule in
+  Chapter 13.)
 - **A Track Info Block (TIB).** At the start of each track the F011 writes a
   small extra field of its own invention — sync train, address mark `0x65`,
   then track number, data rate, encoding, and sector count, with a CRC. A

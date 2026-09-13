@@ -481,7 +481,7 @@ _HM_SDMOUNTED5  MOVE    SCR$OSM_O_DX, R8        ; set "%s is replaced" flag
                 RSUB    SCR$CLRINNER, 1         ; print error message
                 MOVE    R8, R0
                 MOVE    R9, R1
-                MOVE    WRN_ERROR_CODE, R8
+                MOVE    ERR_CODE, R8
                 RSUB    SCR$PRINTSTR, 1
                 MOVE    R0, R8
                 MOVE    SCRATCH_HEX, R9
@@ -986,22 +986,69 @@ _HANDLE_IO_NXT2 ADD     1, R0                   ; next drive
                 CMP     R0, R1                  ; done?
                 RBRA    _HANDLE_IO_2, !Z        ; no, continue
 
-                ; any cache dirty => handle background writing
+                ; Any cache dirty => handle background writing, but serve at
+                ; most ONE drive per iteration.
+                ;
+                ; All virtual drives share the single 512-byte sector buffer of
+                ; the FAT32 layer. Flushing two drives in an alternating manner
+                ; hands that buffer over on every single chunk, and each
+                ; handover costs a full sector write plus a full sector read.
+                ; Measured against one drive at a time that is roughly five
+                ; times the SD card traffic, and it doubles the worst case
+                ; delay until the core gets its next sd_rd_i or sd_wr_i served,
+                ; which is exactly what the small iteration size is there to
+                ; keep short. Serving one drive at a time restores the timing
+                ; behavior of a single drive and is a lot faster in total,
+                ; which matters even more for the large D81 images.
+                ;
+                ; A drive that is already flushing wins over a drive that is
+                ; merely allowed to start, so exactly one drive owns the sector
+                ; buffer at any point in time. No drive is ever skipped: as soon
+                ; as the running drive is done, or the core writes to it again
+                ; (which clears its flushing flag in vdrives.vhd), the next
+                ; drive gets its turn. A drive that the core keeps writing to
+                ; does of course keep restarting its own flush from byte 0, but
+                ; that is the pre-existing anti-thrashing behavior described in
+                ; item 1 at FLUSH_CACHE and it applies to a single drive in
+                ; exactly the same way.
                 XOR     R0, R0                  ; R0: number of virtual drive
 _HANDLE_IO_3    MOVE    R0, R8
                 MOVE    VD_CACHE_DIRTY, R9
                 RSUB    VD_DRV_READ, 1
                 CMP     1, R8                   ; cache dirty?
                 RBRA    _HANDLE_IO_NXT3, !Z     ; no: next drive, if any
-
-                ; handle dirty cache and background writing (aka flushing)
                 MOVE    R0, R8
-                RSUB    FLUSH_CACHE, 1
+                MOVE    VD_CACHE_FLUSHING, R9
+                RSUB    VD_DRV_READ, 1
+                CMP     1, R8                   ; flushing already in progress?
+                RBRA    _HANDLE_IO_FLSH, Z      ; yes: continue with this drive
 
-                ; next drive, if applicable
 _HANDLE_IO_NXT3 ADD     1, R0                   ; next drive
                 CMP     R0, R1                  ; done?
                 RBRA    _HANDLE_IO_3, !Z        ; no, continue
+
+                ; No drive is currently flushing: start the first one whose
+                ; anti-thrashing delay is over
+                XOR     R0, R0                  ; R0: number of virtual drive
+_HANDLE_IO_4    MOVE    R0, R8
+                MOVE    VD_CACHE_DIRTY, R9
+                RSUB    VD_DRV_READ, 1
+                CMP     1, R8                   ; cache dirty?
+                RBRA    _HANDLE_IO_NXT4, !Z     ; no: next drive, if any
+                MOVE    R0, R8
+                MOVE    VD_CACHE_FLUSH_ST, R9
+                RSUB    VD_DRV_READ, 1
+                CMP     1, R8                   ; allowed to start flushing?
+                RBRA    _HANDLE_IO_FLSH, Z      ; yes: start with this drive
+
+_HANDLE_IO_NXT4 ADD     1, R0                   ; next drive
+                CMP     R0, R1                  ; done?
+                RBRA    _HANDLE_IO_4, !Z        ; no, continue
+                RBRA    _HANDLE_IO_RET, 1       ; nothing to flush at all
+
+                ; handle dirty cache and background writing (aka flushing)
+_HANDLE_IO_FLSH MOVE    R0, R8
+                RSUB    FLUSH_CACHE, 1
 
 _HANDLE_IO_RET  SYSCALL(leave, 1)
                 RET
@@ -1062,7 +1109,12 @@ _HDR_SEND_LOOP  CMP     R6, R0                  ; transmission done?
                 MOVE    VD_B_WREN, R8           ; strobe write enable
                 MOVE    1, R9
                 RSUB    VD_CAD_WRITE, 1
-                XOR     0, R9
+                XOR     R9, R9                  ; was "XOR 0, R9": a no-op that
+                                                ; left WREN asserted, so the
+                                                ; later ACK strobe of the
+                                                ; write-back path corrupted the
+                                                ; last byte of the track buffer
+                                                ; -- upstream M2M issue #52
                 RSUB    VD_CAD_WRITE, 1
 
                 ADD     1, R6                   ; next byte
@@ -1195,6 +1247,12 @@ _HDW_RET        SYSCALL(leave, 1)
 ;    intervals between sd_wr_i and sd_ack_o.
 ;
 ; 4. The state between iterations is saved in VDRIVES_* variables.
+;
+; 5. HANDLE_IO serves at most one drive per iteration, so only a single drive
+;    is ever in the middle of flushing. All virtual drives share the one
+;    512-byte sector buffer of the FAT32 layer and alternating between them
+;    would hand that buffer over on every chunk, each handover costing a full
+;    sector write plus a full sector read.
 ; ----------------------------------------------------------------------------
 
 ; FLUSH_CACHE
@@ -1427,11 +1485,25 @@ _START_MON_GO   DECRB
 ; QNICE Monitor. This is invisible to end users but might be helpful for
 ; debugging purposes, if you are able to connect a JTAG interface.
 ;
+; FATAL_IDX behaves exactly like FATAL but prints the shared sentence
+; "Item index = error code." directly after the message. Many config.vhd
+; sanity checks report the offending item index as the error code and used to
+; repeat that sentence inside every single message, which cost 27 ROM words
+; per message. Enter here instead and leave the sentence out of the message.
+;
 ; R8: Pointer to error message
 ; R9: if not zero: contains an error code for additional debugging info
 ; ----------------------------------------------------------------------------
 
-FATAL           MOVE    R8, R0
+FATAL_IDX       MOVE    ERR_ITEMIDX, R1         ; hint printed after the msg
+                RBRA    _FATAL_START, 1
+
+FATAL           XOR     R1, R1                  ; no hint
+
+                ; R0/R1 are safe here: every routine called below banks its
+                ; registers via the enter syscall or INCRB, and FATAL never
+                ; returns, so clobbering the register bank of the caller is OK
+_FATAL_START    MOVE    R8, R0
 
                 ; make sure we have a large window where we can print
                 ; the error message
@@ -1449,7 +1521,13 @@ FATAL           MOVE    R8, R0
                 RSUB    SCR$PRINTSTR, 1
                 SYSCALL(puts, 1)
 
-                CMP     0, R9
+                CMP     0, R1                   ; optional shared hint line
+                RBRA    _FATAL_CODE, Z
+                MOVE    R1, R8
+                RSUB    SCR$PRINTSTR, 1
+                SYSCALL(puts, 1)
+
+_FATAL_CODE     CMP     0, R9
                 RBRA    _FATAL_END, Z
                 MOVE    ERR_CODE, R8
                 RSUB    SCR$PRINTSTR, 1
