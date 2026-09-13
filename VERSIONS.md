@@ -5,8 +5,6 @@ Version 6 - MONTH DAY, 2026
 @TODO: ENSURE README.MDs Video and Audio section is up-to-date re NTSC
 @TODO: ENSURE README.MDs demo pics (OSM!) are up-to-date
 @TODO: ENSURE ROADMAP.MD is up-to-date
-@TODO: Document increased compatibility due to the resolved RTC regression
-@TODO: Document correct BA signal which should also increase compatibility
 
 ## New Features
 
@@ -176,6 +174,14 @@ Version 6 - MONTH DAY, 2026
   - Improved Ocean Type 1 compatibility, so that for example Wonderboy works
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/138)
 
+* The PRG loader was not able to properly load the 4k intro "Boo" by "Reflex".
+  Root cause: This very intro needs the 1541 drive to be on, as it runs code
+  on the 1541 CPU. The standard setting of this core is, that the 1541 is only
+  on when a disk image is mounted, so it was off when you used the PRG loader.
+  Our new feature that allows you to configure drive #8 as "always on"
+  resolves the issue with "Boo".
+  (Github issue https://github.com/MJoergen/C64MEGA65/issues/88)
+
 ## Improvements for 2024+ MEGA65s (R6/R6A) only:
 
 * We moved the HDMI image scaler (aka ASCAL) to the SDRAM. This frees up
@@ -191,6 +197,22 @@ Version 6 - MONTH DAY, 2026
   was opened or an image was mounted while a drive was still saving its cache
   to the SD card ("yellow drive led"): the affected drive lost the bytes it
   had buffered at that moment.
+
+* Regression fixed: Version 5.1 made the MEGA65's Real-Time-Clock (RTC)
+  available for GEOS and other RTC consumers. The RTC communicates with the
+  C64 via the cassette sense signal. By switching this RTC feature on by
+  default, we introduced multiple regresions. From V6 on, the RTC is off by
+  default and there is a configuration setting with which users can switch
+  it on. Here are the currently known regressions/incompatibilities that
+  the RTC generates:
+  - The game "Game "Jupiter Fracture" crashed after the splash screen
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/187).
+  - There was a visual regression in the 1989 demo "Double Density"
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/164).
+  - The demo "Old Men in Used Cars" by "Fossil" stopped working
+    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/135).
+  - The C64 Emulator Test Suite V2.15 failed on TRAP16 test and hung on
+    TRAP17 (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/133).
 
 Version 5.2 - April 28, 2025
 ============================
