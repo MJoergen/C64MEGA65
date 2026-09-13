@@ -90,7 +90,13 @@ acting; skim `tests/README.md` (section "Version WIP-V6-A20") for the test gates
   lines are hidden, just like in the single-drive builds up to A18X2. The
   user enables drive 9 consciously in `Drive Settings`.
 * Semantics: "Always" = drive answers on IEC without a disk (MiSTer
-  parity). Off = engine held in reset, IEC device number free for real
+  parity). An unmounted drive is always an empty 1541, whatever was mounted
+  before: the engine selector (`dtype` in `iec_drive.sv`) follows every
+  `img_mounted` strobe, and a size-0 strobe (Shell unmount, or the
+  reset-driven ghost-disk strobe) puts the drive back on the 1541 engine;
+  the 1581 engine runs only while a D81 is mounted or in Internal 1581.
+  This is what lets "Always" fix "Boo" (issue #88) even after a D81 session.
+  Off = engine held in reset, IEC device number free for real
   hardware. Internal 1581 on at most one drive; selecting it on the other
   drive "steals" it (other drive falls back to If mounted,
   clear-before-set in `OSM_SEL_PRE`, `_OSM_PRE_STEAL`). Unmount-on-reset
@@ -169,6 +175,12 @@ REU_GUARD 0x03FF | total 0x0400` (units: 8 kB windows).
   still carried a `phys_1581_en` signal, which the merge dropped).
 * `iec_drives_reset(i) = (not reset_core_n) or off(i) or (ifm(i) and not
   mounted(i))` — mirrors MiSTer c64.sv Enable-Drive semantics.
+* Engine select per drive (`dtype` in the submodule's `iec_drive.sv`):
+  latched from `img_type` on every `img_mounted` strobe, a size-0 strobe
+  falls back to 00 = 1541. So an unmounted drive in "Always" is a 1541 and
+  the 1581 engine is live only while a D81 is mounted or in Internal 1581;
+  no reset term, which is what keeps a D81 mounted across a soft reset with
+  "Unmount on reset" off.
 * Physical-1581 switching is protected 3-layer: (1) toggle re-encoders +
   un-gated inputs in `c1581_multi.sv` (submodule) — toggle LEVELS never
   jump on the select change (they are parity-persistent by design);

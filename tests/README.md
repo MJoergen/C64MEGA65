@@ -44,6 +44,13 @@ device on the bus.
 * `Disk Image: Always`: with no image mounted the drive must answer on the IEC
   bus like a real drive without a disk (e.g. an error blink / DEVICE NOT
   PRESENT free operation), and mounting must work as usual.
+  An unmounted drive must always be a 1541, whatever was mounted before: mount
+  a D81 on the drive, unmount it, then read the error channel (e.g.
+  `OPEN 15,8,15:INPUT#15,A,B$,C,D:PRINT A,B$,C,D:CLOSE 15`); the answer must
+  name the 1541 (stock DOS: `73,CBM DOS V2.6 1541,00,00`), not the 1581. Then,
+  still with nothing mounted, load the 4k intro "Boo" by Reflex through the
+  PRG loader (issue #88): it runs code on the 1541 CPU and must work in this
+  state too.
 * `Internal 1581` on either drive: the physical drive must appear as IEC
   device 8 or 9 accordingly, with the live status (`Motor`, `Head`, `Reading`,
   `Busy`) shown on the main-menu line. Selecting it on one drive while it is
