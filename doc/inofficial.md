@@ -37,7 +37,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A19X2  | 08/19/26 | c515c68 | Simulated RR-Net hardening (issue #252).  Fix various vulnerabilities and improve robustness.
 | WIP-V6-A20    | 08/01/26 | e9e8699 | Added drive 9; both drives can now be used either as simulated drives or one of them using the built-in floppy drive as 1581 (issues #93 and #237). Configurable drive activation (issue #88). Configurable un-mount on reset (issue #81).
 | WIP-V6-A20X1  | 08/03/26 | 5673e57 | Fixed rare disk image corruption (commit c546c7c). Speed-up of disk image background saving (commit 5673e57). Refactored firmware & vhdl to save ROM space (commits d9f3307, 0145262, e29094e, f1d1600).
-| WIP-V6-A20X2  | 08/05/26 | 57844f2 | Default is one drive 8; drive 9 is invisible. Merge develop branch (Alpha 19) into mh_dev_drives branch (Alpha 20).
+| WIP-V6-A20X2  | 08/05/26 | 57844f2 | Default is one drive 8; drive 9 is invisible. Merge mh_dev_drives branch (Alpha 20) into develop branch (Alpha 19).
 
 ## Version 5.2
 
