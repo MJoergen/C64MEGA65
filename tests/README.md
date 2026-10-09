@@ -90,6 +90,18 @@ device on the bus.
   drive in `Internal 1581` mode (RTL one-hot guard keeps the lower drive)
   and the menu must recover once the user touches the Drive Settings.
 
+* A20X3: silent sector loss on the simulated 1581 (issue #248). The WD1772
+  emulation gave the drive CPU at most one byte-time for the first byte of a
+  sector write; when the host acknowledge of the previous sector landed the
+  next command on the sector header, the sector was written shifted by one
+  byte under a clean status and the 1581 DOS silently dropped the rest of the
+  track-side write-back. Gate: paich64's `SAV-WRITE` stress run (D64 on
+  drive 8, D81 on drive 9, run 0, 50/60 records, 10/20 files) must complete
+  on an R3/R3A and an R6, and every file must pass his sector-level audit;
+  repeat with two D81s and with the D81 on drive 8. Then the usual D81
+  smoke tests (LOAD/SAVE/verify, directory, JiffyDOS 1581) to confirm that
+  reads and the physical-1581 path are unchanged.
+
 Version WIP-V6-A19 - TBD
 ------------------------
 
