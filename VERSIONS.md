@@ -1,11 +1,6 @@
 Version 6 - MONTH DAY, 2026
 ===========================
 
-@TODO: ENSURE README.MD AND FAQ.MD are up-to-date regarding V6
-@TODO: ENSURE README.MDs Video and Audio section is up-to-date re NTSC
-@TODO: ENSURE README.MDs demo pics (OSM!) are up-to-date
-@TODO: ENSURE ROADMAP.MD is up-to-date
-
 ## New Features
 
 * The built-in floppy drive can be used as an 1581.
