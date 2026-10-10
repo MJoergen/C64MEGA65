@@ -2,10 +2,14 @@
 #
 # The .xpr is the SINGLE SOURCE OF TRUTH: file list, VHDL-2008/Verilog/SV
 # classification, target part, XPM libraries, the synthesis and implementation
-# strategies (impl_1 uses Performance_ExtraTimingOpt), the XDC read order and
-# the synth_pre.tcl firmware/log-hygiene hook all come from the project. This
-# script only drives the runs -- it never restates any of that, so it cannot
-# drift from what the Vivado IDE builds.
+# strategies (impl_1 uses Performance_ExplorePostRoutePhysOpt on all boards),
+# the XDC read order and the synth_pre.tcl firmware/log-hygiene hook all come
+# from the project. This script only drives the runs -- it never restates any
+# of that, so it cannot drift from what the Vivado IDE builds. The one
+# exception is a board that misses timing and is then re-rolled by
+# build_all.sh (reroll_bitstream.tcl): that bitstream starts from the
+# checkpoints of this build but uses other placer and router directives (see
+# doc/timing_closure.md).
 #
 # Normally called by build_all.sh, but usable standalone:
 #
@@ -26,52 +30,10 @@
 # printed and the script exits non-zero on any failure (distinct code per
 # class): 1 build failed, 2 timing failed, 3 sign-off failed.
 
-# ---------------------------------------------------------------------------
-# CORE.xdc sign-off gates. Returns a list of human-readable problems with the
-# constraints as actually applied to the currently-open routed design; an empty
-# list means every gate passed. Each check mirrors a CORE.xdc line that turns
-# into a silent no-op if the object it names has been renamed.
-# ---------------------------------------------------------------------------
-proc signoff_gates {} {
-    set gate {}
-
-    # set_case_analysis 0 on the flicker-free fast/slow clock selector (CORE.xdc:7)
-    if {[llength [get_pins -quiet {CORE/hr_core_speed_reg[0]/Q}]] == 0} {
-        lappend gate "set_case_analysis pin CORE/hr_core_speed_reg\[0\]/Q missing"
-    }
-
-    # main_clk generated clock and its source pin (CORE.xdc:9). The period is
-    # fixed by the MMCM in clk.vhd (i_clk_c64_orig CLKOUT0 = 31.5277778 MHz =>
-    # 31.718 ns). The slow flicker-free leg is 31.449 MHz => 31.797 ns, so a
-    # 0.05 ns tolerance catches a clock accidentally derived from the wrong leg.
-    if {[llength [get_pins -quiet {CORE/clk_gen/i_clk_c64_orig/CLKOUT0}]] == 0} {
-        lappend gate "main_clk source pin CORE/clk_gen/i_clk_c64_orig/CLKOUT0 missing"
-    }
-    set mc [get_clocks -quiet main_clk]
-    if {[llength $mc] == 0} {
-        lappend gate "generated clock main_clk missing"
-    } elseif {[expr {abs([get_property PERIOD $mc] - 31.718)}] > 0.05} {
-        lappend gate "main_clk period [get_property PERIOD $mc] ns, expected ~31.718 ns (wrong MMCM leg?)"
-    }
-    if {[llength [get_clocks -quiet qnice_clk]] == 0} {
-        lappend gate "clock qnice_clk missing (common.xdc)"
-    }
-
-    # Deep IEC-drive CDC false-paths (CORE.xdc:18-41) -- the paths most likely
-    # to drift when iec_drive internals are refactored. A pattern that resolves
-    # to zero pins means its set_false_path constrained nothing, re-exposing a
-    # metastability hazard that only bites on real hardware.
-    foreach {desc pat} {
-        "c1541_track busy_reg CDC" {CORE/i_main/iec_drive_inst/c1541/drives[*].c1541_drv/c1541_track/busy_reg/C}
-        "iec_drive dtype_reg CDC"  {CORE/i_main/iec_drive_inst/dtype_reg[*][*]/C}
-        "c1581 fdc sd_rdreq_sync"  {CORE/i_main/iec_drive_inst/c1581/drives[*].c1581_drv/fdc/sd_rdreq_sync/s1_reg[*]/D}
-    } {
-        if {[llength [get_pins -quiet $pat]] == 0} {
-            lappend gate "false_path target for $desc resolves to 0 pins ($pat)"
-        }
-    }
-    return $gate
-}
+# The CORE.xdc sign-off gates (proc signoff_gates) live in their own file so
+# that reroll_bitstream.tcl checks a re-rolled bitstream against the very
+# same list.
+source -notrace signoff_gates.tcl
 
 # ---------------------------------------------------------------------------
 # Arguments
@@ -105,8 +67,9 @@ if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
 # debug.tcl (batch_insert_ila) must run after synthesis and before opt_design
 # -- its documented slot -- so implementation is driven here in-session on the
 # opened synth netlist that carries the freshly inserted cores. Consequence:
-# the .xpr impl STRATEGY (Performance_ExtraTimingOpt) is NOT applied to a debug
-# build; that is fine, a debug bitstream is for hardware bring-up, not release.
+# the .xpr impl STRATEGY (Performance_ExplorePostRoutePhysOpt) is NOT applied
+# to a debug build; that is fine, a debug bitstream is for hardware bring-up,
+# not release.
 # ---------------------------------------------------------------------------
 if {$debug} {
     open_run synth_1

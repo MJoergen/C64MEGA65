@@ -292,6 +292,8 @@ All of the following pass on the staged merge:
   RWDS strobe. The durable fix is recentering the RWDS capture eye (+1-2
   IDELAY taps, ~78 ps each), but that value is MJoergen's silicon-calibrated
   number (issue #218 territory) — ask him, do NOT change it unilaterally.
+  Meanwhile `CORE/build_all.sh` re-rolls such a board automatically, see
+  `doc/timing_closure.md`.
 
 ## 6. Known open items (documented, NOT fixed — design decisions pending)
 

@@ -54,7 +54,8 @@ disagree.
 │   ├── CORE-R{3,4,5,6}.xpr  Vivado project files, one per MEGA65 board revision
 │   ├── CORE-R{3,4,5,6}.{cache,hw,runs,sim,tcl}  Vivado runtime / generated dirs
 │   ├── CORE.xdc           core-specific timing/pin constraints
-│   ├── run_vivado_r{3,4,5,6}.sh   open Vivado on the right project
+│   ├── build_all.sh, build_bitstream.tcl   headless builds straight from the .xpr
+│   ├── reroll_bitstream.tcl, signoff_gates.tcl   timing re-roll, shared sign-off gates
 │   ├── load_bitstream.sh, debug.tcl
 │   ├── ram_init.{hex,py}  initial RAM contents helper
 │   ├── vhdl/              ← C64-side VHDL (top of port, NOT the MiSTer core itself)
@@ -834,6 +835,8 @@ cd CORE/m2m-rom && ./make_rom.sh && cd ../..
 cd CORE
 source /opt/Xilinx/2025.1/Vivado/settings64.sh   # or wherever Vivado is
 ./build_all.sh                 # all boards; or a subset, e.g. ./build_all.sh R6
+#    (a board that only just misses timing is re-rolled afterwards,
+#    see doc/timing_closure.md; --no-reroll skips that, --help lists options)
 #    One board standalone, optionally with an ILA for hardware debug:
 vivado -mode batch -source build_bitstream.tcl -tclargs R6 4         # release
 vivado -mode batch -source build_bitstream.tcl -tclargs R6 4 debug   # + ILA (debug.tcl)
@@ -853,9 +856,17 @@ cd ..
 generated dirs; Vivado regenerates them. `build_all.sh` /
 `build_bitstream.tcl` build straight from these `.xpr` files (project mode),
 so a command-line build never drifts from what the IDE produces — the `.xpr`
-is the only place the file list and build strategy are defined. `debug.tcl`
-is the stock Xilinx ILA-insertion helper, invoked only by the `debug` build
-mode.
+is the only place the file list and build strategy are defined. The one
+exception is the **timing re-roll**: a board whose build only just missed
+timing (the HyperRAM RWDS hold knife-edge of issue #224) is implemented again
+by `reroll_bitstream.tcl` from that build's checkpoints with other placer and
+router directives; the winner replaces `mega65_r?.bit` and
+`mega65_r?_reroll.txt` records it (see `doc/timing_closure.md`). The re-roll
+needs the post-route `phys_opt_design` checkpoint, so keep all four `.xpr` on
+the same strategy, `Performance_ExplorePostRoutePhysOpt`. The `CORE.xdc`
+sign-off gates live in `signoff_gates.tcl`, shared by `build_bitstream.tcl`
+and `reroll_bitstream.tcl`. `debug.tcl` is the stock Xilinx ILA-insertion
+helper, invoked only by the `debug` build mode.
 
 **Config file (saves user menu choices to SD):**
 The framework cannot grow files on FAT32. Generate a correctly-sized
@@ -1055,3 +1066,4 @@ hardware saw the code.
 | HyperRAM contention       | `globals.vhd` C_HMAP_*, `qnice2hyperram.vhd`, ascal       |
 | REU                       | `reu_mapper.vhd`, MiSTer `reu.v`, `globals.vhd` C_HMAP_REU |
 | Per-board pinout/timing   | `M2M/MEGA65-Rx.xdc`, `M2M/vhdl/top_mega65-rx.vhd`, `CORE/CORE.xdc` |
+| Build misses hold on `hr_d_io[n]` (HyperRAM RWDS) | `doc/timing_closure.md`; `CORE/build_all.sh` re-rolls it; do not touch the field-calibrated IDELAY tap |
