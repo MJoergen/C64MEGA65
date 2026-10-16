@@ -39,6 +39,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A20X1  | 08/03/26 | 5673e57 | Fixed rare disk image corruption (commit c546c7c). Speed-up of disk image background saving (commit 5673e57). Refactored firmware & vhdl to save ROM space (commits d9f3307, 0145262, e29094e, f1d1600).
 | WIP-V6-A20X2  | 08/05/26 | 57844f2 | Default is one drive 8; drive 9 is invisible. Merge mh_dev_drives branch (Alpha 20) into develop branch (Alpha 19).
 | WIP-V6-A20X3  | 10/09/26 | 856e70f | Fixed silent sector loss when saving to a simulated 1581 under sustained write activity (issue #248)
+| WIP-V6-A21X1  | TBD      | TBD     | Write support for the built-in floppy drive as 1581, sector writes (issue #244)
 
 ## Version 5.2
 

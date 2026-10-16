@@ -5,6 +5,44 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A21 - TBD
+------------------------
+
+@TODO: Test writing to real disks with the `Internal 1581` (issue #244). WIP-V6-A21X1 writes sectors (`SAVE`, scratch, rename, `VALIDATE`, copy programs, GEOS); formatting a real disk (`N0:`, the WD1772 Write Track) follows with WIP-V6-A21X2. Media: new old stock DD blanks only, labelled; originals and anything irreplaceable stay write-protected (tab hole open). Board order: R3 first, then R6. Every step names its expected observation; an observation outside it stops the round, which goes back to simulation with the dump. Dump the diagnostic device in the same session as the step (`MD 7000 703F` and `MD 7080 709D`, see `doc/1581_dd_debug_device.md`). The full protocol, including what to suspect when a step fails, is in `doc/dev-fdd/WRITE-PLAN.md`, sections 5 and 6.
+
+Bench round 1 (WIP-V6-A21X1, sector writes):
+
+* @TODO Read regression first: the A18X2 read recipes (directory, `LOAD`, a file on side 1, a disk written by a genuine 1581 if available) must behave unchanged. If not, the integration regressed the read path: stop.
+* @TODO Power on, `Internal 1581` on drive 8, a blank disk with the tab hole **open** (protected): `SAVE"T",8` must end in `26, WRITE PROTECT ON`. `CNT_WR_GATE` (`0x8A`) stays 0, `CNT_WR_WP` (`0x8E`) counts the refused attempts (the DOS tries three times per flush), `WR_STATE` (`0x80`) bit 7 (`wr_ok`) reads 0. If the gate opened: stop everything.
+* @TODO Close the tab hole (writable) and wait one second: `WR_STATE` bit 7 reads 1.
+* @TODO On a disk that is already 1581-formatted (by the MEGA65 core or by a real 1581), `SAVE"T",8` a 2-block program. The status line shows `Writing` during the flush. `CNT_WR_SECT` (`0x86`) grows by a multiple of 10 (one flush of ten sectors per touched side), `WR_GATE_CYC` (`0x83`/`0x84`) reads 849,600 (`F6C0`/`000C`), `CNT_WR_LOST` (`0x8C`) and `CNT_WR_ABORT` (`0x90`) stay 0, `WR_FIRST_MARGIN` (`0x96`) is 18 or more, `WR_DRQ_MARGIN` (`0x97`) is 1 or more, and the trace ring shows each flush as Read Address, Read Address, ten writes starting at the sector after the one under the head, Read Address, ten reads.
+* @TODO `LOAD"T",8` after a power cycle, then `VALIDATE`: the program loads and the DOS reports `00, OK,00,00`.
+* @TODO Save a 30-block file that spans both sides, load it back and compare it byte by byte.
+* @TODO paich64's `SAV-WRITE` with a D81 on drive 8 and the `Internal 1581` on drive 9, run 0: completes, every file audits clean, the counters behave as in the 2-block step.
+* @TODO Eject the disk in the middle of a `SAVE` (sacrificial disk): `CNT_WR_ABORT` grows by one, `WR_LAST` (`0x81`) shows reason `0x08`, the DOS reports an error, nothing hangs, and the next disk works.
+* @TODO Press reset in the middle of a `SAVE`: nothing hangs after the reset and the next `SAVE` works.
+* @TODO Mode-change gate: while the drive writes (status `Writing`) or while its motor still runs, a change of the drive mode in `Drive Settings` must be refused.
+* @TODO Referee: the disk of the 30-block step read by an independent reader (the MEGA65's own core with `DIR` and `DLOAD`, a real 1581, or a Greaseweazle `commodore.1581` decode compared with the source D81): directory and file identical.
+
+Bench round 2 (WIP-V6-A21X2, format):
+
+* @TODO `OPEN 15,8,15,"N0:ALPHA,A1":CLOSE 15` on a blank: the status line shows `Format`, `CNT_WR_TRACK` (`0x88`) reads 160, `CNT_WR_LOST` stays 0, `WR_TRK_CYC` (`0x98`/`0x99`) is about 9,990,000, the DOS's own verify passes, the DOS reports `00, OK,00,00` and the directory shows 3160 blocks free.
+* @TODO Fill the disk with files, `VALIDATE`, power cycle, load some of them: all OK.
+* @TODO Format a disk that was formatted by the MEGA65 core before, and one that was written by a real 1581: both OK.
+* @TODO Referee on the formatted and written disk: passes.
+
+Community recipes (Discord, published with A21X1 and A21X2; each report pastes back the diagnostic dump and the step at which it was taken):
+
+* @TODO R1 Save and load: a short program to a blank DD disk (tab hole closed), power cycle, load, `LIST`: identical.
+* @TODO R2 Write protect: the same with the tab hole open: `26, WRITE PROTECT ON`, nothing written (`CNT_WR_GATE` unchanged).
+* @TODO R3 Stress: `SAV-WRITE` with the `Internal 1581` on drive 9 and a D81 on drive 8, then the other way round; report the audit result and the dump.
+* @TODO R4 Format (A21X2): `OPEN 15,8,15,"N0:MYDISK,ID":CLOSE 15` on a blank; time it (a real 1581 takes roughly 75 to 105 s, typically 90 s); the directory shows 3160 blocks free; fill the disk; validate.
+* @TODO R5 Copy a D81 to a real disk and back with a 1581 copier (drive 8 = D81, drive 9 = `Internal 1581`), then copy the real disk to a fresh D81 and compare the two D81 files on the PC.
+* @TODO R6 JiffyDOS: R1 and R5 with `jd-c64.bin` and `jd-c1581.bin`.
+* @TODO R7 GEOS: boot GEOS, save a document to the real disk, reboot, open it.
+* @TODO R8 Referee: anyone with a real 1581 or a Greaseweazle reads a disk written in R5 and reports back (with the `.d81` or `.scp` file).
+* @TODO R9 Reads still fine: disks written by a genuine 1581 still read.
+
 Version WIP-V6-A20 - TBD
 ------------------------
 
