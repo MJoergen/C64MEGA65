@@ -17,6 +17,15 @@
 -- side-effect free; feeding them the same arguments always yields the same
 -- result.
 --
+-- The writable mechanism model (mech_model_1581, G_WRITABLE) lays its seed
+-- tracks with seed_payload (key 0 = golden_payload, any other key a different
+-- deterministic payload, so a write scenario can overwrite a track whose old
+-- content differs from what it writes) in the layout described by the
+-- C_SEED_* constants: C_SEED_LEAD x 4E after the index, then ten records of
+-- C_SEED_REC byte-times, 4E up to the end of the revolution. seed_id_crc_end
+-- gives the rotational position (50 MHz cycles after the index) of the end of
+-- the last channel cell of record r's ID CRC.
+--
 -- C64MEGA65 project, GPLv3.
 -------------------------------------------------------------------------------
 library ieee;
@@ -32,6 +41,16 @@ package golden_1581_pkg is
   -- Deterministic byte for a given cylinder / side / sector / data offset.
   -- Returns an 8-bit value. Pure: no signals, no shared state.
   function golden_payload(cyl, side, sec, off : integer) return unsigned;
+
+  -- Seed payload of the writable model; key 0 is golden_payload.
+  function seed_payload(key, cyl, side, sec, off : integer) return unsigned;
+
+  -- seed track layout of the writable model (byte-times of 1600 cycles)
+  constant C_SEED_LEAD   : integer := 32;    -- 4E after the index
+  constant C_SEED_REC    : integer := 604;   -- 12+3+1+4+2 + 22 + 12+3+1+512+2 + 30
+  constant C_SEED_ID_END : integer := 22;    -- ID CRC end, bytes into a record
+  constant C_SEED_BYTE_CYC : integer := 1600;
+  function seed_id_crc_end(r : integer) return integer;   -- r = 1..10
 
 end package golden_1581_pkg;
 
@@ -56,6 +75,20 @@ package body golden_1581_pkg is
         return to_unsigned(
           (cyl * 31 + side * 17 + sec * 7 + off * 13 + 16#5A#) mod 256, 8);
     end case;
+  end function;
+
+  function seed_payload(key, cyl, side, sec, off : integer) return unsigned is
+  begin
+    if key = 0 then
+      return golden_payload(cyl, side, sec, off);
+    end if;
+    return to_unsigned((to_integer(golden_payload(cyl, side, sec, off))
+                        + key * 41 + off * (2 * key + 1) + sec * 3) mod 256, 8);
+  end function;
+
+  function seed_id_crc_end(r : integer) return integer is
+  begin
+    return (C_SEED_LEAD + (r - 1) * C_SEED_REC + C_SEED_ID_END) * C_SEED_BYTE_CYC;
   end function;
 
 end package body golden_1581_pkg;

@@ -22,6 +22,29 @@
 -- byte-for-byte. DD only (250 kbit/s, MFM 2 us half-cell) -- f_density_i is
 -- observed but has no effect.
 --
+-- Two modes (generic G_WRITABLE):
+--   false (default): the procedural read-only generator -- RDATA is
+--     regenerated every 193.28 ms from golden_1581_pkg, the index free-runs
+--     independently. Unchanged; f_wgate_i must stay '1' (fatal otherwise).
+--   true: a LIVE ROTATING FLUX STORE (the AExp tb_fdd_write p_disk model,
+--     ported). An internal 50 MHz timebase (20 ns, phase-aligned with a
+--     testbench clock started at '0' with a 10 ns half period) turns the
+--     spindle: pos = cycles since the index, period G_INDEX_PERIOD; the index
+--     is low for G_INDEX_LOW at pos 0 while spinning. Per (cylinder, side) a
+--     track holds one slot per 50 cycles, each with at most one flux edge
+--     (its exact cycle position) and a generation stamp (0 = seed, n = the
+--     n-th WGATE window). A track is seeded lazily, the first time it is under
+--     the spinning head, from seed_payload(0, ...) = golden_payload in the
+--     C_SEED_* layout of golden_1581_pkg (seed_req_i re-seeds with any key).
+--     Playback: one active-low RDATA pulse of 400 ns (the generator's width)
+--     per stored edge passing the head while WGATE is high. Writing: while
+--     WGATE is low the erase sweeps at cycle granularity (an edge exactly
+--     under the head is wiped) and every WDATA falling edge is stored with the
+--     window's generation. Instruments: WGATE windows (open position, length
+--     in cycles, generation), a WDATA pulse-width census inside WGATE, a fatal
+--     assert on WDATA low while WGATE is high, span queries (seed / new edge
+--     counts) and a text dump of a track's edge list for wr_twin.py.
+--
 -- C64MEGA65 project, GPLv3.
 -------------------------------------------------------------------------------
 library ieee;
@@ -29,12 +52,15 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.mfm_flux_gen_pkg.all;
 use work.golden_1581_pkg.all;
+use std.textio.all;
 
 entity mech_model_1581 is
   generic (
     G_INDEX_PERIOD : time    := 200 ms;   -- index-to-index period (300 RPM)
     G_INDEX_LOW    : time    := 2 ms;     -- index active-low pulse width
-    G_NUM_CYL      : integer := 80        -- cylinders 0 .. G_NUM_CYL-1
+    G_NUM_CYL      : integer := 80;       -- cylinders 0 .. G_NUM_CYL-1
+    G_WRITABLE     : boolean := false;    -- true: live rotating flux store (see header)
+    G_DUMP_PREFIX  : string  := "flux_"   -- dump file name prefix (G_WRITABLE)
   );
   port (
     -- driven BY the controller (we only observe these) ----------------------
@@ -57,8 +83,36 @@ entity mech_model_1581 is
     f_diskchanged_o   : out std_logic := '1';   -- active-low disk changed
     f_rdata_o         : out std_logic := '1';   -- active-low read flux
 
+    -- write pins from the controller (active low) ---------------------------
+    f_wgate_i         : in  std_logic := '1';
+    f_wdata_i         : in  std_logic := '1';
+
+    -- flux store control (G_WRITABLE only). Each request is a toggle; q_ack_o
+    -- toggles once it has been served (all in the same model clock).
+    trk_cyl_i         : in  integer := 0;        -- track addressed by seed/dump/query
+    trk_side_i        : in  integer := 0;
+    seed_req_i        : in  std_logic := '0';    -- (re)seed the track with seed_key_i
+    seed_key_i        : in  integer := 0;
+    dump_req_i        : in  std_logic := '0';    -- dump the track to G_DUMP_PREFIX & dump_tag_i & ".txt"
+    dump_tag_i        : in  integer := 0;
+    q_req_i           : in  std_logic := '0';    -- count the edges in [q_from_i, q_from_i + q_len_i)
+    q_from_i          : in  integer := 0;
+    q_len_i           : in  integer := 0;
+    q_ack_o           : out std_logic := '0';
+    q_seed_o          : out integer := 0;        -- edges with generation 0 (seed) in the span
+    q_new_o           : out integer := 0;        -- edges with generation > 0 in the span
+
     -- observability for testbenches -----------------------------------------
-    cur_cyl_o         : out integer := 0         -- current head cylinder
+    cur_cyl_o         : out integer := 0;        -- current head cylinder
+    pos_o             : out integer := 0;        -- rotational position (G_WRITABLE)
+    t_rev_o           : out integer := 0;        -- cycles per revolution (G_WRITABLE)
+    wg_opens_o        : out integer := 0;        -- WGATE windows so far
+    wg_open_pos_o     : out integer := 0;        -- position of the last WGATE fall
+    wg_len_o          : out integer := 0;        -- cycles of the last closed window
+    wg_closed_o       : out integer := 0;        -- windows closed so far
+    pw_min_o          : out integer := 0;        -- WDATA low-pulse census (inside WGATE)
+    pw_max_o          : out integer := 0;
+    pw_count_o        : out integer := 0
   );
 end entity mech_model_1581;
 
@@ -120,6 +174,10 @@ begin
     end if;
   end process config_proc;
 
+  ---------------------------------------------------------------------------
+  -- G_WRITABLE = false: the procedural read-only generator (unchanged).
+  ---------------------------------------------------------------------------
+  g_ro : if not G_WRITABLE generate
   ---------------------------------------------------------------------------
   -- Index. Constant G_INDEX_PERIOD period; a G_INDEX_LOW active-low pulse is
   -- emitted only while the disk is spinning (checked at the pulse instant).
@@ -213,5 +271,321 @@ begin
       wait for 100 us;                     -- poll for spin-up
     end if;
   end process flux_proc;
+
+  -- a write into the read-only model is a testbench or DUT defect
+  ro_guard : process (f_wgate_i, f_wdata_i)
+  begin
+    assert f_wgate_i /= '0'
+      report "mech_model_1581: WGATE asserted on the read-only model (G_WRITABLE = false)"
+      severity failure;
+    assert f_wdata_i /= '0'
+      report "mech_model_1581: WDATA asserted on the read-only model (G_WRITABLE = false)"
+      severity failure;
+  end process ro_guard;
+  end generate g_ro;
+
+  ---------------------------------------------------------------------------
+  -- G_WRITABLE = true: the live rotating flux store.
+  ---------------------------------------------------------------------------
+  g_rw : if G_WRITABLE generate
+    constant C_CYC    : time    := 20 ns;                    -- model timebase
+    constant C_TREV   : integer := G_INDEX_PERIOD / C_CYC;   -- cycles per revolution
+    constant C_IDXL   : integer := G_INDEX_LOW / C_CYC;
+    constant C_SLOT   : integer := 50;                       -- cycles per slot
+    constant C_NSLOT  : integer := (C_TREV + C_SLOT - 1) / C_SLOT;
+    constant C_CELL   : integer := 100;                      -- channel cell (2 us)
+    constant C_RDPW   : integer := MFM_LOW_WIDTH / C_CYC;    -- RDATA pulse (400 ns)
+    constant C_NTRK   : integer := 2 * G_NUM_CYL;
+    constant C_NWIN   : integer := 256;                      -- window log entries
+    signal mclk : std_logic := '0';
+  begin
+    mclk <= not mclk after C_CYC / 2;
+    t_rev_o <= C_TREV;
+
+    p_disk : process (mclk)
+      type t_slots is array (natural range <>) of integer;
+      type t_slots_ptr is access t_slots;
+      type t_trk is record
+        flux : t_slots_ptr;     -- edge position (cycles after the index) or -1
+        gen  : t_slots_ptr;     -- 0 = seed, n = written in WGATE window n
+        key  : integer;         -- seed key of the current seed
+      end record;
+      type t_trks is array (0 to C_NTRK - 1) of t_trk;
+      variable trks : t_trks;
+
+      type t_win is record
+        tix, gen, pos, len : integer;   -- track, generation, open position, cycles
+      end record;
+      type t_wins is array (0 to C_NWIN - 1) of t_win;
+      variable wins  : t_wins;
+      variable nwin  : integer := 0;
+
+      variable pos     : integer := C_TREV - 1;   -- the first clock moves to 0
+      variable sl      : integer;
+      variable tix     : integer;
+      variable spin    : boolean;
+      variable gen     : integer := 0;
+      variable wg_prev : std_logic := '1';
+      variable wd_prev : std_logic := '1';
+      variable wgcyc   : integer := 0;
+      variable pulse   : integer := 0;
+      variable pw_run  : integer := 0;
+      variable pwmin   : integer := integer'high;
+      variable pwmax   : integer := 0;
+      variable pwcnt   : integer := 0;
+      variable seq_p, dmp_p, qry_p : std_logic := '0';
+      variable cnt_s, cnt_n : integer;
+      variable p, s    : integer;
+
+      -- MFM channel word of a byte after carried bit prev (independent of the
+      -- DUT encoder: the seed is built here from first principles)
+      procedure lay_byte(variable fl, gn : inout t_slots_ptr; variable k : inout integer;
+                         b : in integer; variable prev : inout integer) is
+        variable d, c : integer;
+      begin
+        for i in 7 downto 0 loop
+          d := (b / 2**i) mod 2;
+          if prev = 0 and d = 0 then c := 1; else c := 0; end if;
+          if c = 1 then
+            fl((k * C_CELL + 50) / C_SLOT) := k * C_CELL + 50; gn((k * C_CELL + 50) / C_SLOT) := 0;
+          end if;
+          k := k + 1;
+          if d = 1 then
+            fl((k * C_CELL + 50) / C_SLOT) := k * C_CELL + 50; gn((k * C_CELL + 50) / C_SLOT) := 0;
+          end if;
+          k := k + 1;
+          prev := d;
+        end loop;
+      end procedure;
+
+      procedure lay_a1(variable fl, gn : inout t_slots_ptr; variable k : inout integer;
+                       variable prev : inout integer) is
+        constant RAW : std_logic_vector(15 downto 0) := x"4489";
+      begin
+        for i in 15 downto 0 loop
+          if RAW(i) = '1' then
+            fl((k * C_CELL + 50) / C_SLOT) := k * C_CELL + 50; gn((k * C_CELL + 50) / C_SLOT) := 0;
+          end if;
+          k := k + 1;
+        end loop;
+        prev := 1;
+      end procedure;
+
+      -- lay a complete seed track: C_SEED_LEAD x 4E, ten records, 4E fill
+      procedure lay(variable fl, gn : inout t_slots_ptr; cyl, side, key : in integer) is
+        variable k    : integer := 0;     -- channel bit index from the index
+        variable prev : integer := 0;
+        variable v    : unsigned(15 downto 0);
+        variable pl   : unsigned(7 downto 0);
+      begin
+        for i in 0 to C_NSLOT - 1 loop fl(i) := -1; gn(i) := -1; end loop;
+        for i in 1 to C_SEED_LEAD loop lay_byte(fl, gn, k, 16#4E#, prev); end loop;
+        for sec in 1 to 10 loop
+          for i in 1 to 12 loop lay_byte(fl, gn, k, 0, prev); end loop;
+          lay_a1(fl, gn, k, prev); lay_a1(fl, gn, k, prev); lay_a1(fl, gn, k, prev);
+          lay_byte(fl, gn, k, 16#FE#, prev);
+          lay_byte(fl, gn, k, cyl mod 256, prev);
+          lay_byte(fl, gn, k, side, prev);
+          lay_byte(fl, gn, k, sec, prev);
+          lay_byte(fl, gn, k, 2, prev);
+          v := x"FFFF";
+          v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1");
+          v := crc16_update(v, x"FE");
+          v := crc16_update(v, to_unsigned(cyl mod 256, 8));
+          v := crc16_update(v, to_unsigned(side, 8));
+          v := crc16_update(v, to_unsigned(sec, 8));
+          v := crc16_update(v, x"02");
+          lay_byte(fl, gn, k, to_integer(v(15 downto 8)), prev);
+          lay_byte(fl, gn, k, to_integer(v(7 downto 0)), prev);
+          for i in 1 to 22 loop lay_byte(fl, gn, k, 16#4E#, prev); end loop;
+          for i in 1 to 12 loop lay_byte(fl, gn, k, 0, prev); end loop;
+          lay_a1(fl, gn, k, prev); lay_a1(fl, gn, k, prev); lay_a1(fl, gn, k, prev);
+          lay_byte(fl, gn, k, 16#FB#, prev);
+          v := x"FFFF";
+          v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1");
+          v := crc16_update(v, x"FB");
+          for off in 0 to 511 loop
+            pl := seed_payload(key, cyl, side, sec, off);
+            lay_byte(fl, gn, k, to_integer(pl), prev);
+            v := crc16_update(v, pl);
+          end loop;
+          lay_byte(fl, gn, k, to_integer(v(15 downto 8)), prev);
+          lay_byte(fl, gn, k, to_integer(v(7 downto 0)), prev);
+          for i in 1 to 30 loop lay_byte(fl, gn, k, 16#4E#, prev); end loop;
+        end loop;
+        while (k + 16) * C_CELL <= C_TREV loop
+          lay_byte(fl, gn, k, 16#4E#, prev);
+        end loop;
+      end procedure;
+
+      procedure seed(t, key : in integer) is
+      begin
+        if trks(t).flux = null then
+          trks(t).flux := new t_slots(0 to C_NSLOT - 1);
+          trks(t).gen  := new t_slots(0 to C_NSLOT - 1);
+        end if;
+        lay(trks(t).flux, trks(t).gen, t / 2, t mod 2, key);
+        trks(t).key := key;
+        for i in 0 to nwin - 1 loop          -- forget the windows of this track
+          if wins(i).tix = t then wins(i).tix := -1; end if;
+        end loop;
+      end procedure;
+
+      procedure dump(t, tag : in integer) is
+        file     f   : text;
+        variable l   : line;
+        variable tf, tg : t_slots_ptr;
+        variable nw  : integer := 0;
+      begin
+        if trks(t).flux = null then seed(t, 0); end if;
+        file_open(f, G_DUMP_PREFIX & integer'image(tag) & ".txt", write_mode);
+        for i in 0 to nwin - 1 loop
+          if wins(i).tix = t then nw := nw + 1; end if;
+        end loop;
+        write(l, string'("# meta t_rev=") & integer'image(C_TREV) & " cell=" & integer'image(C_CELL)
+              & " slot=" & integer'image(C_SLOT) & " cyl=" & integer'image(t / 2)
+              & " side=" & integer'image(t mod 2) & " seed_key=" & integer'image(trks(t).key)
+              & " windows=" & integer'image(nw));
+        writeline(f, l);
+        for i in 0 to nwin - 1 loop
+          if wins(i).tix = t then
+            write(l, string'("G ") & integer'image(wins(i).gen) & " " & integer'image(wins(i).pos)
+                  & " " & integer'image(wins(i).len));
+            writeline(f, l);
+          end if;
+        end loop;
+        for i in 0 to C_NSLOT - 1 loop
+          if trks(t).flux(i) >= 0 then
+            write(l, string'("E ") & integer'image(trks(t).flux(i)) & " " & integer'image(trks(t).gen(i)));
+            writeline(f, l);
+          end if;
+        end loop;
+        -- the pre-seed, laid afresh (what the track held before any window)
+        tf := new t_slots(0 to C_NSLOT - 1);
+        tg := new t_slots(0 to C_NSLOT - 1);
+        lay(tf, tg, t / 2, t mod 2, trks(t).key);
+        for i in 0 to C_NSLOT - 1 loop
+          if tf(i) >= 0 then
+            write(l, string'("P ") & integer'image(tf(i)));
+            writeline(f, l);
+          end if;
+        end loop;
+        deallocate(tf); deallocate(tg);
+        file_close(f);
+      end procedure;
+    begin
+      if rising_edge(mclk) then
+        pos  := (pos + 1) mod C_TREV;
+        sl   := pos / C_SLOT;
+        spin := spinning(f_motora_i, f_selecta_i, cfg_present_i);
+        if f_side1_i = '0' then tix := 2 * cyl_r; else tix := 2 * cyl_r + 1; end if;
+        pos_o <= pos;
+
+        if pos < C_IDXL and spin then f_index_o <= '0'; else f_index_o <= '1'; end if;
+
+        -- lazy seed: the first time a track is under the spinning head
+        if spin and trks(tix).flux = null then
+          seed(tix, 0);
+        end if;
+
+        assert not (f_wdata_i = '0' and f_wgate_i = '1')
+          report "mech_model_1581: WDATA low while WGATE is high (edge outside WGATE)"
+          severity failure;
+
+        -- WGATE windows, measured in cycles
+        if f_wgate_i = '0' and wg_prev = '1' then
+          gen   := gen + 1;
+          wgcyc := 0;
+          wg_open_pos_o <= pos;
+          wg_opens_o    <= gen;
+          assert spin report "mech_model_1581: WGATE opened while the disk is not spinning" severity error;
+          if nwin < C_NWIN then
+            wins(nwin) := (tix => tix, gen => gen, pos => pos, len => -1);
+            nwin := nwin + 1;
+          else
+            report "mech_model_1581: window log full" severity warning;
+          end if;
+        elsif f_wgate_i = '1' and wg_prev = '0' then
+          wg_len_o    <= wgcyc;
+          wg_closed_o <= gen;
+          for i in 0 to nwin - 1 loop
+            if wins(i).gen = gen then wins(i).len := wgcyc; end if;
+          end loop;
+        end if;
+        wg_prev := f_wgate_i;
+
+        -- WDATA pulse-width census (the pin is high outside WGATE by the assert)
+        if f_wdata_i = '0' then
+          if wd_prev = '1' then pw_run := 1; else pw_run := pw_run + 1; end if;
+        elsif wd_prev = '0' and pw_run > 0 then
+          if pw_run < pwmin then pwmin := pw_run; end if;
+          if pw_run > pwmax then pwmax := pw_run; end if;
+          pwcnt  := pwcnt + 1;
+          pw_run := 0;
+          pw_min_o <= pwmin; pw_max_o <= pwmax; pw_count_o <= pwcnt;
+        end if;
+
+        -- erase (cycle granularity) and write under WGATE
+        if f_wgate_i = '0' and spin and trks(tix).flux /= null then
+          wgcyc := wgcyc + 1;
+          if trks(tix).flux(sl) = pos then
+            trks(tix).flux(sl) := -1;
+          end if;
+          if f_wdata_i = '0' and wd_prev = '1' then
+            trks(tix).flux(sl) := pos;
+            trks(tix).gen(sl)  := gen;
+          end if;
+        elsif f_wgate_i = '0' then
+          wgcyc := wgcyc + 1;
+        end if;
+        wd_prev := f_wdata_i;
+
+        -- playback: one RDATA pulse per stored edge while reading
+        if pulse /= 0 then
+          pulse := pulse - 1;
+          if pulse = 0 then f_rdata_o <= '1'; end if;
+        elsif spin and f_wgate_i = '1' and trks(tix).flux /= null then
+          if trks(tix).flux(sl) = pos then
+            f_rdata_o <= '0';
+            pulse     := C_RDPW;
+          end if;
+        end if;
+        if not spin and pulse = 0 then f_rdata_o <= '1'; end if;
+
+        -- store requests from the testbench
+        if seed_req_i /= seq_p then
+          seq_p := seed_req_i;
+          seed(2 * trk_cyl_i + trk_side_i, seed_key_i);
+          q_ack_o <= not q_ack_o;
+        end if;
+        if dump_req_i /= dmp_p then
+          dmp_p := dump_req_i;
+          dump(2 * trk_cyl_i + trk_side_i, dump_tag_i);
+          q_ack_o <= not q_ack_o;
+        end if;
+        if q_req_i /= qry_p then
+          qry_p := q_req_i;
+          cnt_s := 0; cnt_n := 0;
+          t_q : if trks(2 * trk_cyl_i + trk_side_i).flux /= null then
+            for i in 0 to C_NSLOT - 1 loop
+              p := trks(2 * trk_cyl_i + trk_side_i).flux(i);
+              if p >= 0 then
+                s := (p - q_from_i) mod C_TREV;    -- offset into the span
+                if s < q_len_i then
+                  if trks(2 * trk_cyl_i + trk_side_i).gen(i) = 0 then
+                    cnt_s := cnt_s + 1;
+                  else
+                    cnt_n := cnt_n + 1;
+                  end if;
+                end if;
+              end if;
+            end loop;
+          end if t_q;
+          q_seed_o <= cnt_s; q_new_o <= cnt_n;
+          q_ack_o  <= not q_ack_o;
+        end if;
+      end if;
+    end process p_disk;
+  end generate g_rw;
 
 end architecture sim;
