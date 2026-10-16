@@ -266,6 +266,12 @@ package physical_1581_pkg is
   --                        controller subtracts the decoder's ID-CRC to
   --                        id_valid latency, calibrated in the closed-loop
   --                        bench.
+  --   C_WR_GAP_CAL_CYC     The latency the controller subtracts from the
+  --                        C_WR_GAP_BYTES gap: decoder (ID CRC's last cell ->
+  --                        id_valid) plus the write pipeline (gap expiry ->
+  --                        WGATE fall: session/encoder/word FIFO and the
+  --                        writer's 5-cell output stage). Measured in the
+  --                        closed-loop bench tb_physical_1581_write (W1).
   --   C_WR_TRK_START_WD_CYC  Write Track: watchdog for the starting index
   --                        (300 ms).
   --   C_WR_TRK_END_WD_CYC  Write Track: watchdog for the ending index, counted
@@ -281,6 +287,7 @@ package physical_1581_pkg is
   constant C_WR_SEL_SETTLE_CYC   : natural := 2_500;            -- 50 us
   constant C_WR_FILT             : natural := 4;                -- 80 ns
   constant C_WR_GAP_BYTES        : natural := 22;               -- byte times
+  constant C_WR_GAP_CAL_CYC      : natural := 488;              -- measured, see above
   constant C_WR_TRK_START_WD_CYC : natural := 15_000_000;       -- 300 ms
   constant C_WR_TRK_END_WD_CYC   : natural := 13_000_000;       -- 260 ms
   constant C_WR_GUARD_CYC        : natural := 35_000;           -- 700 us

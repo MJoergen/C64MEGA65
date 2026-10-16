@@ -1,22 +1,58 @@
 -------------------------------------------------------------------------------
 -- physical_1581_controller.vhd
 --
--- Operation + mechanics FSM for the physical internal 1581 (read-only milestone),
--- on the 50 MHz controller clock. Instantiates the input conditioner and the
+-- Operation + mechanics FSM for the physical internal 1581, on the 50 MHz
+-- controller clock. Instantiates the input conditioner and the
 -- DD-MFM decoder, drives the mechanism outputs (motor/select/side/step/dir/
 -- density), synthesizes media-ready / index / track0 / write-protect / disk-change
 -- state, and services three drive-domain request classes over a toggle-handshake
 -- ABI:
 --   * one acknowledged Type-I STEP (DIR setup, 4 us pulse, recovery, 18 ms settle)
 --   * a read operation: Read Sector / Verify / Read Address
+--   * a write operation: Write Sector / Write Track (issue #244, WRITE-SPEC 5.3)
 --   * a cancel/force
 -- Decoded payload bytes are pushed to an external dual-clock read FIFO
 -- (physical_1581_rdfifo). The FIFO quarantines one complete sector; the WD
 -- front end releases it at DRQ cadence only after this controller reports a
 -- clean field CRC, or drains it unseen when this controller reports an error.
 --
--- Writes are NOT part of this milestone: f_wgate/f_wdata are never driven here and
--- stay tied inactive at the top level.
+-- Write engine (issue #244, WRITE-SPEC 5.3/5.4/6/7). The op code decides which
+-- engine runs; both share RD_IDLE's acceptance (one pending latch, one done
+-- toggle with its sequence tag and C_DONE_GAP spacing) and RD_SEARCH's ID
+-- matcher (Write Sector reuses the read matcher and its RNF/CRC exhaustion
+-- accounting unchanged). The write bytes arrive from an external drive-domain
+-- -> 50 MHz CDC FIFO (physical_1581_wfifo, first-word-fall-through read side
+-- wbyte_*); the controller owns every mechanism pin, so the MFM encoder and
+-- the writer front end (physical_1581_mfm_encoder, physical_1581_writer) are
+-- instantiated here and f_wgate_o / f_wdata_o come straight from the writer's
+-- registered output stage.
+--   WR_WAIT    media ready, head settled, side settled, writer idle and the
+--              tab qualified (writer wr_ok); wprot_c -> RES_WRITE_PROTECTED.
+--   Write Sector: RD_SEARCH (shared) -> on the C/R match with ID CRC ok and
+--              N = 2: feed, WR_GAP counts G_WR_GAP_CYC (22 byte-times from the
+--              ID CRC's last cell to the gate, minus the measured decoder and
+--              pipeline latency C_WR_GAP_CAL_CYC) -> first-byte rule (FIFO
+--              empty -> RES_LOST_DATA, no gate) -> WR_STREAM: 12 x 00, 3 x A1
+--              (CRC preset on the first), DAM FB/F8, 512 FIFO bytes (an empty
+--              FIFO at a slot writes 00 and sets the sticky wr_lost_o), CRC
+--              hi/lo, FF -> WR_TAIL: session falls, the writer writes its
+--              tail; the FIFO is drained, the writer goes idle, then done.
+--   Write Track: WR_TRK_ARM (feed at once, wait for the filtered index edge,
+--              start watchdog) -> WR_TRK_STREAM (F5 = A1 sync with the CRC
+--              preset on the first F5 of a run, F6 = C2 sync, F7 = CRC hi + lo,
+--              anything else a plain byte) -> at the next index edge the
+--              session falls and the writer's cut_i truncates at the next cell
+--              boundary -> WR_TAIL. End watchdog -> abort, RES_NO_INDEX.
+--   Abort terms after WR_WAIT (cancel edge, a 4-sample disk-change assert
+--   edge, a 4-sample protected level, motor request off, media_ready lost, a
+--   side change, the writer's own abort or discard) -> WR_ABORT: the gate
+--   closes in the clock that sees the term (abort_i, or the writer's own gate
+--   terms), the session falls, the FIFO is drained, done once the writer is
+--   idle. Enable falling (drive reset) idles everything without a done, like
+--   the read engine. The decoder is held in reset from the session's rise
+--   until the writer's busy falls (WRITE-SPEC 6.4). After every WGATE window
+--   the step engine accepts no step for G_WR_GUARD_CYC (700 us); a step edge
+--   arriving in that window is deferred, not lost.
 --
 -- All timing is generic (spec initial values as defaults) so testbenches scale.
 -- C64MEGA65 project, GPLv3.
@@ -40,7 +76,14 @@ entity physical_1581_controller is
     G_DAM_TIMEOUT_CYC : natural := 68_800;      -- 43 decoded byte-times
     G_SEARCH_WD_CYC   : natural := 65_000_000;  -- 1.300 s absolute search watchdog
     G_SEARCH_EDGES    : natural := 5;           -- index-edge search budget
-    G_PERIOD_MAX_CYC  : natural := 12_500_000   -- 250 ms (index-staleness eject bound)
+    G_PERIOD_MAX_CYC  : natural := 12_500_000;  -- 250 ms (index-staleness eject bound)
+    -- write engine (WRITE-SPEC 5.7)
+    G_WR_GAP_CYC      : natural := C_WR_GAP_BYTES * C_BYTE_CYC - C_WR_GAP_CAL_CYC;
+    G_WR_TRK_START_WD_CYC : natural := C_WR_TRK_START_WD_CYC;  -- 300 ms
+    G_WR_TRK_END_WD_CYC   : natural := C_WR_TRK_END_WD_CYC;    -- 260 ms
+    G_WR_GUARD_CYC    : natural := C_WR_GUARD_CYC;             -- 700 us
+    G_WPROT_QUAL_CYC  : natural := C_WR_WPROT_QUAL_CYC;        -- 10 ms tab qualifier
+    G_SEL_SETTLE_CYC  : natural := C_WR_SEL_SETTLE_CYC         -- 50 us settle
   );
   port (
     clk_i            : in  std_logic;            -- 50 MHz (c64_clk_sd_i)
@@ -58,6 +101,8 @@ entity physical_1581_controller is
     f_stepdir_o      : out std_logic := '1';
     f_step_o         : out std_logic := '1';
     f_density_o      : out std_logic := '1';
+    f_wgate_o        : out std_logic := '1';     -- registered in the writer, active low
+    f_wdata_o        : out std_logic := '1';     -- registered in the writer, active low
 
     -- mode + maintained mechanics requests (from drive domain; synced here)
     phys_active_i    : in  std_logic;
@@ -98,6 +143,21 @@ entity physical_1581_controller is
     byte_data_o      : out unsigned(7 downto 0) := (others => '0');
     byte_wr_o        : out std_logic := '0';
     byte_ovf_i       : in  std_logic := '0';     -- FIFO full: a write this cycle is DROPPED
+
+    -- write operation parameters (quasi-static with the request toggle, like
+    -- rd_track_i / rd_sector_i) and the write-byte stream from the external
+    -- drive-domain CDC FIFO (physical_1581_wfifo read side, first-word-fall-
+    -- through: wbyte_data_i shows the head, wbyte_rd_o pops it)
+    wr_deleted_i     : in  std_logic := '0';     -- DAM F8 instead of FB
+    wr_precomp_i     : in  std_logic := '0';     -- precomp requested (WD P bit = 0)
+    wr_precomp_mode_i: in  std_logic_vector(1 downto 0) := "00";  -- 0/3 follow wr_precomp_i, 1 off, 2 on (diag WR_CTRL)
+    wbyte_data_i     : in  std_logic_vector(7 downto 0) := (others => '0');
+    wbyte_empty_i    : in  std_logic := '1';
+    wbyte_rd_o       : out std_logic := '0';
+    wr_feed_o        : out std_logic := '0';     -- level: "ID found / index armed, feed me"
+    wr_lost_o        : out std_logic := '0';     -- level, sticky per op: a slot was served from an empty FIFO
+    wr_busy_o        : out std_logic;            -- writer not idle (gate open or tail draining)
+    wr_ok_o          : out std_logic;            -- tab qualified writable (WRITE-SPEC 6.2)
 
     -- live normalized state to the drive domain
     st_media_ready_o : out std_logic := '0';
@@ -160,7 +220,37 @@ entity physical_1581_controller is
     -- packed live pin levels: raw async inputs + conditioned inputs (layout in physical_1581_diag.vhd)
     diag_in_bits_o      : out std_logic_vector(15 downto 0) := (others => '0');
     -- packed driven mechanism outputs + enable (layout in physical_1581_diag.vhd)
-    diag_out_bits_o     : out std_logic_vector(15 downto 0) := (others => '0')
+    diag_out_bits_o     : out std_logic_vector(15 downto 0) := (others => '0');
+    -------------------------------------------------------------------------
+    -- write-path diagnostics (issue #244, WRITE-SPEC 8): purely additive taps.
+    -------------------------------------------------------------------------
+    -- write engine
+    diag_wr_phase_o     : out std_logic_vector(3 downto 0) := (others => '0');  -- see C_WRPH_* below
+    diag_wr_session_o   : out std_logic := '0';   -- writer session level
+    diag_wr_feed_o      : out std_logic := '0';   -- = wr_feed_o
+    diag_wr_abort_o     : out std_logic := '0';   -- writer abort_i level
+    diag_wr_prec_o      : out std_logic := '0';   -- effective precomp of the current/last op
+    diag_wr_done_o      : out std_logic := '0';   -- 1-cycle strobe: a write op completed (done toggled)
+    diag_wr_last_o      : out std_logic_vector(7 downto 0) := (others => '0');  -- last write op flags:
+                                                  -- 0 completed 1 lost 2 aborted 3 wp-refused
+                                                  -- 4 first-byte-abort 5 track-op 6 deleted 7 precomp
+    diag_wr_bytes_o     : out unsigned(15 downto 0) := (others => '0');  -- FIFO bytes/tokens consumed, last op
+    diag_wr_first_margin_o : out unsigned(7 downto 0) := (others => '1'); -- byte-times left of the gap when
+                                                  -- the first byte arrived, last sector op (FF = none)
+    diag_wr_trk_cyc_o   : out unsigned(31 downto 0) := (others => '0');  -- index-to-index cycles, last track op
+    -- writer (physical_1581_writer d_* taps, forwarded)
+    diag_wr_gate_o      : out std_logic := '0';   -- WGATE level, active high
+    diag_wr_gate_cyc_o  : out unsigned(31 downto 0) := (others => '0');
+    diag_wr_words_last_o: out unsigned(15 downto 0) := (others => '0');
+    diag_wr_underrun_o  : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_discard_o   : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_gateopen_o  : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_wabort_o    : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_precnt_o    : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_pushfull_o  : out unsigned(15 downto 0) := (others => '0');
+    diag_wr_reason_o    : out std_logic_vector(7 downto 0) := (others => '0');
+    diag_wr_reason_acc_o: out std_logic_vector(7 downto 0) := (others => '0');
+    diag_wr_wflags_o    : out std_logic_vector(4 downto 0) := (others => '0')
   );
 end entity physical_1581_controller;
 
@@ -250,7 +340,11 @@ architecture rtl of physical_1581_controller is
   signal head_settled : std_logic := '1';   -- at rest = settled; cleared on step acceptance
 
   -- read engine
-  type rd_st_t is (RD_IDLE, RD_WAIT, RD_SEARCH, RD_DAM, RD_STREAM, RD_ADDR);
+  -- WR_* states: the write engine (issue #244). Write Sector searches in the
+  -- shared RD_SEARCH state (op_r tells the engines apart).
+  type rd_st_t is (RD_IDLE, RD_WAIT, RD_SEARCH, RD_DAM, RD_STREAM, RD_ADDR,
+                   WR_WAIT, WR_GAP, WR_STREAM, WR_TAIL, WR_ABORT,
+                   WR_TRK_ARM, WR_TRK_STREAM);
   signal rd_st      : rd_st_t := RD_IDLE;
   signal op_r       : std_logic_vector(2 downto 0) := (others => '0');
   signal trk_r      : unsigned(7 downto 0) := (others => '0');
@@ -305,6 +399,93 @@ architecture rtl of physical_1581_controller is
   signal dec_a1_candidate, dec_a1_reject, dec_a1_train : std_logic;
   signal dec_mark_fe, dec_mark_dam, dec_dam_unarmed : std_logic;
 
+  ---------------------------------------------------------------------------
+  -- write engine (issue #244)
+  ---------------------------------------------------------------------------
+  function is_wr(op : std_logic_vector(2 downto 0)) return boolean is
+  begin
+    return op = WROP_WRITE_SECTOR or op = WROP_WRITE_TRACK;
+  end function;
+
+  -- write-phase codes on diag_wr_phase_o
+  constant C_WRPH_IDLE   : std_logic_vector(3 downto 0) := "0000";  -- no write op
+  constant C_WRPH_WAIT   : std_logic_vector(3 downto 0) := "0001";
+  constant C_WRPH_SEARCH : std_logic_vector(3 downto 0) := "0010";
+  constant C_WRPH_GAP    : std_logic_vector(3 downto 0) := "0011";
+  constant C_WRPH_STREAM : std_logic_vector(3 downto 0) := "0100";
+  constant C_WRPH_TAIL   : std_logic_vector(3 downto 0) := "0101";
+  constant C_WRPH_ABORT  : std_logic_vector(3 downto 0) := "0110";
+  constant C_WRPH_TARM   : std_logic_vector(3 downto 0) := "0111";
+  constant C_WRPH_TSTRM  : std_logic_vector(3 downto 0) := "1000";
+
+  -- Write Sector byte sequence (WRITE-SPEC 5.3)
+  constant C_WS_SYNC0 : natural := 12;    -- first A1 (CRC preset)
+  constant C_WS_DAM   : natural := 15;
+  constant C_WS_DATA0 : natural := 16;
+  constant C_WS_CRCHI : natural := 528;
+  constant C_WS_CRCLO : natural := 529;
+  constant C_WS_LAST  : natural := 530;   -- trailing FF
+
+  -- strobe -> encoder (1) -> writer push (2) -> word_level_o (3): no new
+  -- admission decision until the previous push is visible in the level
+  constant C_PUSH_COOL : natural := 3;
+
+  signal wr_del_l    : std_logic := '0';   -- accepted wr_deleted_i
+  signal wr_prec_l   : std_logic := '0';   -- accepted wr_precomp_i
+  signal pend_del    : std_logic := '0';
+  signal pend_prec   : std_logic := '0';
+  signal prec_eff    : std_logic;          -- precomp presented to the writer
+  signal session     : std_logic := '0';
+  signal wr_abort_r    : std_logic := '0';   -- writer abort_i
+  signal wr_cut      : std_logic := '0';   -- writer cut_i (1-cycle)
+  signal wr_feed     : std_logic := '0';
+  signal wr_lost     : std_logic := '0';
+  signal wr_bound    : std_logic := '0';   -- the writer has bound THIS op's session
+  signal wr_gap_cnt  : natural range 0 to G_WR_GAP_CYC := 0;
+  signal wr_gap_pre  : natural range 0 to C_BYTE_CYC - 1 := 0;
+  signal wr_gap_bt   : natural range 0 to 255 := 0;
+  signal wr_first_seen : std_logic := '0';
+  signal wr_idx      : natural range 0 to C_WS_LAST + 1 := 0;
+  signal push_cool   : natural range 0 to C_PUSH_COOL := 0;
+  signal wr_res_l    : std_logic_vector(4 downto 0) := RES_OK;  -- latched abort result
+  signal wr_rnf_l    : std_logic := '0';
+  signal wr_last_l   : std_logic_vector(7 downto 0) := (others => '0');
+  signal wr_bytes    : natural range 0 to 65535 := 0;
+  signal wr_trk_wd   : natural range 0 to G_WR_TRK_START_WD_CYC + G_WR_TRK_END_WD_CYC := 0;
+  signal wr_trk_cyc  : natural range 0 to 2**30 := 0;
+  signal trk_crc_lo  : std_logic := '0';   -- the low CRC byte of an F7 is due
+  signal trk_prev_f5 : std_logic := '0';   -- the previous token was F5
+  signal wr_guard    : natural range 0 to G_WR_GUARD_CYC := 0;
+  signal step_pend   : std_logic := '0';   -- a step edge deferred by the guard
+  signal wr_done_prev: std_logic := '0';   -- rd_done_tgl_o, one clock late
+  signal wr_aborted_l: std_logic := '0';   -- the current/last write op went through WR_ABORT
+  -- 4-sample filters of the write abort terms (the writer filters the same
+  -- inputs the same way; these cover the phases before the session)
+  signal wp_run      : natural range 0 to C_WR_FILT := 0;
+  signal chg_run     : natural range 0 to C_WR_FILT := 0;
+  signal chg_armed   : std_logic := '1';
+
+  -- encoder
+  signal enc_start   : std_logic := '0';
+  signal enc_valid   : std_logic := '0';
+  signal enc_byte    : std_logic_vector(7 downto 0) := (others => '0');
+  signal enc_mark    : enc_mark_t := ENC_MARK_NONE;
+  signal enc_feed    : std_logic := '0';
+  signal enc_creset  : std_logic := '0';
+  signal enc_ready   : std_logic;
+  signal enc_word    : std_logic_vector(15 downto 0);
+  signal enc_wvalid  : std_logic;
+  signal enc_crc     : std_logic_vector(15 downto 0);
+
+  -- writer
+  signal w_level     : unsigned(2 downto 0);
+  signal w_full      : std_logic;
+  signal w_busy      : std_logic;
+  signal w_ok        : std_logic;
+  signal w_gate      : std_logic;
+  signal w_reason    : std_logic_vector(7 downto 0);
+  signal w_flags     : std_logic_vector(4 downto 0);
+
 begin
 
   en <= '1' when (G_CAPABLE and active_s = '1') else '0';
@@ -343,6 +524,72 @@ begin
       crc_value_o => dec_crc_value,
       est_o => dec_est
     );
+
+  ---------------------------------------------------------------------------
+  -- write path: MFM encoder + writer front end (issue #244). The writer owns
+  -- f_wgate_o / f_wdata_o (registered, single driver, reset '1'); its gate
+  -- terms are this controller's own enable, motor request and media_ready.
+  ---------------------------------------------------------------------------
+  prec_eff <= '0' when wr_precomp_mode_i = "01" else
+              '1' when wr_precomp_mode_i = "10" else
+              wr_prec_l;
+
+  i_enc : entity work.physical_1581_mfm_encoder
+    port map (
+      clk_i => clk_i, rst_i => rst_i, start_i => enc_start,
+      byte_i => enc_byte, mark_i => enc_mark, crc_feed_i => enc_feed,
+      crc_reset_i => enc_creset, valid_i => enc_valid, ready_o => enc_ready,
+      word_o => enc_word, word_valid_o => enc_wvalid, crc_o => enc_crc
+    );
+
+  i_wr : entity work.physical_1581_writer
+    generic map (
+      G_WPROT_QUAL_CYC => G_WPROT_QUAL_CYC,
+      G_SEL_SETTLE_CYC => G_SEL_SETTLE_CYC
+    )
+    port map (
+      clk_i => clk_i, rst_i => rst_i,
+      en_i => en, mot_i => motor_s, media_ready_i => media_ready,
+      side_i => side_s, wprot_i => wprot_c, change_i => change_c,
+      session_i => session, abort_i => wr_abort_r, precomp_i => prec_eff, cut_i => wr_cut,
+      word_i => enc_word, word_push_i => enc_wvalid,
+      word_full_o => w_full, word_level_o => w_level,
+      f_wdata_o => f_wdata_o, f_wgate_o => f_wgate_o,
+      busy_o => w_busy, wr_ok_o => w_ok, gate_o => w_gate,
+      d_gate_cyc_o => diag_wr_gate_cyc_o, d_words_last_o => diag_wr_words_last_o,
+      d_underrun_o => diag_wr_underrun_o, d_discard_o => diag_wr_discard_o,
+      d_gateopen_o => diag_wr_gateopen_o, d_abort_o => diag_wr_wabort_o,
+      d_precnt_o => diag_wr_precnt_o, d_pushfull_o => diag_wr_pushfull_o,
+      d_reason_o => w_reason, d_reason_acc_o => diag_wr_reason_acc_o,
+      d_flags_o => w_flags
+    );
+
+  wr_feed_o <= wr_feed;
+  wr_lost_o <= wr_lost;
+  wr_busy_o <= w_busy;
+  wr_ok_o   <= w_ok;
+
+  diag_wr_session_o <= session;
+  diag_wr_feed_o    <= wr_feed;
+  diag_wr_abort_o   <= wr_abort_r;
+  diag_wr_prec_o    <= prec_eff;
+  diag_wr_last_o    <= wr_last_l;
+  diag_wr_bytes_o   <= to_unsigned(wr_bytes, 16);
+  diag_wr_trk_cyc_o <= to_unsigned(wr_trk_cyc, 32);
+  diag_wr_gate_o    <= w_gate;
+  diag_wr_reason_o  <= w_reason;
+  diag_wr_wflags_o  <= w_flags;
+
+  diag_wr_phase_o <= C_WRPH_IDLE   when not is_wr(op_r) or rd_st = RD_IDLE else
+                     C_WRPH_WAIT   when rd_st = WR_WAIT else
+                     C_WRPH_SEARCH when rd_st = RD_SEARCH else
+                     C_WRPH_GAP    when rd_st = WR_GAP else
+                     C_WRPH_STREAM when rd_st = WR_STREAM else
+                     C_WRPH_TAIL   when rd_st = WR_TAIL else
+                     C_WRPH_ABORT  when rd_st = WR_ABORT else
+                     C_WRPH_TARM   when rd_st = WR_TRK_ARM else
+                     C_WRPH_TSTRM  when rd_st = WR_TRK_STREAM else
+                     C_WRPH_IDLE;
 
   ---------------------------------------------------------------------------
   -- physical output drivers (combinational from maintained state)
@@ -425,7 +672,14 @@ begin
     "0010" when RD_SEARCH,
     "0011" when RD_DAM,
     "0100" when RD_STREAM,
-    "0101" when RD_ADDR;
+    "0101" when RD_ADDR,
+    "1000" when WR_WAIT,
+    "1001" when WR_GAP,
+    "1010" when WR_STREAM,
+    "1011" when WR_TAIL,
+    "1100" when WR_ABORT,
+    "1101" when WR_TRK_ARM,
+    "1110" when WR_TRK_STREAM;
 
   -- step FSM state -> 2-bit phase code
   with step_st select diag_step_phase_o <=
@@ -470,6 +724,26 @@ begin
     variable rd_req_edge     : boolean;
     variable cancel_edge     : boolean;
     variable side_changed    : boolean;
+    variable v_chg_edge      : boolean;
+    variable v_wr_term       : boolean;
+    variable v_wr_res        : std_logic_vector(4 downto 0);
+    variable v_wr_rnf        : std_logic;
+
+    -- completion of a write op: result + done toggle with the usual tag and
+    -- spacing (the same handshake as every read completion)
+    procedure wr_done(res : std_logic_vector(4 downto 0); rnf : std_logic) is
+    begin
+      rd_result_o   <= res;
+      rd_rnf_o      <= rnf;
+      rd_crc_err_o  <= '0';
+      rd_done_tgl_o <= not rd_done_tgl_o;
+      rd_done_seq_o <= seq_r;
+      done_gap_cnt  <= C_DONE_GAP;
+      wr_feed       <= '0';
+      wr_abort_r      <= '0';
+      wr_bound      <= '0';
+      rd_st         <= RD_IDLE;
+    end procedure;
   begin
     if rising_edge(clk_i) then
       -- default strobes
@@ -478,6 +752,57 @@ begin
       rd_req_evt <= '0';
       diag_match_id_o <= '0';
       diag_dam_miss_o <= '0';
+      enc_valid   <= '0';
+      enc_start   <= '0';
+      enc_feed    <= '0';
+      enc_creset  <= '0';
+      wr_cut      <= '0';
+      wbyte_rd_o  <= '0';
+      diag_wr_done_o <= '0';
+      if push_cool /= 0 then
+        push_cool <= push_cool - 1;
+      end if;
+
+      -- mechanics guard (WRITE-SPEC 6.5): reloaded while WGATE is open, so it
+      -- expires G_WR_GUARD_CYC after the gate closed, however the op ended
+      if w_gate = '1' then
+        wr_guard <= G_WR_GUARD_CYC;
+      elsif wr_guard /= 0 then
+        wr_guard <= wr_guard - 1;
+      end if;
+
+      -- write abort-term filters: a protected level and a disk-change assert
+      -- edge count only after C_WR_FILT consecutive samples, like the writer's
+      -- own filters on the same two inputs
+      if wprot_c = '1' then
+        if wp_run /= C_WR_FILT then wp_run <= wp_run + 1; end if;
+      else
+        wp_run <= 0;
+      end if;
+      v_chg_edge := chg_run = C_WR_FILT and chg_armed = '1';
+      if change_c = '1' then
+        if chg_run /= C_WR_FILT then chg_run <= chg_run + 1; end if;
+        if v_chg_edge then chg_armed <= '0'; end if;
+      else
+        chg_run   <= 0;
+        chg_armed <= '1';
+      end if;
+
+      -- write-op completion bookkeeping, one clock after the done toggle
+      -- (rd_result_o and op_r still describe the completed op: a pending
+      -- request is served C_DONE_GAP cycles later at the earliest)
+      wr_done_prev <= rd_done_tgl_o;
+      if rd_done_tgl_o /= wr_done_prev and is_wr(op_r) then
+        diag_wr_done_o <= '1';
+        wr_last_l(0) <= '1' when rd_result_o = RES_OK else '0';
+        wr_last_l(1) <= '1' when wr_lost = '1' or rd_result_o = RES_LOST_DATA else '0';
+        wr_last_l(2) <= wr_aborted_l;
+        wr_last_l(3) <= '1' when rd_result_o = RES_WRITE_PROTECTED else '0';
+        wr_last_l(4) <= '1' when rd_result_o = RES_LOST_DATA else '0';
+        wr_last_l(5) <= '1' when op_r = WROP_WRITE_TRACK else '0';
+        wr_last_l(6) <= wr_del_l;
+        wr_last_l(7) <= prec_eff;
+      end if;
 
       step_req_edge := (stq_s /= stq_d);
       rd_req_edge   := (rdq_s /= rdq_d);
@@ -529,6 +854,20 @@ begin
           head_valid     <= '0';
           last_dir_vld   <= '0';
           head_cyl       <= 0;
+        end if;
+        -- write engine idle (WRITE-SPEC 7): the writer closes WGATE in this
+        -- clock through its own en_i term; no done (the WD is gone). The write
+        -- FIFO is drained here, so it is empty when the drive is re-enabled
+        -- (its write side is reset from the QNICE reset only).
+        session    <= '0';
+        wr_abort_r   <= '0';
+        wr_feed    <= '0';
+        wr_lost    <= '0';
+        wr_bound   <= '0';
+        trk_crc_lo <= '0';
+        step_pend  <= '0';
+        if rst_i = '0' and wbyte_rd_o = '0' and wbyte_empty_i = '0' then
+          wbyte_rd_o <= '1';
         end if;
       else
         ------------------------------------------------------------------
@@ -631,7 +970,12 @@ begin
         case step_st is
           when SI_IDLE =>
             step_dir_pulse <= '1';
-            if step_req_edge then
+            if (step_req_edge or step_pend = '1') and wr_guard /= 0 then
+              -- mechanics guard after a write (WRITE-SPEC 6.5): defer the
+              -- step, never lose it (the toggle edge is gone after this clock)
+              step_pend <= '1';
+            elsif step_req_edge or step_pend = '1' then
+              step_pend    <= '0';
               step_dir_o   <= step_outward_i;
               step_rev     <= '1' when (last_dir_vld = '1' and step_outward_i /= last_dir_out) else '0';
               head_settled <= '0';           -- clear on acceptance so no read races DIR/setup
@@ -702,8 +1046,43 @@ begin
           done_gap_cnt <= done_gap_cnt - 1;
         end if;
 
+        -- write abort terms (WRITE-SPEC 5.3 / 6.3), evaluated in every write
+        -- state after WR_WAIT. The disk change counts as an EDGE here (the
+        -- mechanism holds the line until the next step, and a level would
+        -- block a DOS that rewrites without stepping after a swap); the read
+        -- engine's level rule below is unchanged. While the writer streams it
+        -- catches the same terms itself, in the same clock, with its own
+        -- reason codes; its abort or discard is mapped here as well.
+        v_wr_term := false;
+        v_wr_res  := RES_CANCELLED;
+        v_wr_rnf  := '0';
+        if is_wr(op_r) and rd_st /= RD_IDLE and rd_st /= WR_WAIT and rd_st /= WR_ABORT then
+          if cancel_edge then
+            v_wr_term := true;
+          elsif v_chg_edge then
+            v_wr_term := true; v_wr_res := RES_DISK_CHANGED; v_wr_rnf := '1';
+          elsif wp_run = C_WR_FILT then
+            v_wr_term := true; v_wr_res := RES_WRITE_PROTECTED;
+          elsif motor_s = '0' or media_ready = '0' or side_changed then
+            v_wr_term := true;
+          elsif wr_bound = '1' and w_flags(1) = '1' then
+            -- the writer aborted on its own term
+            v_wr_term := true;
+            if w_reason(2) = '1' then
+              v_wr_res := RES_WRITE_PROTECTED;
+            elsif w_reason(3) = '1' then
+              v_wr_res := RES_DISK_CHANGED; v_wr_rnf := '1';
+            elsif w_reason(6) = '1' then
+              v_wr_res := RES_INTERNAL_FAULT;          -- word underrun
+            end if;
+          elsif wr_bound = '1' and w_flags(2) = '1' then
+            -- the writer refused the session at ARM (tab not qualified)
+            v_wr_term := true; v_wr_res := RES_WRITE_PROTECTED;
+          end if;
+        end if;
+
         -- global cancel / disk-change abort during an active read
-        if rd_st /= RD_IDLE and (cancel_edge or change_c = '1') then
+        if rd_st /= RD_IDLE and not is_wr(op_r) and (cancel_edge or change_c = '1') then
           if change_c = '1' then
             rd_result_o <= RES_DISK_CHANGED; rd_rnf_o <= '1'; rd_crc_err_o <= '0';
           else
@@ -713,6 +1092,19 @@ begin
           rd_done_seq_o <= seq_r;              -- F4: tag of the op being completed
           done_gap_cnt  <= C_DONE_GAP;         -- F5: arm the spacing counter
           rd_st <= RD_IDLE;
+        elsif rd_st = WR_WAIT and cancel_edge then
+          -- Force Interrupt before the write engine left its preconditions
+          wr_done(RES_CANCELLED, '0');
+        elsif v_wr_term then
+          -- WGATE closes in this clock (abort_i, or the writer's own term);
+          -- WR_ABORT drops the session, drains the FIFO and reports once the
+          -- writer is idle
+          wr_res_l     <= v_wr_res;
+          wr_rnf_l     <= v_wr_rnf;
+          wr_abort_r     <= '1';
+          wr_feed      <= '0';
+          wr_aborted_l <= '1';
+          rd_st        <= WR_ABORT;
         else
           case rd_st is
             when RD_IDLE =>
@@ -737,7 +1129,17 @@ begin
                   edge_cnt <= 0;
                   rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
                   rd_req_evt <= '1';             -- trace REQUEST on acceptance
-                  rd_st  <= RD_WAIT;
+                  if is_wr(rd_op_i) then
+                    wr_del_l     <= wr_deleted_i;
+                    wr_prec_l    <= wr_precomp_i;
+                    wr_lost      <= '0';
+                    wr_bytes     <= 0;
+                    wr_bound     <= '0';
+                    wr_aborted_l <= '0';
+                    rd_st  <= WR_WAIT;
+                  else
+                    rd_st  <= RD_WAIT;
+                  end if;
                 elsif pend_v = '1' and not cancel_edge then
                   op_r   <= pend_op;
                   trk_r  <= pend_trk;
@@ -749,7 +1151,17 @@ begin
                   edge_cnt <= 0;
                   rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
                   rd_req_evt <= '1';             -- a served pending traces here
-                  rd_st  <= RD_WAIT;
+                  if is_wr(pend_op) then
+                    wr_del_l     <= pend_del;
+                    wr_prec_l    <= pend_prec;
+                    wr_lost      <= '0';
+                    wr_bytes     <= 0;
+                    wr_bound     <= '0';
+                    wr_aborted_l <= '0';
+                    rd_st  <= WR_WAIT;
+                  else
+                    rd_st  <= RD_WAIT;
+                  end if;
                 end if;
               end if;
 
@@ -815,6 +1227,18 @@ begin
                         rd_done_seq_o <= seq_r;
                         done_gap_cnt  <= C_DONE_GAP;
                         rd_st <= RD_IDLE;
+                      elsif op_r = WROP_WRITE_SECTOR then
+                        -- Write Sector: the ID matched (C, R, ID CRC ok, N = 2).
+                        -- Start feeding now; the data field is written
+                        -- C_WR_GAP_BYTES byte-times after the ID CRC's last cell.
+                        diag_match_id_o <= '1';
+                        rd_c_o <= id_c; rd_h_o <= id_h; rd_r_o <= id_r; rd_n_o <= id_n;
+                        wr_feed       <= '1';
+                        wr_gap_cnt    <= G_WR_GAP_CYC;
+                        wr_gap_pre    <= 0;
+                        wr_gap_bt     <= C_WR_GAP_BYTES;
+                        wr_first_seen <= '0';
+                        rd_st         <= WR_GAP;
                       else
                         diag_match_id_o <= '1';
                         dam_cnt <= to_unsigned(G_DAM_TIMEOUT_CYC, 32);
@@ -844,6 +1268,7 @@ begin
                 rd_done_tgl_o <= not rd_done_tgl_o;
                 rd_done_seq_o <= seq_r;
                 done_gap_cnt  <= C_DONE_GAP;
+                wr_feed <= '0';                      -- a Write Sector match in this very clock
                 rd_st <= RD_IDLE;
               end if;
 
@@ -933,7 +1358,155 @@ begin
               else
                 addr_idx <= addr_idx + 1;
               end if;
+
+            ----------------------------------------------------------------
+            -- WRITE engine (issue #244, WRITE-SPEC 5.3)
+            ----------------------------------------------------------------
+            when WR_WAIT =>
+              -- the read engine's preconditions, plus an idle writer (a
+              -- session may rise only while busy_o = '0') and a qualified tab
+              if rdy_wd_cnt /= 0 then rdy_wd_cnt <= rdy_wd_cnt - 1; end if;
+              if media_ready = '1' and head_settled = '1' and side_settle = 0 and w_busy = '0' then
+                if wprot_c = '1' then
+                  wr_done(RES_WRITE_PROTECTED, '0');   -- no feed, no gate
+                elsif w_ok = '1' then
+                  if op_r = WROP_WRITE_TRACK then
+                    wr_done(RES_INVALID_REQUEST, '0');
+                  else
+                    dec_rst  <= '1';                   -- fresh separator for the search
+                    wd_cnt   <= to_unsigned(G_SEARCH_WD_CYC, 32);
+                    edge_cnt <= 0;
+                    rd_st    <= RD_SEARCH;             -- the shared ID matcher
+                  end if;
+                elsif rdy_wd_cnt = 0 then
+                  -- the tab reads writable but never qualified within the
+                  -- readiness budget: refuse like a protected disk
+                  wr_done(RES_WRITE_PROTECTED, '0');
+                end if;
+              elsif rdy_wd_cnt = 0 then
+                wr_done(RES_NOT_READY, '1');
+              end if;
+
+            when WR_GAP =>
+              -- the 22-byte gap; the feed is up, the drive fills the FIFO
+              if wr_gap_pre = C_BYTE_CYC - 1 then
+                wr_gap_pre <= 0;
+                if wr_gap_bt /= 0 then wr_gap_bt <= wr_gap_bt - 1; end if;
+              else
+                wr_gap_pre <= wr_gap_pre + 1;
+              end if;
+              if wbyte_empty_i = '0' and wr_first_seen = '0' then
+                wr_first_seen <= '1';
+                diag_wr_first_margin_o <= to_unsigned(wr_gap_bt, 8);
+              end if;
+              if wr_gap_cnt /= 0 then
+                wr_gap_cnt <= wr_gap_cnt - 1;
+              elsif wbyte_empty_i = '1' then
+                -- first-byte rule (WRITE-SPEC 5.4): LOST DATA, WGATE never opens
+                diag_wr_first_margin_o <= (others => '0');
+                wr_done(RES_LOST_DATA, '0');
+              else
+                session   <= '1';                      -- writer ARM -> STREAM
+                enc_start <= '1';                      -- p := 0, CRC := FFFF
+                push_cool <= C_PUSH_COOL;
+                wr_idx    <= 0;
+                rd_st     <= WR_STREAM;
+              end if;
+
+            when WR_STREAM =>
+              -- one encoder strobe per writer word slot: push while the word
+              -- FIFO holds at most one word, a push in flight counted
+              -- (push_cool), and only while the encoder's CRC is idle
+              if push_cool = 0 and enc_ready = '1' and w_level <= 1 then
+                enc_valid  <= '1';
+                push_cool  <= C_PUSH_COOL;
+                enc_mark   <= ENC_MARK_NONE;
+                enc_feed   <= '1';
+                if wr_idx < C_WS_SYNC0 then
+                  enc_byte <= x"00";                   -- 12 x 00 run-up
+                  enc_feed <= '0';
+                elsif wr_idx < C_WS_DAM then
+                  enc_mark <= ENC_MARK_A1;             -- 3 x A1 (0x4489)
+                  if wr_idx = C_WS_SYNC0 then
+                    enc_creset <= '1';                 -- CRC preset before the first A1
+                  end if;
+                elsif wr_idx = C_WS_DAM then
+                  enc_byte <= std_logic_vector(MARK_F8) when wr_del_l = '1' else std_logic_vector(MARK_FB);
+                elsif wr_idx < C_WS_CRCHI then
+                  if wbyte_empty_i = '0' then
+                    enc_byte   <= wbyte_data_i;
+                    wbyte_rd_o <= '1';
+                    if wr_bytes /= 65535 then wr_bytes <= wr_bytes + 1; end if;
+                  else
+                    enc_byte <= x"00";                 -- underrun at a data slot: 00, sticky LOST
+                    wr_lost  <= '1';
+                  end if;
+                elsif wr_idx = C_WS_CRCHI then
+                  enc_byte <= enc_crc(15 downto 8);
+                  enc_feed <= '0';
+                elsif wr_idx = C_WS_CRCLO then
+                  enc_byte <= enc_crc(7 downto 0);
+                  enc_feed <= '0';
+                else
+                  enc_byte <= x"FF";                   -- trailing FF
+                  enc_feed <= '0';
+                end if;
+                if wr_idx = C_WS_LAST then
+                  rd_st <= WR_TAIL;
+                else
+                  wr_idx <= wr_idx + 1;
+                end if;
+              end if;
+
+            when WR_TAIL =>
+              -- the session falls once the last push has landed; the writer
+              -- writes its tail; then drain, idle writer -> done
+              if push_cool = 0 then
+                session <= '0';
+              end if;
+              if session = '0' and push_cool = 0 and w_busy = '0' and
+                 wbyte_empty_i = '1' and wbyte_rd_o = '0' then
+                if wr_bound = '1' then
+                  wr_done(RES_OK, '0');                -- + wr_lost_o as the LOST flag
+                else
+                  wr_done(RES_INTERNAL_FAULT, '0');    -- the writer never bound
+                end if;
+              end if;
+
+            when WR_ABORT =>
+              -- abort_i is high (the gate is shut); drop the session once no
+              -- push is in flight, drain, report when the writer is idle
+              if push_cool = 0 then
+                session <= '0';
+              end if;
+              if session = '0' and push_cool = 0 and w_busy = '0' and
+                 wbyte_empty_i = '1' and wbyte_rd_o = '0' then
+                wr_done(wr_res_l, wr_rnf_l);
+              end if;
+
+            when WR_TRK_ARM | WR_TRK_STREAM =>
+              wr_done(RES_INVALID_REQUEST, '0');
           end case;
+        end if;
+
+        -- the writer has bound this op's session: its flags describe it now
+        if session = '1' and w_busy = '1' then
+          wr_bound <= '1';
+        end if;
+
+        -- the decoder is held in reset from the session's rise until the
+        -- writer is idle (WRITE-SPEC 6.4: RDATA is meaningless while writing)
+        if session = '1' or w_busy = '1' then
+          dec_rst <= '1';
+        end if;
+
+        -- write FIFO drain outside the consuming phases: the late bytes of a
+        -- lost sector, the residue of an aborted op. The FIFO is empty at
+        -- every op boundary (one pop per two clocks: the FWFT head and the
+        -- empty flag move one clock after a pop).
+        if rd_st /= WR_GAP and rd_st /= WR_STREAM and rd_st /= WR_TRK_ARM and
+           rd_st /= WR_TRK_STREAM and wbyte_rd_o = '0' and wbyte_empty_i = '0' then
+          wbyte_rd_o <= '1';
         end if;
 
         ------------------------------------------------------------------
@@ -955,6 +1528,8 @@ begin
           pend_trk <= rd_track_i;
           pend_sec <= rd_sector_i;
           pend_seq <= rd_seq_i;
+          pend_del <= wr_deleted_i;
+          pend_prec<= wr_precomp_i;
         end if;
 
       end if;
