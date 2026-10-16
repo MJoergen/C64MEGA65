@@ -2,7 +2,7 @@
 -- physical_1581_pkg.vhd
 --
 -- Constants, result/op codes and cycle-conversion helpers for the physical
--- internal 1581 drive (issue #90), read-only milestone.
+-- internal 1581 drive (issue #90 read path, issue #244 write path).
 --
 -- All magnetic timing derives from a single controller clock frequency
 -- C_FDC_HZ = 50 MHz (the exact QNICE-domain clock c64_clk_sd_i). The MEGA65
@@ -183,6 +183,11 @@ package physical_1581_pkg is
   constant RES_UNSUPPORTED_SIZE : result_t := "01000";
   constant RES_WRITE_PROTECTED  : result_t := "01001";
   constant RES_DISK_CHANGED     : result_t := "01010";
+  -- Write path (issue #244): the first data byte / first token was not in the
+  -- write FIFO when the splice deadline expired (WGATE never opened), or a
+  -- Write Track token stream ran dry. Distinct from the sticky mid-sector
+  -- phys_wr_lost flag, which marks an otherwise completed op.
+  constant RES_LOST_DATA        : result_t := "01011";
   constant RES_CANCELLED        : result_t := "01101";
   constant RES_INVALID_REQUEST  : result_t := "01110";
   constant RES_INTERNAL_FAULT   : result_t := "01111";
@@ -195,6 +200,10 @@ package physical_1581_pkg is
   constant RDOP_READ_ADDRESS : rdop_t := "001";
   constant RDOP_VERIFY       : rdop_t := "010";
   constant RDOP_READ_TRACK   : rdop_t := "011";
+  -- Write operations (issue #244) share the op channel and its request /
+  -- cancel / done-tag discipline with the reads.
+  constant WROP_WRITE_SECTOR : rdop_t := "100";
+  constant WROP_WRITE_TRACK  : rdop_t := "101";
 
   -----------------------------------------------------------------------------
   -- MFM address-mark byte values (decoded)
@@ -205,11 +214,69 @@ package physical_1581_pkg is
   constant MARK_FB : unsigned(7 downto 0) := x"FB";   -- data mark (normal)
   constant MARK_F8 : unsigned(7 downto 0) := x"F8";   -- data mark (deleted)
 
+  -- Raw 16-bit MFM channel words of the two sync marks with their missing
+  -- clock cell (c7 d7 c6 d6 ... c0 d0, MSB first in time). A1 misses c2
+  -- (regular A1 would be 0x44A9), C2 misses c3 (regular C2 would be 0x5254).
+  -- Both words start with c7 = 0 because bit 7 of A1 and C2 is 1, so they are
+  -- valid after either value of the carried previous data bit.
+  constant C_MFM_SYNC_A1 : std_logic_vector(15 downto 0) := x"4489";
+  constant C_MFM_SYNC_C2 : std_logic_vector(15 downto 0) := x"5224";
+
   -- CRC-16/CCITT-FALSE state after feeding A1 A1 A1 (sanity anchor).
   constant C_CRC_AFTER_3XA1 : unsigned(15 downto 0) := x"CDB4";
 
   -- Standard 1581 sector size code (N=2 => 512 bytes) -- only value supported.
   constant C_SIZECODE_512 : unsigned(7 downto 0) := x"02";
+
+  -----------------------------------------------------------------------------
+  -- Write path timing (issue #244), all in 50 MHz controller cycles
+  --
+  --   C_WR_CELL_CYC        One MFM channel cell (2.000 us), the period of the
+  --                        writer's serializer; equal to the read path's
+  --                        C_HALF_CELL_CYC. A 16-bit channel word therefore
+  --                        lasts 1600 cycles (32 us, one DD byte time).
+  --   C_WR_LAUNCH_CYC      Cell cycle at which the falling WDATA edge (the
+  --                        flux reversal) of a '1' channel bit is launched:
+  --                        the cell midpoint, so a precompensated edge keeps
+  --                        860 ns to either cell boundary.
+  --   C_WR_PULSE_CYC       Width of the active-low WDATA pulse (500 ns), the
+  --                        middle of the mechanism's 0.2..1.1 us window. Only
+  --                        the falling edge is written.
+  --   C_WR_PRECOMP_CYC     Write precompensation magnitude (140 ns), the shift
+  --                        AExp measured on this medium; the WD1772 nominal is
+  --                        about 125 ns.
+  --   C_WR_WPROT_QUAL_CYC  Write-protect qualifier (10 ms): the tab must read
+  --                        writable for this much cumulative enabled-and-
+  --                        settled time before wr_ok is granted.
+  --   C_WR_SEL_SETTLE_CYC  Blind window (50 us) after the enable edge in which
+  --                        the qualifier ignores the mechanism's status lines.
+  --   C_WR_FILT            Samples (80 ns at 50 MHz) a protected level or a
+  --                        disk-change assert must persist before it revokes
+  --                        wr_ok or aborts a running write.
+  --   C_WR_GAP_BYTES       Byte times from the ID field to the data-field
+  --                        splice of a Write Sector (WD1772 datasheet; the
+  --                        image-mode WR_FIRST_GRACE rule of issue #248). The
+  --                        controller subtracts the decoder's ID-CRC to
+  --                        id_valid latency, calibrated in the closed-loop
+  --                        bench.
+  --   C_WR_TRK_START_WD_CYC  Write Track: watchdog for the starting index
+  --                        (300 ms).
+  --   C_WR_TRK_END_WD_CYC  Write Track: watchdog for the ending index, counted
+  --                        from the start edge (260 ms).
+  --   C_WR_GUARD_CYC       Mechanics guard (700 us): no step is accepted after
+  --                        WGATE deasserts, while the write current decays.
+  -----------------------------------------------------------------------------
+  constant C_WR_CELL_CYC         : natural := C_HALF_CELL_CYC;  -- 100 = 2.000 us
+  constant C_WR_LAUNCH_CYC       : natural := 50;               -- 1.000 us
+  constant C_WR_PULSE_CYC        : natural := 25;               -- 500 ns
+  constant C_WR_PRECOMP_CYC      : natural := 7;                -- 140 ns
+  constant C_WR_WPROT_QUAL_CYC   : natural := 500_000;          -- 10 ms
+  constant C_WR_SEL_SETTLE_CYC   : natural := 2_500;            -- 50 us
+  constant C_WR_FILT             : natural := 4;                -- 80 ns
+  constant C_WR_GAP_BYTES        : natural := 22;               -- byte times
+  constant C_WR_TRK_START_WD_CYC : natural := 15_000_000;       -- 300 ms
+  constant C_WR_TRK_END_WD_CYC   : natural := 13_000_000;       -- 260 ms
+  constant C_WR_GUARD_CYC        : natural := 35_000;           -- 700 us
 
 end package physical_1581_pkg;
 
