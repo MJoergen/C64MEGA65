@@ -64,7 +64,8 @@ images). It supports the following hardware ports of the MEGA65:
   cartridges, GeoRAM, multi-function flash cartridges, etc.
 * IEC port so that you can attach real 1541 & 1581 drives as well as
   printers, plotters or modern devices such as the SD2IEC
-* Use the MEGA65's built-in floppy drive as 1581 (read-only)
+* Use the MEGA65's built-in floppy drive as 1581 (it also writes from
+  WIP-V6-A21X1 on, see [below](#writing-to-real-disks-with-the-internal-1581))
 
 Additionally, the C64 for MEGA65 core can simulate a 1750 REU with 512KB
 of RAM, it can simulate cartridges (by loading `*.crt` files) and it offers
@@ -116,6 +117,21 @@ authentic image.
 Important: If you use VGA displays or analog retro monitors, please switch off
 "HDMI: Flicker-free" as described
 [here](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
+
+### Writing to real disks with the Internal 1581
+
+*This applies from WIP-V6-A21X1 on.* The built-in floppy drive in "Internal 1581" mode also writes: `SAVE`, scratching and renaming files, `VALIDATE`, copy programs and GEOS work on real disks as they do with a real 1581. Formatting a real disk (`N0:`) follows with WIP-V6-A21X2. Please read this before you insert a disk you care about.
+
+**The write-protect tab of the disk is the only thing that protects it.** There is no switch in the menu and no "are you sure": if the tab is closed, the C64 can write to the disk, and it will. On a 3.5" disk the tab is the small sliding shutter in the corner:
+
+* **Hole open**: the disk is protected and nothing can be written to it. The drive then answers every write with `26, WRITE PROTECT ON`.
+* **Hole closed**: the disk can be written.
+
+So keep the hole **open** on every original and on every disk you could not replace. For writing, use blank disks or disks whose contents you would not miss: writing real disks is the youngest part of the core.
+
+* Use **double density (DD)** disks, the kind with one square hole. High-density (HD) disks, with two holes and usually marked "HD", do not work.
+* `25, WRITE ERROR` means that the 1581 DOS read the sectors back after writing them and they did not match what it wrote. Try another disk first; a worn or dirty disk is the usual cause. If it happens with fresh disks, please report it together with a dump of the [diagnostic device](doc/1581_dd_debug_device.md).
+* Rarely, the drive mechanism itself starts up in a bad state: right after switching on, it knocks and reads nothing, not even a disk that worked before. This is the small controller inside the drive, not the core and not your disk: switch the MEGA65 off and on again.
 
 ### Constraints and Roadmap
 

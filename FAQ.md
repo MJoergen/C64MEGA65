@@ -376,3 +376,15 @@ with a "New to FPGAs?" chapter that will smoothly guide you on your adventure.
 
 You can also go through [this tutorial](https://files.mega65.org?ar=898d573b-d30d-4438-8893-09455bd16400)
 on the MEGA65 FileHost.
+
+## 23) Can I write to real disks with the built-in floppy drive?
+
+From WIP-V6-A21X1 on, yes: in "Internal 1581" mode the built-in drive writes sectors like a real 1581 (`SAVE`, scratch, `VALIDATE`, copy programs, GEOS). Formatting a real disk follows with WIP-V6-A21X2.
+
+**The write-protect tab of the disk is the only guard.** There is no menu switch: with the tab hole closed the C64 can write to the disk, with the hole open it cannot, and the drive answers with `26, WRITE PROTECT ON`. Keep the hole open on originals and on everything you could not replace, and write to blank disks or to disks whose contents you would not miss.
+
+* DD disks only; HD disks (two holes) do not work.
+* `25, WRITE ERROR`: the DOS read the written sectors back and they did not match. Try another disk; if fresh disks fail too, please report it.
+* If the drive knocks and reads nothing right after you switched the MEGA65 on, its own little controller started up in a bad state: switch the MEGA65 off and on again.
+
+[Learn more](README.md#writing-to-real-disks-with-the-internal-1581).
