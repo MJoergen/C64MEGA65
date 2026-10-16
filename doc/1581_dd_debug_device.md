@@ -2,16 +2,18 @@
 
 **Device:** `C_DEV_C64_PHYS1581 = 0x0108` (defined in `CORE/vhdl/globals.vhd`)
 **Module:** `CORE/vhdl/physical_1581/physical_1581_diag.vhd`
-**Access:** READ-ONLY, observational. Issue #90 (internal 3.5" DD floppy as physical drive 8, read-only milestone).
+**Access:** observational, with one writable word (`WR_CTRL`, `0x9A`, map v8). Issue #90 (internal 3.5" DD floppy as a physical 1581, read path) and issue #244 (write path, map v8).
 
 The MEGA65 has no oscilloscope or logic analyzer on the internal floppy bus, so this
-register bank is the only on-hardware window into the physical-1581 read path. It
-surfaces the live pin levels, the controller state machine, the last decoded sector
-result, the CRCs, the index/flux timing and a set of saturating event counters.
+register bank is the only on-hardware window into the physical-1581 read and write
+paths. It surfaces the live pin levels, the controller state machine, the last decoded
+sector result, the CRCs, the index/flux timing, a set of saturating event counters and
+(map v8) the write instruments.
 
-It is **strictly observational**: it drives nothing back into the read path, it cannot
-move the head, spin the motor or change any mechanism output, and it has no write side
-(any QNICE write to the device is silently ignored). Reads never stall the QNICE bus.
+It is **observational**: it cannot move the head, spin the motor, open the write gate or
+change any mechanism output. The one exception is `WR_CTRL` (`0x9A`, section 2.2), which
+overrides the write precompensation for experiments; a QNICE write to any other word is
+silently ignored. Reads never stall the QNICE bus.
 
 The whole bank runs on the QNICE 50 MHz clock (`c64_clk_sd_i`), which is the *same*
 clock as the `physical_1581_controller`, so every value below is a coherent snapshot with
@@ -43,17 +45,18 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-64 words at offsets `0x00`–`0x3F`, plus the 64-word WD-dialogue trace ring at
-`0x40`–`0x7F` (section 2.1). Any other offset reads `0x0000`. All multi-bit
-fields are right-aligned unless a bit layout is given.
+64 words at offsets `0x00`–`0x3F`, the 64-word WD-dialogue trace ring at
+`0x40`–`0x7F` (section 2.1) and the 30 write words at `0x80`–`0x9D` (map v8,
+section 2.2). Any other offset reads `0x0000`. All multi-bit fields are
+right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x07FF` |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x08FE` (bit 0, "read-only", cleared since map v8) |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
-| `0x04` | `CTRL_STATE`    | controller state flags + read/step FSM phase (bit layout below) |
+| `0x04` | `CTRL_STATE`    | controller state flags + read/write/step FSM phase (bit layout below) |
 | `0x05` | `HEAD`          | head cylinder estimate + valid + last direction (bit layout below) |
 | `0x06` | `LAST_RESULT`   | last completed read result (bit layout below)                   |
 | `0x07` | `CHRN_CR`       | found C (high byte) / found R (low byte) of the last read       |
@@ -99,11 +102,18 @@ fields are right-aligned unless a bit layout is given.
 | `0x3E` | `CNT_MATCH_ID`   | 16-bit saturating counter: CRC-valid IDs matching the requested track/sector |
 | `0x3F` | `CNT_DAM_MISS`   | 16-bit saturating counter: matching IDs after which the controller saw another ID or timed out before a DAM |
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
+| `0x80`–`0x9D` | write instruments | map v8, section 2.2 |
 
 The original fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never
 wrap). Read the low word first, then the high word (`0x0000` in the high word while
 values stay small). The eight counters at `0x38`–`0x3F` are single-word 16-bit
 saturating counters.
+
+Reads and writes share one request/done channel between the WD front end and the
+controller. Since map v8 the read words `LAST_RESULT`, `CHRN_CR`, `CHRN_HN`
+(`0x06`–`0x08`), `CNT_READOP`, `CNT_RNF`, `CNT_CRCERR`, `CNT_CANCEL` (`0x1A`–`0x21`) and
+`RNF_CTX` (`0x37`) count and latch **read operations only**; write operations are counted
+in the write words of section 2.2. The trace ring records both.
 
 ### Delivery v2 (map v4, words `0x2A`–`0x35`)
 
@@ -218,8 +228,14 @@ Entry types (by `w0` bits 15:12):
 | Type | `w0` | `w1` |
 | ---- | ---- | ---- |
 | `1` = STEP completed | `0x1000` \| dir`<<8` (`1` = toward track 0) \| head-cylinder estimate | bit0 = track0 after the step |
-| `2` = read op REQUESTED | `0x2000` \| op`<<9` (`0` sector, `1` address, `2` verify) \| side`<<8` \| requested track | requested sector `<<8` |
-| `3` = read op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found-H LSB`<<8` \| found C | found R `<<8` \| result code |
+| `2` = op REQUESTED | `0x2000` \| op`<<9` (`0` sector, `1` address, `2` verify, `4` write sector, `5` write track) \| side`<<8` \| requested track | requested sector `<<8` |
+| `3` = op RESULT | `0x3000` \| rnf`<<11` \| crc`<<10` \| deleted`<<9` \| found-H LSB`<<8` \| found C | found R `<<8` \| result code |
+
+Write operations (map v8) are recorded like reads: a Write Sector REQUEST reads
+`0x28xx`/`0x29xx` (op `4`, side bit 8), a Write Track `0x2Axx`/`0x2Bxx`, and the RESULT
+carries the write result code (`0x00` OK, `0x09` write protected, `0x0B` lost data, …).
+A dump after a `SAVE` shows the DOS's write-back order: the sector under the head first,
+then the following ones, wrapping at the end of the track.
 
 To capture a failure: reset/power-on, reproduce the failing access once, then dump
 `MD 7000 703F` and `MD 7040 707F`. Every REQUEST is normally followed by its RESULT
@@ -238,6 +254,72 @@ write-back cache has not been flushed to the SD card yet. The Shell consults it 
 allows switching drive 8 from disk image to the internal 1581 (the image drive can write,
 so switching away mid-access or with unsaved data would lose data); `CTRL_STATE` gates the
 opposite direction. Capability bit 3 in `VERSION` announces that this word exists.
+
+### 2.2 Write instruments (map v8, words `0x80`–`0x9D`)
+
+All counters are cumulative since the QNICE reset (there is no per-episode reset); the
+"last op" words describe the most recent write operation that the controller completed
+and are latched when it reports done. The writer's own counters (`CNT_WR_UNDERRUN`,
+`WR_REASON_ACC`, `WR_PUSHFULL`, `WR_DISCARD`) are read live from the writer and reset
+with it.
+
+| Off  | Name               | Contents |
+| ---- | ------------------ | -------- |
+| `0x80` | `WR_STATE`        | live write state (bit layout below) |
+| `0x81` | `WR_LAST`         | last write op: flags (high byte, below) / abort reason bitmask (low byte; `0` when the op ended before the writer session started) |
+| `0x82` | `WR_LAST_CHR`     | last Write Sector: requested R (high byte) / requested C (low byte); H is `WR_STATE` bit 13 |
+| `0x83` / `0x84` | `WR_GATE_CYC` | WGATE window of the last op in 50 MHz cycles (`0` if the gate did not open); a sector is exactly 849,600 = `0x000CF6C0` |
+| `0x85` | `WR_BYTES_LAST`   | bytes (sector) or tokens (track) the controller took from the write FIFO in the current/last op: 512 for a sector |
+| `0x86` / `0x87` | `CNT_WR_SECT`  | counter: Write Sector operations |
+| `0x88` / `0x89` | `CNT_WR_TRACK` | counter: Write Track operations |
+| `0x8A` / `0x8B` | `CNT_WR_GATE`  | counter: write operations in which WGATE opened |
+| `0x8C` / `0x8D` | `CNT_WR_LOST`  | counter: write operations with LOST DATA (first-byte aborts and mid-op underruns) |
+| `0x8E` / `0x8F` | `CNT_WR_WP`    | counter: write-protect refusals: the WD pre-check (no operation reaches the controller), the controller's own check and the live tab abort |
+| `0x90` / `0x91` | `CNT_WR_ABORT` | counter: aborted write operations (all reasons) |
+| `0x92` | `WR_REASON_ACC`   | OR of every writer abort reason since reset (reason bits below) |
+| `0x93` | `CNT_WR_FIFO_OVF` | 16-bit: data-register writes the WD dropped (write FIFO full, more than 512 bytes, or after the feed fell) |
+| `0x94` | `CNT_WR_UNDERRUN` | 16-bit: writer word underruns (structurally unreachable; must stay 0) |
+| `0x95` | `WR_PRECOMP_CNT`  | precompensated WDATA pulses in the last op (about 1,800 for a sector on cylinders 1–43, 0 without precomp) |
+| `0x96` | `WR_FIRST_MARGIN` | smallest first-byte margin seen since reset: byte-times of the 22-byte gap still left when the first data byte arrived (`0x00FF` = none yet) |
+| `0x97` | `WR_DRQ_MARGIN`   | smallest write-FIFO level seen at a data pop in the last op (`1` = the FIFO held only the byte taken, `0` = a byte was lost, `0x00FF` = no pop) |
+| `0x98` / `0x99` | `WR_TRK_CYC` | index-to-index cycles of the last Write Track (about 10,000,000 at 300 RPM) |
+| `0x9A` | `WR_CTRL`         | **writable**: bits 1:0 = precomp mode, `0` follow the WD P bit (default), `1` off, `2` on, `3` = follow; reset `0` (section 3.5) |
+| `0x9B` | `CNT_WR_FIN`      | 16-bit: write operations the WD front end finalized (it consumed the controller's done) |
+| `0x9C` | `WR_PUSHFULL`     | 16-bit: MFM words refused by a full writer FIFO (must stay 0) |
+| `0x9D` | `WR_DISCARD`      | 16-bit: writer sessions discarded at ARM because the tab was not qualified writable |
+
+`0x80` **`WR_STATE`**
+
+| Bit  | Meaning | Bit | Meaning |
+| ---- | ------- | --- | ------- |
+| 3:0  | write FSM phase: `0` idle, `1` wait for ready, `2` ID search, `3` 22-byte gap, `4` sector stream, `5` tail, `6` abort, `7` track: wait for index, `8` track stream | 10 | precomp active (current/last op) |
+| 6:4  | writer state, derived from its taps: `0` idle, `1` armed or draining with WGATE shut, `2` streaming with WGATE open, `3` discarding, `4` aborted | 11 | `f_wgate` pin level (`0` = writing) |
+| 7    | `wr_ok`: write-protect tab qualified writable (10 ms of writable readings, cleared by a protected reading or a disk change) | 12 | `f_wdata` pin level |
+| 8    | writer session | 13 | H (found ID) of the last Write Sector |
+| 9    | feed (the controller asks the WD for bytes) | 14 | abort level to the writer |
+|      |  | 15 | 0 |
+
+`0x81` **`WR_LAST`** flags (high byte): bit 8 completed (`RES_OK`), 9 LOST DATA, 10 aborted,
+11 write-protect refusal, 12 first-byte abort, 13 Write Track, 14 deleted data mark, 15
+precomp. Abort reasons (low byte and `WR_REASON_ACC`): `0x02` enable, motor or media-ready
+lost, `0x04` tab protected, `0x08` disk change, `0x20` side change, `0x40` writer underrun,
+`0x80` the controller's abort (Force Interrupt, index loss in a Write Track).
+
+**A healthy write session.** After a run of `SAVE`s, scratches and `VALIDATE`s on a
+writable disk, with no protected disk, no eject and no Force Interrupt in between:
+
+- `CNT_WR_GATE = CNT_WR_SECT + CNT_WR_TRACK` (every operation opened the gate);
+- `CNT_WR_FIN = CNT_WR_SECT + CNT_WR_TRACK` (the WD consumed every completion);
+- `CNT_WR_LOST`, `CNT_WR_WP`, `CNT_WR_ABORT`, `CNT_WR_UNDERRUN` and `WR_PUSHFULL` are 0;
+- `CNT_WR_FIFO_OVF` is 0 after sector writes. A format leaves a count here: the DOS keeps
+  writing gap bytes after the ending index until BUSY drops, and those are dropped by
+  design;
+- `WR_GATE_CYC` reads 849,600 (`0x000CF6C0`) after a sector, `WR_BYTES_LAST` 512;
+- `WR_FIRST_MARGIN` is 18 or more, `WR_DRQ_MARGIN` 1 or more.
+
+Every write-protect refusal, every Write Sector that does not find its ID (RNF) and every
+operation aborted before its gap expired is one operation without a gate, so in general
+`CNT_WR_GATE` is `CNT_WR_SECT + CNT_WR_TRACK` minus those; the trace ring shows which.
 
 ### Bit layouts
 
@@ -272,12 +354,22 @@ is asserted / active).
 | 1    | head settled             | 8      | track0                               |
 | 2    | separator locked         | 9      | write-protected                      |
 | 3    | motor on                 | 11:10  | step FSM phase (see codes below)     |
-| 4    | disk-change latched      | 15:12  | read FSM phase (see codes below)     |
+| 4    | disk-change latched      | 15:12  | read FSM phase, or a write code (see below) |
 | 5    | head estimate valid      |        |                                      |
 | 6    | physical mode active (enable) |   |                                      |
 
 Read FSM phase (bits 15:12): `0` idle, `1` waiting for ready, `2` searching for ID,
 `3` waiting for data-address-mark, `4` streaming data, `5` reading address.
+
+Write codes (bits 15:12, map v8): while a write operation is active or the writer is
+still busy, bit 15 is set, bit 14 says which command (`0` = Write Sector, `1` = Write
+Track, i.e. format) and bits 13:12 give the coarse phase: `0` waiting for ready, `1`
+positioning (ID search and the 22-byte gap of a Write Sector, waiting for the index
+of a Write Track), `2` streaming (WGATE open), `3` ending (tail, abort, writer still
+draining). So `0x8`–`0xB` = Write Sector, `0xC`–`0xF` = Write Track. A Write Sector
+searching for its ID therefore reads `0x9`, never the read code `2`. The Shell's
+status line (Writing / Format / Reading / Head / Motor) and its idle gate use this
+word alone; the full write phase is in `WR_STATE` (`0x80`).
 Step FSM phase (bits 11:10): `0` idle, `1` direction setup, `2` step pulse low, `3` recovery/settle.
 
 `0x05` **`HEAD`** — head position estimate.
@@ -306,8 +398,9 @@ head reaches the track-0 sensor. It is diagnostic only and does not affect decod
 Result codes (5-bit, from `physical_1581_pkg.vhd`): `0x00` OK, `0x01` not ready,
 `0x02` no index, `0x03` track0 failed, `0x04` record not found, `0x05` ID CRC error,
 `0x06` missing data-address-mark, `0x07` data CRC error, `0x08` unsupported sector size,
-`0x09` write protected, `0x0A` disk changed, `0x0D` cancelled, `0x0E` invalid request,
-`0x0F` internal fault.
+`0x09` write protected, `0x0A` disk changed, `0x0B` lost data (write: the first byte
+was missing when the gate was due, or a Write Track token underrun), `0x0D` cancelled,
+`0x0E` invalid request, `0x0F` internal fault.
 
 ---
 
@@ -351,7 +444,7 @@ MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 
 This prints all 64 scalar diagnostic words in one block. To watch a value live, re-issue the
 `MD 7000 703F` (or `ME 70xx`) command repeatedly — the registers update continuously while
-the C64 accesses drive 8.
+the C64 accesses the drive. The write instruments are `MD 7080 709D`.
 
 ### 3.4 Typical checks
 
@@ -386,13 +479,36 @@ the C64 accesses drive 8.
   count after aborts is normal and correlates with `CNT_CANCEL`; only a count that grows during
   error-free operation indicates a real race.
 
+- **Did a `SAVE` reach the disk?** `CNT_WR_SECT` (`0x86`) and `CNT_WR_GATE` (`0x8A`) climb
+  together, `WR_LAST` (`0x81`) reads `0x01xx` or `0x81xx` (completed, with or without
+  precomp) and `WR_GATE_CYC` (`0x83`/`0x84`) reads `F6C0`/`000C`. A rising `CNT_WR_WP`
+  means the tab is set to protected; a rising `CNT_WR_LOST` means the drive CPU did not
+  deliver the bytes in time (the DOS then reports `25, WRITE ERROR`).
+
+### 3.5 Change the precompensation (`WR_CTRL`)
+
+The physical drive precompensates like a real 1581: it follows the P bit of the DOS's
+write command (precomp on cylinders 1–43). `WR_CTRL` overrides that without a rebuild,
+for testing media that read back badly. With the device selected (section 3.1):
+
+```text
+MC            (Memory/Change)
+709A          address of WR_CTRL (0x7000 + 0x9A)
+0001          0 = follow the DOS (default), 1 = precomp off, 2 = precomp always on
+```
+
+`ME 709A` reads the setting back. It applies from the next write operation on, and a core
+or QNICE reset returns it to `0`. `WR_PRECOMP_CNT` (`0x95`) shows the effect: about 1,800
+shifted pulses per sector with precomp, 0 without.
+
 ---
 
 ## 4. Notes and caveats
 
-- **Read-only.** This device cannot change anything the drive does. It observes the
-  `physical_1581_controller` and its decoder; the mechanism is driven entirely by the C64/DOS
-  through the WD1772 model, not by QNICE.
+- **Observational.** Apart from `WR_CTRL`, this device cannot change anything the drive does.
+  It observes the `physical_1581_controller`, its decoder and its writer; the mechanism is
+  driven entirely by the C64/DOS through the WD1772 model, not by QNICE. In particular it
+  cannot open the write gate.
 - **`GAP_MIN`/`GAP_MAX` and the counters are cumulative since the last reset** (`c64_rst_sd_i`,
   which follows the QNICE-domain reset). There is no clear-on-read; power-cycle or a core reset
   zeroes them (and re-seeds `GAP_MIN` to `0xFFFF`).
