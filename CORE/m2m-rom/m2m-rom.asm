@@ -751,8 +751,9 @@ _HCIO_1581_POLL MOVE    IO$CYC_MID, R0
                 MOVE    R1, @R0
 
                 ; One diagnostic-device selection and two word reads. The pure
-                ; classifier gives read precedence over head movement, then
-                ; motor, and finally the defensive image-busy state.
+                ; classifier gives a write (Writing or Format) precedence over
+                ; a read, a read over head movement, then motor, and finally
+                ; the defensive image-busy state.
                 MOVE    M2M$RAMROM_DEV, R0
                 MOVE    P1581_DIAG_DEV, @R0
                 MOVE    M2M$RAMROM_4KWIN, R0
@@ -886,7 +887,7 @@ _OSM_SEL_POST_R XOR     R8, R8
                 DECRB
                 RET
 
-; Physical internal 1581 read-only diagnostic device (issue #90). Its device id
+; Physical internal 1581 diagnostic device (issues #90 and #244). Its device id
 ; is C_DEV_C64_PHYS1581 = 0x0108 (globals.vhd) and physical_1581_diag.vhd exposes
 ; the live controller state at word offset RM_CTRL_STATE = 0x04. That word is
 ; nonzero in the read-FSM phase (bits 15..12), the step-FSM phase (bits 11..10)
@@ -897,6 +898,13 @@ _OSM_SEL_POST_R XOR     R8, R8
 ; physical-drive busy flag that is meaningful without any extra RTL and
 ; naturally reads idle in disk-image mode. Read via the standard
 ; M2M$RAMROM_DEV / _4KWIN / _DATA window.
+;
+; Since diag map v8 (issue #244) bits 15..12 carry a write code instead of the
+; read phase while a write operation is active or the writer is still busy:
+; bit 15 is set, bit 14 = 1 for a Write Track (format), 0 for a Write Sector,
+; bits 13..12 = the coarse write phase. So 0x8xxx..0xBxxx = Writing, 0xCxxx..
+; 0xFxxx = Format, and the busy mask (bits 15..10 and 3) already covers every
+; write without a change of its value.
 ;
 ; Word offset RM_IMG_DRIVE = 0x28 is the mirror image for the OTHER direction:
 ; bit 0 is set while ANY simulated (disk image) drive is active (drive LEDs,
@@ -912,7 +920,7 @@ _OSM_SEL_POST_R XOR     R8, R8
 
 P1581_DIAG_DEV       .EQU 0x0108                ; C_DEV_C64_PHYS1581
 P1581_RM_CTRL        .EQU 0x0004                ; RM_CTRL_STATE word offset
-P1581_BUSY_MASK      .EQU 0xFC08                ; read | step | motor
+P1581_BUSY_MASK      .EQU 0xFC08                ; write | read | step | motor
 P1581_RM_IMGBSY      .EQU 0x0028                ; RM_IMG_DRIVE word offset
 P1581_IMGBSY_D8      .EQU 0x0001                ; image drive 8 busy or dirty
 P1581_IMGBSY_D9      .EQU 0x0002                ; image drive 9 busy or dirty
@@ -923,17 +931,23 @@ P1581_OS_MOTOR       .EQU 1
 P1581_OS_HEAD        .EQU 2
 P1581_OS_READING     .EQU 3
 P1581_OS_BUSY        .EQU 4                     ; defensive image-side activity
+P1581_OS_WRITING     .EQU 5                     ; Write Sector (diag map v8)
+P1581_OS_FORMAT      .EQU 6                     ; Write Track (diag map v8)
 P1581_OS_INVALID     .EQU 0xFFFF
 
 P1581_OSM_POLL_MASK  .EQU 0x0007                ; 763 Hz / 8 = about 95 Hz
 P1581_OSM_LABEL_LEN  .EQU 23                    ; characters after marker
 
 ; Classify the two words used by the symmetric idle gate. Physical activity
-; has priority so that the label explains what the internal mechanism does.
+; has priority so that the label explains what the internal mechanism does;
+; a write code (bit 15) comes ahead of the read phase.
 ;
 ; Input:  R8 = RM_CTRL_STATE, R9 = RM_IMG_DRIVE
 ; Output: R8 = P1581_OS_* state, R9 unchanged
 P1581_CLASSIFY INCRB
+                MOVE    R8, R0
+                AND     0x8000, R0              ; write op active?
+                RBRA    _P1581_C_WRITE, !Z
                 MOVE    R8, R0
                 AND     0xF000, R0              ; read FSM active?
                 RBRA    _P1581_C_READ, !Z
@@ -954,6 +968,12 @@ _P1581_C_HEAD  MOVE    P1581_OS_HEAD, R8
                 RBRA    _P1581_C_RET, 1
 _P1581_C_READ  MOVE    P1581_OS_READING, R8
                 RBRA    _P1581_C_RET, 1
+_P1581_C_WRITE MOVE    R8, R0
+                MOVE    P1581_OS_WRITING, R8
+                AND     0x4000, R0              ; Write Track, i.e. format?
+                RBRA    _P1581_C_RET, Z
+                MOVE    P1581_OS_FORMAT, R8
+                RBRA    _P1581_C_RET, 1
 _P1581_C_BUSY  MOVE    P1581_OS_BUSY, R8
 _P1581_C_RET   DECRB
                 RET
@@ -966,20 +986,26 @@ _P1581_C_RET   DECRB
 P1581_OSM_STR8
                 .DW P1581_OSM8_IDLE, P1581_OSM8_MOTOR, P1581_OSM8_HEAD
                 .DW P1581_OSM8_READING, P1581_OSM8_BUSY
+                .DW P1581_OSM8_WRITING, P1581_OSM8_FORMAT
 P1581_OSM_STR9
                 .DW P1581_OSM9_IDLE, P1581_OSM9_MOTOR, P1581_OSM9_HEAD
                 .DW P1581_OSM9_READING, P1581_OSM9_BUSY
+                .DW P1581_OSM9_WRITING, P1581_OSM9_FORMAT
 
 P1581_OSM8_IDLE    .ASCII_W "8:Internal 1581        "
 P1581_OSM8_MOTOR   .ASCII_W "8:Internal 1581 Motor  "
 P1581_OSM8_HEAD    .ASCII_W "8:Internal 1581 Head   "
 P1581_OSM8_READING .ASCII_W "8:Internal 1581 Reading"
 P1581_OSM8_BUSY    .ASCII_W "8:Internal 1581 Busy   "
+P1581_OSM8_WRITING .ASCII_W "8:Internal 1581 Writing"
+P1581_OSM8_FORMAT  .ASCII_W "8:Internal 1581 Format "
 P1581_OSM9_IDLE    .ASCII_W "9:Internal 1581        "
 P1581_OSM9_MOTOR   .ASCII_W "9:Internal 1581 Motor  "
 P1581_OSM9_HEAD    .ASCII_W "9:Internal 1581 Head   "
 P1581_OSM9_READING .ASCII_W "9:Internal 1581 Reading"
 P1581_OSM9_BUSY    .ASCII_W "9:Internal 1581 Busy   "
+P1581_OSM9_WRITING .ASCII_W "9:Internal 1581 Writing"
+P1581_OSM9_FORMAT  .ASCII_W "9:Internal 1581 Format "
 
 ; OSM_SEL_PRE callback function:
 ;
@@ -1092,7 +1118,7 @@ _OSM_PRE_MODE2  MOVE    M2M$RAMROM_DEV, R2
 _OSM_PRE_MODE3  MOVE    M2M$RAMROM_DATA, R2
                 ADD     P1581_RM_CTRL, R2        ; -> RM_CTRL_STATE
                 MOVE    @R2, R2                  ; R2: control-state word
-                AND     P1581_BUSY_MASK, R2      ; read / step / motor active?
+                AND     P1581_BUSY_MASK, R2      ; write / read / step / motor?
                 RBRA    _OSM_PRE_MODEB, !Z       ; physical drive busy: revert
 
 _OSM_PRE_MODE4  MOVE    M2M$RAMROM_DATA, R2
