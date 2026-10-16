@@ -222,6 +222,13 @@ package physical_1581_pkg is
   constant C_MFM_SYNC_A1 : std_logic_vector(15 downto 0) := x"4489";
   constant C_MFM_SYNC_C2 : std_logic_vector(15 downto 0) := x"5224";
 
+  -- Mark selector of physical_1581_mfm_encoder (mark_i): a plain byte, or one
+  -- of the two missing-clock sync marks.
+  subtype enc_mark_t is std_logic_vector(1 downto 0);
+  constant ENC_MARK_NONE : enc_mark_t := "00";
+  constant ENC_MARK_A1   : enc_mark_t := "01";
+  constant ENC_MARK_C2   : enc_mark_t := "10";
+
   -- CRC-16/CCITT-FALSE state after feeding A1 A1 A1 (sanity anchor).
   constant C_CRC_AFTER_3XA1 : unsigned(15 downto 0) := x"CDB4";
 
