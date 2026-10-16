@@ -35,14 +35,17 @@
 --              empty -> RES_LOST_DATA, no gate) -> WR_STREAM: 12 x 00, 3 x A1
 --              (CRC preset on the first), DAM FB/F8, 512 FIFO bytes (an empty
 --              FIFO at a slot writes 00 and sets the sticky wr_lost_o), CRC
---              hi/lo, FF -> WR_TAIL: session falls, the writer writes its
---              tail; the FIFO is drained, the writer goes idle, then done.
+--              hi/lo, FF -> WR_TAIL: the feed falls first (with the last
+--              word strobe), the session falls, the writer writes its tail;
+--              the FIFO is drained, the writer goes idle, and done follows
+--              once the feed has been low for 16 clocks.
 --   Write Track: WR_TRK_ARM (feed at once, wait for the filtered index edge,
 --              start watchdog) -> WR_TRK_STREAM (F5 = A1 sync with the CRC
 --              preset on the first F5 of a run, F6 = C2 sync, F7 = CRC hi + lo,
 --              anything else a plain byte) -> at the next index edge the
---              session falls and the writer's cut_i truncates at the next cell
---              boundary -> WR_TAIL. End watchdog -> abort, RES_NO_INDEX.
+--              session falls, the feed falls and the writer's cut_i truncates
+--              at the next cell boundary, in one clock -> WR_TAIL. End
+--              watchdog -> abort, RES_NO_INDEX.
 --   Abort terms after WR_WAIT (cancel edge, a 4-sample disk-change assert
 --   edge, a 4-sample protected level, motor request off, media_ready lost, a
 --   side change, the writer's own abort or discard) -> WR_ABORT: the gate
@@ -430,6 +433,12 @@ architecture rtl of physical_1581_controller is
   -- admission decision until the previous push is visible in the level
   constant C_PUSH_COOL : natural := 3;
 
+  -- WR_TAIL / WR_ABORT may report done only once the feed has been low for
+  -- this many clocks (WRITE-SPEC 5.3): the last drive-side push may still be
+  -- in flight through the 2-FF of the feed and the wfifo pointer sync, and
+  -- the drain must see it before the empty check can pass
+  constant C_FEED_LOW_CYC : natural := 16;
+
   signal wr_del_l    : std_logic := '0';   -- accepted wr_deleted_i
   signal wr_prec_l   : std_logic := '0';   -- accepted wr_precomp_i
   signal pend_del    : std_logic := '0';
@@ -439,6 +448,7 @@ architecture rtl of physical_1581_controller is
   signal wr_abort_r    : std_logic := '0';   -- writer abort_i
   signal wr_cut      : std_logic := '0';   -- writer cut_i (1-cycle)
   signal wr_feed     : std_logic := '0';
+  signal feed_low    : natural range 0 to C_FEED_LOW_CYC := C_FEED_LOW_CYC;  -- clocks since wr_feed fell
   signal wr_lost     : std_logic := '0';
   signal wr_bound    : std_logic := '0';   -- the writer has bound THIS op's session
   signal wr_gap_cnt  : natural range 0 to G_WR_GAP_CYC := 0;
@@ -762,6 +772,13 @@ begin
       diag_wr_done_o <= '0';
       if push_cool /= 0 then
         push_cool <= push_cool - 1;
+      end if;
+
+      -- clocks since the feed fell (saturating), the WR_TAIL / WR_ABORT guard
+      if wr_feed = '1' then
+        feed_low <= 0;
+      elsif feed_low /= C_FEED_LOW_CYC then
+        feed_low <= feed_low + 1;
       end if;
 
       -- mechanics guard (WRITE-SPEC 6.5): reloaded while WGATE is open, so it
@@ -1458,19 +1475,24 @@ begin
                   enc_feed <= '0';
                 end if;
                 if wr_idx = C_WS_LAST then
-                  rd_st <= WR_TAIL;
+                  wr_feed <= '0';                      -- feed falls FIRST (WRITE-SPEC 5.3)
+                  rd_st   <= WR_TAIL;
                 else
                   wr_idx <= wr_idx + 1;
                 end if;
               end if;
 
             when WR_TAIL =>
-              -- the session falls once the last push has landed; the writer
-              -- writes its tail; then drain, idle writer -> done
+              -- the feed fell on the entry (sector: with the last word strobe;
+              -- track: in the clock of the cut); the session falls once the
+              -- last push has landed; the writer writes its tail; then drain,
+              -- and done once the writer is idle, the FIFO is empty and the
+              -- feed has been low for C_FEED_LOW_CYC clocks
               if push_cool = 0 then
                 session <= '0';
               end if;
               if session = '0' and push_cool = 0 and w_busy = '0' and
+                 wr_feed = '0' and feed_low = C_FEED_LOW_CYC and
                  wbyte_empty_i = '1' and wbyte_rd_o = '0' then
                 if wr_bound = '1' then
                   wr_done(RES_OK, '0');                -- + wr_lost_o as the LOST flag
@@ -1481,11 +1503,14 @@ begin
 
             when WR_ABORT =>
               -- abort_i is high (the gate is shut); drop the session once no
-              -- push is in flight, drain, report when the writer is idle
+              -- push is in flight, drain, report when the writer is idle and
+              -- the feed (cleared on the entry) has been low for
+              -- C_FEED_LOW_CYC clocks
               if push_cool = 0 then
                 session <= '0';
               end if;
               if session = '0' and push_cool = 0 and w_busy = '0' and
+                 wr_feed = '0' and feed_low = C_FEED_LOW_CYC and
                  wbyte_empty_i = '1' and wbyte_rd_o = '0' then
                 wr_done(wr_res_l, wr_rnf_l);
               end if;
@@ -1524,6 +1549,7 @@ begin
                 if push_cool = 0 then
                   session      <= '0';
                   wr_cut       <= '1';
+                  wr_feed      <= '0';                  -- feed falls in the clock of the cut
                   trk_end_pend <= '0';
                   rd_st        <= WR_TAIL;
                 else
