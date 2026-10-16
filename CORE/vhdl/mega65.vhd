@@ -177,9 +177,11 @@ port (
    iec_srq_n_i             : in  std_logic;
    iec_srq_n_o             : out std_logic;
 
-   -- MEGA65 physical internal 1581 (issue #90): board floppy pins routed to the
-   -- physical_1581_controller inside main.vhd. Read-only milestone: the write
-   -- pins (f_wgate/f_wdata) and drive-B pins stay tied inactive at the top level.
+   -- MEGA65 physical internal 1581 (issues #90 and #244): board floppy pins routed
+   -- to the physical_1581_controller inside main.vhd, read and write. The write
+   -- pins f_wgate/f_wdata are driven by the controller's writer (registered,
+   -- idle and reset '1'); only the drive-B pins stay tied inactive at the top
+   -- level.
    f_rdata_i               : in  std_logic;
    f_index_i               : in  std_logic;
    f_track0_i              : in  std_logic;
@@ -191,6 +193,8 @@ port (
    f_stepdir_o             : out std_logic;
    f_step_o                : out std_logic;
    f_density_o             : out std_logic;
+   f_wgate_o               : out std_logic;  -- write gate, active low
+   f_wdata_o               : out std_logic;  -- write data pulses, active low
 
    -- C64 Expansion Port (aka Cartridge Port)
    cart_en_o               : out std_logic;  -- Enable port, active high
@@ -519,8 +523,9 @@ signal qnice_rrnetmk3_addr          : std_logic_vector(12 downto 0);
 signal qnice_rrnetmk3_data_to       : std_logic_vector(7 downto 0);
 signal qnice_rrnetmk3_data_from     : std_logic_vector(7 downto 0);
 
--- Physical internal 1581 read-only diagnostic device (issue #90; C_DEV_C64_PHYS1581)
+-- Physical internal 1581 diagnostic device (issues #90 and #244; C_DEV_C64_PHYS1581)
 signal phys_diag_ce                 : std_logic;
+signal phys_diag_we                 : std_logic;
 signal phys_diag_data               : std_logic_vector(15 downto 0);
 
 -- Core-only polyphase filter coefficients (C_DEV_C64_VFILTERS, video_filters.vhd)
@@ -901,10 +906,14 @@ begin
          f_stepdir_o            => f_stepdir_o,
          f_step_o               => f_step_o,
          f_density_o            => f_density_o,
+         f_wgate_o              => f_wgate_o,
+         f_wdata_o              => f_wdata_o,
 
-         -- Physical internal 1581 read-only QNICE diagnostic device (issue #90)
+         -- Physical internal 1581 QNICE diagnostic device (issues #90 and #244)
          phys_diag_ce_i         => phys_diag_ce,
+         phys_diag_we_i         => phys_diag_we,
          phys_diag_addr_i       => qnice_dev_addr_i(7 downto 0),
+         phys_diag_data_i       => qnice_dev_data_i,
          phys_diag_data_o       => phys_diag_data,
 
          -- C64 Expansion Port (aka Cartridge Port)
@@ -1089,6 +1098,7 @@ begin
       qnice_rrnetmk3_addr        <= (others => '0');
       qnice_rrnetmk3_data_to     <= (others => '0');
       phys_diag_ce               <= '0';
+      phys_diag_we               <= '0';
 
       case qnice_dev_id_i is
          -- C64 RAM
@@ -1160,11 +1170,13 @@ begin
             qnice_dev_data_o           <= x"00" & qnice_c1541rom_data_from;
             qnice_c1541rom_data_to     <= qnice_dev_data_i(7 downto 0);
 
-         -- Physical internal 1581: read-only diagnostic register bank (issue #90).
-         -- Mirrors the C_DEV_C64_RAM pattern: no wait-state, writes ignored inside
-         -- the diag bank. Its QNICE port lives in i_main (same 50 MHz domain).
+         -- Physical internal 1581: diagnostic register bank (issues #90 and #244).
+         -- Mirrors the C_DEV_C64_RAM pattern: no wait-state. The diag bank accepts
+         -- one write, WR_CTRL (word 0x9A, precomp override), and ignores writes to
+         -- every other word. Its QNICE port lives in i_main (same 50 MHz domain).
          when C_DEV_C64_PHYS1581 =>
             phys_diag_ce               <= qnice_dev_ce_i;
+            phys_diag_we               <= qnice_dev_we_i;
             qnice_dev_data_o           <= phys_diag_data;
 
          -- Core-only polyphase filter coefficients (video_filters.vhd): read-only

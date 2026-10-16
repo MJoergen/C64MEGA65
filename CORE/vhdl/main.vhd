@@ -175,10 +175,11 @@ entity main is
     drive_mode_i           : in    std_logic_vector(2 * G_VDNUM - 1 downto 0);
     drive_unmount_i        : in    std_logic_vector(G_VDNUM - 1 downto 0);
 
-    -- MEGA65 physical internal 1581 (issue #90): one drive backed by the real
-    -- internal 3.5" DD floppy (read-only milestone). The physical controller
+    -- MEGA65 physical internal 1581 (issues #90 and #244): one drive backed by
+    -- the real internal 3.5" DD floppy, read and write. The physical controller
     -- runs in the QNICE 50 MHz clock domain (c64_clk_sd_i); c64_rst_sd_i is its
-    -- reset. The f_* pins connect ONLY to the controller.
+    -- reset. The f_* pins connect ONLY to the controller; f_wgate_o / f_wdata_o
+    -- come straight from the registered output stage of its writer (idle '1').
     c64_rst_sd_i           : in    std_logic;                    -- QNICE-domain (50 MHz) reset for the physical controller
     f_rdata_i              : in    std_logic;                    -- raw read flux from the drive
     f_index_i              : in    std_logic;
@@ -191,12 +192,18 @@ entity main is
     f_stepdir_o            : out   std_logic;
     f_step_o               : out   std_logic;
     f_density_o            : out   std_logic;
+    f_wgate_o              : out   std_logic := '1';             -- write gate, active low (issue #244)
+    f_wdata_o              : out   std_logic := '1';             -- write data pulses, active low, gated by WGATE
 
-    -- Physical internal 1581 read-only QNICE diagnostic device (issue #90;
+    -- Physical internal 1581 QNICE diagnostic device (issues #90 and #244;
     -- C_DEV_C64_PHYS1581 = 0x0108). Same QNICE 50 MHz domain (c64_clk_sd_i) as
-    -- the controller, so no CDC. Read-only: writes are ignored, no wait-state.
+    -- the controller, so no CDC. Observational, no wait-state; the only
+    -- writable word is WR_CTRL (0x9A, precomp override), writes elsewhere are
+    -- ignored.
     phys_diag_ce_i         : in    std_logic;
+    phys_diag_we_i         : in    std_logic;
     phys_diag_addr_i       : in    std_logic_vector(7 downto 0);
+    phys_diag_data_i       : in    std_logic_vector(15 downto 0);
     phys_diag_data_o       : out   std_logic_vector(15 downto 0);
 
     -- C64 Expansion Port (aka Cartridge Port)
@@ -595,6 +602,68 @@ architecture synthesis of main is
   attribute async_reg of p1581_dbg_busycmd_sd_s   : signal is "true";
   attribute async_reg of p1581_dbg_fin_sd_m       : signal is "true";
   attribute async_reg of p1581_dbg_fin_sd_s       : signal is "true";
+  -- issue #244: the three write-path event toggles of fdc1772 (drive clock),
+  -- 2-FF-synced like the five above and counted in the diag (map v8)
+  signal   p1581_dbg_wr_fin_tgl     : std_logic;
+  signal   p1581_dbg_wr_wp_tgl      : std_logic;
+  signal   p1581_dbg_wr_drop_tgl    : std_logic;
+  signal   p1581_dbg_wr_fin_sd_m    : std_logic;
+  signal   p1581_dbg_wr_fin_sd_s    : std_logic;
+  signal   p1581_dbg_wr_wp_sd_m     : std_logic;
+  signal   p1581_dbg_wr_wp_sd_s     : std_logic;
+  signal   p1581_dbg_wr_drop_sd_m   : std_logic;
+  signal   p1581_dbg_wr_drop_sd_s   : std_logic;
+  attribute async_reg of p1581_dbg_wr_fin_sd_m    : signal is "true";
+  attribute async_reg of p1581_dbg_wr_fin_sd_s    : signal is "true";
+  attribute async_reg of p1581_dbg_wr_wp_sd_m     : signal is "true";
+  attribute async_reg of p1581_dbg_wr_wp_sd_s     : signal is "true";
+  attribute async_reg of p1581_dbg_wr_drop_sd_m   : signal is "true";
+  attribute async_reg of p1581_dbg_wr_drop_sd_s   : signal is "true";
+
+  -- Physical write path (issue #244, WRITE-SPEC 5.2). The write request rides on
+  -- the read request channel (p1581_rd_op = WROP_*); deleted/precomp are
+  -- quasi-static with it, like p1581_rd_track/_sector. The data bytes cross from
+  -- the drive clock (clk_main_i) to the 50 MHz controller through
+  -- physical_1581_wfifo; full/level are native on the drive side (the DRQ
+  -- source), the read side is first-word-fall-through. feed/lost/busy are 50 MHz
+  -- levels, 2-FF-synced inside fdc1772.
+  signal   p1581_wr_deleted      : std_logic;              -- iec_drive -> controller wr_deleted_i
+  signal   p1581_wr_precomp      : std_logic;              -- iec_drive -> controller wr_precomp_i
+  signal   p1581_wr_byte_wr      : std_logic;              -- iec_drive -> wfifo wr_en_i   (drive clock)
+  signal   p1581_wr_byte_data    : std_logic_vector(7 downto 0);  -- iec_drive -> wfifo wr_data_i
+  signal   p1581_wr_fifo_full    : std_logic;              -- wfifo wr_full_o  -> iec_drive (drive clock)
+  signal   p1581_wr_fifo_level   : unsigned(2 downto 0);   -- wfifo wr_level_o -> iec_drive (drive clock)
+  signal   p1581_wbyte_data      : std_logic_vector(7 downto 0);  -- wfifo rd_data_o  -> controller (50 MHz)
+  signal   p1581_wbyte_empty     : std_logic;              -- wfifo rd_empty_o -> controller
+  signal   p1581_wbyte_rd        : std_logic;              -- controller wbyte_rd_o -> wfifo rd_en_i + diag
+  signal   p1581_wfifo_rd_level  : unsigned(2 downto 0);   -- wfifo rd_level_o -> diag (WR_DRQ_MARGIN)
+  signal   p1581_wr_feed         : std_logic;              -- controller -> iec_drive phys_wr_feed
+  signal   p1581_wr_lost         : std_logic;              -- controller -> iec_drive phys_wr_lost
+  signal   p1581_wr_busy         : std_logic;              -- controller -> iec_drive phys_wr_busy + diag
+  signal   p1581_wr_ok           : std_logic;              -- controller -> diag
+  signal   p1581_wr_precomp_mode : std_logic_vector(1 downto 0);  -- diag WR_CTRL -> controller
+  signal   p1581_f_wgate         : std_logic;              -- controller pins -> f_wgate_o / f_wdata_o + diag
+  signal   p1581_f_wdata         : std_logic;
+  -- write-path diagnostic taps (controller -> diag, both 50 MHz)
+  signal   p1581_diag_wr_phase        : std_logic_vector(3 downto 0);
+  signal   p1581_diag_wr_session      : std_logic;
+  signal   p1581_diag_wr_feed         : std_logic;
+  signal   p1581_diag_wr_abort        : std_logic;
+  signal   p1581_diag_wr_prec         : std_logic;
+  signal   p1581_diag_wr_done         : std_logic;
+  signal   p1581_diag_wr_last         : std_logic_vector(7 downto 0);
+  signal   p1581_diag_wr_bytes        : unsigned(15 downto 0);
+  signal   p1581_diag_wr_first_margin : unsigned(7 downto 0);
+  signal   p1581_diag_wr_trk_cyc      : unsigned(31 downto 0);
+  signal   p1581_diag_wr_gate         : std_logic;
+  signal   p1581_diag_wr_gate_cyc     : unsigned(31 downto 0);
+  signal   p1581_diag_wr_underrun     : unsigned(15 downto 0);
+  signal   p1581_diag_wr_discard      : unsigned(15 downto 0);
+  signal   p1581_diag_wr_precnt       : unsigned(15 downto 0);
+  signal   p1581_diag_wr_pushfull     : unsigned(15 downto 0);
+  signal   p1581_diag_wr_reason       : std_logic_vector(7 downto 0);
+  signal   p1581_diag_wr_reason_acc   : std_logic_vector(7 downto 0);
+  signal   p1581_diag_wr_wflags       : std_logic_vector(4 downto 0);
 
   -- physical_1581 read-only diagnostics (issue #90): controller diag_* taps and
   -- the two previously-open st_* outputs, fed to physical_1581_diag (device 0x0108).
@@ -941,9 +1010,10 @@ begin
     end if;
   end process p1581_fiforst_sync_proc;
 
-  -- 2-FF sync of the fdc1772 delivery-v2 diagnostic event toggles (drive clock
-  -- domain) into the 50 MHz diag domain; edge detection and counting happen
-  -- inside physical_1581_diag (see the signal declaration comment)
+  -- 2-FF sync of the fdc1772 delivery-v2 diagnostic event toggles and of the
+  -- three write-path toggles (issue #244) from the drive clock domain into the
+  -- 50 MHz diag domain; edge detection and counting happen inside
+  -- physical_1581_diag (see the signal declaration comments)
   p1581_dbg_sync_proc : process (c64_clk_sd_i)
   begin
     if rising_edge(c64_clk_sd_i) then
@@ -957,6 +1027,12 @@ begin
       p1581_dbg_busycmd_sd_s   <= p1581_dbg_busycmd_sd_m;
       p1581_dbg_fin_sd_m       <= p1581_dbg_fin_tgl;
       p1581_dbg_fin_sd_s       <= p1581_dbg_fin_sd_m;
+      p1581_dbg_wr_fin_sd_m    <= p1581_dbg_wr_fin_tgl;
+      p1581_dbg_wr_fin_sd_s    <= p1581_dbg_wr_fin_sd_m;
+      p1581_dbg_wr_wp_sd_m     <= p1581_dbg_wr_wp_tgl;
+      p1581_dbg_wr_wp_sd_s     <= p1581_dbg_wr_wp_sd_m;
+      p1581_dbg_wr_drop_sd_m   <= p1581_dbg_wr_drop_tgl;
+      p1581_dbg_wr_drop_sd_s   <= p1581_dbg_wr_drop_sd_m;
     end if;
   end process p1581_dbg_sync_proc;
 
@@ -2194,6 +2270,20 @@ begin
       phys_motor_on      => p1581_motor_on,
       phys_head_settled  => p1581_head_settled,
 
+      -- physical write path (issue #244): the op parameters to the controller,
+      -- the byte push into the write FIFO and its drive-side full/level (all on
+      -- this module's clock), and the controller's feed/lost/busy levels
+      -- (2-FF-synced inside fdc1772)
+      phys_wr_deleted    => p1581_wr_deleted,
+      phys_wr_precomp    => p1581_wr_precomp,
+      phys_wr_byte_wr    => p1581_wr_byte_wr,
+      phys_wr_byte_data  => p1581_wr_byte_data,
+      phys_wr_fifo_full  => p1581_wr_fifo_full,
+      phys_wr_fifo_level => std_logic_vector(p1581_wr_fifo_level),
+      phys_wr_feed       => p1581_wr_feed,
+      phys_wr_lost       => p1581_wr_lost,
+      phys_wr_busy       => p1581_wr_busy,
+
       -- fdc1772 delivery-v2 diagnostic taps (drive clock; synced/captured above
       -- and inside physical_1581_diag, see the p1581_dbg_* declarations)
       phys_dbg_lost_tgl      => p1581_dbg_lost_tgl,
@@ -2201,17 +2291,23 @@ begin
       phys_dbg_staledone_tgl => p1581_dbg_staledone_tgl,
       phys_dbg_busycmd_tgl   => p1581_dbg_busycmd_tgl,
       phys_dbg_fin_tgl       => p1581_dbg_fin_tgl,
-      phys_dbg_pres_cnt      => p1581_dbg_pres_cnt
+      phys_dbg_pres_cnt      => p1581_dbg_pres_cnt,
+      phys_dbg_wr_fin_tgl    => p1581_dbg_wr_fin_tgl,
+      phys_dbg_wr_wp_tgl     => p1581_dbg_wr_wp_tgl,
+      phys_dbg_wr_drop_tgl   => p1581_dbg_wr_drop_tgl
     ); -- iec_drive_inst
 
   --------------------------------------------------------------------------------------------------
-  -- Physical internal 1581 controller + read-byte FIFO (issue #90)
+  -- Physical internal 1581 controller + read-byte FIFO (issue #90) + write-byte FIFO (issue #244)
   --------------------------------------------------------------------------------------------------
   -- The controller lives in the QNICE 50 MHz domain (c64_clk_sd_i); its reset is
   -- c64_rst_sd_i (== qnice_rst one level up). The f_* mechanism pins connect ONLY
   -- here. The read-byte stream crosses back to the drive clock (clk_main_i) through
-  -- the dual-clock rdfifo. G_CAPABLE=true on every board (feature gated by the OSM
-  -- "Internal 1581" drive mode via phys_1581_en, not by synthesis).
+  -- the dual-clock rdfifo, the write-byte stream comes in through the dual-clock
+  -- wfifo. The controller owns the MFM encoder and the writer, so f_wgate/f_wdata
+  -- come from its writer's registered output stage. G_CAPABLE=true on every board
+  -- (feature gated by the OSM "Internal 1581" drive mode via phys_1581_en, not by
+  -- synthesis).
   i_physical_1581_controller : entity work.physical_1581_controller
     generic map (
       G_CAPABLE => true
@@ -2232,6 +2328,8 @@ begin
       f_stepdir_o      => f_stepdir_o,
       f_step_o         => f_step_o,
       f_density_o      => f_density_o,
+      f_wgate_o        => p1581_f_wgate,
+      f_wdata_o        => p1581_f_wdata,
 
       -- mode + maintained mechanics requests (from iec_drive)
       phys_active_i    => p1581_active,
@@ -2266,6 +2364,20 @@ begin
       byte_data_o      => p1581_fifo_wr_data,
       byte_wr_o        => p1581_fifo_wr_en,
       byte_ovf_i       => p1581_fifo_wr_full,
+
+      -- write operation parameters (quasi-static with the request toggle, like
+      -- rd_track_i) + the write-byte stream (wfifo read side, FWFT, 50 MHz) +
+      -- the levels back to the drive domain (synced inside fdc1772)
+      wr_deleted_i     => p1581_wr_deleted,
+      wr_precomp_i     => p1581_wr_precomp,
+      wr_precomp_mode_i=> p1581_wr_precomp_mode,
+      wbyte_data_i     => p1581_wbyte_data,
+      wbyte_empty_i    => p1581_wbyte_empty,
+      wbyte_rd_o       => p1581_wbyte_rd,
+      wr_feed_o        => p1581_wr_feed,
+      wr_lost_o        => p1581_wr_lost,
+      wr_busy_o        => p1581_wr_busy,
+      wr_ok_o          => p1581_wr_ok,
 
       -- live normalized state to the drive domain
       st_media_ready_o => p1581_media_ready,
@@ -2311,8 +2423,37 @@ begin
       diag_rd_req_sector_o => p1581_diag_rd_req_sec,
       diag_rd_req_side_o   => p1581_diag_rd_req_side,
       diag_in_bits_o      => p1581_diag_in_bits,
-      diag_out_bits_o     => p1581_diag_out_bits
+      diag_out_bits_o     => p1581_diag_out_bits,
+
+      -- write-path diagnostic taps -> physical_1581_diag (map v8)
+      diag_wr_phase_o        => p1581_diag_wr_phase,
+      diag_wr_session_o      => p1581_diag_wr_session,
+      diag_wr_feed_o         => p1581_diag_wr_feed,
+      diag_wr_abort_o        => p1581_diag_wr_abort,
+      diag_wr_prec_o         => p1581_diag_wr_prec,
+      diag_wr_done_o         => p1581_diag_wr_done,
+      diag_wr_last_o         => p1581_diag_wr_last,
+      diag_wr_bytes_o        => p1581_diag_wr_bytes,
+      diag_wr_first_margin_o => p1581_diag_wr_first_margin,
+      diag_wr_trk_cyc_o      => p1581_diag_wr_trk_cyc,
+      diag_wr_gate_o         => p1581_diag_wr_gate,
+      diag_wr_gate_cyc_o     => p1581_diag_wr_gate_cyc,
+      diag_wr_words_last_o   => open,   -- = WR_GATE_CYC / 1600 for a normal session
+      diag_wr_underrun_o     => p1581_diag_wr_underrun,
+      diag_wr_discard_o      => p1581_diag_wr_discard,
+      diag_wr_gateopen_o     => open,   -- counted per op in the diag (CNT_WR_GATE)
+      diag_wr_wabort_o       => open,   -- counted per op in the diag (CNT_WR_ABORT)
+      diag_wr_precnt_o       => p1581_diag_wr_precnt,
+      diag_wr_pushfull_o     => p1581_diag_wr_pushfull,
+      diag_wr_reason_o       => p1581_diag_wr_reason,
+      diag_wr_reason_acc_o   => p1581_diag_wr_reason_acc,
+      diag_wr_wflags_o       => p1581_diag_wr_wflags
     ); -- i_physical_1581_controller
+
+  -- the two write pins: straight from the writer's registered output stage
+  -- (reset and idle '1'; WGATE opens only under the WRITE-SPEC 6.1 conjunction)
+  f_wgate_o <= p1581_f_wgate;
+  f_wdata_o <= p1581_f_wdata;
 
   i_physical_1581_rdfifo : entity work.physical_1581_rdfifo
     generic map (
@@ -2344,13 +2485,43 @@ begin
       rd_empty_o => p1581_byte_empty
     ); -- i_physical_1581_rdfifo
 
+  -- Write-byte FIFO (issue #244, WRITE-SPEC 3.3/5.4): fdc1772 pushes one byte per
+  -- data-register write on the drive clock; the controller pops them at disk pace
+  -- on the 50 MHz clock. Four entries (G_AW = 2), LUTRAM, Gray-coded pointers. Both
+  -- sides reset from the SAME event as the rdfifo -- the QNICE reset, synchronized
+  -- into each side's own clock -- and never from reset_core_n: residue after an
+  -- aborted or reset operation is drained by the controller, which pops in every
+  -- state that does not consume (the disabled state included).
+  i_physical_1581_wfifo : entity work.physical_1581_wfifo
+    generic map (
+      G_DW => 8,
+      G_AW => 2
+    )
+    port map (
+      -- write side: drive clock (clk_main_i, the iec_drive clock)
+      wr_clk_i   => clk_main_i,
+      wr_rst_i   => p1581_fiforst_s,
+      wr_en_i    => p1581_wr_byte_wr,
+      wr_data_i  => p1581_wr_byte_data,
+      wr_full_o  => p1581_wr_fifo_full,       -- the WD's DRQ is "not full"
+      wr_level_o => p1581_wr_fifo_level,
+      -- read side: controller, 50 MHz (c64_clk_sd_i)
+      rd_clk_i   => c64_clk_sd_i,
+      rd_rst_i   => c64_rst_sd_i,
+      rd_en_i    => p1581_wbyte_rd,
+      rd_data_o  => p1581_wbyte_data,
+      rd_empty_o => p1581_wbyte_empty,
+      rd_level_o => p1581_wfifo_rd_level      -- sampled at each pop by the diag (WR_DRQ_MARGIN)
+    ); -- i_physical_1581_wfifo
+
   --------------------------------------------------------------------------------------------------
-  -- Physical internal 1581 read-only QNICE diagnostic register bank (issue #90)
+  -- Physical internal 1581 QNICE diagnostic register bank (issues #90 and #244)
   --------------------------------------------------------------------------------------------------
   -- Device C_DEV_C64_PHYS1581 = 0x0108. Runs on c64_clk_sd_i (== QNICE clock ==
-  -- controller clock), so it observes the controller with zero CDC. Strictly
-  -- observational: it drives nothing back into the read path. See
-  -- doc/1581_dd_debug_device.md for the register map and how to read it from QNICE.
+  -- controller clock), so it observes the controller with zero CDC. Observational
+  -- with one exception: WR_CTRL (word 0x9A, map v8) drives the controller's
+  -- precomp override. It never touches the gate. See doc/1581_dd_debug_device.md
+  -- for the register map and how to read it from QNICE.
   i_physical_1581_diag : entity work.physical_1581_diag
     port map (
       clk_i             => c64_clk_sd_i,
@@ -2431,9 +2602,44 @@ begin
       match_id_i          => p1581_diag_match_id,
       dam_miss_i          => p1581_diag_dam_miss,
 
-      -- QNICE read interface (from mega65.vhd core_specific_devices decode)
+      -- map v8 write instruments (issue #244): controller taps (50 MHz), the pin
+      -- levels, the wfifo pop + read-side level, and the three fdc1772 write
+      -- toggles (2-FF-synced above in p1581_dbg_sync_proc)
+      diag_wr_phase_i        => p1581_diag_wr_phase,
+      diag_wr_session_i      => p1581_diag_wr_session,
+      diag_wr_feed_i         => p1581_diag_wr_feed,
+      diag_wr_abort_i        => p1581_diag_wr_abort,
+      diag_wr_prec_i         => p1581_diag_wr_prec,
+      diag_wr_done_i         => p1581_diag_wr_done,
+      diag_wr_last_i         => p1581_diag_wr_last,
+      diag_wr_bytes_i        => p1581_diag_wr_bytes,
+      diag_wr_first_margin_i => p1581_diag_wr_first_margin,
+      diag_wr_trk_cyc_i      => p1581_diag_wr_trk_cyc,
+      diag_wr_gate_i         => p1581_diag_wr_gate,
+      diag_wr_gate_cyc_i     => p1581_diag_wr_gate_cyc,
+      diag_wr_underrun_i     => p1581_diag_wr_underrun,
+      diag_wr_discard_i      => p1581_diag_wr_discard,
+      diag_wr_precnt_i       => p1581_diag_wr_precnt,
+      diag_wr_pushfull_i     => p1581_diag_wr_pushfull,
+      diag_wr_reason_i       => p1581_diag_wr_reason,
+      diag_wr_reason_acc_i   => p1581_diag_wr_reason_acc,
+      diag_wr_wflags_i       => p1581_diag_wr_wflags,
+      wr_busy_i              => p1581_wr_busy,
+      wr_ok_i                => p1581_wr_ok,
+      f_wgate_i              => p1581_f_wgate,
+      f_wdata_i              => p1581_f_wdata,
+      wr_pop_i               => p1581_wbyte_rd,
+      wr_fifo_level_i        => p1581_wfifo_rd_level,
+      dbg_wr_fin_i           => p1581_dbg_wr_fin_sd_s,
+      dbg_wr_wp_i            => p1581_dbg_wr_wp_sd_s,
+      dbg_wr_drop_i          => p1581_dbg_wr_drop_sd_s,
+      wr_precomp_mode_o      => p1581_wr_precomp_mode,
+
+      -- QNICE interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,
+      qnice_we_i        => phys_diag_we_i,
       qnice_addr_i      => phys_diag_addr_i,
+      qnice_data_i      => phys_diag_data_i,
       qnice_data_o      => phys_diag_data_o
     ); -- i_physical_1581_diag
 

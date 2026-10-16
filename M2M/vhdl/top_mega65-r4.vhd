@@ -497,14 +497,16 @@ begin
    dbg_io_10             <= 'Z';
    dbg_io_11             <= 'Z';
 
-   -- MEGA65 physical internal 1581 (issue #90): the read-path control outputs
-   -- (f_motora/f_selecta/f_side1/f_stepdir/f_step/f_density) are now driven by
-   -- the physical_1581_controller via MEGA65_Core. Drive B and the write pins
-   -- stay tied inactive (read-only milestone).
+   -- M2M-UPSTREAM floppy-pins (C64MEGA65 issue #244, 2026-10-17): the drive A
+   -- pins of the internal floppy connector are routed into MEGA65_Core for the
+   -- physical internal 1581: f_density/f_motora/f_selecta/f_side1/f_stepdir/
+   -- f_step, the write pins f_wdata/f_wgate and the five inputs. The core drives
+   -- f_wdata and f_wgate from physical_1581_writer; both idle high (inactive),
+   -- and WGATE opens only while, among other conditions, the write-protect tab
+   -- of the disk reads writable. Drive B stays tied inactive: the core uses
+   -- drive A only.
    f_motorb_o            <= '1';
    f_selectb_o           <= '1';
-   f_wdata_o             <= '1';
-   f_wgate_o             <= '1';
    joystick_5v_disable_o <= '0'; -- Enable 5V power supply to joysticks
    led_g_n_o             <= '1'; -- Off
    led_r_n_o             <= '1'; -- Off
@@ -903,7 +905,8 @@ begin
          iec_srq_n_i       => iec_srq_n_i,
          iec_srq_n_o       => iec_srq_n_o,
 
-         -- Physical internal 1581 (issue #90): board floppy pins
+         -- M2M-UPSTREAM floppy-pins (C64MEGA65 issue #244, 2026-10-17): MEGA65
+         -- internal floppy drive (physical internal 1581, read and write)
          f_rdata_i         => f_rdata_i,
          f_index_i         => f_index_i,
          f_track0_i        => f_track0_i,
@@ -915,6 +918,8 @@ begin
          f_stepdir_o       => f_stepdir_o,
          f_step_o          => f_step_o,
          f_density_o       => f_density_o,
+         f_wdata_o         => f_wdata_o,
+         f_wgate_o         => f_wgate_o,
 
          -- C64 Expansion Port (aka Cartridge Port)
          cart_en_o         => cart_en, -- Enable port, active high
