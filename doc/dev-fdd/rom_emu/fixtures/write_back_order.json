@@ -1,0 +1,1083 @@
+{
+ "byte_time_cycles": 64,
+ "cycle_ns": 500,
+ "flushes": [
+  {
+   "busy_drop_to_next_command_cycles": [
+    136,
+    135,
+    134,
+    188,
+    133,
+    132,
+    138,
+    137,
+    136,
+    3963
+   ],
+   "commands": [
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 0,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 0,
+     "track": 0
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 0,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 0,
+     "side": 0,
+     "t": 16827,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 55546,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 125448,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 164423,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 203398,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 242428,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 291589,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 330564,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 369546,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 408521,
+     "track": 0
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 0,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 447496,
+     "track": 0
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 0,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 490299,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 533428,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 604031,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 643060,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 692213,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 731200,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 770174,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 809148,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 848122,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 887096,
+     "track": 0
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 0,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 926070,
+     "track": 0
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 0,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 966427,
+     "track": 0
+    }
+   ],
+   "cylinder": 0,
+   "data_latency_cycles": {
+    "max": 37,
+    "min": 22,
+    "n": 5110
+   },
+   "drained": 0,
+   "drops": 0,
+   "first_byte_latency_cycles": {
+    "max": 34,
+    "min": 26,
+    "per_sector": [
+     31,
+     30,
+     29,
+     28,
+     34,
+     27,
+     26,
+     32,
+     31,
+     30
+    ]
+   },
+   "first_command_to_last_write_busy_drop_cycles": 486336,
+   "label": "idle flush cylinder 0 side 0 (T1 S0)",
+   "logical_sector": 0,
+   "logical_track": 1,
+   "lost": 0,
+   "p_bit": [
+    1
+   ],
+   "side": 0,
+   "verify": {
+    "read_address": 2,
+    "read_sector_order": [
+     9,
+     10,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "write_command_bytes": [
+    "AA"
+   ],
+   "write_sector_busy_cycles": [
+    69766,
+    38840,
+    38841,
+    38842,
+    49028,
+    38843,
+    38844,
+    38838,
+    38839,
+    38840
+   ],
+   "write_sector_order": [
+    7,
+    8,
+    9,
+    10,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "busy_drop_to_next_command_cycles": [
+    134,
+    133,
+    132,
+    193,
+    138,
+    137,
+    136,
+    135,
+    134,
+    3961
+   ],
+   "commands": [
+    {
+     "cmd": "C8",
+     "data": 1,
+     "head": 1,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 0,
+     "track": 1
+    },
+    {
+     "cmd": "C8",
+     "data": 1,
+     "head": 1,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 17800,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 1,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 56358,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 126306,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 165281,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 204256,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 243293,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 292454,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 331429,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 370404,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 409379,
+     "track": 1
+    },
+    {
+     "cmd": "A8",
+     "data": 0,
+     "head": 1,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 448354,
+     "track": 1
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 1,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 491157,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 534190,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 604884,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 643913,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 693079,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 732053,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 771027,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 810001,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 848988,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 887962,
+     "track": 1
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 1,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 926936,
+     "track": 1
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 1,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 967280,
+     "track": 1
+    }
+   ],
+   "cylinder": 1,
+   "data_latency_cycles": {
+    "max": 37,
+    "min": 22,
+    "n": 5110
+   },
+   "drained": 0,
+   "drops": 0,
+   "first_byte_latency_cycles": {
+    "max": 32,
+    "min": 22,
+    "per_sector": [
+     22,
+     28,
+     27,
+     26,
+     26,
+     32,
+     31,
+     30,
+     29,
+     28
+    ]
+   },
+   "first_command_to_last_write_busy_drop_cycles": 487196,
+   "label": "idle flush cyl1 side 0 (T2 S0)",
+   "logical_sector": 0,
+   "logical_track": 2,
+   "lost": 0,
+   "p_bit": [
+    0
+   ],
+   "side": 0,
+   "verify": {
+    "read_address": 2,
+    "read_sector_order": [
+     9,
+     10,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "write_command_bytes": [
+    "A8"
+   ],
+   "write_sector_busy_cycles": [
+    69814,
+    38842,
+    38843,
+    38844,
+    49023,
+    38838,
+    38839,
+    38840,
+    38841,
+    38842
+   ],
+   "write_sector_order": [
+    7,
+    8,
+    9,
+    10,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "busy_drop_to_next_command_cycles": [
+    134,
+    133,
+    132,
+    193,
+    138,
+    137,
+    136,
+    135,
+    134,
+    3961
+   ],
+   "commands": [
+    {
+     "cmd": "C8",
+     "data": 79,
+     "head": 79,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 0,
+     "track": 79
+    },
+    {
+     "cmd": "C8",
+     "data": 79,
+     "head": 79,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 79,
+     "side": 0,
+     "t": 16177,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 79,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 54710,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 124632,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 163607,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 202582,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 241619,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 290780,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 329755,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 368730,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 407705,
+     "track": 79
+    },
+    {
+     "cmd": "AA",
+     "data": 0,
+     "head": 79,
+     "name": "WRSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 446680,
+     "track": 79
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 79,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 489483,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 9,
+     "side": 0,
+     "t": 532600,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 10,
+     "side": 0,
+     "t": 603216,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 1,
+     "side": 0,
+     "t": 642245,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 2,
+     "side": 0,
+     "t": 691411,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 3,
+     "side": 0,
+     "t": 730385,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 4,
+     "side": 0,
+     "t": 769359,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 5,
+     "side": 0,
+     "t": 808333,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 6,
+     "side": 0,
+     "t": 847307,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 7,
+     "side": 0,
+     "t": 886281,
+     "track": 79
+    },
+    {
+     "cmd": "88",
+     "data": 0,
+     "head": 79,
+     "name": "RDSEC",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 925255,
+     "track": 79
+    },
+    {
+     "cmd": "C8",
+     "data": 0,
+     "head": 79,
+     "name": "RDADDR",
+     "pc": "$CBF8",
+     "sector": 8,
+     "side": 0,
+     "t": 965612,
+     "track": 79
+    }
+   ],
+   "cylinder": 79,
+   "data_latency_cycles": {
+    "max": 37,
+    "min": 22,
+    "n": 5110
+   },
+   "drained": 0,
+   "drops": 0,
+   "first_byte_latency_cycles": {
+    "max": 32,
+    "min": 22,
+    "per_sector": [
+     22,
+     28,
+     27,
+     26,
+     26,
+     32,
+     31,
+     30,
+     29,
+     28
+    ]
+   },
+   "first_command_to_last_write_busy_drop_cycles": 485522,
+   "label": "idle flush cyl79 side 0 (T80 S0)",
+   "logical_sector": 0,
+   "logical_track": 80,
+   "lost": 0,
+   "p_bit": [
+    1
+   ],
+   "side": 0,
+   "verify": {
+    "read_address": 2,
+    "read_sector_order": [
+     9,
+     10,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "write_command_bytes": [
+    "AA"
+   ],
+   "write_sector_busy_cycles": [
+    69788,
+    38842,
+    38843,
+    38844,
+    49023,
+    38838,
+    38839,
+    38840,
+    38841,
+    38842
+   ],
+   "write_sector_order": [
+    7,
+    8,
+    9,
+    10,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  }
+ ],
+ "generator": "doc/dev-fdd/rom_emu/run_write_proofs.py (issue #244, M2)",
+ "layout": "stock 318045-02: ID CRC end of record R at byte-time 32 + 609 (R-1) + 22",
+ "model": "wd_write_model.py: M2 FIFO-room DRQ (depth 4), first-byte rule 22 byte-times after the ID CRC, sticky LOST DATA, WP pre-check, minimum BUSY 3000 cycles",
+ "p_bit_per_cylinder": {
+  "0": 1,
+  "1": 0,
+  "43": 0,
+  "44": 1,
+  "79": 1
+ },
+ "revolution_byte_times": 6250,
+ "rom_sha256": "8f689277f36be357f5f105e6e606c35c42e73c581cdeec14b58f31850dfbcfcb"
+}
