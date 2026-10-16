@@ -41,10 +41,12 @@ wait
 rc=0
 python3 $TWIN --selftest || rc=1
 for f in $B/wr_g*_stream_*.txt; do
+  [ -f "$f" ] || continue
   d=${f/_stream_/_flux_}
   python3 $TWIN --stream $f --dump $d --quiet || rc=1
 done
 for f in $B/wr_g1_l*_stream_2.txt; do
+  [ -f "$f" ] || continue
   if python3 $TWIN --stream $f --dump ${f/_stream_/_flux_} --flip-precomp --quiet > /dev/null; then
     echo "twin red control: W10 with flipped precomp PASSED -- the check is blind"; rc=1
   else

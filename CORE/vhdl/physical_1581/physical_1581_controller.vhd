@@ -455,6 +455,7 @@ architecture rtl of physical_1581_controller is
   signal wr_trk_cyc  : natural range 0 to 2**30 := 0;
   signal trk_crc_lo  : std_logic := '0';   -- the low CRC byte of an F7 is due
   signal trk_prev_f5 : std_logic := '0';   -- the previous token was F5
+  signal trk_end_pend: std_logic := '0';   -- the ending index was seen, cut pending
   signal wr_guard    : natural range 0 to G_WR_GUARD_CYC := 0;
   signal step_pend   : std_logic := '0';   -- a step edge deferred by the guard
   signal wr_done_prev: std_logic := '0';   -- rd_done_tgl_o, one clock late
@@ -1371,7 +1372,12 @@ begin
                   wr_done(RES_WRITE_PROTECTED, '0');   -- no feed, no gate
                 elsif w_ok = '1' then
                   if op_r = WROP_WRITE_TRACK then
-                    wr_done(RES_INVALID_REQUEST, '0');
+                    -- Write Track: feed at once, the DOS loads the first token
+                    -- long before the index (WRITE-SPEC 4.4)
+                    wr_feed      <= '1';
+                    wr_trk_wd    <= G_WR_TRK_START_WD_CYC;
+                    trk_end_pend <= '0';
+                    rd_st        <= WR_TRK_ARM;
                   else
                     dec_rst  <= '1';                   -- fresh separator for the search
                     wd_cnt   <= to_unsigned(G_SEARCH_WD_CYC, 32);
@@ -1484,8 +1490,89 @@ begin
                 wr_done(wr_res_l, wr_rnf_l);
               end if;
 
-            when WR_TRK_ARM | WR_TRK_STREAM =>
-              wr_done(RES_INVALID_REQUEST, '0');
+            when WR_TRK_ARM =>
+              -- wait for the filtered index leading edge (200 us floor)
+              if wr_trk_wd /= 0 then wr_trk_wd <= wr_trk_wd - 1; end if;
+              if index_edge = '1' then
+                if wbyte_empty_i = '1' then
+                  -- first token missing at the index (real chip: LOST DATA)
+                  wr_done(RES_LOST_DATA, '0');
+                else
+                  session     <= '1';
+                  enc_start   <= '1';
+                  push_cool   <= C_PUSH_COOL;
+                  trk_crc_lo  <= '0';
+                  trk_prev_f5 <= '0';
+                  wr_trk_wd   <= G_WR_TRK_END_WD_CYC;
+                  wr_trk_cyc  <= 0;
+                  rd_st       <= WR_TRK_STREAM;
+                end if;
+              elsif wr_trk_wd = 0 then
+                wr_done(RES_NO_INDEX, '1');          -- no gate was opened
+              end if;
+
+            when WR_TRK_STREAM =>
+              if trk_end_pend = '0' and wr_trk_cyc /= 2**30 then   -- edge to edge, exact
+                wr_trk_cyc <= wr_trk_cyc + 1;
+              end if;
+              if wr_trk_wd /= 0 then wr_trk_wd <= wr_trk_wd - 1; end if;
+              if index_edge = '1' or trk_end_pend = '1' then
+                -- the next index: the track is complete. The session falls
+                -- and cut_i truncates at the next cell boundary, in the same
+                -- clock -- once no push is in flight (at most C_PUSH_COOL
+                -- clocks later), so that no word can land on an idle writer.
+                if push_cool = 0 then
+                  session      <= '0';
+                  wr_cut       <= '1';
+                  trk_end_pend <= '0';
+                  rd_st        <= WR_TAIL;
+                else
+                  trk_end_pend <= '1';
+                end if;
+              elsif wr_trk_wd = 0 then
+                -- no ending index within the watchdog: close, RES_NO_INDEX
+                wr_res_l     <= RES_NO_INDEX;
+                wr_rnf_l     <= '1';
+                wr_abort_r   <= '1';
+                wr_feed      <= '0';
+                wr_aborted_l <= '1';
+                rd_st        <= WR_ABORT;
+              elsif push_cool = 0 and enc_ready = '1' and w_level <= 1 then
+                -- one token per word slot (an F7 takes two)
+                enc_valid <= '1';
+                push_cool <= C_PUSH_COOL;
+                enc_mark  <= ENC_MARK_NONE;
+                enc_feed  <= '1';
+                if trk_crc_lo = '1' then
+                  enc_byte    <= enc_crc(7 downto 0);   -- second word of an F7
+                  enc_feed    <= '0';
+                  trk_crc_lo  <= '0';
+                  trk_prev_f5 <= '0';
+                elsif wbyte_empty_i = '0' then
+                  wbyte_rd_o <= '1';
+                  if wr_bytes /= 65535 then wr_bytes <= wr_bytes + 1; end if;
+                  if wbyte_data_i = x"F5" then
+                    enc_mark <= ENC_MARK_A1;            -- A1 sync, preset on the first of a run
+                    if trk_prev_f5 = '0' then enc_creset <= '1'; end if;
+                    trk_prev_f5 <= '1';
+                  elsif wbyte_data_i = x"F6" then
+                    enc_mark    <= ENC_MARK_C2;         -- C2 sync, fed
+                    trk_prev_f5 <= '0';
+                  elsif wbyte_data_i = x"F7" then
+                    enc_byte    <= enc_crc(15 downto 8); -- CRC high now, low next slot
+                    enc_feed    <= '0';
+                    trk_crc_lo  <= '1';
+                    trk_prev_f5 <= '0';
+                  else
+                    enc_byte    <= wbyte_data_i;
+                    trk_prev_f5 <= '0';
+                  end if;
+                else
+                  enc_byte    <= x"00";                 -- token underrun: 00, sticky LOST
+                  wr_lost     <= '1';
+                  trk_prev_f5 <= '0';
+                end if;
+              end if;
           end case;
         end if;
 

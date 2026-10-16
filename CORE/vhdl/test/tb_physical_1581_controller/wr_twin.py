@@ -40,7 +40,8 @@ Inputs (written by the bench):
 
 Verdicts, each failing the run:
   V1  window length: sector = 531 words x 1600 cycles exactly; track = the
-      window is a prefix of the token stream's words (cut at the index)
+      window is a prefix of the token stream's words, cut at a cell boundary
+      (+/-1 cycle: the cut closes WGATE in the boundary clock)
   V2  every expected edge of a window exists in the final flux with that
       window's generation within +/-1 cycle, and every final edge of that
       generation is expected (edge for edge)
@@ -373,7 +374,9 @@ def check(stream_path, dump_path, flip=False, quiet=False):
                 errs.append("V1 gen %d: window %d cycles, expected %d" % (w["gen"], w["len"], len(words) * 1600))
         else:
             words = track_words(sec["bytes"])
-            if w["len"] > len(words) * 1600 or w["len"] % CELL != 0:
+            # a cut window ends at a cell boundary: the gate opened one clock
+            # after one and the cut closes it in the boundary clock (+/-1)
+            if w["len"] > len(words) * 1600 or min(w["len"] % CELL, CELL - w["len"] % CELL) > TOL:
                 errs.append("V1 gen %d: window %d cycles for %d words" % (w["gen"], w["len"], len(words)))
         exp = expected_edges(words, w["pos"], t_rev, prec, wlen=w["len"])
         # edges of later windows overwrite earlier ones (none in these scenarios)

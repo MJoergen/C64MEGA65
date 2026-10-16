@@ -40,7 +40,9 @@
 --     per stored edge passing the head while WGATE is high. Writing: while
 --     WGATE is low the erase sweeps at cycle granularity (an edge exactly
 --     under the head is wiped) and every WDATA falling edge is stored with the
---     window's generation. Instruments: WGATE windows (open position, length
+--     window's generation; meanwhile RDATA echoes WDATA (a head reading its
+--     own write current, the worst case for the controller's decoder hold).
+--     Instruments: WGATE windows (open position, length
 --     in cycles, generation), a WDATA pulse-width census inside WGATE, a fatal
 --     assert on WDATA low while WGATE is high, span queries (seed / new edge
 --     counts) and a text dump of a track's edge list for wr_twin.py.
@@ -75,6 +77,7 @@ entity mech_model_1581 is
     cfg_present_i     : in  std_logic;    -- a disk is in the drive
     cfg_wprot_i       : in  std_logic;    -- disk is write protected
     cfg_change_i      : in  std_logic;    -- disk-changed line asserted
+    cfg_noindex_i     : in  std_logic := '0';  -- G_WRITABLE: suppress the index pulse (sensor fault)
 
     -- driven TO the controller ----------------------------------------------
     f_index_o         : out std_logic := '1';   -- active-low index
@@ -327,6 +330,7 @@ begin
       variable gen     : integer := 0;
       variable wg_prev : std_logic := '1';
       variable wd_prev : std_logic := '1';
+      variable wg_prev_rd : std_logic := '1';
       variable wgcyc   : integer := 0;
       variable pulse   : integer := 0;
       variable pw_run  : integer := 0;
@@ -481,7 +485,11 @@ begin
         if f_side1_i = '0' then tix := 2 * cyl_r; else tix := 2 * cyl_r + 1; end if;
         pos_o <= pos;
 
-        if pos < C_IDXL and spin then f_index_o <= '0'; else f_index_o <= '1'; end if;
+        if pos < C_IDXL and spin and cfg_noindex_i = '0' then
+          f_index_o <= '0';
+        else
+          f_index_o <= '1';
+        end if;
 
         -- lazy seed: the first time a track is under the spinning head
         if spin and trks(tix).flux = null then
@@ -540,8 +548,15 @@ begin
         end if;
         wd_prev := f_wdata_i;
 
-        -- playback: one RDATA pulse per stored edge while reading
-        if pulse /= 0 then
+        -- playback: one RDATA pulse per stored edge while reading. While
+        -- WGATE is low the head echoes the write current onto RDATA (the
+        -- worst case for the controller's decoder hold, WRITE-SPEC 6.4)
+        if f_wgate_i = '0' then
+          f_rdata_o <= f_wdata_i;
+          pulse     := 0;
+        elsif wg_prev_rd = '0' then
+          f_rdata_o <= '1';                    -- the gate just closed
+        elsif pulse /= 0 then
           pulse := pulse - 1;
           if pulse = 0 then f_rdata_o <= '1'; end if;
         elsif spin and f_wgate_i = '1' and trks(tix).flux /= null then
@@ -550,7 +565,8 @@ begin
             pulse     := C_RDPW;
           end if;
         end if;
-        if not spin and pulse = 0 then f_rdata_o <= '1'; end if;
+        if not spin and pulse = 0 and f_wgate_i = '1' then f_rdata_o <= '1'; end if;
+        wg_prev_rd := f_wgate_i;
 
         -- store requests from the testbench
         if seed_req_i /= seq_p then

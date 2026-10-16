@@ -20,9 +20,10 @@
 --
 -- Monitors over the whole run: rd_done_seq only changes with a rd_done
 -- toggle; WGATE is low and the feed level is high only while a write op is
--- outstanding (W13: never during a read); the model fatally asserts WDATA low
--- while WGATE is high; the writer's refused-push and underrun counters must
--- stay 0.
+-- outstanding (W13: never during a read); no decoder event while WGATE is
+-- low (the model echoes WDATA onto RDATA there, so an unheld decoder would
+-- decode the written field); the model fatally asserts WDATA low while WGATE
+-- is high; the writer's refused-push and underrun counters must stay 0.
 --
 -- Scenario groups (generic G_GROUP; each group is its own run so they can run
 -- in parallel; each one starts from power-up):
@@ -126,6 +127,7 @@ architecture sim of tb_physical_1581_write is
 
   -- controller diag taps used here
   signal d_id_valid, d_match_id : std_logic;
+  signal d_data_end, d_a1_train, d_gap_err : std_logic;
   signal d_wr_phase   : std_logic_vector(3 downto 0);
   signal d_wr_session, d_wr_done, d_wr_gate : std_logic;
   signal d_wr_last    : std_logic_vector(7 downto 0);
@@ -143,6 +145,7 @@ architecture sim of tb_physical_1581_write is
   signal cfg_wprot   : std_logic := '0';
   signal cfg_change  : std_logic := '0';
   signal cfg_present : std_logic := '1';
+  signal cfg_noindex : std_logic := '0';
   signal cur_cyl     : integer;
   signal m_trk_cyl, m_trk_side : integer := 0;
   signal m_seed_req, m_dump_req, m_q_req : std_logic := '0';
@@ -223,6 +226,7 @@ begin
       st_wprot_o => st_wprot, st_change_o => st_change, st_motor_on_o => st_motor_on,
       st_head_settled_o => st_head_settled, st_head_cyl_o => st_head_cyl, st_locked_o => st_locked,
       diag_id_valid_o => d_id_valid, diag_match_id_o => d_match_id,
+      diag_data_end_o => d_data_end, diag_a1_train_o => d_a1_train, diag_gap_error_o => d_gap_err,
       diag_wr_phase_o => d_wr_phase, diag_wr_session_o => d_wr_session,
       diag_wr_done_o => d_wr_done, diag_wr_last_o => d_wr_last, diag_wr_bytes_o => d_wr_bytes,
       diag_wr_first_margin_o => d_wr_margin, diag_wr_trk_cyc_o => d_wr_trk_cyc,
@@ -257,6 +261,7 @@ begin
       f_motora_i => f_motora, f_selecta_i => f_selecta, f_side1_i => f_side1,
       f_stepdir_i => f_stepdir, f_step_i => f_step, f_density_i => f_density,
       cfg_present_i => cfg_present, cfg_wprot_i => cfg_wprot, cfg_change_i => cfg_change,
+      cfg_noindex_i => cfg_noindex,
       f_index_o => f_index, f_track0_o => f_track0, f_writeprotect_o => f_wprot,
       f_diskchanged_o => f_change, f_rdata_o => f_rdata,
       f_wgate_i => f_wgate, f_wdata_i => f_wdata,
@@ -299,6 +304,10 @@ begin
       g_p := f_wgate;
       assert wr_feed = '0' or wr_outstanding
         report "FAIL: wr_feed high outside a write op" severity error;
+      -- WRITE-SPEC 6.4: the decoder is held in reset while the head writes
+      -- (the model echoes WDATA onto RDATA under WGATE)
+      assert f_wgate = '1' or (d_id_valid = '0' and d_data_end = '0' and d_a1_train = '0' and d_gap_err = '0')
+        report "FAIL: decoder activity while WGATE is open (decoder not held in reset)" severity error;
       if d_id_valid = '1' then idv_pos <= m_pos; end if;
       if d_match_id = '1' then match_pos <= m_pos; end if;
     end if;
@@ -386,6 +395,8 @@ begin
     variable wopen     : integer;
     file     sf        : text;
     variable sl        : line;
+    variable tk        : buf_t;              -- Write Track token stream
+    variable ntk       : integer := 0;
 
     procedure clkw(n : natural) is
     begin
@@ -568,6 +579,53 @@ begin
            & integer'image(m_wg_open_pos) & ", " & integer'image(m_q_new) & " new edges, 0 seed edges in the span";
     end procedure;
 
+    -- Write Track token streams -----------------------------------------
+    procedure tput(b, n : integer) is
+    begin
+      for i in 1 to n loop
+        if ntk <= tk'high then
+          tk(ntk) := std_logic_vector(to_unsigned(b mod 256, 8));
+          ntk := ntk + 1;
+        end if;
+      end loop;
+    end procedure;
+
+    -- the stock 1581 DOS format stream of one side (WRITE-SPEC 4.4)
+    procedure build_format(c, sd, fill : integer) is
+    begin
+      ntk := 0;
+      tput(16#4E#, 32);
+      for r in 1 to 10 loop
+        tput(16#00#, 12); tput(16#F5#, 3); tput(16#FE#, 1);
+        tput(c, 1); tput(sd, 1); tput(r, 1); tput(2, 1); tput(16#F7#, 1);
+        tput(16#4E#, 22); tput(16#00#, 12); tput(16#F5#, 3); tput(16#FB#, 1);
+        tput(fill, 512); tput(16#F7#, 1); tput(16#4E#, 35);
+      end loop;
+      tput(16#4E#, tk'length - ntk);               -- 4E until BUSY drops
+    end procedure;
+
+    procedure track_start(lat_us : natural) is
+    begin
+      for i in 0 to tk'high loop fd_buf(i) <= tk(i); end loop;
+      fd_n <= ntk; fd_lat <= us2d(lat_us); fd_lat0 <= us2d(lat_us);
+      wait until rising_edge(clk);
+      fd_go <= fd_go + 1;
+      wait until rising_edge(clk);
+      req(WROP_WRITE_TRACK, 0, 0, '0', '0');
+    end procedure;
+
+    -- the consumed tokens of the last track write for wr_twin.py
+    procedure stream_track(tag, n : integer) is
+    begin
+      file_open(sf, C_PREFIX & "stream_" & integer'image(tag) & ".txt", append_mode);
+      write(sl, string'("S gen=") & integer'image(m_wg_opens) & " kind=track precomp=0");
+      writeline(sf, sl);
+      write(sl, string'("T "));
+      for i in 0 to n - 1 loop write(sl, to_hstring(tk(i))); end loop;
+      writeline(sf, sl);
+      file_close(sf);
+    end procedure;
+
     procedure startup is
     begin
       rst <= '1'; wait for 500 ns; rst <= '0'; wait for 500 ns;
@@ -639,6 +697,7 @@ begin
       stream_sector(1, '0', "FB");
       splice := (m_wg_open_pos - seed_id_crc_end(s)) mod m_trev;
       declat := (match_pos - 1 - seed_id_crc_end(s)) mod m_trev;
+      if declat > m_trev / 2 then declat := declat - m_trev; end if;   -- signed
       report "  W1: ID CRC end -> id_valid " & integer'image(declat) & " cycles; ID CRC end -> WGATE "
            & integer'image(splice) & " cycles = " & integer'image(splice / 1600) & " byte-times + "
            & integer'image(splice mod 1600) & " cycles (target 35200)";
@@ -759,6 +818,7 @@ begin
       assert gate_falls = g0 and fd_sent = 0
         report "FAIL: W4a: gate or feed moved on a protected disk" severity error;
       assert d_wr_last(3) = '1' report "FAIL: W4a: wp-refused flag" severity error;
+      assert now - t0 < 2 ms report "FAIL: W4a: the refusal took " & time'image(now - t0) severity error;
       report "  W4a: protected disk refused in " & time'image(now - t0) & ", no gate, no byte fed";
       cfg_wprot <= '0';
       wait for 100 us;
@@ -919,6 +979,75 @@ begin
       for i in 511 downto 201 loop exp(i) := exp(i - 1); end loop;
       exp(200) := x"00";
       read_check(0, s, "W9 (00 at slot 200, the rest one slot late)");
+
+    -------------------------------------------------------------------------
+    elsif G_GROUP = 5 then
+    -------------------------------------------------------------------------
+      -- W3: Write Track with the stock DOS token stream for one side
+      -- (WRITE-SPEC 4.4: 32 x 4E, ten records with gap3 = 35 x 4E, 4E until
+      -- the index), then Read Address x 10 and Read Sector 1..10 through the
+      -- real decoder (fill byte 00)
+      m_seed(0, 0, 30);
+      build_format(0, 0, 16#00#);
+      g0 := gate_falls;
+      track_start(G_LAT_US);
+      t0 := now;
+      wait_done(1 sec);
+      expect(RES_OK, "W3 Write Track");
+      assert wr_lost = '0' report "FAIL: W3: LOST flag" severity error;
+      assert gate_falls = g0 + 1 report "FAIL: W3: WGATE windows " & integer'image(gate_falls - g0) severity error;
+      assert abs (to_integer(d_wr_trk_cyc) - m_trev) <= 2
+        report "FAIL: W3: index to index " & integer'image(to_integer(d_wr_trk_cyc)) & " cycles" severity error;
+      assert abs (m_wg_len - m_trev) < 1600
+        report "FAIL: W3: WGATE window " & integer'image(m_wg_len) & " cycles" severity error;
+      assert d_wr_wflags(4) = '1' and d_wr_wflags(1) = '0' and d_wr_last(5) = '1'
+        report "FAIL: W3: writer flags " & hs(d_wr_wflags) & " last " & hs(d_wr_last) severity error;
+      m_query(0, 0, m_wg_open_pos, m_wg_len);
+      assert m_q_seed = 0 and m_q_new > 0
+        report "FAIL: W3: span seed/new " & integer'image(m_q_seed) & "/" & integer'image(m_q_new) severity error;
+      report "  W3: Write Track done in " & time'image(now - t0) & ": index to index "
+           & integer'image(to_integer(d_wr_trk_cyc)) & " cycles (model revolution " & integer'image(m_trev)
+           & "), WGATE window " & integer'image(m_wg_len) & " cycles, " & integer'image(to_integer(d_wr_bytes))
+           & " tokens consumed, " & integer'image(m_q_new) & " new edges, 0 seed edges in the span";
+      stream_track(3, to_integer(d_wr_bytes));
+      -- Read Address x 10: ten different IDs of cylinder 0, all CRC ok
+      n0 := 0;
+      for k in 1 to 10 loop
+        read_addr(0, r0);
+        assert rd_h = x"00" report "FAIL: W3: Read Address H=" & hs(rd_h) severity error;
+        n0 := n0 + 2**(r0 - 1);
+      end loop;
+      assert n0 = 1023 report "FAIL: W3: Read Address x 10 saw sector mask " & integer'image(n0) severity error;
+      report "  W3: Read Address x 10: sectors 1..10 all seen, ID CRCs ok";
+      s := r0;
+      for k in 1 to 10 loop
+        s := nxt(s);
+        for i in 0 to 511 loop exp(i) := x"00"; end loop;
+        read_check(0, s, "W3 formatted");
+      end loop;
+      m_dump(0, 0, 3);
+
+      -- W12: index loss during a track write -> watchdog close, RES_NO_INDEX
+      m_seed(0, 0, 31);
+      build_format(0, 0, 16#E5#);
+      g0 := gate_falls;
+      track_start(G_LAT_US);
+      wait until f_wgate = '0' for 400 ms;
+      assert f_wgate = '0' report "FAIL: W12: WGATE never opened" severity failure;
+      t0 := now;
+      wait for 10 ms;
+      cfg_noindex <= '1';                            -- the index sensor goes quiet
+      wait_done(1 sec);
+      t1 := now;
+      cfg_noindex <= '0';
+      expect(RES_NO_INDEX, "W12");
+      assert rd_rnf = '1' report "FAIL: W12: rnf not set" severity error;
+      assert d_wr_reason = x"80" and d_wr_last(2) = '1'
+        report "FAIL: W12: writer reason " & hs(d_wr_reason) & " last " & hs(d_wr_last) severity error;
+      assert abs (m_wg_len - C_WR_TRK_END_WD_CYC) < 1600
+        report "FAIL: W12: WGATE window " & integer'image(m_wg_len) & " cycles" severity error;
+      report "  W12: index lost mid-track: WGATE closed by the end watchdog after " & integer'image(m_wg_len)
+           & " cycles (watchdog " & integer'image(C_WR_TRK_END_WD_CYC) & " from the start edge), RES_NO_INDEX + rnf";
     end if;
 
     -------------------------------------------------------------------------
