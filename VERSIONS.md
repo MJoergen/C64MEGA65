@@ -4,7 +4,8 @@ Version 6 - MONTH DAY, 2026
 ## New Features
 
 * The built-in floppy drive can be used as an 1581 (reading and writing).
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/90)
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/90 and
+   GitHub issue https://github.com/MJoergen/C64MEGA65/issues/244)
 
 * Virtual drive 8 can now mount `*.d81` disk images on a simulated Commodore
   1581 drive, in addition to the existing `*.d64` images. Just go to the disk
