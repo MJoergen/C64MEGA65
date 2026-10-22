@@ -118,6 +118,15 @@ Important: If you use VGA displays or analog retro monitors, please switch off
 "HDMI: Flicker-free" as described
 [here](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
 
+### PAL and NTSC
+
+*This applies from WIP-V6-A22 on.* The core is a PAL C64 by default. To turn it into an NTSC C64, open the on-screen menu with <kbd>Help</kbd>, go to "Model" and choose "NTSC"; choose "PAL" to switch back. The choice is saved in the C64MEGA65 config file like all other settings, so the core starts in NTSC again after you switch the MEGA65 on: it shows the PAL start-up screen for a moment and then resets into NTSC.
+
+* The C64 resets automatically when you switch between PAL and NTSC, so that the C64 and your software detect the new mode. This is the same as a short press of the reset button: cartridges start again, and mounted disk images are unmounted unless you switched off "Unmount on reset" for the drive.
+* HDMI: NTSC has its own display modes at 59.94 Hz: "16:9 720p 59.94 Hz" (default), "4:3 480p 59.94 Hz" and "5:4 480p 59.94 Hz", and its own "HDMI: Flicker-free" switch (on by default). The HDMI menu only shows the modes of the active mode, and PAL and NTSC each remember their own choice.
+* VGA: NTSC runs at 60 Hz (precisely 59.83 Hz; 31.47 kHz in "Standard" and 15.73 kHz in the retro 15 kHz modes). This makes the core usable on older VGA monitors that only accept 60 Hz.
+* In NTSC on VGA and on the two 480p HDMI modes, the on-screen menu looks slightly smaller (89 %) so that it fits on the screen.
+
 ### Writing to real disks with the Internal 1581
 
 *This applies from WIP-V6-A21X1 on.* The built-in floppy drive in "Internal 1581" mode also writes: `SAVE`, scratching and renaming files, `VALIDATE`, copy programs and GEOS work on real disks as they do with a real 1581. Formatting a real disk (`N0:`) follows with WIP-V6-A21X2. Please read this before you insert a disk you care about.

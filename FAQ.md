@@ -388,3 +388,15 @@ From WIP-V6-A21X1 on, yes: in "Internal 1581" mode the built-in drive writes sec
 * If the drive knocks and reads nothing right after you switched the MEGA65 on, its own little controller started up in a bad state: switch the MEGA65 off and on again.
 
 [Learn more](README.md#writing-to-real-disks-with-the-internal-1581).
+
+## 24) Can I run the core as an NTSC C64?
+
+From WIP-V6-A22 on, yes: open the on-screen menu with <kbd>Help</kbd>, go to "Model" and choose "NTSC" ("PAL" is the default). The C64 then is an NTSC machine with the newer VIC-II 6567R8 and the exact NTSC clock speed.
+
+* The C64 resets automatically when you switch between PAL and NTSC, just like after a short press of the reset button, so that the C64 and your software detect the new mode.
+* HDMI: NTSC uses its own display modes at 59.94 Hz ("16:9 720p 59.94 Hz", "4:3 480p 59.94 Hz", "5:4 480p 59.94 Hz") and its own "HDMI: Flicker-free" switch; the menu only shows the ones that belong to the active mode.
+* VGA: NTSC runs at 60 Hz (59.83 Hz), which helps with older VGA monitors that only accept 60 Hz.
+* The on-screen menu looks slightly smaller in NTSC on VGA and on the 480p HDMI modes, so that it fits on the screen.
+* Your choice is saved in the C64MEGA65 config file. After switching the MEGA65 on, you briefly see the PAL start-up screen, then the core resets into NTSC.
+
+[Learn more](README.md#pal-and-ntsc).
