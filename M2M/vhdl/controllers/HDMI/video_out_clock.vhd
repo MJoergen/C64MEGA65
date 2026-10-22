@@ -56,6 +56,8 @@ entity video_out_clock is
           -- 100 =  25.175 MHz. E.g.  640x480 @ 59.94 Hz
           -- 101 =  27.027 MHz. E.g.  720x480 @ 60.00 Hz
           -- 110 =  74.176 MHz. E.g. 1280x720 @ 59.94 Hz
+          --        74.176 MHz nominal, 74.1667 MHz actual (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3),
+          --        i.e. 1280x720 @ 59.9327 Hz
           -- 111 = undefined
     rsto    : out   std_logic;                    -- output clock synchronous reset
     clko    : out   std_logic;                    -- pixel clock

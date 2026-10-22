@@ -116,7 +116,9 @@ architecture synthesis of digital_pipeline is
    signal reset_na               : std_logic;            -- Asynchronous reset, active low
 
    signal hdmi_tmds              : slv_9_0_t(0 to 2);    -- parallel TMDS symbol stream x 3 channels
-   signal hdmi_video_mode        : video_modes_t;
+   -- The initial value only matters in simulation: without it, the VIC conversion in the
+   -- port map of i_vga_to_hdmi sees integer'low at time 0.
+   signal hdmi_video_mode        : video_modes_t := G_VIDEO_MODE_VECTOR(0);
 
    constant C_AVM_ADDRESS_SIZE   : integer := 19;
    constant C_AVM_DATA_SIZE      : integer := 128;
@@ -202,10 +204,10 @@ begin
    assert G_VIDEO_MODE_VECTOR(2).H_PIXELS <= G_VIDEO_MODE_VECTOR(2).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(3).H_PIXELS <= G_VIDEO_MODE_VECTOR(3).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(4).H_PIXELS <= G_VIDEO_MODE_VECTOR(4).V_PIXELS*4/3;
-   assert G_VIDEO_MODE_VECTOR(5).H_PIXELS <= G_VIDEO_MODE_VECTOR(5).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(6).H_PIXELS <= G_VIDEO_MODE_VECTOR(6).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(7).H_PIXELS >= G_VIDEO_MODE_VECTOR(7).V_PIXELS*4/3;
-   -- 8 and 9 are a 720x480 (3:2) container that is signaled as 4:3, so the 4:3 rule does not apply
+   -- 5, 8 and 9 are a 720x480 (3:2) container that is signaled as 4:3, so the 4:3 rule does not apply
+   assert G_VIDEO_MODE_VECTOR(5).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(5).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(8).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(8).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(9).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(9).V_PIXELS = 480;
 
