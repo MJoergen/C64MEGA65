@@ -51,10 +51,13 @@ entity main is
     c64_rom_i              : in    std_logic_vector(1 downto 0);
 
     -- Video mode selection:
-    -- c64_ntsc_i: PAL/NTSC switch
-    -- clk_main_speed_i: The core's clock speed depends on mode and needs to be very exact for avoiding clock drift
+    -- c64_ntsc_i: PAL/NTSC switch: selects the VIC-II (6569 or 6567R8), the CIA TOD reference (50 or 60 Hz)
+    --    and the video_sync geometry; every change triggers the mode-change reset (mode_change_reset_proc)
+    -- clk_main_speed_i: The core's clock speed depends on mode and needs to be very exact for avoiding clock drift.
+    --    It is always the vanilla speed of the active standard (CORE_CLK_SPEED_PAL or CORE_CLK_SPEED_NTSC),
+    --    also while the HDMI flicker-free clock is running, and it changes in the same cycle as c64_ntsc_i
     -- video_retro15kHz_i: Analog video output configuration: Horizontal sync frequency: '0'=30 kHz ("normal" on "modern" analog monitors), '1'=retro 15 kHz
-    c64_ntsc_i             : in    std_logic;                    -- 0 = PAL mode, 1 = NTSC mode, clocks need to be correctly set, too
+    c64_ntsc_i             : in    std_logic;                    -- 0 = PAL mode (6569), 1 = NTSC mode (6567R8)
     clk_main_speed_i       : in    natural;
     video_retro15khz_i     : in    std_logic;
 
@@ -739,6 +742,15 @@ architecture synthesis of main is
   -- QNICE delay loop between the OR/AND CSR writes to widen the pulse to >= 64 main_clk cycles
   -- after the 2-stage CDC in framework.vhd). All three sources honor the 32-cycle minimum.
   --
+  -- A fourth source of soft resets lives inside main.vhd: the mode-change reset (mode_change_reset_proc).
+  -- Every change of c64_ntsc_i (PAL <-> NTSC, including the change that happens when the Shell restores a
+  -- saved NTSC setting after power-on) produces exactly one mode_reset pulse of C_MODE_RST_LEN = 1024
+  -- cycles, so that the KERNAL re-runs its PAL/NTSC detection ($02A6) under the new VIC-II and clock.
+  -- mode_reset joins hard_reset_proc next to reset_soft_i (it pulls reset_core_n low, never hard_reset_n)
+  -- and cart_soft_reset (re-initializes the simulated cartridge). The other soft resets are silently
+  -- dropped while prevent_reset = '1'; the mode-change reset is deferred instead and fires as soon as
+  -- prevent_reset = '0', because a lost mode-change reset would leave the KERNAL in the wrong region.
+  --
   -- A reset that is coming from a hardware cartridge via cart_in_reset_n_q (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are
   -- aware of minimum reset durations. (Example: The EF3 pulses the reset for 7xphi2, which is way longer
@@ -749,7 +761,8 @@ architecture synthesis of main is
   --       reset_hard_i
   -- IN MAIN.VHD AS YOU WILL RISK DATA CORRUPTION!
   -- Exceptions are the processes "hard_reset" and "handle_cartridge_triggered_resets",
-  -- which "know what they are doing".
+  -- which "know what they are doing". (mode_change_reset_proc is no exception: it only reads
+  -- c64_ntsc_i and prevent_reset, and hard_reset_proc turns its mode_reset into a protected reset.)
   --
   -- The go-to signal for all standard reset situations within main.vhd:
   --       reset_core_n
@@ -770,6 +783,15 @@ architecture synthesis of main is
   signal   hard_rst_counter : natural                              := 0;
   signal   hard_reset_n_d   : std_logic                            := '1';
   signal   cold_start_done  : std_logic                            := '0';
+
+  -- Mode-change reset (issue #181): PAL <-> NTSC switches re-run the KERNAL's region detection.
+  -- C_MODE_RST_LEN must be >= 32 (RESET SEMANTICS) and long enough to cover the clock switch in
+  -- clk.vhd (a few hr_clk cycles, below 1 us); 1024 cycles = 31 us.
+  constant C_MODE_RST_LEN   : natural                              := 1024;
+  signal   ntsc_d           : std_logic                            := '0';   -- power-on standard is PAL
+  signal   mode_rst_pending : std_logic                            := '0';
+  signal   mode_rst_counter : natural range 0 to C_MODE_RST_LEN    := 0;
+  signal   mode_reset       : std_logic;
 
   -- Core's simulated expansion port
   signal   core_roml            : std_logic;
@@ -968,7 +990,8 @@ begin
   -- since we can have more than one cache that might be dirty, we convert the std_logic_vector of length G_VDNUM
   -- into an unsigned and check for zero
   prevent_reset     <= '0' when unsigned(cache_dirty) = 0 else '1';
-  cart_soft_reset   <= cart_soft_reset_i and not prevent_reset;
+  -- the mode-change reset re-initializes the simulated cartridge like any OSM-driven soft reset
+  cart_soft_reset   <= (cart_soft_reset_i or mode_reset) and not prevent_reset;
   cart_soft_reset_o <= cart_soft_reset;
 
   -- the color of the drive led is green normally, but it turns yellow
@@ -1043,7 +1066,9 @@ begin
   hard_reset_proc : process (clk_main_i)
   begin
     if rising_edge(clk_main_i) then
-      if reset_soft_i = '1' or reset_hard_i = '1' or cart_reset_counter /= 0 then
+      -- mode_reset is a soft reset: it reaches reset_core_n (protected by prevent_reset) but never
+      -- hard_reset_n; mode_change_reset_proc only raises it while prevent_reset = '0'
+      if reset_soft_i = '1' or reset_hard_i = '1' or cart_reset_counter /= 0 or mode_reset = '1' then
         -- Due to sw_cartridge_wrapper's logic, reset_soft_i stays high longer than reset_hard_i.
         -- We need to make sure that this is not interfering with hard_reset_n
         if reset_hard_i = '1' then
@@ -1069,6 +1094,31 @@ begin
       end if;
     end if;
   end process hard_reset_proc;
+
+  -- Mode-change reset: soft-reset the C64 once per change of c64_ntsc_i, so that the KERNAL re-detects
+  -- PAL/NTSC. MiSTer resets while its PLL relocks; we have four permanently running MMCMs instead, so
+  -- the reset is generated here. A change that arrives while prevent_reset = '1' (a virtual drive still
+  -- writes back) stays pending and fires afterwards; several changes inside that window give one reset.
+  -- c64_ntsc_i is a registered OSM bit, so no synchronizer is needed. ntsc_d starts as PAL, which makes
+  -- the restore of a saved NTSC setting after power-on an ordinary mode change.
+  mode_change_reset_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      ntsc_d <= c64_ntsc_i;
+      if ntsc_d /= c64_ntsc_i then
+        mode_rst_pending <= '1';
+      end if;
+
+      if mode_rst_counter /= 0 then
+        mode_rst_counter <= mode_rst_counter - 1;
+      elsif mode_rst_pending = '1' and prevent_reset = '0' then
+        mode_rst_counter <= C_MODE_RST_LEN;
+        mode_rst_pending <= '0';
+      end if;
+    end if;
+  end process mode_change_reset_proc;
+
+  mode_reset <= '1' when mode_rst_counter /= 0 else '0';
 
   -- Combined reset signal to be used throughout main.vhd: reset triggered by the MEGA65's reset button (reset_core_int_n)
   -- and reset triggered by an external cartridge.
@@ -1189,8 +1239,9 @@ begin
       sim_crt_i     => c64_exp_port_mode_i(C_SIM_CRT), -- turbo mode for SIMCRTs and protection for hardware cartridges
 
       -- VGA/SCART interface
-      -- The hsync frequency is 15.64 kHz (period 63.94 us).
-      -- The hsync pulse width is 12.69 us.
+      -- PAL (6569, 63 cycles x 312 lines): the hsync frequency is 15.64 kHz (period 63.94 us).
+      -- NTSC (6567R8, 65 cycles x 263 lines): the hsync frequency is 15.73 kHz (period 63.56 us).
+      -- The VIC-II's hsync pulse is wide (12.69 us in PAL); video_sync_inst shortens it, see below.
       ntscmode      => c64_ntsc_i,
       hsync         => vga_hs,
       vsync         => vga_vs,
@@ -1872,8 +1923,13 @@ begin
   --------------------------------------------------------------------------------------------------
 
   -- The M2M framework needs the signals vga_hblank_o, vga_vblank_o, and vga_ce_o.
-  -- This shortens the hsync pulse width to 4.82 us, still with a period of 63.94 us.
-  -- This also crops the signal to 382x270 via the vs_hblank and vs_vblank signals.
+  -- video_sync counts one dot per four clk32 cycles and follows c64_ntsc_i (like MiSTer's c64.sv):
+  --    PAL : 504 dots per line, 312 lines; hsync pulse shortened to 4.821 us (period 63.94 us);
+  --          cropped to 382x270 via hblank and vblank
+  --    NTSC: 520 dots per line, 263 lines; hsync pulse shortened to 4.644 us (period 63.56 us);
+  --          cropped to 404x250 via hblank and vblank (MiSTer: "NTSC mode has 250 visible lines only")
+  -- These numbers are measured by CORE/vhdl/test/tb_ntsc/run.sh video (real VIC-II plus video_sync).
+  -- wide stays '0': MiSTer sets it only for 600 and 800 line HDMI modes with vertical crop.
   --
   -- IMPORTANT: For the C64 core, we need to use the video_sync component that is located in
   -- "C64_MiSTerMEGA65/rtl/video_sync.vhd" and NOT the version that is located in the M2M framework.
@@ -1884,7 +1940,7 @@ begin
       pause     => '0',
       hsync     => vga_hs,
       vsync     => vga_vs,
-      ntsc      => '0',
+      ntsc      => c64_ntsc_i,
       wide      => '0',
       hsync_out => video_hs_o,
       vsync_out => video_vs_o,
@@ -2644,14 +2700,18 @@ begin
     ); -- i_physical_1581_diag
 
   -- 16 MHz chip enable for the IEC drives, so that ph2_r and ph2_f can be 1 MHz (C1541's CPU runs with 1 MHz)
-  -- Uses a counter to compensate for clock drift, because the input clock is not exactly at 32 MHz
+  -- Uses a fractional counter to compensate for the input clock not being exactly 32 MHz: the same algorithm
+  -- as MiSTer's drive_ce in c64.sv (msum = ntsc ? 32727264 : 31527954), with our MMCM-exact clock speeds.
+  -- clk_main_speed_i is CORE_CLK_SPEED_PAL (31.527778 MHz) in PAL and CORE_CLK_SPEED_NTSC (32.727273 MHz)
+  -- in NTSC, so the drives run at 1 MHz in both standards. reset_core_n clears iec_dce_sum, and the
+  -- mode-change reset asserts reset_core_n, so no left-over sum of the other standard survives a switch.
   --
   -- It is important that also in the HDMI-Flicker-Free-mode we are using the vanilla clock speed given by
   -- CORE_CLK_SPEED_PAL (or CORE_CLK_SPEED_NTSC) and not a speed-adjusted version of this speed. Reason:
-  -- Otherwise the drift-compensation in generate_drive_ce will compensate for the slower clock speed and
-  -- ensure an exact 32 MHz frequency even though the system has been slowed down by the HDMI-Flicker-Free.
-  -- This leads to a different frequency ratio C64 vs 1541 and therefore to incompatibilities such as the
-  -- one described in this GitHub issue:
+  -- Otherwise the drift-compensation in iec_drive_ce_proc would compensate for the flicker-free clock
+  -- (slower than the original clock in PAL, faster in NTSC) and keep the chip enable at exactly 16 MHz
+  -- even though the C64 itself runs slower or faster. This leads to a different frequency ratio C64 vs
+  -- 1541 and therefore to incompatibilities such as the one described in this GitHub issue:
   -- https://github.com/MJoergen/C64MEGA65/issues/2
   iec_drive_ce_proc : process (all)
     variable msum, nextsum : integer;
@@ -2812,14 +2872,20 @@ begin
   -- See https://github.com/MJoergen/C64MEGA65/issues/133,
   --     https://github.com/MJoergen/C64MEGA65/issues/164 and
   --     https://github.com/MJoergen/C64MEGA65/issues/187
+  --
+  -- Timing is wired the way MiSTer does it (c64.sv line 1560: rtcF83 #(16000000, 0) with .ce(drive_ce)):
+  -- rtcF83.sv advances its seconds counter only on ce, so it counts the 16 MHz pulses of iec_drive_ce,
+  -- which are exact in PAL and in NTSC (see iec_drive_ce_proc). This keeps the PCF8583 correct in both
+  -- standards without a mode-dependent generic. The I2C side of rtcF83.sv is sampled on every clk.
+  -- In the HDMI flicker-free clock the RTC follows the speed of the C64, like the CIA TOD clock does.
   rtcf83_inst : component rtcf83
     generic map (
-      CLOCK_RATE => CORE_CLK_SPEED,
+      CLOCK_RATE => 16_000_000,
       HAS_RAM    => 0
     )
     port map (
       clk   => clk_main_i,
-      ce    => '1',
+      ce    => iec_drive_ce,
       reset => reset_hard_i,
       rtc   => rtc_i,
       scl_i => cass_write,
