@@ -2877,7 +2877,9 @@ begin
   -- rtcF83.sv advances its seconds counter only on ce, so it counts the 16 MHz pulses of iec_drive_ce,
   -- which are exact in PAL and in NTSC (see iec_drive_ce_proc). This keeps the PCF8583 correct in both
   -- standards without a mode-dependent generic. The I2C side of rtcF83.sv is sampled on every clk.
-  -- In the HDMI flicker-free clock the RTC follows the speed of the C64, like the CIA TOD clock does.
+  -- While the HDMI flicker-free clock runs, the RTC follows the speed of the C64 like the CIA TOD clock
+  -- does, and since iec_drive_ce_proc holds the chip enable while reset_core_n = '0', the RTC also pauses
+  -- for the duration of a C64 reset (MiSTer's drive_ce keeps running during a reset).
   rtcf83_inst : component rtcf83
     generic map (
       CLOCK_RATE => 16_000_000,
