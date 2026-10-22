@@ -68,7 +68,7 @@ Every file and line range that the NTSC implementation (issue #181) touches, gro
 | `CORE/vhdl/config.vhd` | 643, 646, 647 | Group-ID comments of `OPTM_G_MACHINE_MODE`, `OPTM_G_HDMI_MODES_NTSC`, `OPTM_G_HDMI_FF_NTSC` | 9.1 |
 | `CORE/m2m-rom/*.asm`, `M2M/rom/*.asm` | none | No change expected (`SUBMENU_SUMMARY` already handles PAL / NTSC) | 9.3 |
 | `tests/README.md` | before line 8 | New section `Version WIP-V6-A22 - TBD` with the hardware tests of spec 10.5 | 10.5 |
-| `doc/wip-thoughts-on-ntsc.md` | top | Pointer to `doc/dev-ntsc/NTSC-SPEC.md` as the implemented design | 9.1 |
+| `doc/ntsc.md` (replaces `doc/wip-thoughts-on-ntsc.md`) | whole | Developer description of the implemented design, pointer to `doc/dev-ntsc/NTSC-SPEC.md` | 9.1 |
 | `ROADMAP.md` | 12 | NTSC entry: in progress in WIP-V6-A22 | 9.1 |
 | `doc/hdmi.md`, `doc/speed.md`, `doc/clock_reset.md`, `doc/models.md` | sections on clocks and HDMI modes | NTSC clocks, flicker-free polarity, mode-change reset | 3, 4, 8 |
 

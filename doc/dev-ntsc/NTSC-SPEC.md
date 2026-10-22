@@ -8,7 +8,7 @@ Companion files:
 
 - `doc/dev-ntsc/recon_map.md`: every file and line range the implementation touches, grouped by worker.
 - `doc/dev-ntsc/tools/ntsc_clocks.py`: MMCM parameter search that produced every clock number in this document (`python3 doc/dev-ntsc/tools/ntsc_clocks.py`).
-- `doc/wip-thoughts-on-ntsc.md`: background on the choice of HDMI modes.
+- `doc/ntsc.md`: the developer description of the implemented NTSC support, including the background on the choice of HDMI modes.
 
 Line numbers refer to the tip of branch `ntsc` (commit `91f8164`) and to the submodule `CORE/C64_MiSTerMEGA65` at `650c6b5`. They are orientation aids; the names are authoritative.
 
