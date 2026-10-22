@@ -26,6 +26,7 @@ entity video_overlay is
       -- QNICE
       vga_cfg_scaling_i : in  natural range 0 to 8;
       vga_cfg_shift_i   : in  natural;
+      vga_cfg_vshift_i  : in  natural := 0;  -- OSM rows above the first visible row (moves the OSM up)
       vga_cfg_enable_i  : in  std_logic;
       vga_cfg_r15kHz_i  : in  std_logic;
       vga_cfg_xy_i      : in  std_logic_vector(15 downto 0);
@@ -101,8 +102,8 @@ begin
       ); -- i_vga_recover_counters
 
    stage1.vga_col <= to_integer(stage1.vga_pix_x) - vga_cfg_shift_i;
-   stage1.vga_row <= to_integer(stage1.vga_pix_y) when vga_cfg_r15kHz_i = '0' else
-                     to_integer(stage1.vga_pix_y)*2;
+   stage1.vga_row <= to_integer(stage1.vga_pix_y) + vga_cfg_vshift_i when vga_cfg_r15kHz_i = '0' else
+                     to_integer(stage1.vga_pix_y)*2 + vga_cfg_vshift_i;
 
 
    -----------------------------------------------
