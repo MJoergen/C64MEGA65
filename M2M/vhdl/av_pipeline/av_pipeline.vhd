@@ -151,12 +151,20 @@ signal audio_filter           : std_logic;
 signal audio_mute             : std_logic;
 
 ---------------------------------------------------------------------------------------------
+-- qnice_clk
+---------------------------------------------------------------------------------------------
+
+-- The machine runs in NTSC (derived from the video mode, see video_mode_is_ntsc)
+signal qnice_ntsc             : std_logic;
+
+---------------------------------------------------------------------------------------------
 -- video_clk
 ---------------------------------------------------------------------------------------------
 signal video_retro15kHz       : std_logic;
 signal video_scandoubler      : std_logic;
 signal video_csync            : std_logic;
 signal video_zoom_crop        : std_logic;
+signal video_ntsc             : std_logic;
 
 signal video_crop_ce          : std_logic;
 signal video_crop_red         : std_logic_vector(7 downto 0);
@@ -202,6 +210,7 @@ signal hdmi_osm_vram_data     : std_logic_vector(15 downto 0);
 
 signal hdmi_video_mode        : std_logic_vector(3 downto 0);
 signal hdmi_zoom_crop         : std_logic;
+signal hdmi_osm_ntsc480       : std_logic;
 
 ---------------------------------------------------------------------------------------------
 -- MiSTer audio filter
@@ -259,17 +268,35 @@ begin
    return tmp'length;
 end function first_nonzero_bit;
 
+-- OSM scaling index; force at least index 1 (89 %) when the output has fewer than 540 OSM rows
+-- (VGA in NTSC: 500 rows, HDMI 480p in NTSC: 480 rows), so that the options menu and the
+-- main screen stay fully visible (doc/dev-ntsc/NTSC-SPEC.md, section 7)
+pure function osm_scaling(arg : std_logic_vector; force_min : std_logic) return natural is
+   variable s : natural := first_nonzero_bit(arg);
+begin
+   if force_min = '1' and s = 0 then
+      return 1;
+   end if;
+   return s;
+end function osm_scaling;
+
 begin
 
    ---------------------------------------------------------------------------------------------
    -- Analog pipeline (VGA + audio out)
    ---------------------------------------------------------------------------------------------
 
+   -- The machine standard reaches the video pipeline only through the video mode: mega65.vhd
+   -- selects one of the 59.94 Hz NTSC modes if and only if the machine runs in NTSC.
+   -- The bit is quasi-static (it only changes together with the mode-change reset of the
+   -- core), so the array synchronizer below is sufficient.
+   qnice_ntsc <= '1' when video_mode_is_ntsc(slv_to_video_mode(qnice_video_mode_i)) else '0';
+
    -- Clock domain crossing: QNICE to VIDEO
    i_qnice2video: xpm_cdc_array_single
       generic map (
          DEST_SYNC_FF => 2,
-         WIDTH        => 46
+         WIDTH        => 47
       )
       port map (
          src_clk                => qnice_clk_i,
@@ -281,6 +308,7 @@ begin
          src_in(35)             => qnice_csync_i,
          src_in(36)             => qnice_zoom_crop_i,
          src_in(45 downto 37)   => qnice_osm_cfg_scaling_i,
+         src_in(46)             => qnice_ntsc,
          dest_clk               => video_clk_i,
          dest_out(15 downto 0)  => video_osm_cfg_xy,
          dest_out(31 downto 16) => video_osm_cfg_dxdy,
@@ -289,7 +317,8 @@ begin
          dest_out(34)           => video_scandoubler,
          dest_out(35)           => video_csync,
          dest_out(36)           => video_zoom_crop,
-         dest_out(45 downto 37) => video_osm_cfg_scaling
+         dest_out(45 downto 37) => video_osm_cfg_scaling,
+         dest_out(46)           => video_ntsc
       ); -- i_qnice2video
 
    -- Clock domain crossing: QNICE to AUDIO
@@ -433,7 +462,7 @@ begin
          vdac_blankn_o           => vdac_blank_n,
 
          -- Connect to QNICE and Video RAM
-         video_osm_cfg_scaling_i => first_nonzero_bit(video_osm_cfg_scaling),
+         video_osm_cfg_scaling_i => osm_scaling(video_osm_cfg_scaling, video_ntsc),
          video_osm_cfg_enable_i  => video_osm_cfg_enable,
          video_osm_cfg_xy_i      => video_osm_cfg_xy,
          video_osm_cfg_dxdy_i    => video_osm_cfg_dxdy,
@@ -502,6 +531,11 @@ begin
          dest_out(46 downto 38) => hdmi_osm_cfg_scaling
       ); -- i_qnice2hdmi
 
+   -- 480p shows only 480 of the 540 OSM rows: see osm_scaling and digital_pipeline (vertical shift)
+   hdmi_osm_ntsc480 <= '1' when slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_4_3_5994 or
+                                slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_5_4_5994 else
+                       '0';
+
 
    i_crop : entity work.crop
       port map (
@@ -516,6 +550,7 @@ begin
          video_hblank_i    => video_hblank_i,
          video_vblank_i    => video_vblank_i,
          video_crop_mode_i => video_zoom_crop,
+         video_ntsc_i      => video_ntsc,
          video_ce_o        => video_crop_ce,
          video_red_o       => video_crop_red,
          video_green_o     => video_crop_green,
@@ -568,7 +603,7 @@ begin
          hdmi_dvi_i               => qnice_dvi_i, -- proper clock domain crossing for this very signal happens inside vga_to_hdmi.vhd
          hdmi_video_mode_i        => slv_to_video_mode(hdmi_video_mode),
          hdmi_crop_mode_i         => hdmi_zoom_crop,
-         hdmi_osm_cfg_scaling_i   => first_nonzero_bit(hdmi_osm_cfg_scaling),
+         hdmi_osm_cfg_scaling_i   => osm_scaling(hdmi_osm_cfg_scaling, hdmi_osm_ntsc480),
          hdmi_osm_cfg_enable_i    => hdmi_osm_cfg_enable,
          hdmi_osm_cfg_xy_i        => hdmi_osm_cfg_xy,
          hdmi_osm_cfg_dxdy_i      => hdmi_osm_cfg_dxdy,

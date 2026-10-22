@@ -12,7 +12,7 @@ package video_modes_pkg is
                                                    -- 011 = 148.500 MHz
                                                    -- 100 =  25.175 MHz
                                                    -- 101 =  27.027 MHz
-                                                   -- 110 =  74.176 MHz
+                                                   -- 110 =  74.176 MHz nominal, 74.1667 MHz actual
                                                    -- 111 = undefined
       CEA_CTA_VIC : integer;                       -- CEA/CTA VIC
       ASPECT      : std_logic_vector(1 downto 0);  -- aspect ratio: 01=4:3, 10=16:9
@@ -120,6 +120,32 @@ package video_modes_pkg is
       V_POL       => '0'         -- vertical sync pulse polarity (1 = positive, 0 = negative)
    );
 
+   -- HDMI 720p @ 59.94 Hz (1280x720)
+   -- Same timing as C_HDMI_720p_60 (section 4.3 in the document CEA-861-D) with the
+   -- 59.94 Hz pixel clock. CLK_KHZ is the clock that CLK_SEL "110" really produces
+   -- (74.1667 MHz instead of the nominal 74.25 MHz / 1.001 = 74.176 MHz), because
+   -- digital_pipeline uses it as the CTS value of the HDMI audio clock regeneration.
+   -- Frame rate: 74.1667 MHz / (1650 x 750) = 59.9327 Hz.
+   -- The sync polarity is the one of C_HDMI_720p_50, which is the 720p mode that is
+   -- field-proven with this core.
+   constant C_HDMI_720p_5994 : video_modes_t := (
+      CLK_KHZ     => 74167,      -- 74.1667 MHz (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3, CLKOUT1_DIVIDE 10)
+      CLK_SEL     => "110",
+      CEA_CTA_VIC => 4,          -- CEA/CTA VIC: 1280x720p, 59.94/60 Hz, 16:9
+      ASPECT      => "10",       -- apsect ratio: 01=4:3, 10=16:9
+      PIXEL_REP   => '0',        -- no pixel repetition
+      H_PIXELS    => 1280,       -- horizontal display width in pixels
+      V_PIXELS    => 720,        -- vertical display width in rows
+      H_FP        => 110,        -- horizontal front porch width in pixels
+      H_PULSE     => 40,         -- horizontal sync pulse width in pixels
+      H_BP        => 220,        -- horizontal back porch width in pixels
+      V_FP        => 5,          -- vertical front porch width in rows
+      V_PULSE     => 5,          -- vertical sync pulse width in rows
+      V_BP        => 20,         -- vertical back porch width in rows
+      H_POL       => '1',        -- horizontal sync pulse polarity (1 = positive, 0 = negative)
+      V_POL       => '1'         -- vertical sync pulse polarity (1 = positive, 0 = negative)
+   );
+
 
    --------------------------------------------------------
    -- 60.00 Hz modes
@@ -194,12 +220,19 @@ package video_modes_pkg is
       C_VIDEO_HDMI_5_4_50   ,  -- PAL  576p in 5:4 @ 50 Hz
       C_VIDEO_HDMI_640_60   ,  -- HDMI 640x480     @ 60 Hz
       C_VIDEO_HDMI_720_5994 ,  -- HDMI 720x480     @ 59.94 Hz
-      C_VIDEO_SVGA_800_60      -- SVGA 800x600     @ 60 Hz
+      C_VIDEO_SVGA_800_60   ,  -- SVGA 800x600     @ 60 Hz
+      -- The NTSC modes are appended so that the encodings of the modes above do not move
+      C_VIDEO_HDMI_16_9_5994,  -- NTSC 720p in 16:9 @ 59.94 Hz (1280x720)
+      C_VIDEO_HDMI_4_3_5994 ,  -- NTSC 480p in 4:3  @ 59.94 Hz (720x480)
+      C_VIDEO_HDMI_5_4_5994    -- NTSC 480p in 5:4  @ 59.94 Hz (720x480)
    );
 
    pure function video_mode_to_slv(video_mode : video_mode_type) return std_logic_vector;
 
    pure function slv_to_video_mode(video_mode_slv : std_logic_vector) return video_mode_type;
+
+   -- true for the video modes that the C64 core uses while the machine runs in NTSC
+   pure function video_mode_is_ntsc(video_mode : video_mode_type) return boolean;
 
 end package video_modes_pkg;
 
@@ -208,13 +241,16 @@ package body video_modes_pkg is
    pure function video_mode_to_slv(video_mode : video_mode_type) return std_logic_vector is
    begin
       case video_mode is
-         when C_VIDEO_HDMI_16_9_50  => return "0000";
-         when C_VIDEO_HDMI_16_9_60  => return "0001";
-         when C_VIDEO_HDMI_4_3_50   => return "0010";
-         when C_VIDEO_HDMI_5_4_50   => return "0011";
-         when C_VIDEO_HDMI_640_60   => return "0100";
-         when C_VIDEO_HDMI_720_5994 => return "0101";
-         when C_VIDEO_SVGA_800_60   => return "0110";
+         when C_VIDEO_HDMI_16_9_50   => return "0000";
+         when C_VIDEO_HDMI_16_9_60   => return "0001";
+         when C_VIDEO_HDMI_4_3_50    => return "0010";
+         when C_VIDEO_HDMI_5_4_50    => return "0011";
+         when C_VIDEO_HDMI_640_60    => return "0100";
+         when C_VIDEO_HDMI_720_5994  => return "0101";
+         when C_VIDEO_SVGA_800_60    => return "0110";
+         when C_VIDEO_HDMI_16_9_5994 => return "0111";
+         when C_VIDEO_HDMI_4_3_5994  => return "1000";
+         when C_VIDEO_HDMI_5_4_5994  => return "1001";
       end case;
    end function video_mode_to_slv;
 
@@ -228,9 +264,18 @@ package body video_modes_pkg is
          when "0100" => return C_VIDEO_HDMI_640_60;
          when "0101" => return C_VIDEO_HDMI_720_5994;
          when "0110" => return C_VIDEO_SVGA_800_60;
+         when "0111" => return C_VIDEO_HDMI_16_9_5994;
+         when "1000" => return C_VIDEO_HDMI_4_3_5994;
+         when "1001" => return C_VIDEO_HDMI_5_4_5994;
          when others => return C_VIDEO_HDMI_16_9_50;
       end case;
    end function slv_to_video_mode;
+
+   pure function video_mode_is_ntsc(video_mode : video_mode_type) return boolean is
+   begin
+      return video_mode = C_VIDEO_HDMI_16_9_5994 or video_mode = C_VIDEO_HDMI_4_3_5994 or
+             video_mode = C_VIDEO_HDMI_5_4_5994;
+   end function video_mode_is_ntsc;
 
 end package body video_modes_pkg;
 

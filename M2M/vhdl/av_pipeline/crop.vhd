@@ -13,6 +13,7 @@ use ieee.numeric_std.all;
 entity crop is
    port (
       video_crop_mode_i : in  std_logic;
+      video_ntsc_i      : in  std_logic;  -- 0 = PAL input stream, 1 = NTSC input stream
 
       -- Input video stream
       video_clk_i       : in  std_logic;
@@ -40,22 +41,46 @@ end entity crop;
 
 architecture synthesis of crop is
 
-   -- These constants are properties of the input stream
-   constant LEFT_BORDER_IN    : natural := 33;
-   constant TOP_BORDER_IN     : natural := 35;
-   constant IMAGE_SIZE_X      : natural := 320;
-   constant IMAGE_SIZE_Y      : natural := 200;
+   -- These constants are properties of the input stream: the position of the 320x200
+   -- display window of the C64 inside the visible area that the MiSTer video_sync.vhd
+   -- produces (PAL 382x270, NTSC 404x250). x_count is 0 on the first visible pixel of a
+   -- line, y_count is 1 on the first visible line of a frame.
+   -- PAL:  33 + 320 + 29 = 382, 35 + 200 + 35 = 270
+   -- NTSC: 44 + 320 + 40 = 404, 26 + 200 + 24 = 250. The VIC-II 6567R8 line is 16 dots
+   -- longer, which moves the window 11 dots to the right relative to the end of hblank,
+   -- and video_sync starts the visible area 9 lines closer to the window (measured with
+   -- the real VIC-II in CORE/vhdl/test/tb_ntsc/tb_crop_ntsc.vhd). Depending on the phase
+   -- of the core video clock enable relative to the VIC-II pixel grid, the window can
+   -- start one pixel earlier; that applies to both standards alike.
+   constant LEFT_BORDER_IN_PAL  : natural := 33;
+   constant TOP_BORDER_IN_PAL   : natural := 35;
+   constant LEFT_BORDER_IN_NTSC : natural := 44;
+   constant TOP_BORDER_IN_NTSC  : natural := 26;
+   constant IMAGE_SIZE_X        : natural := 320;
+   constant IMAGE_SIZE_Y        : natural := 200;
 
-   -- These are the new desired borders
+   -- These are the new desired borders (348x208 output in both standards).
+   -- MiSTer has no equivalent of this zoom: its optional vertical crop (vcrop and the
+   -- CROP_SIZE of video_freak in c64.sv, 240 lines for 480p and 720p) crops to a height
+   -- that divides the HDMI height, in PAL and NTSC alike.
    constant LEFT_BORDER_NEW   : natural := 14;
    constant RIGHT_BORDER_NEW  : natural := 14;
    constant TOP_BORDER_NEW    : natural := 4;
    constant BOTTOM_BORDER_NEW : natural := 4;
 
-   constant X_MIN : natural := LEFT_BORDER_IN-LEFT_BORDER_NEW;
-   constant X_MAX : natural := LEFT_BORDER_IN+IMAGE_SIZE_X+RIGHT_BORDER_NEW-1;
-   constant Y_MIN : natural := TOP_BORDER_IN-TOP_BORDER_NEW;
-   constant Y_MAX : natural := TOP_BORDER_IN+IMAGE_SIZE_Y+BOTTOM_BORDER_NEW-1;
+   constant X_MIN_PAL  : natural := LEFT_BORDER_IN_PAL-LEFT_BORDER_NEW;
+   constant X_MAX_PAL  : natural := LEFT_BORDER_IN_PAL+IMAGE_SIZE_X+RIGHT_BORDER_NEW-1;
+   constant Y_MIN_PAL  : natural := TOP_BORDER_IN_PAL-TOP_BORDER_NEW;
+   constant Y_MAX_PAL  : natural := TOP_BORDER_IN_PAL+IMAGE_SIZE_Y+BOTTOM_BORDER_NEW-1;
+   constant X_MIN_NTSC : natural := LEFT_BORDER_IN_NTSC-LEFT_BORDER_NEW;
+   constant X_MAX_NTSC : natural := LEFT_BORDER_IN_NTSC+IMAGE_SIZE_X+RIGHT_BORDER_NEW-1;
+   constant Y_MIN_NTSC : natural := TOP_BORDER_IN_NTSC-TOP_BORDER_NEW;
+   constant Y_MAX_NTSC : natural := TOP_BORDER_IN_NTSC+IMAGE_SIZE_Y+BOTTOM_BORDER_NEW-1;
+
+   signal x_min : natural range 0 to 2047;
+   signal x_max : natural range 0 to 2047;
+   signal y_min : natural range 0 to 1023;
+   signal y_max : natural range 0 to 1023;
 
    signal video_hblank_d : std_logic;
    signal video_vblank_d : std_logic;
@@ -93,8 +118,13 @@ begin
       end if;
    end process p_count;
 
-   crop_active <= video_crop_mode_i when x_count < X_MIN or x_count > X_MAX or
-                                         y_count < Y_MIN or y_count > Y_MAX else '0';
+   x_min <= X_MIN_NTSC when video_ntsc_i = '1' else X_MIN_PAL;
+   x_max <= X_MAX_NTSC when video_ntsc_i = '1' else X_MAX_PAL;
+   y_min <= Y_MIN_NTSC when video_ntsc_i = '1' else Y_MIN_PAL;
+   y_max <= Y_MAX_NTSC when video_ntsc_i = '1' else Y_MAX_PAL;
+
+   crop_active <= video_crop_mode_i when x_count < x_min or x_count > x_max or
+                                         y_count < y_min or y_count > y_max else '0';
 
    video_hblank_o <= video_hblank_d or crop_active;
    video_vblank_o <= video_vblank_d or crop_active;
