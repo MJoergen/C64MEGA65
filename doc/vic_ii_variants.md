@@ -154,7 +154,7 @@ coherent chip sets:
 
 Some combinations never existed in silicon: old NTSC predates HMOS entirely,
 and the Drean's 6572 was NMOS. The OSM's independent switches (CIA 8521,
-SID 6581/8580, and eventually PAL/NTSC) let users mix freely, but
+SID 6581/8580, PAL/NTSC) let users mix freely, but
 the compatibility personas people actually want are clusters — bread-bin
 PAL, C64C PAL, NTSC machines — which is an argument for eventually offering
 machine presets on top of the individual toggles, the way VICE names whole
@@ -164,7 +164,7 @@ machine models rather than individual chips.
 
 | Item | Location | State |
 | ---- | -------- | ----- |
-| PAL/NTSC (`ntscMode`) | `mega65.vhd` drives `c64_ntsc_i`, hardcoded to PAL | OSM Model submenu exists, not wired (#181) |
+| PAL/NTSC (`ntscMode`) | `mega65.vhd` drives `c64_ntsc_i` from the OSM | `Model > PAL / NTSC` (#181, see [ntsc.md](ntsc.md)) |
 | Old NTSC (`mode6567old`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
 | PAL-N (`mode6572`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
 | VIC variant (`variant`) | `fpga64_sid_iec.vhd`, hardcoded `"10"` (old HMOS) | Deliberately not in the OSM (#120) |
