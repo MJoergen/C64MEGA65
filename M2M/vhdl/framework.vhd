@@ -274,14 +274,18 @@ architecture synthesis of framework is
 -- Constants
 ---------------------------------------------------------------------------------------------
 
-constant VIDEO_MODE_VECTOR    : video_modes_vector(0 to 6) := (
+-- The index is the position of the member in video_mode_type (video_modes_pkg.vhd)
+constant VIDEO_MODE_VECTOR    : video_modes_vector(0 to 9) := (
    C_HDMI_720p_50,        -- HDMI 1280x720   @ 50 Hz
    C_HDMI_720p_60,        -- 1280x720        @ 60 Hz
    C_HDMI_576p_50,        -- PAL 576p in 4:3 @ 50 Hz
    C_HDMI_576p_50,        -- PAL 576p in 5:4 @ 50 Hz
    C_HDMI_640x480p_60,    -- HDMI 640x480    @ 60 Hz
    C_HDMI_720x480p_5994,  -- HDMI 720x480    @ 59.94 Hz
-   C_SVGA_800_600_60);    -- SVGA 800x600    @ 60 Hz
+   C_SVGA_800_600_60,     -- SVGA 800x600    @ 60 Hz
+   C_HDMI_720p_5994,      -- 7: NTSC 720p in 16:9 @ 59.94 Hz
+   C_HDMI_720x480p_5994,  -- 8: NTSC 480p in 4:3  @ 59.94 Hz
+   C_HDMI_720x480p_5994); -- 9: NTSC 480p in 5:4  @ 59.94 Hz
 
 signal video_mode : video_modes_t;
 
@@ -496,13 +500,16 @@ begin
          sys_pps_o         => sys_pps
       ); -- i_clk_m2m
 
-   video_mode <= C_SVGA_800_600_60    when qnice_video_mode_i = C_VIDEO_SVGA_800_60   else
-                 C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_720_5994 else
-                 C_HDMI_640x480p_60   when qnice_video_mode_i = C_VIDEO_HDMI_640_60   else
-                 C_HDMI_576p_50       when qnice_video_mode_i = C_VIDEO_HDMI_5_4_50   else
-                 C_HDMI_576p_50       when qnice_video_mode_i = C_VIDEO_HDMI_4_3_50   else
-                 C_HDMI_720p_60       when qnice_video_mode_i = C_VIDEO_HDMI_16_9_60  else
-                 C_HDMI_720p_50;                             -- C_VIDEO_HDMI_16_9_50
+   video_mode <= C_SVGA_800_600_60    when qnice_video_mode_i = C_VIDEO_SVGA_800_60    else
+                 C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_720_5994  else
+                 C_HDMI_640x480p_60   when qnice_video_mode_i = C_VIDEO_HDMI_640_60    else
+                 C_HDMI_576p_50       when qnice_video_mode_i = C_VIDEO_HDMI_5_4_50    else
+                 C_HDMI_576p_50       when qnice_video_mode_i = C_VIDEO_HDMI_4_3_50    else
+                 C_HDMI_720p_60       when qnice_video_mode_i = C_VIDEO_HDMI_16_9_60   else
+                 C_HDMI_720p_5994     when qnice_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
+                 C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_4_3_5994  else
+                 C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_5_4_5994  else
+                 C_HDMI_720p_50;                              -- C_VIDEO_HDMI_16_9_50
 
    qnice_clk_sel <= video_mode.CLK_SEL;
 
