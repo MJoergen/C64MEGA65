@@ -130,7 +130,7 @@ constant HELP_1 : string :=
    "   Flicker-free to avoid glitches\n" &
    " * If you use HDMI, then absolutely make\n" &
    "   sure that you enable HDMI: Flicker-free\n" &
-   "   and that you run the core at 50 Hz\n" &
+   "   for PAL (50 Hz) and NTSC (59.94 Hz)\n" &
    " * To use hardware cartridges, you need to\n" &
    "   have a MEGA65 core #0 from at least mid\n" &
    "   2023; so you might need to upgrade\n\n" &
@@ -453,7 +453,7 @@ constant OPTM_ITEMS        : string :=
    " Model\n"                   &
    "\n"                         &
    " PAL\n"                     &
-   " NTSC\n"                    &  -- not yet wired in mega65.vhd, see #181
+   " NTSC\n"                    &  -- VIC-II 6567R8; every change of the machine mode resets the C64
    "\n"                         &
    " Turbo mode\n"              &
    "\n"                         &
@@ -473,15 +473,15 @@ constant OPTM_ITEMS        : string :=
    " HDMI: %s\n"                &  -- HDMI submenu
    " HDMI Display Mode\n"       &
    "\n"                         &
-   " 16:9 720p 50 Hz\n"         &  -- PAL modes; with the dependencies feature (#229) only the matching
-   " 16:9 720p 59.94 Hz\n"      &  -- machine-mode variants will be shown, hence no (PAL)/(NTSC) suffixes
-   " 4:3  576p 50 Hz\n"         &  -- the NTSC display modes (59.94 Hz) are not yet wired in mega65.vhd,
-   " 4:3  480p 59.94 Hz\n"      &  -- see #181/#105
+   " 16:9 720p 50 Hz\n"         &  -- 50 Hz: PAL modes, 59.94 Hz: NTSC modes; with the dependencies feature (#229)
+   " 16:9 720p 59.94 Hz\n"      &  -- only the modes of the active machine mode are shown, hence no (PAL)/(NTSC)
+   " 4:3  576p 50 Hz\n"         &  -- suffixes. PAL and NTSC are separate groups, so each standard remembers
+   " 4:3  480p 59.94 Hz\n"      &  -- its own choice (see #181/#105)
    " 5:4  576p 50 Hz\n"         &
    " 5:4  480p 59.94 Hz\n"      &
    "\n"                         &
    " HDMI: Flicker-free\n"      &
-   " HDMI: Flicker-free\n"      &  -- NTSC twin of the line above; not yet wired, see #181 and path-to-OSM-dependencies.md
+   " HDMI: Flicker-free\n"      &  -- NTSC twin of the line above; only the one of the active machine mode is shown
    " HDMI: DVI (no sound)\n"    &
 
    " HDMI: %s\n"                &  -- HDMI Filter submenu, nested inside the HDMI submenu
@@ -640,11 +640,11 @@ constant OPTM_G_VGA_MODES     : integer := 18;
 constant OPTM_G_OSM_MODE      : integer := 19;
 constant OPTM_G_ABOUT_HELP    : integer := 20;
 constant OPTM_G_REU           : integer := 21;
-constant OPTM_G_MACHINE_MODE  : integer := 22;  -- PAL/NTSC; the C64 core itself is not yet wired, see #181
+constant OPTM_G_MACHINE_MODE  : integer := 22;  -- PAL/NTSC (#181): VIC-II, core clock and HDMI modes; a change resets the C64
 constant OPTM_G_TURBO_MODE    : integer := 23;  -- not yet wired
 constant OPTM_G_TURBO_SPEED   : integer := 24;  -- not yet wired
-constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes; not yet wired, see #181/#105
-constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF; not yet wired
+constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes (59.94 Hz), see #181/#105
+constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
 constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187

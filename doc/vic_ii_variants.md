@@ -91,20 +91,19 @@ would give a VICE-style approximation, not a cycle-exact Drean.
 
 ### Relation to the OSM "Model" setting (issue #181)
 
-The planned PAL/NTSC switch in the OSM Model submenu drives `ntscMode`, so
-it is literally selecting among these mode inputs — old NTSC and PAL-N would
+The PAL/NTSC switch in the OSM Model submenu drives `ntscMode`, so it is
+literally selecting among these mode inputs — old NTSC and PAL-N would
 simply be entries three and four of the same submenu, if we ever wanted
 them. All the hard infrastructure NTSC needs is the same infrastructure the
-exotic modes would need: a second core clock in `clk.vhd`, the matching
-`clk32_speed` value for the CIA TOD, NTSC entries in the video pipeline, the
-59.94 Hz HDMI display modes and the flicker-free NTSC twin that already sit
-unwired in `config.vhd` (see `doc/wip-thoughts-on-ntsc.md` for the HDMI
-side).
+exotic modes would need: core clocks of their own in `clk.vhd`, the matching
+`clk32_speed` value for the CIA TOD, entries in the video pipeline, HDMI
+display modes and a flicker-free twin (see [ntsc.md](ntsc.md) for how NTSC
+does it).
 
-Design consequence: if the #181 wiring is designed as "machine mode selects
-a bundle of VIC mode bits, core clock, `clk32_speed` and video pipeline
-profile" rather than as a single PAL/NTSC boolean threaded through
-everything, adding a third or fourth machine later stays cheap. Old NTSC
+Design consequence: as long as the machine mode selects a bundle of VIC mode
+bits, core clock, `clk32_speed` and video pipeline profile rather than a
+single PAL/NTSC boolean threaded through everything, adding a third or
+fourth machine later stays cheap. Old NTSC
 then comes almost for free (same clock, different geometry, but the 61 Hz
 output problem remains), while PAL-N costs one more MMCM frequency.
 
@@ -155,7 +154,7 @@ coherent chip sets:
 
 Some combinations never existed in silicon: old NTSC predates HMOS entirely,
 and the Drean's 6572 was NMOS. The OSM's independent switches (CIA 8521,
-SID 6581/8580, and eventually PAL/NTSC) let users mix freely, but
+SID 6581/8580, PAL/NTSC) let users mix freely, but
 the compatibility personas people actually want are clusters — bread-bin
 PAL, C64C PAL, NTSC machines — which is an argument for eventually offering
 machine presets on top of the individual toggles, the way VICE names whole
@@ -165,7 +164,7 @@ machine models rather than individual chips.
 
 | Item | Location | State |
 | ---- | -------- | ----- |
-| PAL/NTSC (`ntscMode`) | `mega65.vhd` drives `c64_ntsc_i`, hardcoded to PAL | OSM Model submenu exists, not wired (#181) |
+| PAL/NTSC (`ntscMode`) | `mega65.vhd` drives `c64_ntsc_i` from the OSM | `Model > PAL / NTSC` (#181, see [ntsc.md](ntsc.md)) |
 | Old NTSC (`mode6567old`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
 | PAL-N (`mode6572`) | `fpga64_sid_iec.vhd`, hardcoded `'0'` | Not in the OSM |
 | VIC variant (`variant`) | `fpga64_sid_iec.vhd`, hardcoded `"10"` (old HMOS) | Deliberately not in the OSM (#120) |

@@ -93,7 +93,7 @@ DEBUG=1 ./build_all.sh R6                        # R6 with an ILA (see debug bui
 
 **Debug builds (ILA insertion).** Passing `debug` (or `DEBUG=1` to `build_all.sh`) inserts an Integrated Logic Analyzer on every net that carries the `mark_debug` attribute in the RTL, using the stock Xilinx helper `CORE/debug.tcl`. Mark the nets you want to capture with `attribute mark_debug of <signal> : signal is "true";` in the VHDL, rebuild with the `debug` flag, then load both the bitstream and the generated probes file into the Vivado hardware manager. The probes are written next to the bitstream as `mega65_r<rev>.ltx` (and `debug.tcl` also drops a `CORE/debug_nets.ltx`). Two caveats: a debug build drives implementation in-session, so the `.xpr` `Performance_ExplorePostRoutePhysOpt` implementation strategy is **not** applied — a debug bitstream is for hardware bring-up, not for release — and it is deliberately not gated on timing, because the ILA logic often eats into slack, so it is never re-rolled either.
 
-**The sign-off gates.** After a release build, `build_bitstream.tcl` (and `reroll_bitstream.tcl` after a re-roll) re-opens the routed design and verifies that the load-bearing `CORE.xdc` constraints actually attached to real objects. This matters because a constraint whose target instance was renamed silently constrains nothing, and Vivado only emits a warning that is easy to miss in a long log. The gates check the flicker-free clock-selector pin (`CORE/hr_core_speed_reg[0]/Q`), the generated `main_clk` (present, and sourced from the correct MMCM leg so its period is ~31.718 ns), the `qnice_clk` clock, and a representative set of the deep IEC-drive CDC false-path pins. If any gate fails, the build is reported `SIGNOFF-FAILED` and exits `3` even though synthesis, implementation and timing all succeeded. The gates live in `CORE/signoff_gates.tcl`, which both scripts share; when you add or rename hierarchy that `CORE.xdc` references, update that list in the same commit.
+**The sign-off gates.** After a release build, `build_bitstream.tcl` (and `reroll_bitstream.tcl` after a re-roll) re-opens the routed design and verifies that the load-bearing `CORE.xdc` constraints actually attached to real objects. This matters because a constraint whose target instance was renamed silently constrains nothing, and Vivado only emits a warning that is easy to miss in a long log. The gates check both core clock-selector pins (`CORE/hr_core_speed_reg[0]/Q` and `CORE/hr_core_speed_reg[1]/Q`, which `CORE.xdc` sets to `1` by case analysis so that the core is timed at the fastest of its four clocks), the generated `main_clk` (present, and sourced from `CORE/clk_gen/i_clk_c64_ntsc_ff/CLKOUT0`, the NTSC flicker-free MMCM, so its period is ~30.497 ns), the `qnice_clk` clock, and a representative set of the deep IEC-drive CDC false-path pins. If any gate fails, the build is reported `SIGNOFF-FAILED` and exits `3` even though synthesis, implementation and timing all succeeded. The gates live in `CORE/signoff_gates.tcl`, which both scripts share; when you add or rename hierarchy that `CORE.xdc` references, update that list in the same commit.
 
 Making a `.cor` file
 --------------------
@@ -531,6 +531,11 @@ wanted.
 Even though this "switching between two frame rates" works perfectly on the HDMI output,
 it can lead to flickering on some VGA monitors. So for this reason, it is important to
 have the option of disabling this feature.
+
+The same mechanism works in NTSC, with two more clocks: the NTSC C64 produces 59.826 Hz,
+the NTSC HDMI modes run at 59.94 Hz, so there the flicker-free clock is the *faster* one
+(32.789700 MHz instead of 32.727273 MHz) and the switching polarity is inverted. See
+[ntsc.md](ntsc.md) and [speed.md](speed.md).
 
 ### Keyboard
 

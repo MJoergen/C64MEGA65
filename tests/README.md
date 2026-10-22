@@ -5,6 +5,26 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22 - TBD
+------------------------
+
+@TODO: Test the NTSC machine mode (issue #181) on R3 and R6 at least. NTSC is selected in `Model > NTSC`; every change of the machine mode resets the C64 automatically. In NTSC the HDMI submenu offers `16:9 720p 59.94 Hz`, `4:3 480p 59.94 Hz`, `5:4 480p 59.94 Hz` and the NTSC twin of `HDMI: Flicker-free`. The design, including the expected clocks and frame rates, is in `doc/ntsc.md` and `doc/dev-ntsc/NTSC-SPEC.md`.
+
+* @TODO PAL regression: power on in PAL, all three PAL HDMI modes, `HDMI: Flicker-free` on and off, VGA `Standard` and both 15 kHz modes, the usual demo set. Nothing may differ from WIP-V6-A21.
+* @TODO Switch to NTSC in `Model`: the C64 resets automatically and `PRINT PEEK(678)` (`$02A6`) prints 0; switch back to PAL: it prints 1. The HDMI submenu shows only the items of the active machine mode.
+* @TODO NTSC on HDMI: `16:9 720p 59.94 Hz`, `4:3 480p 59.94 Hz` and `5:4 480p 59.94 Hz`. The display reports 59.94 Hz (720p shows as 59.93 Hz on displays that print two decimals). HDMI audio has no periodic dropouts over 10 minutes in each mode.
+* @TODO NTSC on VGA: `Standard` (31.47 kHz, 59.83 Hz) on a 60 Hz-only VGA monitor; the 15 kHz modes with HS/VS and with CSYNC on a CRT or a 15 kHz-capable display. Watch the vertical sync stability: like on MiSTer, the NTSC vertical sync has no vertical front porch.
+* @TODO OSM in NTSC: the whole options menu, a help page and the file browser are fully visible on VGA (31 kHz and 15 kHz), on 720p59.94 and on both 480p items, at OSM scaling 100 % and 50 %.
+* @TODO `HDMI: Flicker-free` in NTSC: with it on, smooth horizontal scrolling (for example the Ballblazer or Skate or Die intro) has no periodic stutter; with it off, a stutter about every 9 s is expected (59.826 Hz content on a 59.94 Hz output).
+* @TODO The programs from the Discord discussion in NTSC: Ballblazer (60 Hz motion), M.U.L.E. (music tempo), Impossible Mission (speech pitch and speed), Maniac Mansion (aspect, music), Skate or Die (sampled intro), Beachhead (the score-line raster glitch reported by KeithHenrickson-Retro in PAL: check that the score line is stable in NTSC). Plus the PAL re-check of issue #2 and of the programs from issue #2 in PAL, as requested in issue #181.
+* @TODO 1541 loading in NTSC: a D64 with the standard loader, a fastloader game, and `SAVE` to a D64 (also with `HDMI: Flicker-free` on); the same with a D81 on the simulated 1581.
+* @TODO TOD accuracy in NTSC: set the TOD clock (CIA1 `$DC08-$DC0B`, the 50/60 Hz bit in `$DC0E` as the program expects) and let it run 10 minutes against a stopwatch: deviation below 1 s. Repeat in PAL.
+* @TODO JiffyDOS in NTSC: `Kernal > JiffyDOS` with the JiffyDOS 1541 ROM; `@$` and a JiffyDOS load.
+* @TODO Config-file persistence: select NTSC, save the settings, power cycle: the core shows PAL for a moment, resets automatically and runs NTSC; the NTSC HDMI mode and the NTSC flicker-free setting are restored.
+* @TODO GEOS real-time clock in NTSC (`GEOS Real-Time-Clock` on): GEOS shows the correct time after 10 minutes.
+* @TODO Mode change while a D64 write-back is pending (drive LED yellow, `<Saving>` shown): the reset happens after the write-back and the image on the SD card is intact.
+* @TODO Hardware cartridge in NTSC (an EF3 menu, a 1541 Ultimate II+ or similar): the cartridge starts after the automatic reset.
+
 Version WIP-V6-A21 - TBD
 ------------------------
 

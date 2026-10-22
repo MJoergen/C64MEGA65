@@ -9,7 +9,6 @@ at a later stage:
 Feature Roadmap
 ---------------
 
-* NTSC
 * Turbo mode for games such as Zeropaige's Super Mario Bros
 * Offer an SD2IEC compatible IEC device that browses the SD card and that
   you can for example use to flash the EF1CR cartridge without the need of

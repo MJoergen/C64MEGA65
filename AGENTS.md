@@ -63,7 +63,8 @@ disagree.
 │   │   │                  CDC, REU/CRT HyperRAM paths, OSM bit decoding
 │   │   ├── main.vhd       Main-clock-domain wrapper around the MiSTer core
 │   │   │                  (instantiates fpga64_sid_iec, REU, drives, etc.)
-│   │   ├── clk.vhd        MMCM clock generation (PAL/NTSC, HDMI flicker-free)
+│   │   ├── clk.vhd        MMCM clock generation: four core clocks (PAL/NTSC x
+│   │   │                  original/HDMI flicker-free), glitch-free BUFGCTRL tree
 │   │   ├── config.vhd     OSM/help/welcome text + OPTM_GROUPS menu structure
 │   │   ├── globals.vhd    Constants: clock speeds, device IDs, vdrives, ROMs
 │   │   ├── keyboard.vhd   MEGA65 keyboard → C64 CIA matrix (replaces MiSTer PS/2)
@@ -129,6 +130,7 @@ disagree.
 ├── doc/                   ← Internal developer notes (NOT the user's guide)
 │   ├── developer.md       BUILD INSTRUCTIONS — start here for build flow
 │   ├── clock_reset.md     clock domains and reset semantics
+│   ├── ntsc.md            NTSC support: clocks, HDMI modes, OSM, mode-change reset
 │   ├── PLA.md             PLA logic fixes vs. MiSTer
 │   ├── cartridges.md, hdmi.md, retrotubes.md, jiffy.md, RTC.md,
 │   ├── speed.md, graphics.md, models.md, inofficial.md
@@ -257,17 +259,24 @@ on `main_clk`). M2M splits it:
 
 - **Analog VGA (`analog_pipeline.vhd`)**: optional scandoubler (15 kHz → 30+
   kHz), optional composite sync. "Pure retro" output, no CRT emulation. The
-  core puts out 720x576 @ 50.125 Hz in PAL.
+  core puts out 720x576 @ 50.125 Hz in PAL and 808x500 (31.47 kHz) or 404x250
+  (15.73 kHz) @ 59.826 Hz in NTSC.
 - **Digital HDMI (`digital_pipeline.vhd`)**: feeds `ascal.vhd` (MiSTer's
   poly-phase scaler). Ascal writes input frames into HyperRAM and reads them
-  out at the chosen HDMI mode (720p/576p, 50/60 Hz). Defaults to 1280x720@50
-  with 4:3 letterboxing. CRT emulation, zoom, polyphase filters live here.
-- **Flicker-free (HDMI)**: C64 native frame rate is 50.125 Hz; HDMI is
-  exactly 50.000 Hz. The Xilinx PLL can't synthesize a perfect 31.4496 MHz,
-  so M2M continuously monitors ascal's FIFO level and pulses `hr_high_i` /
-  `hr_low_i` to mega65.vhd, which switches between two PLL outputs (50.124
-  Hz / 49.999 Hz) via a glitch-free clock mux. Average → 50 Hz exactly.
-  Disable on VGA/CRT (it can flicker analog displays).
+  out at the chosen HDMI mode (PAL: 720p50/576p50, NTSC: 720p59.94/480p59.94).
+  Defaults to 1280x720@50 with 4:3 letterboxing. CRT emulation, zoom,
+  polyphase filters live here. The pipeline learns the machine standard only
+  from the HDMI mode (a `*_5994` mode if and only if the machine is NTSC).
+- **Flicker-free (HDMI)**: the C64 native frame rate is 50.124 Hz (PAL) or
+  59.826 Hz (NTSC); HDMI is exactly 50.000 Hz or 59.94 Hz. A fixed PLL can't
+  hit the exact clock that would match, so M2M continuously monitors ascal's
+  FIFO level and pulses `hr_high_i` / `hr_low_i` to mega65.vhd, whose
+  `hr_core_speed` process switches between the original and the flicker-free
+  clock of the active standard via a glitch-free clock mux: PAL 50.124 Hz /
+  49.999 Hz, NTSC 59.826 Hz / 59.940 Hz. The polarity is inverted in NTSC
+  (there the flicker-free clock is the *faster* one). Average → HDMI rate
+  exactly. Disable on VGA/CRT (it can flicker analog displays). See
+  `doc/ntsc.md`.
 
 ### 3.6 Memory
 
@@ -893,8 +902,12 @@ These are documented in `doc/developer.md` and in code comments — but
 internalize them before debugging anything visual or timing-related:
 
 1. **PLL accuracy.** Xilinx MMCMs can't synthesize MiSTer's exact 31.527954
-   MHz; we use 31.527778 MHz (≈6 Hz off). For dynamic flicker-free we use
-   two clocks and switch between them.
+   MHz; we use 31.527778 MHz (≈6 ppm off) in PAL and the exact 32.727273 MHz
+   in NTSC. For dynamic flicker-free we use two clocks per standard and
+   switch between them: four permanently running MMCMs in `clk.vhd` instead
+   of MiSTer's PLL reprogramming. A PAL/NTSC change soft-resets the C64
+   (`mode_change_reset_proc` in `main.vhd`) so the KERNAL re-detects the
+   region.
 2. **Keyboard.** MEGA65 has a real keyboard, not PS/2. `keyboard.vhd`
    replaces `fpga64_keyboard.vhd` and feeds CIA1 directly.
 3. **PHI2 to expansion port.** Added on top of MiSTer's `fpga64_sid_iec`;
@@ -1047,6 +1060,7 @@ hardware saw the code.
 | Symptom area              | Files to look at first                                    |
 | ------------------------- | --------------------------------------------------------- |
 | HDMI tearing / flicker    | `clk.vhd`, `mega65.vhd` (hr_core_speed), `hdmi_flicker_free.vhd`, `ascal.vhd` |
+| NTSC / PAL switch         | `clk.vhd` (four MMCMs, mux tree), `mega65.vhd` (`hr_core_speed`, `qnice_video_mode_o`), `main.vhd` (`mode_change_reset_proc`), `video_modes_pkg.vhd`, `doc/ntsc.md` |
 | VGA / scandoubler / CSYNC | `analog_pipeline.vhd`, `vga_controller.vhd`               |
 | OSM rendering / scaling   | `vga_osm.vhd`, `video_overlay.vhd`, `vga_recover_counters.vhd` |
 | Menu items / labels       | `CORE/vhdl/config.vhd` (OPTM_ITEMS, OPTM_GROUPS, WHS)     |
