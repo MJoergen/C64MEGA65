@@ -45,9 +45,24 @@ constant QNICE_FIRMWARE           : string  := QNICE_FIRMWARE_M2M;
 -- C64 core clock speeds
 -- Make sure that you specify very exact values here, because these values will be used in counters
 -- in main.vhd and in fpga64_sid_iec.vhd to avoid clock drift at derived clocks
-constant CORE_CLK_SPEED_PAL   : natural := 31_527_778;   -- Will lead to a C64 clock of 985,243 Hz
-constant CORE_CLK_SPEED_NTSC  : natural := 32_727_264;   -- @TODO: This is MiSTer's value; we will need to adjust it to ours
+--
+-- Each constant is the integer frequency of the MMCM in clk.vhd that produces the core clock of the
+-- respective standard (the C64 runs at a 32nd of it). mega65.vhd feeds the value of the active
+-- standard into main.vhd (clk_main_speed_i), where the CIA TOD divider and the 1541/1581 chip enable
+-- count with it. While the core runs on a flicker-free clock (clk.vhd) these counters keep using the
+-- value of the active standard on purpose, so that the C64 and the drives speed up or slow down
+-- together (issue #2).
+--
+--    PAL:  100 MHz x 56.75 / 6 / 30   = 31,527,777.8 Hz, C64 clock 985,243 Hz, 50.124 Hz frame rate
+--          (MiSTer: 31,527,954 Hz, see "msum" in c64.sv, line 1127)
+--    NTSC: 100 MHz x 36 / 5 / 22      = 32,727,272.7 Hz, C64 clock 1,022,727 Hz, 59.826 Hz frame rate
+--          (exactly 14.31818 MHz x 16 / 7, the clock of a real NTSC C64; MiSTer: 32,727,264 Hz, same line)
+constant CORE_CLK_SPEED_PAL   : natural := 31_527_778;
+constant CORE_CLK_SPEED_NTSC  : natural := 32_727_273;
 
+-- Clock speed for the consumers that use one fixed value for both standards: the joystick debouncer
+-- and the keyboard scanner in framework.vhd and the reset delay in prg_loader.vhd. All of them
+-- tolerate the 3.8% faster NTSC clock (doc/dev-ntsc/NTSC-SPEC.md, section 5.5).
 constant CORE_CLK_SPEED       : natural := CORE_CLK_SPEED_PAL;
 
 -- System clock speed (crystal that is driving the FPGA) and QNICE clock speed
