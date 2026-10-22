@@ -91,20 +91,19 @@ would give a VICE-style approximation, not a cycle-exact Drean.
 
 ### Relation to the OSM "Model" setting (issue #181)
 
-The planned PAL/NTSC switch in the OSM Model submenu drives `ntscMode`, so
-it is literally selecting among these mode inputs — old NTSC and PAL-N would
+The PAL/NTSC switch in the OSM Model submenu drives `ntscMode`, so it is
+literally selecting among these mode inputs — old NTSC and PAL-N would
 simply be entries three and four of the same submenu, if we ever wanted
 them. All the hard infrastructure NTSC needs is the same infrastructure the
-exotic modes would need: a second core clock in `clk.vhd`, the matching
-`clk32_speed` value for the CIA TOD, NTSC entries in the video pipeline, the
-59.94 Hz HDMI display modes and the flicker-free NTSC twin that already sit
-unwired in `config.vhd` (see `doc/wip-thoughts-on-ntsc.md` for the HDMI
-side).
+exotic modes would need: core clocks of their own in `clk.vhd`, the matching
+`clk32_speed` value for the CIA TOD, entries in the video pipeline, HDMI
+display modes and a flicker-free twin (see [ntsc.md](ntsc.md) for how NTSC
+does it).
 
-Design consequence: if the #181 wiring is designed as "machine mode selects
-a bundle of VIC mode bits, core clock, `clk32_speed` and video pipeline
-profile" rather than as a single PAL/NTSC boolean threaded through
-everything, adding a third or fourth machine later stays cheap. Old NTSC
+Design consequence: as long as the machine mode selects a bundle of VIC mode
+bits, core clock, `clk32_speed` and video pipeline profile rather than a
+single PAL/NTSC boolean threaded through everything, adding a third or
+fourth machine later stays cheap. Old NTSC
 then comes almost for free (same clock, different geometry, but the 61 Hz
 output problem remains), while PAL-N costs one more MMCM frequency.
 
