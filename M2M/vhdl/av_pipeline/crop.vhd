@@ -60,8 +60,9 @@ architecture synthesis of crop is
    constant IMAGE_SIZE_Y        : natural := 200;
 
    -- These are the new desired borders (348x208 output in both standards).
-   -- MiSTer has no equivalent of this zoom: its vertical crop (vcrop/video_freak in c64.sv)
-   -- crops to an integer scale of the HDMI height instead.
+   -- MiSTer has no equivalent of this zoom: its optional vertical crop (vcrop and the
+   -- CROP_SIZE of video_freak in c64.sv, 240 lines for 480p and 720p) crops to a height
+   -- that divides the HDMI height, in PAL and NTSC alike.
    constant LEFT_BORDER_NEW   : natural := 14;
    constant RIGHT_BORDER_NEW  : natural := 14;
    constant TOP_BORDER_NEW    : natural := 4;
