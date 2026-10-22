@@ -261,6 +261,7 @@ architecture synthesis of MEGA65_Core is
 signal c64_rom                    : std_logic_vector(1 downto 0); -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
 signal c64_ntsc                   : std_logic;               -- global switch: 0 = PAL mode, 1 = NTSC mode
 signal c64_clock_speed            : natural;                 -- clock speed depending on PAL/NTSC
+signal main_hdmi_ff               : std_logic;               -- HDMI flicker-free switch of the active standard
 signal c64_exp_port_mode          : std_logic_vector(3 downto 0);
                                                              -- bit    0: Simulate cartridge (.CRT file)
                                                              -- bit    1: Simulate REU
@@ -326,7 +327,12 @@ signal main_cart_soft_reset       : std_logic;
 -- hr_clk
 ---------------------------------------------------------------------------------------------
 
-signal hr_core_speed              : unsigned(1 downto 0);    -- see clock.vhd for details
+signal hr_core_speed              : unsigned(1 downto 0);    -- see clk.vhd for details
+
+-- CORE.xdc sets case analysis on both flops hr_core_speed_reg[0] and hr_core_speed_reg[1]
+-- and CORE/signoff_gates.tcl checks that they exist: they must be neither merged nor renamed
+attribute dont_touch : string;
+attribute dont_touch of hr_core_speed : signal is "true";
 
 signal hr_reu_write               : std_logic;
 signal hr_reu_read                : std_logic;
@@ -382,7 +388,8 @@ signal hr_arb_readdata            : std_logic_vector( 63 downto 0);
 signal hr_arb_readdatavalid       : std_logic_vector(  3 downto 0);
 signal hr_arb_waitrequest         : std_logic_vector(  3 downto 0);
 
-signal hr_hdmi_ff                 : std_logic;
+signal hr_hdmi_ff                 : std_logic;               -- HDMI flicker-free switch of the active standard
+signal hr_ntsc                    : std_logic;               -- 0 = PAL mode, 1 = NTSC mode
 
 ---------------------------------------------------------------------------------------------
 -- qnice_clk
@@ -416,7 +423,7 @@ constant C_MENU_DRV9_UNMOUNT  : natural := 22;
 constant C_MENU_EXP_PORT_HW   : natural := 28;
 constant C_MENU_SIM_CRT       : natural := 29;
 constant C_MENU_SIM_REU       : natural := 31;
--- Model submenu: machine mode and turbo are not yet wired, see #181
+-- Model submenu: the machine mode selects PAL or NTSC; turbo is not yet wired
 -- C_MENU_MODEL is the flat index of the " Model: %s" submenu opener; the
 -- custom SUBMENU_SUMMARY callback in m2m-rom.asm uses it to recognize that line
 constant C_MENU_MODEL         : natural := 35;
@@ -429,9 +436,9 @@ constant C_MENU_TURBO_2X      : natural := 48;
 constant C_MENU_TURBO_3X      : natural := 49;
 constant C_MENU_TURBO_4X      : natural := 50;
 constant C_MENU_FLIP_JOYS     : natural := 53;
--- HDMI submenu; the NTSC display modes (59.94 Hz) and the NTSC
--- flicker-free twin are not yet wired, see #181/#105, neither is raw
--- 50.1 Hz
+-- HDMI submenu: the PAL display modes (50 Hz) and the NTSC display modes
+-- (59.94 Hz) are separate groups with their own default, and so are the PAL
+-- flicker-free switch and its NTSC twin; raw 50.1 Hz is not yet wired
 constant C_MENU_HDMI_16_9_50  : natural := 57;
 constant C_MENU_HDMI_16_9_5994 : natural := 58;
 constant C_MENU_HDMI_4_3_50   : natural := 59;
@@ -563,14 +570,14 @@ signal qnice_crt_qnice_wait         : std_logic;
 
 begin
 
-   -- MMCME2_ADV clock generators
-   --   C64 PAL: 31.528 MHz (main) and 63.056 MHz (video)
-   --            HDMI: Flicker-free: 0.25% slower
+   -- MMCME2_ADV clock generators (the video clock is the core clock, see below)
+   --   C64 PAL:  31.528 MHz, HDMI: Flicker-free: 31.449 MHz (0.25% slower)
+   --   C64 NTSC: 32.727 MHz, HDMI: Flicker-free: 32.790 MHz (0.19% faster)
    clk_gen : entity work.clk
       port map (
          sys_clk_i         => clk_i,           -- expects 100 MHz
 
-         core_speed_i      => hr_core_speed,   -- 0=PAL/original C64, 1=PAL/HDMI flicker-free, 2=NTSC
+         core_speed_i      => hr_core_speed,   -- 0=PAL original, 1=PAL flicker-free, 2=NTSC original, 3=NTSC flicker-free
 
          main_clk_o        => main_clk_o,      -- core's clock
          main_rst_o        => main_rst_o       -- core's reset, synchronized
@@ -584,19 +591,22 @@ begin
    -- hr_clk (HyperRAM clock)
    ---------------------------------------------------------------------------------------------
 
-   -- Switch between two clock rates for the CORE, corresponding to frame rates that
-   -- closely "embrace" the output rate of exactly 50 Hz (determined by the HDMI resolution).
+   -- Switch between the original clock and the flicker-free clock of the active standard so that
+   -- the core frame rate "embraces" the HDMI frame rate. PAL: the original clock (50.124 Hz) is the
+   -- faster one, the flicker-free clock (49.999 Hz) the slower one. NTSC: the original clock
+   -- (59.826 Hz) is the slower one, the flicker-free clock (59.9402 Hz) the faster one.
    process (hr_clk_i)
    begin
       if rising_edge(hr_clk_i) then
-         if hr_low_i = '1' then     -- the core is too slow ...
-            hr_core_speed <= "00";  -- ... switch to PAL original (50.124 Hz)
+         hr_core_speed(1) <= hr_ntsc;                 -- 0 = PAL clocks, 1 = NTSC clocks
+         if hr_low_i = '1' then                       -- the core is too slow ...
+            hr_core_speed(0) <= hr_ntsc;              -- ... PAL: original (00), NTSC: flicker-free (11)
          end if;
-         if hr_high_i = '1' then    -- the core is too fast ...
-            hr_core_speed <= "01";  -- ... switch to PAL slow (49.999 Hz)
+         if hr_high_i = '1' then                      -- the core is too fast ...
+            hr_core_speed(0) <= not hr_ntsc;          -- ... PAL: flicker-free (01), NTSC: original (10)
          end if;
          if hr_hdmi_ff = '0' then
-            hr_core_speed <= "00";
+            hr_core_speed(0) <= '0';                  -- flicker-free off: original clock of the standard
          end if;
       end if;
    end process;
@@ -671,7 +681,9 @@ begin
    -- main_clk (C64 MiSTer Core clock)
    ---------------------------------------------------------------------------------------------
 
-   c64_ntsc          <= '0'; -- @TODO: For now, we hardcode PAL mode
+   -- Machine mode from the "Model" submenu: 0 = PAL (default), 1 = NTSC
+   -- main_osm_control_i is already synchronized into the main clock domain by the framework.
+   c64_ntsc          <= main_osm_control_i(C_MENU_MACHINE_NTSC);
 
    -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
    c64_rom <= "00" when main_osm_control_i(C_MENU_KERNAL_JIFFY)   else
@@ -680,7 +692,13 @@ begin
               "01";   -- Use standard ROM as default
 
    -- needs to be in main clock domain
-   c64_clock_speed   <= CORE_CLK_SPEED;
+   -- Always the vanilla clock speed of the active standard, also while the core runs on the
+   -- flicker-free clock (see the comment above iec_drive_ce_proc in main.vhd)
+   c64_clock_speed   <= CORE_CLK_SPEED_NTSC when c64_ntsc = '1' else CORE_CLK_SPEED_PAL;
+
+   -- HDMI flicker-free switch of the active standard: each standard has its own menu item
+   main_hdmi_ff      <= main_osm_control_i(C_MENU_HDMI_FF_NTSC) when c64_ntsc = '1' else
+                        main_osm_control_i(C_MENU_HDMI_FF);
 
    -- Mode selection for Expansion Port (aka Cartridge Port):
    -- bit 0 = 0: Use the MEGA65's actual hardware slot
@@ -1034,11 +1052,18 @@ begin
    -- adjusted image looks best on a 5:4 monitor and the other way round.
    -- Not sure if this will stay forever or if we will come up with a better naming convention.
    -- The V6 menu (#189) removed the PAL-clocked "16:9 720p 60 Hz" mode (see #105): the
-   -- NTSC-rate modes are reserved for the upcoming NTSC support (#181). The NTSC menu
-   -- entries (C_MENU_HDMI_*_5994) exist already, but they are deliberately not wired up yet.
-   qnice_video_mode_o <= C_VIDEO_HDMI_5_4_50   when qnice_osm_control_i(C_MENU_HDMI_5_4_50)  = '1' else
-                         C_VIDEO_HDMI_4_3_50   when qnice_osm_control_i(C_MENU_HDMI_4_3_50)  = '1' else
-                         C_VIDEO_HDMI_16_9_50;                       -- C_MENU_HDMI_16_9_50
+   -- NTSC-rate modes (59.94 Hz) are used by the NTSC machine mode only.
+   -- The PAL and the NTSC display modes are separate OSM groups, each with its own default, so
+   -- each standard remembers its own HDMI mode and switching the machine mode switches to it.
+   -- The video pipeline relies on this invariant: qnice_video_mode_o is one of the *_5994 modes
+   -- if and only if the machine mode is NTSC.
+   qnice_video_mode_o <=
+      C_VIDEO_HDMI_5_4_5994  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_5_4_5994) = '1' else
+      C_VIDEO_HDMI_4_3_5994  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_4_3_5994) = '1' else
+      C_VIDEO_HDMI_16_9_5994 when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' else      -- C_MENU_HDMI_16_9_5994 (group default)
+      C_VIDEO_HDMI_5_4_50    when qnice_osm_control_i(C_MENU_HDMI_5_4_50)  = '1' else
+      C_VIDEO_HDMI_4_3_50    when qnice_osm_control_i(C_MENU_HDMI_4_3_50)  = '1' else
+      C_VIDEO_HDMI_16_9_50;                                                                  -- C_MENU_HDMI_16_9_50
 
    -- Use On-Screen-Menu selections to configure several audio and video settings
    -- Video and audio mode control
@@ -1223,16 +1248,19 @@ begin
    ---------------------------------------------------------------------------------------------
 
    -- Clock Domain Crossing: CORE -> HyperRAM
+   -- Both bits are quasi-static OSM settings; they control the core clock selection (hr_core_speed)
    i_cdc_main2hr : entity work.cdc_stable
       generic map (
          G_REGISTER_SRC => true,
-         G_DATA_SIZE    => 1
+         G_DATA_SIZE    => 2
       )
       port map (
          src_clk_i     => main_clk_o,
-         src_data_i(0) => main_osm_control_i(C_MENU_HDMI_FF),
+         src_data_i(0) => main_hdmi_ff,
+         src_data_i(1) => c64_ntsc,
          dst_clk_i     => hr_clk_i,
-         dst_data_o(0) => hr_hdmi_ff
+         dst_data_o(0) => hr_hdmi_ff,
+         dst_data_o(1) => hr_ntsc
       ); -- i_cdc_main2hr
 
    -- Clock Domain Crossing: CORE -> QNICE
