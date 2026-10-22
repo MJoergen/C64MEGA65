@@ -138,11 +138,12 @@ if want osm; then
       "$AV/video_overlay.vhd" "$HERE/tb_osm_place.vhd" || fail "analysis tb_osm_place"
    "$GHDL" -e "${FLAGS[@]}" tb_osm_place || fail "elaboration tb_osm_place"
    FONT="$REPO/M2M/font/Anikki-16x16-m2m.rom"
-   # name|exe|generics: output rows, 15 kHz, vertical shift, NTSC force, box (0 options, 1 main)
-   for out in "vga31|-gG_ROWS=500 -gG_R15KHZ=false -gG_VSHIFT=0 -gG_FORCE=true" \
-              "vga15|-gG_ROWS=250 -gG_R15KHZ=true -gG_VSHIFT=0 -gG_FORCE=true" \
-              "hdmi480|-gG_ROWS=480 -gG_R15KHZ=false -gG_VSHIFT=24 -gG_FORCE=true" \
-              "hdmi480_nochange|-gG_ROWS=480 -gG_R15KHZ=false -gG_VSHIFT=0 -gG_FORCE=false -gG_EXPECT_CLIP=true"; do
+   # name|generics: visible rows, 15 kHz, vertical shift; each with the options menu and the main screen
+   for out in "ntsc_vga31|-gG_ROWS=500 -gG_R15KHZ=false -gG_VSHIFT=0" \
+              "ntsc_vga15|-gG_ROWS=250 -gG_R15KHZ=true -gG_VSHIFT=0" \
+              "ntsc_hdmi480_shift24|-gG_ROWS=480 -gG_R15KHZ=false -gG_VSHIFT=24" \
+              "ntsc_hdmi480_noshift|-gG_ROWS=480 -gG_R15KHZ=false -gG_VSHIFT=0" \
+              "pal_vga31|-gG_ROWS=540 -gG_R15KHZ=false -gG_VSHIFT=0"; do
       n="${out%%|*}"; g="${out#*|}"
       for box in 0 1; do
          echo "osm_${n}_box$box|tb_osm_place|-gG_FONT_FILE=$FONT -gG_BOX=$box $g" >> "$JOBFILE"
@@ -151,15 +152,16 @@ if want osm; then
 fi
 
 run_one() {
-   IFS='|' read -r name exe gens <<< "$1"
+   IFS='|' read -r name exe gens <<< "$(sed -n "${1}p" "$JOBFILE")"
    local s=$(date +%s)
    # shellcheck disable=SC2086
    ./"$exe" --ieee-asserts=disable $gens > "$BUILD/$name.log" 2>&1
    echo "runtime: $(( $(date +%s) - s )) s" >> "$BUILD/$name.log"
 }
 export -f run_one
-export BUILD
-[ -s "$JOBFILE" ] && xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {} < "$JOBFILE"
+export BUILD JOBFILE
+# job line numbers, not the lines: macOS xargs limits -I replacements to 255 bytes
+[ -s "$JOBFILE" ] && seq 1 "$(wc -l < "$JOBFILE")" | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
 
 status=0
 failed=""

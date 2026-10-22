@@ -160,11 +160,13 @@ def vhdl_div(a, b):
     return q if (a >= 0) == (b >= 0) else -q
 
 
-def osm_rows(rows, r15, vshift, s, box_y, box_dy):
-    """For every visible screen row: the OSM character row it shows, or None."""
+def osm_rows(rows, r15, vshift, s, box_y, box_dy, first=0):
+    """For the screen rows first .. rows-1: the OSM character row they show (rows without OSM omitted)."""
     shown = {}
-    for r in range(rows):
+    for r in range(first, rows):
         vga_row = (2 * r if r15 else r) + vshift
+        if vga_row < 0:
+            continue
         row = vga_row
         if vga_row < G_VGA_DY:
             row = vga_row + vhdl_div(s * (vga_row - box_dy * FONT_DY // 2), 8)
@@ -180,15 +182,16 @@ def osm_summary(rows, r15, vshift, s, box_y, box_dy):
     """Screen rows that show the box, and the character rows that are cut off.
 
     A character row counts as lost when any screen row that would show it lies
-    below the last visible row (the extent is taken from an unbounded screen,
-    because the scaler skips some font rows anyway)."""
-    unbounded = osm_rows(1024, r15, vshift, s, box_y, box_dy)
+    above the first or below the last visible row (the extent is taken from a
+    screen that is unbounded in both directions, because the scaler skips some
+    font rows anyway)."""
+    unbounded = osm_rows(1024, r15, vshift, s, box_y, box_dy, first=-128)
     lost = []
     for c in range(box_y, box_y + box_dy):
         rc = [r for r, cc in unbounded.items() if cc == c]
-        if not rc or max(rc) >= rows:
+        if not rc or min(rc) < 0 or max(rc) >= rows:
             lost.append(c)
-    vis = [r for r in unbounded if r < rows]
+    vis = [r for r in unbounded if 0 <= r < rows]
     rng = (min(vis), max(vis)) if vis else None
     return rng, lost
 
@@ -226,6 +229,12 @@ def osm_checks():
         ("NTSC 480p 89 %, main", (480, False, 0, 1, 0, 33), (None, [31, 32])),
         ("NTSC 480p 89 % + 24 up, options", (480, False, 24, 1, 0, 31), ((3, 444), [])),
         ("NTSC 480p 89 % + 24 up, main", (480, False, 24, 1, 0, 33), ((5, 474), [])),
+        # s = 0 cases that tb_osm_place.vhd simulates with the real video_overlay
+        ("NTSC VGA 15 kHz 100 %, options", (250, True, 0, 0, 0, 31), ((0, 247), [])),
+        ("NTSC VGA 15 kHz 100 %, main", (250, True, 0, 0, 0, 33), ((0, 249), [31, 32])),
+        ("NTSC 480p 100 % + 24 up, options", (480, False, 24, 0, 0, 31), ((0, 471), [0, 1])),
+        ("NTSC 480p 100 % + 24 up, main", (480, False, 24, 0, 0, 33), ((0, 479), [0, 1, 31, 32])),
+        ("PAL VGA 100 %, main", (540, False, 0, 0, 0, 33), ((0, 527), [])),
     ]
     print("  spec section 7.3:")
     for name, args, (exp_rng, exp_lost) in t73:
