@@ -2,11 +2,22 @@
 ##
 ## MEGA65 port done by MJoergen and sy2002 in 2023 and licensed under GPL v3
 
-## Assume the core is running at the original (slightly faster) clock.
-## This halves the number of set_false_path needed.
-set_case_analysis 0 [get_pins CORE/hr_core_speed_reg[0]/Q]
+## The core clock main_clk is one of four MMCM outputs (CORE/vhdl/clk.vhd), selected at run time by
+## the two bits of hr_core_speed (CORE/vhdl/mega65.vhd) through a two-level BUFGCTRL tree:
+##    00 = PAL original      31.527778 MHz  31.718 ns   i_clk_c64_orig
+##    01 = PAL flicker-free  31.448993 MHz  31.798 ns   i_clk_c64_slow
+##    10 = NTSC original     32.727273 MHz  30.556 ns   i_clk_c64_ntsc
+##    11 = NTSC flicker-free 32.789700 MHz  30.497 ns   i_clk_c64_ntsc_ff
+## Time the core at its fastest clock (NTSC flicker-free, 32.789700 MHz). All four core
+## clocks share the post-mux clock tree, so this covers the three slower ones as well.
+## Forcing both select bits to 1 lets only i_clk_c64_ntsc_ff reach any sequential element,
+## so no set_clock_groups and no additional false paths are needed. Keep the name main_clk:
+## the constraints below and the [get_generated_clocks] rules in M2M/common.xdc rely on it.
+## CORE/signoff_gates.tcl checks the two pins, the source pin and the period.
+set_case_analysis 1 [get_pins CORE/hr_core_speed_reg[0]/Q]
+set_case_analysis 1 [get_pins CORE/hr_core_speed_reg[1]/Q]
 
-create_generated_clock -name main_clk [get_pins CORE/clk_gen/i_clk_c64_orig/CLKOUT0]
+create_generated_clock -name main_clk [get_pins CORE/clk_gen/i_clk_c64_ntsc_ff/CLKOUT0]
 
 ## CDC in IEC drives, handled manually in the source code
 set_false_path -from [get_pins -hier id1_reg[*]/C]
@@ -42,7 +53,7 @@ set_false_path -to [get_pins CORE/i_main/iec_drive_inst/c1581/drives[*].c1581_dr
 
 ## CDC between the two asynchronous system clocks (physical internal 1581, issue #90).
 ## The physical_1581 controller / read-FIFO / diag device run on qnice_clk (50 MHz) while
-## the WD1772 + drive logic run on main_clk (~31.5 MHz). Every crossing is explicitly
+## the WD1772 + drive logic run on main_clk (31.4 to 32.8 MHz). Every crossing is explicitly
 ## synchronized in the source: iecdrv_sync 2-FF chains, toggle handshakes whose payload is
 ## stable before the toggle flips, Gray-coded FIFO pointers (physical_1581_rdfifo), and
 ## async_reg-tagged 2-FF pairs. Cut the clock pair in both directions -- the same idiom
