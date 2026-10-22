@@ -49,7 +49,9 @@ architecture synthesis of crop is
    -- NTSC: 44 + 320 + 40 = 404, 26 + 200 + 24 = 250. The VIC-II 6567R8 line is 16 dots
    -- longer, which moves the window 11 dots to the right relative to the end of hblank,
    -- and video_sync starts the visible area 9 lines closer to the window (measured with
-   -- the real VIC-II in CORE/vhdl/test/tb_ntsc/tb_crop_ntsc.vhd).
+   -- the real VIC-II in CORE/vhdl/test/tb_ntsc/tb_crop_ntsc.vhd). Depending on the phase
+   -- of the core video clock enable relative to the VIC-II pixel grid, the window can
+   -- start one pixel earlier; that applies to both standards alike.
    constant LEFT_BORDER_IN_PAL  : natural := 33;
    constant TOP_BORDER_IN_PAL   : natural := 35;
    constant LEFT_BORDER_IN_NTSC : natural := 44;
