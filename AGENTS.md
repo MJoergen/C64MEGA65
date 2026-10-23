@@ -26,8 +26,31 @@ helper CPU.
 - **MiSTer C64 core**: The reference C64 implementation maintained by the
   MiSTer community (origin: Peter Wendrich's FPGA64). Highly compatible.
 - **MiSTer2MEGA65 (M2M)** — https://github.com/sy2002/MiSTer2MEGA65
-  — framework that adapts MiSTer cores to the MEGA65's Xilinx FPGA, hardware,
-  and conventions. **C64MEGA65 is the reference implementation of M2M.**
+  — originally a framework that adapts MiSTer cores to the MEGA65's Xilinx
+  FPGA, hardware, and conventions; since October 2026 a **template** (see
+  below). C64MEGA65 was its reference implementation.
+
+### M2M is a template, not a framework — this repo owns its `M2M/` copy
+
+Decision by MJoergen and sy2002, October 2026: M2M no longer evolves as a
+framework whose API, architecture, and compatibility must be preserved. It is
+an AI-first template that every core copies and then changes however that
+core needs. Consequences for work in this repo:
+
+- **Everything under `M2M/` (except the `M2M/QNICE` submodule) is our code.**
+  Change `M2M/vhdl`, `M2M/rom`, `M2M/tools`, the XDCs, anything, whenever that
+  gives the best result for the C64 core. There is no upstream compatibility
+  to protect, no "keep M2M generic" workaround to build, no obligation to
+  port a change back, and no reason to wait for an M2M release.
+- The layering of `CORE/` versus `M2M/` (section 3.1) is a useful structure
+  we inherited, not a rule. Cross it when a cleaner solution lives on the
+  other side.
+- Upstream M2M, its wiki, and other M2M-based cores are reference material
+  only. If a fix here is obviously useful to the other cores (for example a
+  bug in a shared VHDL file), mention it in the report so the maintainers can
+  carry it over by hand; that is optional, never a blocker.
+- The only true upstreams left are the two submodules: `CORE/C64_MiSTerMEGA65`
+  (our fork of the MiSTer C64 core) and `M2M/QNICE` (QNICE-FPGA).
 
 ### Authorship
 
@@ -38,10 +61,11 @@ helper CPU.
 
 ### Source authority
 
-Several MiSTer2MEGA65 wiki sub-pages have historically been marked WIP/@TODO.
-For QNICE, virtual drives, OSM, and MiSTer-core integration, prefer this
-project guide and the actual source code over upstream wiki text when they
-disagree.
+Several MiSTer2MEGA65 wiki sub-pages have historically been marked WIP/@TODO,
+and since M2M became a template (see above) the wiki no longer describes this
+repo's `M2M/` copy anyway. For QNICE, virtual drives, OSM, video, and
+MiSTer-core integration, the actual source code in this repo and this project
+guide are the authority; upstream wiki text is background at best.
 
 ---
 
@@ -88,7 +112,7 @@ disagree.
 │                          mos6526.v (CIA), video_vicII_656x.vhd (VIC-II),
 │                          sid/, t65/, iec_drive/, reu.v, cartridge.v, opl3/,
 │                          rtcF83.sv, sdram.v, c1351.v (mouse), c1530.vhd (tape)
-├── M2M/                   ← MiSTer2MEGA65 framework (board-side; core-independent)
+├── M2M/                   ← our copy of the MiSTer2MEGA65 template (board-side; ours to change, see §1)
 │   ├── MEGA65-R{3,4,5,6}.xdc   per-board pin constraints
 │   ├── common.xdc          timing constraints
 │   ├── vhdl/
@@ -172,9 +196,12 @@ disagree.
         └────────────────────────────────────────────────────────────┘
 ```
 
-**Key separation (this is the M2M philosophy):**
+**Key separation (inherited from M2M; a convention, not a rule — see the
+template note in section 1):**
 - `CORE/` is core-dependent and **board-independent**.
-- `M2M/` is core-independent and **board-dependent**.
+- `M2M/` is board-dependent and was core-independent; today it is simply the
+  part of our code that sits between the board and the C64, and it may know
+  about the C64 whenever that is the cleaner solution.
 - The contract between them is the entity `MEGA65_Core` declared in
   `CORE/vhdl/mega65.vhd`.
 
