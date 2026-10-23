@@ -196,10 +196,14 @@ the new standard a few HyperRAM clock cycles later, inside the reset window; the
 switches to the HDMI mode of the new standard (a short blank screen, as with any HDMI mode
 change); after the reset the KERNAL measures the raster lines and sets `$02A6`.
 
-At power-on the core starts in PAL. If the config file says NTSC, the Shell restores that setting
-after loading the file, which is an ordinary mode change: the PAL start-up screen shows for a
-moment, then the C64 resets into NTSC. MiSTer behaves the same when a core with a saved NTSC
-setting is loaded.
+At power-on the C64 is held in reset while the Shell restores the config file: `CSR_DEFAULT`
+(`M2M/vhdl/QNICE/qnice.vhd`) starts the Shell with the reset bit of `M2M$CSR` set,
+`HELP_MENU_INIT` (`M2M/rom/options.asm`) loads the config file and writes the menu state, and only
+then does `RP_SYSTEM_START` (`M2M/rom/gencfg.asm`) release the reset. If the config file says NTSC,
+`c64_ntsc_i` therefore changes while the C64 is still in reset, and the first KERNAL boot is already
+NTSC; there is no visible PAL phase. The mode-change reset machinery covers this case all the same:
+`ntsc_d` starts as PAL, so the restore is an ordinary mode change, and its pulse falls inside the
+reset that the Shell holds anyway, where it is harmless.
 
 `CORE/vhdl/test/tb_ntsc/run_w3.sh` simulates the mode-change reset (one toggle, toggles during a
 write-back, a toggle during a running reset, power-on in PAL and in NTSC) against a verbatim copy

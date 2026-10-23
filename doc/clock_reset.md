@@ -72,9 +72,11 @@ machine mode:
 * While a virtual drive still writes its cache back to the SD card (`prevent_reset = '1'`),
   ordinary soft resets are ignored. The mode-change reset is deferred instead and happens as
   soon as the write-back has finished; several changes inside that window lead to one reset.
-* The core always starts in PAL. If the config file contains NTSC, the Shell restores it after
-  power-on, which is an ordinary mode change: the PAL start-up screen is visible for a moment,
-  then the C64 resets into NTSC.
+* At power-on the Shell restores the config file while the C64 is still held in reset (the
+  reset bit of `M2M$CSR` is set from `CSR_DEFAULT` until `RP_SYSTEM_START` clears it). If the
+  file contains NTSC, the core therefore starts directly in NTSC; there is no visible PAL phase.
+  The restore is still a change of `c64_ntsc_i` and produces a mode-change reset, which falls
+  inside the held reset and is harmless.
 
 The `RESET SEMANTICS` comment block in `main.vhd` is the authoritative description of all
 reset sources of the C64 core.

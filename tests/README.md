@@ -20,7 +20,7 @@ Version WIP-V6-A22 - TBD
 * @TODO 1541 loading in NTSC: a D64 with the standard loader, a fastloader game, and `SAVE` to a D64 (also with `HDMI: Flicker-free` on); the same with a D81 on the simulated 1581.
 * @TODO TOD accuracy in NTSC: set the TOD clock (CIA1 `$DC08-$DC0B`, the 50/60 Hz bit in `$DC0E` as the program expects) and let it run 10 minutes against a stopwatch: deviation below 1 s. Repeat in PAL.
 * @TODO JiffyDOS in NTSC: `Kernal > JiffyDOS` with the JiffyDOS 1541 ROM; `@$` and a JiffyDOS load.
-* @TODO Config-file persistence: select NTSC, save the settings, power cycle: the core shows PAL for a moment, resets automatically and runs NTSC; the NTSC HDMI mode and the NTSC flicker-free setting are restored.
+* @TODO Config-file persistence: select NTSC, save the settings, power cycle: the core starts directly in NTSC, without a PAL start-up screen (`PRINT PEEK(678)` prints 0); the NTSC HDMI mode and the NTSC flicker-free setting are restored.
 * @TODO GEOS real-time clock in NTSC (`GEOS Real-Time-Clock` on): GEOS shows the correct time after 10 minutes.
 * @TODO Mode change while a D64 write-back is pending (drive LED yellow, `<Saving>` shown): the reset happens after the write-back and the image on the SD card is intact.
 * @TODO Hardware cartridge in NTSC (an EF3 menu, a 1541 Ultimate II+ or similar): the cartridge starts after the automatic reset.

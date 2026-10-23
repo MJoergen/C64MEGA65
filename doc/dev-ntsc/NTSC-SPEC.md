@@ -649,7 +649,13 @@ If a write-back is pending, or starts while the pulse of step 3 runs (the pulse 
 
 ### 8.4 Power-on with a saved NTSC setting
 
-The core starts in PAL (power-on defaults: `ntsc_d = '0'`, OSM defaults). The Shell then loads the config file and writes the restored OSM state; `c64_ntsc_i` goes to `'1'`, which is an ordinary mode change and triggers steps 2 to 6. The user sees the PAL boot screen for a moment, then the NTSC one, which matches MiSTer behavior when a core with a saved NTSC setting is loaded.
+The Shell restores the config file while the C64 is still held in reset:
+
+- `CSR_DEFAULT = x"0839"` (`M2M/vhdl/QNICE/qnice.vhd`) has bit 0 (`csr_reset_o`) set, so the core is in reset when the Shell starts.
+- `shell.asm` calls `HELP_MENU_INIT` before `RP_SYSTEM_START`. `HELP_MENU_INIT` (`options.asm`) waits for the SD card (`WAIT_FOR_SD`, at least `SD_WAIT` = 2 s), loads the config file and writes `M2M$CFM_DATA`.
+- Only then does `RP_SYSTEM_START` release the reset (`gencfg.asm`, `AND M2M$CSR_UN_RESET`).
+
+So `c64_ntsc_i` goes to `'1'` while the C64 is still in reset. Because `ntsc_d` starts as `'0'`, this is an ordinary mode change for `mode_change_reset_proc`: steps 2 to 5 happen, and the 1024-cycle pulse falls inside the reset that the Shell holds anyway, where it is harmless. The first KERNAL boot (step 6) is already NTSC; no PAL boot screen and no second reset are visible. The same holds after a long press of the reset button, which restarts the Shell with `CSR_DEFAULT`.
 
 ---
 
@@ -757,7 +763,7 @@ W3 prepends a section `Version WIP-V6-A22 - TBD` above `Version WIP-V6-A21 - TBD
 8. 1541 loading in NTSC: a D64 with the standard loader, a fastloader game, and `SAVE` to a D64 (also with flicker-free on); the same with a D81 on the simulated 1581.
 9. TOD accuracy in NTSC: set the TOD clock (CIA1 `$DC08-$DC0B`, 60 Hz bit in `$DC0E` as the program expects), let it run 10 minutes against a stopwatch: deviation below 1 s. Repeat in PAL.
 10. JiffyDOS in NTSC: JiffyDOS KERNAL (`Kernal > JiffyDOS`) with JiffyDOS 1541 ROM; `@$` and a JiffyDOS load.
-11. Config-file persistence: select NTSC, save settings, power cycle: the core boots in PAL for a moment, resets automatically and runs NTSC; the HDMI mode and the NTSC flicker-free setting are restored.
+11. Config-file persistence: select NTSC, save settings, power cycle: the core starts directly in NTSC, without a PAL boot screen (`PRINT PEEK(678)` prints 0); the HDMI mode and the NTSC flicker-free setting are restored.
 12. GEOS real-time clock in NTSC (`RTC` on): GEOS shows the correct time after 10 minutes.
 13. Mode change while a D64 write-back is pending (`<Saving>` shown): the reset happens after the write-back and the image on the SD card is intact.
 14. Hardware cartridge in NTSC (an EF3 menu, a 1541 Ultimate II+ or similar): the cartridge starts after the automatic reset.
