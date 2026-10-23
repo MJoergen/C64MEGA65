@@ -35,8 +35,8 @@ shown with a 4:3 aspect ratio.
   display that the picture is 4:3, so the display stretches it to 4:3.
 
 * 5:4 576p 50 Hz: The same 720x576 signal, but the picture is letterboxed to
-  720x540, so that a 5:4 display, which shows the signal as 5:4, shows the C64
-  picture as 4:3.
+  720x541 (rows 18 to 558), so that a 5:4 display, which shows the signal as
+  5:4, shows the C64 picture as 4:3.
 
 ### NTSC (machine mode NTSC)
 
@@ -49,8 +49,8 @@ shown with a 4:3 aspect ratio.
   720x576 in PAL. There is no black border, the HDMI signal tells the display
   that the picture is 4:3.
 
-* 5:4 480p 59.94 Hz: The same 720x480 signal, letterboxed to 720x450 so that a
-  5:4 display shows the C64 picture as 4:3.
+* 5:4 480p 59.94 Hz: The same 720x480 signal, letterboxed to 720x451 (rows 15
+  to 465) so that a 5:4 display shows the C64 picture as 4:3.
 
 In NTSC the C64 produces 59.826 frames per second, so "HDMI: Flicker-free" lets
 the core run 0.19 % faster to match the 59.94 Hz of the HDMI output (in PAL the
@@ -65,10 +65,10 @@ little, so that the whole menu fits into the 480 lines.
 -------- | ------------------- | -------------------------- | ------------ | ------------ | ----------------------------- | ------
  PAL     | 16:9 720p 50 Hz     | 1280x720p50 (19), 16:9     | 74.250 MHz   | 50.000 Hz    | 960x720, black border         | full screen
  PAL     | 4:3 576p 50 Hz      | 720x576p50 (17), 4:3       | 27.000 MHz   | 50.000 Hz    | 720x576, no border            | full screen
- PAL     | 5:4 576p 50 Hz      | 720x576p50 (17), 4:3       | 27.000 MHz   | 50.000 Hz    | 720x540, black border         | full screen
+ PAL     | 5:4 576p 50 Hz      | 720x576p50 (17), 4:3       | 27.000 MHz   | 50.000 Hz    | 720x541, black border         | full screen
  NTSC    | 16:9 720p 59.94 Hz  | 1280x720p59.94 (4), 16:9   | 74.1667 MHz  | 59.933 Hz    | 960x720, black border         | full screen
  NTSC    | 4:3 480p 59.94 Hz   | 720x480p59.94 (2), 4:3     | 27.000 MHz   | 59.940 Hz    | 720x480, no border            | full screen
- NTSC    | 5:4 480p 59.94 Hz   | 720x480p59.94 (2), 4:3     | 27.000 MHz   | 59.940 Hz    | 720x450, black border         | full screen
+ NTSC    | 5:4 480p 59.94 Hz   | 720x480p59.94 (2), 4:3     | 27.000 MHz   | 59.940 Hz    | 720x451, black border         | full screen
 
 "Zoom-in" crops the picture to the 320x200 C64 screen plus a small part of the
 border and scales that to the whole HDMI frame, in PAL and in NTSC.
