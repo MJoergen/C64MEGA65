@@ -84,6 +84,20 @@ Glitch-free switching requires both inputs of a `BUFGCTRL` to be running, which 
 MMCMs run all the time instead of reprogramming one MMCM the way MiSTer does. The design is timed
 once, at its fastest clock (NTSC flicker-free, 30.497 ns), see `CORE/CORE.xdc`.
 
+### Checks in the first Vivado build
+
+* `CORE/build_all.sh` for R3 and R6 at least: WNS and WHS at or above 0 with `main_clk` at
+  30.497 ns, and `signoff_gates.tcl` passes.
+* `report_clock_utilization` on R3 and R6: the `BUFGCTRL` tree (`bufgmux_pal_inst`,
+  `bufgmux_ntsc_inst`, `bufgmux_mode_inst`) is placed without warnings, and no clock is routed
+  through general interconnect. `opt_design` removes `main_clk_bufg` as a redundant cascaded
+  buffer, as it already does in the PAL-only R6 build. If the placer complains about the cascade
+  anyway, deleting `main_clk_bufg` in `clk.vhd` and driving `main_clk_o` from `bufgmux_mode_inst`
+  is the expected remedy; `CORE.xdc` and the sign-off gates reference the MMCM pin, not the buffer.
+* The four core MMCMs lock.
+
+The complete list is in section 10.4 of `doc/dev-ntsc/NTSC-SPEC.md`.
+
 
 ## HDMI flicker-free in NTSC
 
