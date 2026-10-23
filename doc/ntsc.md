@@ -21,8 +21,10 @@ protocol is the `Version WIP-V6-A22` section of [`tests/README.md`](../tests/REA
 * HDMI: in NTSC the `HDMI Display Mode` submenu offers `16:9 720p 59.94 Hz`, `4:3 480p 59.94 Hz`
   and `5:4 480p 59.94 Hz` instead of the three 50 Hz modes, plus its own `HDMI: Flicker-free`
   switch (on by default).
-* VGA: the analog output runs at 59.83 Hz in NTSC with `HDMI: Flicker-free` off (about 59.94 Hz
-  with it on, the default). The `Standard` mode (31.47 kHz) suits VGA
+* VGA: the analog output is the live VIC-II signal, so it carries the true NTSC frame rate of
+  59.83 Hz as long as `HDMI: Flicker-free` is off (with it on, the whole core is nudged to
+  59.94 Hz to match HDMI, as it is nudged to 50.00 Hz in PAL). Analog users should switch
+  flicker-free off, as the help page says. The `Standard` mode (31.47 kHz) suits VGA
   monitors that only accept 60 Hz; the two retro 15 kHz modes produce 15.73 kHz for CRTs.
 * The on-screen menu is shown at 89 % of its size on VGA and on the two 480p HDMI modes in
   NTSC, because these outputs have fewer lines than the menu canvas.

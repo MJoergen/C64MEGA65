@@ -395,7 +395,7 @@ From WIP-V6-A22 on, yes: open the on-screen menu with <kbd>Help</kbd>, go to "Mo
 
 * The C64 resets automatically when you switch between PAL and NTSC, just like after a short press of the reset button, so that the C64 and your software detect the new mode.
 * HDMI: NTSC uses its own display modes at 59.94 Hz ("16:9 720p 59.94 Hz", "4:3 480p 59.94 Hz", "5:4 480p 59.94 Hz") and its own "HDMI: Flicker-free" switch; the menu only shows the ones that belong to the active mode.
-* VGA: NTSC runs at 60 Hz (59.83 Hz with "HDMI: Flicker-free" off, about 59.94 Hz with it on, the default), which helps with older VGA monitors that only accept 60 Hz.
+* VGA: the analog output carries the true NTSC frame rate of 59.83 Hz, which older VGA monitors that only accept 60 Hz handle fine. Switch "HDMI: Flicker-free" off when you use the analog output; with it on, the core is nudged to 59.94 Hz to match HDMI.
 * The on-screen menu looks slightly smaller in NTSC on VGA and on the 480p HDMI modes, so that it fits on the screen.
 * Your choice is saved in the C64MEGA65 config file, so the core starts directly in NTSC the next time you switch the MEGA65 on.
 
