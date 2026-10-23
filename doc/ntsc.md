@@ -105,8 +105,9 @@ come from the same oscillator, so their ratio is exact and the small margin is e
 `doc/dev-ntsc/tools/ff_model.py` is a closed-loop model of this regulation.
 
 While the flicker-free clock runs, the whole C64 including SID pitch, TOD, the drives and the
-GEOS clock runs 0.19 % fast in NTSC (0.25 % slow in PAL). TOD and the drives keep the nominal
-clock as their reference on purpose, so the speed ratio between C64 and drive stays that of a
+GEOS clock runs 0.19 % fast in NTSC (0.25 % slow in PAL): over 10 minutes TOD gains about 1.1 s
+in NTSC and loses about 1.5 s in PAL, so TOD accuracy is measured with `HDMI: Flicker-free` off.
+TOD and the drives keep the nominal clock as their reference on purpose, so the speed ratio between C64 and drive stays that of a
 real machine ([issue #2](https://github.com/MJoergen/C64MEGA65/issues/2)). With flicker-free off,
 a 59.826 Hz C64 on a 59.94 Hz display shows a short stutter about every 9 seconds.
 
