@@ -24,6 +24,7 @@ Version WIP-V6-A22 - TBD
 * @TODO GEOS real-time clock in NTSC (`GEOS Real-Time-Clock` on): GEOS shows the correct time after 10 minutes.
 * @TODO Mode change while a D64 write-back is pending (drive LED yellow, `<Saving>` shown): the reset happens after the write-back and the image on the SD card is intact.
 * @TODO Hardware cartridge in NTSC (an EF3 menu, a 1541 Ultimate II+ or similar): the cartridge starts after the automatic reset.
+* @TODO HyperRAM bandwidth on R3/R3A (risk 4 in `doc/dev-ntsc/NTSC-SPEC.md`): NTSC, `16:9 720p 59.94 Hz`, `HDMI: Flicker-free` on, simulated REU on. Run a REU-heavy demo (for example Treu Love with `TreuLove_ForReal1750Reu.d64`, or the REU demo Zelda, see "Dedicated REU tests" in the Version 5.2 section below) for 10 minutes; then a bank-switching EasyFlash `.crt` loaded from the SD card for 10 minutes; then the Final Cartridge III freezer with simulated REU (the workflow of `doc/issue_214_simreu_hyperram.md`). Expected: no picture tearing, no REU errors, no cartridge hangs, flicker-free stays locked. Repeat everything with `4:3 480p 59.94 Hz`.
 
 Version WIP-V6-A21 - TBD
 ------------------------
