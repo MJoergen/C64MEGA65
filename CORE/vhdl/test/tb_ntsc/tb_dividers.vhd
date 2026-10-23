@@ -8,8 +8,8 @@
 --     (sum := sum + add_value, add_value 100 for PAL and 120 for NTSC,
 --     todclk toggles when sum >= clk32_speed, giving 50 or 60 Hz)
 --   * iec_drive_ce_proc in CORE/vhdl/main.vhd (16 MHz chip enable for the
---     simulated 1541: nextsum := iec_dce_sum + 16000000, pulse when
---     nextsum >= clk_main_speed_i)
+--     simulated 1541 and the GEOS RTC: nextsum := iec_dce_sum + 16000000,
+--     pulse when nextsum >= clk_main_speed_i; free-running, no reset)
 --
 -- The modulus (clk32_speed / clk_main_speed_i) is G_MODULUS. The bench runs
 -- for G_ACTUAL_HZ clock cycles after reset, which is one second of real time
@@ -17,6 +17,10 @@
 -- Running with G_ACTUAL_HZ different from G_MODULUS shows what happens when
 -- the clock and the modulus disagree (for example the flicker-free slow
 -- clock, which deliberately keeps the nominal modulus).
+--
+-- The reset of the TOD divider is held for C_RESET_CYCLES cycles first; the
+-- 1541 chip enable must keep running during that time (it has no reset, so
+-- that the RTC does not pause while the C64 is held in reset).
 --
 -- Everything is counted in clock cycles; the simulated period is arbitrary.
 -- Asserts that the TOD frequency and the 1541 enable rate are within
@@ -46,12 +50,12 @@ end entity tb_dividers;
 
 architecture sim of tb_dividers is
 
-   constant C_PERIOD : time := 2 ns;   -- arbitrary, see header
+   constant C_PERIOD       : time    := 2 ns;   -- arbitrary, see header
+   constant C_RESET_CYCLES : natural := 1000;
 
    signal clk32           : std_logic := '0';
    signal running         : boolean := true;
    signal reset           : std_logic := '1';
-   signal reset_core_n    : std_logic;
    signal ntscMode        : std_logic;
    signal clk32_speed     : natural;
 
@@ -71,7 +75,6 @@ begin
    clk32_speed      <= G_MODULUS;
    clk_main_i       <= clk32;
    clk_main_speed_i <= G_MODULUS;
-   reset_core_n     <= not reset;
 
    ---------------------------------------------------------------------------
    -- Copy of the TOD divider process in rtl/fpga64_sid_iec.vhd
@@ -109,14 +112,10 @@ begin
 
       if rising_edge(clk_main_i) then
          iec_drive_ce <= '0';
-         if reset_core_n = '0' then
-            iec_dce_sum <= 0;
-         else
-            iec_dce_sum <= nextsum;
-            if nextsum >= msum then
-               iec_dce_sum  <= nextsum - msum;
-               iec_drive_ce <= '1';
-            end if;
+         iec_dce_sum  <= nextsum;
+         if nextsum >= msum then
+            iec_dce_sum  <= nextsum - msum;
+            iec_drive_ce <= '1';
          end if;
       end if;
    end process iec_drive_ce_proc;
@@ -143,6 +142,8 @@ begin
       variable ce_err     : real;
       variable scale      : real;
       variable ok         : boolean := true;
+      variable ce_reset   : natural := 0;   -- 1541 CE pulses while reset = '1'
+      variable ce_rst_ref : real;
       variable msg        : line;
       variable l          : line;
 
@@ -176,8 +177,11 @@ begin
       else
          n_cycles := G_ACTUAL_HZ;
       end if;
-      for i in 1 to 4 loop
+      for i in 1 to C_RESET_CYCLES loop
          wait until rising_edge(clk32);
+         if i > 1 and iec_drive_ce = '1' then
+            ce_reset := ce_reset + 1;
+         end if;
       end loop;
       reset <= '0';
       wait until rising_edge(clk32);   -- reset is low from this edge on
@@ -229,6 +233,15 @@ begin
       put("1541 CE pulses    : " & integer'image(ce_count) & " per second, reference " & fixed(ce_ref, 1) &
           ", error " & fixed(ce_err, 2) & " ppm, gap between pulses " & integer'image(min_gap) & " .. " &
           integer'image(max_gap) & " clk");
+
+      -- pulses produced by edges 1 .. C_RESET_CYCLES - 1, starting from iec_dce_sum = 0
+      ce_rst_ref := real(C_RESET_CYCLES - 1) * 16.0e6 / real(G_MODULUS);
+      put("1541 CE in reset  : " & integer'image(ce_reset) & " pulses in " & integer'image(C_RESET_CYCLES - 1) &
+          " clk of reset, reference " & fixed(ce_rst_ref, 1));
+      if abs(real(ce_reset) - ce_rst_ref) > 1.0 then
+         ok := false;
+         write(msg, string'("1541 CE does not run freely during reset; "));
+      end if;
 
       if abs(tod_err) > real(G_TOL_PPM) then
          ok := false;

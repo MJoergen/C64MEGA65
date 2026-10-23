@@ -48,6 +48,11 @@ also while the HDMI flicker-free clock is running. These two values are the inte
 of the two original MMCM outputs, so TOD and the drive chip enable are exact (verified by
 `CORE/vhdl/test/tb_ntsc/run.sh dividers`).
 
+The drive chip enable runs freely, without a reset, like MiSTer's `drive_ce`. The GEOS real-time
+clock (`rtcF83.sv`) counts its 16 MHz pulses, so it keeps exact time in both standards and keeps
+counting while the C64 is held in reset, for example during the Shell's SD card wait of at least
+2 s after power-on or while the reset button is held.
+
 Two consumers of the clock frequency deliberately stay on the PAL constant `CORE_CLK_SPEED`: the
 joystick debouncer and the MEGA65 keyboard scanner in `framework.vhd`. In NTSC their timing is
 3.8 % shorter, which neither of them cares about.

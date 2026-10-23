@@ -438,7 +438,7 @@ architecture synthesis of main is
   signal   iec_srq_n_sync   : std_logic := '1';
 
   -- Simulated IEC drives
-  signal   iec_drive_ce : std_logic;              -- chip enable for iec_drive (clock divider, see generate_drive_ce below)
+  signal   iec_drive_ce : std_logic;              -- chip enable for iec_drive (clock divider, see iec_drive_ce_proc below)
   signal   iec_dce_sum  : integer     := 0;       -- caution: we expect 32-bit integers here and we expect the initialization to 0
 
   signal   iec_img_mounted  : std_logic_vector(G_VDNUM - 1 downto 0);
@@ -2715,8 +2715,12 @@ begin
   -- Uses a fractional counter to compensate for the input clock not being exactly 32 MHz: the same algorithm
   -- as MiSTer's drive_ce in c64.sv (msum = ntsc ? 32727264 : 31527954), with our MMCM-exact clock speeds.
   -- clk_main_speed_i is CORE_CLK_SPEED_PAL (31.527778 MHz) in PAL and CORE_CLK_SPEED_NTSC (32.727273 MHz)
-  -- in NTSC, so the drives run at 1 MHz in both standards. reset_core_n clears iec_dce_sum, and the
-  -- mode-change reset asserts reset_core_n, so no left-over sum of the other standard survives a switch.
+  -- in NTSC, so the drives run at 1 MHz in both standards. Like MiSTer's drive_ce (c64.sv has no reset
+  -- there), the chip enable runs freely and is not affected by any reset: the drives have their own reset
+  -- input, and the GEOS RTC (rtcf83_inst), which counts these pulses, keeps time while the C64 is held in
+  -- reset. iec_dce_sum stays below msum by construction, also when msum drops at a switch from NTSC to
+  -- PAL: the sum is below 32727273, nextsum below 48727273, and one subtraction of 31527778 leaves less
+  -- than 17200000, which is below msum again.
   --
   -- It is important that also in the HDMI-Flicker-Free-mode we are using the vanilla clock speed given by
   -- CORE_CLK_SPEED_PAL (or CORE_CLK_SPEED_NTSC) and not a speed-adjusted version of this speed. Reason:
@@ -2733,14 +2737,10 @@ begin
 
     if rising_edge(clk_main_i) then
       iec_drive_ce <= '0';
-      if reset_core_n = '0' then
-        iec_dce_sum <= 0;
-      else
-        iec_dce_sum <= nextsum;
-        if nextsum >= msum then
-          iec_dce_sum  <= nextsum - msum;
-          iec_drive_ce <= '1';
-        end if;
+      iec_dce_sum  <= nextsum;
+      if nextsum >= msum then
+        iec_dce_sum  <= nextsum - msum;
+        iec_drive_ce <= '1';
       end if;
     end if;
   end process iec_drive_ce_proc;
@@ -2890,8 +2890,8 @@ begin
   -- which are exact in PAL and in NTSC (see iec_drive_ce_proc). This keeps the PCF8583 correct in both
   -- standards without a mode-dependent generic. The I2C side of rtcF83.sv is sampled on every clk.
   -- While the HDMI flicker-free clock runs, the RTC follows the speed of the C64 like the CIA TOD clock
-  -- does, and since iec_drive_ce_proc holds the chip enable while reset_core_n = '0', the RTC also pauses
-  -- for the duration of a C64 reset (MiSTer's drive_ce keeps running during a reset).
+  -- does. iec_drive_ce runs freely like MiSTer's drive_ce, so the RTC keeps counting while the C64 is
+  -- held in reset (for example during the SD card wait of the Shell after power-on).
   rtcf83_inst : component rtcf83
     generic map (
       CLOCK_RATE => 16_000_000,
