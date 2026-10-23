@@ -258,7 +258,7 @@ begin
           when x"80" => data := x"06" & x"1145" & x"1000";  -- CLKOUT5 Register 1
           when x"81" => data := x"07" & x"0000" & x"8000";  -- CLKOUT5 Register 2
           when x"82" => data := x"08" & x"10C4" & x"1000";  -- CLKOUT0 Register 1
-          when x"83" => data := x"09" & x"00C0" & x"8000";  -- CLKOUT0 Register 2
+          when x"83" => data := x"09" & x"0080" & x"8000";  -- CLKOUT0 Register 2
           when x"84" => data := x"0A" & x"1452" & x"1000";  -- CLKOUT1 Register 1
           when x"85" => data := x"0B" & x"0080" & x"8000";  -- CLKOUT1 Register 2
           when x"86" => data := x"0C" & x"1145" & x"1000";  -- CLKOUT2 Register 1
@@ -288,9 +288,9 @@ begin
           when x"A0" => data := x"06" & x"1145" & x"1000";  -- CLKOUT5 Register 1
           when x"A1" => data := x"07" & x"0000" & x"8000";  -- CLKOUT5 Register 2
           when x"A2" => data := x"08" & x"1104" & x"1000";  -- CLKOUT0 Register 1
-          when x"A3" => data := x"09" & x"00C0" & x"8000";  -- CLKOUT0 Register 2
+          when x"A3" => data := x"09" & x"0000" & x"8000";  -- CLKOUT0 Register 2
           when x"A4" => data := x"0A" & x"1514" & x"1000";  -- CLKOUT1 Register 1
-          when x"A5" => data := x"0B" & x"0080" & x"8000";  -- CLKOUT1 Register 2
+          when x"A5" => data := x"0B" & x"0000" & x"8000";  -- CLKOUT1 Register 2
           when x"A6" => data := x"0C" & x"1145" & x"1000";  -- CLKOUT2 Register 1
           when x"A7" => data := x"0D" & x"0000" & x"8000";  -- CLKOUT2 Register 2
           when x"A8" => data := x"0E" & x"1145" & x"1000";  -- CLKOUT3 Register 1
