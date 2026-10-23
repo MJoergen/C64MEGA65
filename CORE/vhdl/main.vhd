@@ -750,6 +750,8 @@ architecture synthesis of main is
   -- and cart_soft_reset (re-initializes the simulated cartridge). The other soft resets are silently
   -- dropped while prevent_reset = '1'; the mode-change reset is deferred instead and fires as soon as
   -- prevent_reset = '0', because a lost mode-change reset would leave the KERNAL in the wrong region.
+  -- For the same reason a pulse that is running when prevent_reset rises is aborted and re-armed: the
+  -- C64 always gets one complete C_MODE_RST_LEN pulse after the write-back.
   --
   -- A reset that is coming from a hardware cartridge via cart_in_reset_n_q (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are
@@ -1067,7 +1069,8 @@ begin
   begin
     if rising_edge(clk_main_i) then
       -- mode_reset is a soft reset: it reaches reset_core_n (protected by prevent_reset) but never
-      -- hard_reset_n; mode_change_reset_proc only raises it while prevent_reset = '0'
+      -- hard_reset_n; mode_change_reset_proc only raises it while prevent_reset = '0' and aborts and
+      -- re-arms it when prevent_reset rises during the pulse
       if reset_soft_i = '1' or reset_hard_i = '1' or cart_reset_counter /= 0 or mode_reset = '1' then
         -- Due to sw_cartridge_wrapper's logic, reset_soft_i stays high longer than reset_hard_i.
         -- We need to make sure that this is not interfering with hard_reset_n
@@ -1099,6 +1102,9 @@ begin
   -- PAL/NTSC. MiSTer resets while its PLL relocks; we have four permanently running MMCMs instead, so
   -- the reset is generated here. A change that arrives while prevent_reset = '1' (a virtual drive still
   -- writes back) stays pending and fires afterwards; several changes inside that window give one reset.
+  -- If prevent_reset rises while the pulse runs, hard_reset_proc releases reset_core_int_n at once and
+  -- the C64 would see only a few cycles of reset; the pulse is therefore aborted and re-armed, so that a
+  -- complete pulse follows as soon as prevent_reset = '0' again.
   -- c64_ntsc_i is a registered OSM bit, so no synchronizer is needed. ntsc_d starts as PAL, which makes
   -- the restore of a saved NTSC setting after power-on an ordinary mode change.
   mode_change_reset_proc : process (clk_main_i)
@@ -1110,7 +1116,13 @@ begin
       end if;
 
       if mode_rst_counter /= 0 then
-        mode_rst_counter <= mode_rst_counter - 1;
+        if prevent_reset = '1' then
+          -- a write-back started inside the pulse: abort it and retry afterwards
+          mode_rst_counter <= 0;
+          mode_rst_pending <= '1';
+        else
+          mode_rst_counter <= mode_rst_counter - 1;
+        end if;
       elsif mode_rst_pending = '1' and prevent_reset = '0' then
         mode_rst_counter <= C_MODE_RST_LEN;
         mode_rst_pending <= '0';

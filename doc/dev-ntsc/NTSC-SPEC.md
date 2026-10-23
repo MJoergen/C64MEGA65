@@ -577,7 +577,7 @@ The font and the canvas stay as they are; the glyphs are rendered by the same sc
 
 - Every change of `c64_ntsc_i` (PAL to NTSC or back), whatever its cause (user selection, config-file restore after power-on), soft-resets the C64 exactly once, so that the KERNAL re-runs its PAL/NTSC detection (`$02A6`) under the new VIC-II and the new clock.
 - The pulse is at least 32 main clock cycles long (RESET SEMANTICS, `main.vhd:717`).
-- The reset must never be lost. A soft reset that arrives while `prevent_reset = '1'` (a virtual drive has a dirty write cache, `main.vhd:970`) is silently ignored by `hard_reset_proc` today; for the mode change that would leave the KERNAL in the wrong region. The mode-change reset is therefore **deferred** until `prevent_reset = '0'`.
+- The reset must never be lost. A soft reset that arrives while `prevent_reset = '1'` (a virtual drive has a dirty write cache, `main.vhd:970`) is silently ignored by `hard_reset_proc` today; for the mode change that would leave the KERNAL in the wrong region. The mode-change reset is therefore **deferred** until `prevent_reset = '0'`. For the same reason a pulse that is already running when `prevent_reset` rises is **aborted and re-armed**: `hard_reset_proc` releases `reset_core_int_n` as soon as `prevent_reset = '1'`, so the C64 would otherwise see only a few cycles of reset (fewer than the 32 cycles of one 1 MHz CPU enable period) and keep the old region flag.
 - It behaves like the other OSM-driven soft resets (kernal swap, expansion-port toggle via `RESET_CORE` / `M2M$CSR_RESET`): it resets the C64 through `reset_core_n`, it starts cartridges (soft-reset semantics), and it re-initializes the simulated-cartridge cache through `cart_soft_reset_o`.
 
 ### 8.2 Mechanism (all in `main.vhd`, main clock domain, owner W3)
@@ -607,7 +607,13 @@ begin
     end if;
 
     if mode_rst_counter /= 0 then
-      mode_rst_counter <= mode_rst_counter - 1;
+      if prevent_reset = '1' then
+        -- a write-back started inside the pulse: abort it and retry afterwards
+        mode_rst_counter <= 0;
+        mode_rst_pending <= '1';
+      else
+        mode_rst_counter <= mode_rst_counter - 1;
+      end if;
     elsif mode_rst_pending = '1' and prevent_reset = '0' then
       mode_rst_counter <= C_MODE_RST_LEN;
       mode_rst_pending <= '0';
@@ -618,13 +624,15 @@ end process mode_change_reset_proc;
 mode_reset <= '1' when mode_rst_counter /= 0 else '0';
 ```
 
+The re-arm covers a narrow but real window: a drive asserts `sd_wr`, the Shell has not acknowledged it yet (`cache_dirty = 0`, so `prevent_reset = 0`), the user switches the standard and the pulse starts; the Shell's `HANDLE_IO` then acknowledges the write inside the 31 us of the pulse and `prevent_reset` rises. The short reset that `hard_reset_proc` has already passed on before the abort is the same as for every other soft reset that meets a rising `prevent_reset`; the complete pulse follows when the write-back is done. `tb_mode_reset.vhd` case 6 checks exactly this sequence.
+
 Joins the existing reset paths:
 
 1. `hard_reset_proc` (`main.vhd:1046`): the condition `if reset_soft_i = '1' or reset_hard_i = '1' or cart_reset_counter /= 0 then` gets `or mode_reset = '1'`. Inside that branch nothing changes: `reset_core_int_n <= prevent_reset and (not reset_hard_i)` drives `reset_core_n` low, and `hard_reset_n` is untouched (a mode change is not a hard reset). Add `hard_reset_proc` to the list of processes that "know what they are doing" only in the sense that it now also reads `mode_reset`; `mode_change_reset_proc` itself reads `prevent_reset`, not `reset_soft_i` / `reset_hard_i`, so the RESET SEMANTICS rule is respected.
 2. `cart_soft_reset` (`main.vhd:971`): `cart_soft_reset <= (cart_soft_reset_i or mode_reset) and not prevent_reset;` so that `sw_cartridge_wrapper` re-initializes the cacher like after any OSM-driven soft reset.
 3. Hardware cartridges see the reset on `/RESET` automatically, because `cart_reset_o` follows `reset_core_int_n` (`main.vhd:1467`).
 4. `reset_core_n` also clears `iec_dce_sum` (`iec_drive_ce_proc`) and resets the simulated drives, the same consumers as the reset button.
-5. Extend the RESET SEMANTICS comment block: "a fourth source of soft resets is the mode-change reset (`mode_change_reset_proc`, 1024 cycles, deferred while `prevent_reset = '1'`)".
+5. Extend the RESET SEMANTICS comment block: "a fourth source of soft resets is the mode-change reset (`mode_change_reset_proc`, 1024 cycles, deferred while `prevent_reset = '1'`, aborted and re-armed when `prevent_reset` rises during the pulse)".
 
 `mega65.vhd` needs nothing for the reset: the change of `main_osm_control_i(C_MENU_MACHINE_NTSC)` reaches `main.vhd` through `c64_ntsc_i`. `qnice_reset_for_prgloader` is not extended: a mode change while a PRG is being injected is not a supported combination, and the PRG loader keeps its own hard reset.
 
@@ -637,7 +645,7 @@ Joins the existing reset paths:
 5. In parallel, in the QNICE domain, `qnice_video_mode_o` switches to the HDMI mode of the new standard; `video_out_clock` reprograms its MMCM and the display resynchronizes (a short blank screen, as with any HDMI mode change in the menu).
 6. After the reset, the KERNAL boots, measures the raster line count and sets `$02A6` (0 = NTSC, 1 = PAL).
 
-If a write-back is pending, steps 3 and 6 happen after the write-back finished; during that window the C64 keeps running with the new VIC-II and the new clock and the old region flag. That is harmless (the next step is the reset); a disk write in progress continues correctly because the drives keep their exact 1 MHz.
+If a write-back is pending, or starts while the pulse of step 3 runs (the pulse is then aborted and re-armed), steps 3 and 6 happen after the write-back finished; during that window the C64 keeps running with the new VIC-II and the new clock and the old region flag. That is harmless (the next step is the reset); a disk write in progress continues correctly because the drives keep their exact 1 MHz.
 
 ### 8.4 Power-on with a saved NTSC setting
 
@@ -722,7 +730,7 @@ Tools: ghdl 5.1.1 (`ghdl -a --std=08 -frelaxed`, add `-fsynopsys` for the MiSTer
 1. `analyze.sh CORE/vhdl/main.vhd CORE/vhdl/config.vhd` passes.
 2. `CORE/vhdl/test/tb_ntsc/run.sh video`: with `ntsc = '1'` the `video_sync` output has 404 x 250 visible pixels, 520 dots per line, 263 lines, and the PAL figures (382 x 270) are unchanged.
 3. `CORE/vhdl/test/tb_ntsc/run.sh dividers`: TOD exactly 60 Hz and drive CE exactly 16 MHz at `CORE_CLK_SPEED_NTSC = 32_727_273`, 50 Hz / 16 MHz in PAL, and the documented drift in the flicker-free legs.
-4. A ghdl bench of `mode_change_reset_proc` (copied into a bench entity with `c64_ntsc_i`, `prevent_reset`): one toggle gives exactly one `mode_reset` pulse of 1024 cycles; a toggle while `prevent_reset = '1'` gives the pulse after `prevent_reset` falls; two toggles during one `prevent_reset` window give one pulse; no pulse at power-on with `c64_ntsc_i = '0'`.
+4. A ghdl bench of `mode_change_reset_proc` (copied into a bench entity with `c64_ntsc_i`, `prevent_reset`): one toggle gives exactly one `mode_reset` pulse of 1024 cycles; a toggle while `prevent_reset = '1'` gives the pulse after `prevent_reset` falls; two toggles during one `prevent_reset` window give one pulse; `prevent_reset` rising during a running pulse stops it, and one complete 1024-cycle pulse (on `mode_reset` and on `reset_core_int_n`) follows after `prevent_reset` falls; no pulse at power-on with `c64_ntsc_i = '0'`.
 5. `rtcF83.sv` with `CLOCK_RATE 16000000` and `ce` at 16 MHz advances one second per 16 000 000 `ce` pulses (iverilog or a Python transcription of `rtcF83.sv:142-146`).
 6. `python3 M2M/rom/tests/menu_test.py verify` still passes (proves that no menu index moved).
 7. Markdown files pass the Marked 2 / MathJax rules (no bare `$` pairs, no bare `==`).
@@ -763,7 +771,7 @@ Ordered by rating (highest first).
 | # | Risk | Rating | Mitigation |
 |---|---|---|---|
 | 1 | **Flicker-free polarity in NTSC.** The original clock is the slow one in NTSC; reusing the PAL rule makes the core drift away from the HDMI rate and the frame buffer tear permanently. | high impact, easy to get wrong | Section 4.2 gives the exact process; W1 proves it with the bench and the closed-loop model of 10.1 items 3 and 4. |
-| 2 | **Lost mode-change reset.** A soft reset during `prevent_reset = '1'` is silently ignored today; a lost mode-change reset leaves the KERNAL with the wrong region flag. | medium | Deferred reset of section 8; W3 bench 10.3 item 4; hardware test 10.5 item 13. |
+| 2 | **Lost mode-change reset.** A soft reset during `prevent_reset = '1'` is silently ignored today; a lost mode-change reset leaves the KERNAL with the wrong region flag. | medium | Deferred and re-armed reset of section 8; W3 bench 10.3 item 4; hardware test 10.5 item 13. |
 | 3 | **Crop constants for NTSC zoom-in** are derived from the RTL and from the visible raster box of the video bench, not yet from a crop bench. | low (cosmetic if wrong: a shifted zoom window) | W2 confirms them in simulation (10.2 item 5) before reporting. |
 | 4 | **HyperRAM bandwidth on R3/R3A.** The ascal input grows from 382 x 270 x 50.12 Hz (5.17 Mpixel/s) to 404 x 250 x 59.83 Hz (6.04 Mpixel/s), +17 % for writes and about the same for reads at 59.94 Hz output, on top of SIMCRT bank fills and SIMREU DMA (+3.8 % with the faster C64). | medium | No design change; hardware test on R3 with SIMREU (a REU-heavy demo) plus 720p59.94 and flicker-free on. R4 and later keep the ascal frame buffer in SDRAM (`framework.vhd:973`, `sdram_gen` is HyperRAM only for `MEGA65_R3`), so there the contention does not grow; `hdmi_flicker_free.vhd` taps the same `hr_dig_*` bus on every board, so flicker-free works on both paths. |
 | 5 | **Timing closure at 32.79 MHz** (period 30.497 ns instead of 31.718 ns, -1.221 ns). | low | The current routed reports show main_clk intra-clock WNS of 9.001 ns (R6) and 10.704 ns (R3), and every main_clk crossing is a `-datapath_only` max-delay (8 ns / 2 ns) or a false path, which does not depend on the period. Section 3.8 times the fastest clock, so there is no hidden slower-clock path. The HyperRAM RWDS hold knife-edge (issue #224) is unrelated to main_clk and stays with the re-roll flow. |

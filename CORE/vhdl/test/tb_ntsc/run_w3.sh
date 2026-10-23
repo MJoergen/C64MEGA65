@@ -5,7 +5,7 @@
 #
 #   tb_mode_reset: mode_change_reset_proc, hard_reset_proc and cart_soft_reset
 #                  of CORE/vhdl/main.vhd, run once with a PAL power-on (cases
-#                  1 to 5) and once with c64_ntsc_i = '1' from the first cycle
+#                  1 to 6) and once with c64_ntsc_i = '1' from the first cycle
 #
 # Before simulating, the copies of mode_change_reset_proc (with the mode_reset
 # assignment), hard_reset_proc and the cart_soft_reset assignment inside

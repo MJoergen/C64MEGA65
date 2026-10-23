@@ -23,6 +23,10 @@
 --   4. two toggles inside one prevent_reset window: exactly one pulse
 --   5. a toggle during a running pulse: the change is not lost, a second
 --      pulse follows the first one
+--   6. prevent_reset rises during a running pulse (a write-back starts):
+--      the pulse stops, the reset is pending, and one complete pulse of
+--      C_MODE_RST_LEN cycles (mode_reset and reset_core_int_n) follows
+--      after prevent_reset falls
 --   G_POWER_ON_NTSC = true: c64_ntsc_i = '1' from the very first cycle
 --      (ntsc_d starts as PAL): exactly one pulse
 --
@@ -95,7 +99,8 @@ begin
   begin
     if rising_edge(clk_main_i) then
       -- mode_reset is a soft reset: it reaches reset_core_n (protected by prevent_reset) but never
-      -- hard_reset_n; mode_change_reset_proc only raises it while prevent_reset = '0'
+      -- hard_reset_n; mode_change_reset_proc only raises it while prevent_reset = '0' and aborts and
+      -- re-arms it when prevent_reset rises during the pulse
       if reset_soft_i = '1' or reset_hard_i = '1' or cart_reset_counter /= 0 or mode_reset = '1' then
         -- Due to sw_cartridge_wrapper's logic, reset_soft_i stays high longer than reset_hard_i.
         -- We need to make sure that this is not interfering with hard_reset_n
@@ -127,6 +132,9 @@ begin
   -- PAL/NTSC. MiSTer resets while its PLL relocks; we have four permanently running MMCMs instead, so
   -- the reset is generated here. A change that arrives while prevent_reset = '1' (a virtual drive still
   -- writes back) stays pending and fires afterwards; several changes inside that window give one reset.
+  -- If prevent_reset rises while the pulse runs, hard_reset_proc releases reset_core_int_n at once and
+  -- the C64 would see only a few cycles of reset; the pulse is therefore aborted and re-armed, so that a
+  -- complete pulse follows as soon as prevent_reset = '0' again.
   -- c64_ntsc_i is a registered OSM bit, so no synchronizer is needed. ntsc_d starts as PAL, which makes
   -- the restore of a saved NTSC setting after power-on an ordinary mode change.
   mode_change_reset_proc : process (clk_main_i)
@@ -138,7 +146,13 @@ begin
       end if;
 
       if mode_rst_counter /= 0 then
-        mode_rst_counter <= mode_rst_counter - 1;
+        if prevent_reset = '1' then
+          -- a write-back started inside the pulse: abort it and retry afterwards
+          mode_rst_counter <= 0;
+          mode_rst_pending <= '1';
+        else
+          mode_rst_counter <= mode_rst_counter - 1;
+        end if;
       elsif mode_rst_pending = '1' and prevent_reset = '0' then
         mode_rst_counter <= C_MODE_RST_LEN;
         mode_rst_pending <= '0';
@@ -324,7 +338,33 @@ begin
          check(mr_last_len = C_MODE_RST_LEN, "case 5: second pulse length " & natural'image(mr_last_len));
          put("info : case 5: gap between the two pulses " & natural'image(mr_last_gap) & " cycle(s)");
 
-         check(mr_bad_len = 0, "all pulses are " & natural'image(C_MODE_RST_LEN) & " cycles long");
+         check(mr_bad_len = 0, "cases 2 to 5: all pulses are " & natural'image(C_MODE_RST_LEN) & " cycles long");
+
+         ------------------------------------------------------------------
+         -- case 6: prevent_reset rises during a running pulse
+         ------------------------------------------------------------------
+         p0 := cycle;
+         c64_ntsc_i <= '1';
+         wait_cycles(10);
+         check(mode_reset = '1' and reset_core_int_n = '0', "case 6: pulse running");
+         prevent_reset <= '1';
+         wait_cycles(5);
+         check(mode_reset = '0', "case 6: the pulse stops when prevent_reset rises");
+         check(reset_core_int_n = '1', "case 6: reset_core_int_n released while prevent_reset = '1'");
+         check(mode_rst_pending = '1', "case 6: the reset is pending again");
+         check(mr_bad_len = 1, "case 6: the aborted pulse is the only short one (short pulses " & natural'image(mr_bad_len) & ")");
+         wait_cycles(3000);
+         check(mr_pulses = 6, "case 6: no pulse while prevent_reset = '1' (pulses " & natural'image(mr_pulses) & ")");
+         p0 := cycle;
+         prevent_reset <= '0';
+         wait_cycles(3000);
+         check(mr_pulses = 7, "case 6: one pulse after prevent_reset fell (pulses " & natural'image(mr_pulses) & ")");
+         check(mr_last_len = C_MODE_RST_LEN, "case 6: pulse length " & natural'image(mr_last_len));
+         check(mr_last_start - p0 <= 3, "case 6: pulse starts " & natural'image(mr_last_start - p0) & " cycles after prevent_reset fell");
+         check(rc_last_len = C_MODE_RST_LEN, "case 6: reset_core_int_n low for " & natural'image(rc_last_len) & " cycles");
+         check(mode_rst_pending = '0', "case 6: nothing pending afterwards");
+
+         check(mr_bad_len = 1, "only the aborted pulse of case 6 is shorter than " & natural'image(C_MODE_RST_LEN) & " cycles");
          check(not hr_seen, "hard_reset_n never asserted");
       end if;
 
