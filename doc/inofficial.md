@@ -40,6 +40,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A20X2  | 08/05/26 | 57844f2 | Default is one drive 8; drive 9 is invisible. Merge mh_dev_drives branch (Alpha 20) into develop branch (Alpha 19).
 | WIP-V6-A20X3  | 10/09/26 | 856e70f | Fixed silent sector loss when saving to a simulated 1581 under sustained write activity (issue #248)
 | WIP-V6-A21X1  | 10/18/26 | b68949d | Write support for the built-in floppy drive as 1581, sector writes (issue #244)
+| WIP-V6-A22    | 10/23/26 | d5494f7 | Added NTSC support (issue #181)
 
 ## Version 5.2
 

@@ -29,8 +29,7 @@ Version 6 - MONTH DAY, 2026
 * NTSC: Choose PAL (default) or NTSC in the "Model" submenu. In NTSC mode
   the core is an NTSC C64 (VIC-II 6567R8, NTSC clock) and resets automatically
   when you switch. HDMI gets its own 59.94 Hz modes (720p, 4:3 480p, 5:4 480p)
-  including "HDMI: Flicker-free"; VGA outputs 60 Hz, which also suits older
-  VGA monitors that only accept 60 Hz.
+  including "HDMI: Flicker-free"; the analog output ("VGA") outputs 60 Hz.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/181)
 
 * Full DMA support for hardware cartridges such as hardware REUs (for example
