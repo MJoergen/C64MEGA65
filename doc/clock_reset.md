@@ -72,6 +72,8 @@ machine mode:
 * While a virtual drive still writes its cache back to the SD card (`prevent_reset = '1'`),
   ordinary soft resets are ignored. The mode-change reset is deferred instead and happens as
   soon as the write-back has finished; several changes inside that window lead to one reset.
+  A write-back that starts while the mode-change reset runs aborts it, and a complete reset
+  follows after the write-back.
 * At power-on the Shell restores the config file while the C64 is still held in reset (the
   reset bit of `M2M$CSR` is set from `CSR_DEFAULT` until `RP_SYSTEM_START` clears it). If the
   file contains NTSC, the core therefore starts directly in NTSC; there is no visible PAL phase.

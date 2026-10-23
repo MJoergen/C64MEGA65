@@ -204,7 +204,9 @@ the C64. `mode_change_reset_proc` in `CORE/vhdl/main.vhd`:
 2. waits until no virtual drive is writing back its cache (`prevent_reset = '0'`); a change
    during a write-back is never dropped, and several changes inside one write-back give one
    reset,
-3. raises `mode_reset` for `C_MODE_RST_LEN = 1024` core clock cycles (31 us).
+3. raises `mode_reset` for `C_MODE_RST_LEN = 1024` core clock cycles (31 us); if a write-back
+   starts while the pulse runs, the pulse is aborted and the reset is pending again, so a
+   complete pulse follows after the write-back.
 
 `mode_reset` joins `hard_reset_proc` next to the reset button and `cart_soft_reset`: the C64 gets
 a soft reset through `reset_core_n` (cartridges start again, simulated cartridges are
@@ -228,8 +230,8 @@ NTSC; there is no visible PAL phase. The mode-change reset machinery covers this
 reset that the Shell holds anyway, where it is harmless.
 
 `CORE/vhdl/test/tb_ntsc/run_w3.sh` simulates the mode-change reset (one toggle, toggles during a
-write-back, a toggle during a running reset, power-on in PAL and in NTSC) against a verbatim copy
-of the processes in `main.vhd`.
+write-back, a toggle during a running reset, a write-back that starts during a running reset,
+power-on in PAL and in NTSC) against a verbatim copy of the processes in `main.vhd`.
 
 
 ## Parity with MiSTer
