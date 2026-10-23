@@ -338,7 +338,7 @@ rtcf83_inst : component rtcf83
     ...                            -- rest unchanged
 ```
 
-`rtcF83.sv` counts `seccnt` only when `ce = '1'` and compares with `CLOCK_RATE / 100`, so the PCF8583 seconds stay exact in both standards. Because `iec_drive_ce` runs freely (section 5.3), the RTC keeps counting while the C64 is held in reset; it only loads the time from the MEGA65 RTC (`RTC[64]` toggle) and is reset by `reset_hard_i`. The I2C sampling of `scl_i` / `sda_i` is also qualified by `ce`; at 16 MHz this is far faster than the GEOS bit-banging, exactly as on MiSTer.
+`rtcF83.sv` counts `seccnt` only when `ce = '1'` and compares with `CLOCK_RATE / 100`, so the PCF8583 seconds stay exact in both standards. Because `iec_drive_ce` runs freely (section 5.3), the RTC keeps counting while the C64 is held in reset. Apart from `ce`, it loads the time from the MEGA65 RTC on every `RTC[64]` toggle and is reset by `reset_hard_i`. The I2C sampling of `scl_i` / `sda_i` (`rtcF83.sv:50-82`) runs on every `clk`, independent of `ce`, so the GEOS bit-banging is sampled at the full core clock.
 
 ### 5.5 Inventory of clock-speed consumers
 
