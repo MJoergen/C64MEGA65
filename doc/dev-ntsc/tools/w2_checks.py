@@ -392,15 +392,7 @@ def source_checks(repo):
         print("video_out_clock CLK_SEL %s: CLKFBOUT_MULT_F %.3f, DIVCLK %d, CLKOUT0 %.3f, CLKOUT1 %.3f -> pixel %.6f MHz, serializer %.4f MHz = %.1f x pixel; %s CLK_KHZ %d" % (
             sel, m, d, o0, o1, f, f * o1 / o0, o1 / o0, name, recs[name]["CLK_KHZ"]))
         check(round(f * 1000) == recs[name]["CLK_KHZ"], "CLK_SEL %s gives %.4f MHz, record says %d kHz" % (sel, f, recs[name]["CLK_KHZ"]))
-        if sel != "110":
-            check(abs(o1 / o0 - 5.0) < 1e-9, "CLK_SEL %s: serializer clock is not 5x" % sel)
-        elif abs(o1 / o0 - 5.0) > 1e-9:
-            # Not counted as a failure: spec section 6.4 keeps the table unchanged. See the W2 report.
-            regs = drp_table(vo, sel)
-            print("  FINDING: CLK_SEL 110 programs CLKOUT0 (serializer clock clko_x5) with ClkReg1 %04X /"
-                  " ClkReg2 %04X: NO_COUNT is set, so CLKOUT0 = VCO / 1 = %.2f MHz = %.0f x pixel clock;"
-                  " the 74.25 MHz table encodes the same divide 2 as %04X / %04X" % (
-                      regs[0x08], regs[0x09], f * o1, o1, drp_table(vo, "010")[0x08], drp_table(vo, "010")[0x09]))
+        check(abs(o1 / o0 - 5.0) < 1e-9, "CLK_SEL %s: serializer clock is not 5x" % sel)
     m, d, o0, o1, f = mmcm_freq(drp_table(vo, "110"))
     check((m, d, o1) == (22.25, 3, 10.0), "CLK_SEL 110 is not 22.25 / 3 / 10")
     print("720p59.94 frame rate: %.6f Hz (pixel clock %.1f ppm from 74.25/1.001 MHz)" % (

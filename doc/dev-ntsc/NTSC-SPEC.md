@@ -445,7 +445,9 @@ Zoom-in needs the standard in the video clock domain: section 6.7.
 
 ### 6.4 `video_out_clock.vhd`
 
-No functional change; `CLK_SEL "110"` already exists. Correct the comment of `sel` value `110` to "74.176 MHz nominal, 74.1667 MHz actual (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3)" so that the next reader does not trust the label.
+`CLK_SEL "110"` (1280 x 720 at 59.94 Hz) already exists. Its comment says "74.176 MHz nominal, 74.1667 MHz actual (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3)", so that the next reader does not trust the label.
+
+The 0xC0 table of this setting had wrong register-2 words for CLKOUT0 and CLKOUT1 (`x"00C0"` and `x"0080"`, the NO_COUNT and EDGE bits of the 148.5 MHz table). With NO_COUNT set, CLKOUT0 ran at VCO / 1 = 741.67 MHz, so the serializer clock `clko_x5` was 10 times the pixel clock instead of 5 times. Commit `b810c59` sets both words to `x"0000"`, which matches the register-1 words (divide 2 and divide 10) and the field-proven 74.25 MHz table: CLKOUT0 = 370.833 MHz = 5 x 74.1667 MHz. `doc/dev-ntsc/tools/w2_checks.py` decodes the tables of `CLK_SEL` 010, 001 and 110 per XAPP888 and fails unless each gives its record's `CLK_KHZ` and a 5x serializer clock. The lock (0xD1) and filter (0xD5, 0xD6) words of the 110 table cannot be checked against the XAPP888 lookup tables without Vivado; they are checked on hardware (section 10.5 item 3). The same table exists in `M2M/vhdl/controllers/HDMI/video_out_clock.vhd` of other MiSTer2MEGA65-based cores; whether and when to upstream the fix is the maintainer's call.
 
 ### 6.5 HDMI infoframe and audio
 
