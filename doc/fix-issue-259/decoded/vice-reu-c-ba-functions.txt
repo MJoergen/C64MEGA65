@@ -1,0 +1,54 @@
+inline static void nonsc_reu_clk_inc_pre(void)
+{
+    if (!reu_ba.enabled) {
+        maincpu_clk++;
+    }
+}
+
+/*! \brief clock handling for x64sc reu write */
+inline static void reu_clk_inc_post_write(void)
+{
+    if (reu_ba.enabled) {
+        maincpu_clk++;
+        if (reu_ba.check()) {
+            reu_ba.delay++;
+        } else {
+            reu_ba.delay = 0;
+        }
+        reu_ba.last_cycle = (reu_ba.delay > 1);
+        if (reu_ba.last_cycle) {
+            reu_ba.steal();
+            reu_ba.delay = 0;
+        }
+    }
+}
+
+/*! \brief clock handling for x64sc reu read */
+inline static void reu_clk_inc_post_read(void)
+{
+    if (reu_ba.enabled) {
+        /* add one cycle */
+        maincpu_clk++;
+        /* steal more cycles while BA is pulled low by the VICII */
+        if (reu_ba.check()) {
+            reu_ba.steal();
+        }
+    }
+}
+
+int vicii_cycle_reu(void)
+{
+    int check = vicii.raster_cycle == VICII_PAL_CYCLE(54) && (vicii.regs[0x15] & 1) && (vicii.regs[1] == (vicii.raster_line & 0xff)) && !(vicii.sprite_dma & 1);
+    return vicii_cycle() && !check;
+}
+
+/* Steal cycles from CPU  */
+void vicii_steal_cycles(void)
+{
+    int ba_low;
+
+    do {
+        maincpu_clk++;
+        ba_low = vicii_cycle();
+    } while (ba_low);
+}
