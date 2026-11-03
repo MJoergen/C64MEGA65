@@ -826,6 +826,28 @@ architecture synthesis of main is
   signal   core_dma_we    : std_logic;
   signal   core_irq_ext_n : std_logic;
 
+  -- Hardware DMA cartridges and the VIC-II (issue #259): see comment block at cart_dma_ba_proc below
+  constant C_CART_BA_RECHARGE_TICKS : natural := 4;             -- clk_main_i ticks BA is driven high after a VIC stall
+  signal   core_dotclk_d1       : std_logic := '0';             -- dot clock pulse delay line, see cart_dotclk_shape_proc
+  signal   core_dotclk_d2       : std_logic := '0';
+  signal   core_dotclk_d3       : std_logic := '0';
+  signal   cart_dotclk_q        : std_logic := '0';             -- 50 % duty cycle dot clock for the Expansion Port
+  signal   core_ba_q            : std_logic := '1';             -- core_ba one tick ago (edge detection)
+  signal   core_dma_cycle_q     : std_logic := '0';             -- core_dma_cycle one tick ago (edge detection)
+  signal   core_dma_last_we     : std_logic := '0';             -- last served hardware DMA cycle was a write
+  signal   core_dma_last_valid  : std_logic := '0';             -- ... and there was such a cycle since /DMA was asserted
+  signal   core_dma_last_addr_p1: unsigned(15 downto 0) := (others => '0'); -- address of that cycle plus one (registered: keeps the adder off the write-enable path)
+  signal   core_dma_prev_we     : std_logic := '0';             -- direction of the served cycle before the last one
+  signal   core_dma_prev_valid  : std_logic := '0';
+  signal   core_dma_grace_armed : std_logic := '0';             -- a served write arms exactly one grace cycle
+  signal   core_dma_grace       : std_logic := '0';             -- first BA-low cycle after a write: serve one more access
+  signal   core_dma_grace_rd    : std_logic := '0';             -- ... as a read (swap) instead of a write (fetch)
+  signal   cart_ba_recharge     : std_logic := '0';             -- BA was driven low and must be driven high again
+  signal   cart_ba_drive_high   : std_logic := '0';             -- drive BA high right now (C_CART_BA_RECHARGE_TICKS)
+  signal   cart_ba_recharge_cnt : natural range 0 to C_CART_BA_RECHARGE_TICKS - 1 := 0;
+  signal   cart_phi_low_cnt     : natural range 0 to 31 := 0;   -- ticks since the last PHI2 falling edge (saturating)
+  signal   cart_phi2_q          : std_logic := '0';             -- core_phi2 one tick ago (edge detection; core_phi2_prev is R3/R4 only)
+
   -- Cart-port output registration: see comment block at cart_output_pipeline_proc below
   signal   cart_out_a        : unsigned(15 downto 0); -- combinational, includes Ultimax override
   signal   cart_out_a_q      : unsigned(15 downto 0);
@@ -1287,6 +1309,7 @@ begin
       dma_dout      => core_dma_dout,      -- input
       dma_din       => core_dma_din,       -- output
       dma_we        => core_dma_we,        -- input
+      dma_grace     => core_dma_grace,     -- input, issue #259
       irq_ext_n     => core_irq_ext_n,     -- input
 
       -- paddle interface
@@ -1389,9 +1412,10 @@ begin
   -- We also register cart_out_d_q, a one-cycle-delayed copy of the C64's outgoing write byte,
   -- to hold valid write data during the registered tail of a cart write.
   --
-  -- BA and dotclock are NOT registered because they come from clean register outputs in
-  -- the core (VIC-II output and clock divider respectively) with no combinational mux
-  -- upstream that could glitch.
+  -- BA is NOT registered because it comes from a clean register output in the core (VIC-II
+  -- output); in hardware-DMA mode it is additionally driven by the registered BA recharge
+  -- logic (cart_dma_ba_proc, issue #259). The dot clock is shaped and registered in
+  -- cart_dotclk_shape_proc below (issue #259).
   --
   -- PHI2 is NOT registered as it is already generated cart-port-faithful in fpga64_sid_iec.vhd
   cart_output_pipeline_proc : process (clk_main_i)
@@ -1432,6 +1456,151 @@ begin
       cart_in_d_q       <= cart_d_i;
     end if;
   end process cart_input_pipeline_proc;
+
+  -- ---------------------------------------------------------------------------------------------
+  -- Hardware DMA cartridges and the VIC-II (issue #259)
+  --
+  -- Three things that a real C64 does and that the MOS 8726 REC in the Commodore 1700/1764/1750
+  -- REUs turned out to depend on. Modern DMA cartridges (REU Grande, RAD, TeensyROM, Ultimate)
+  -- are indifferent to all three, which is why they worked before:
+  --
+  --   1. DOTCLK is a 50 % square wave on a real C64 and the REC derives its DRAM control timing
+  --      from it. The core's internal pixel enable (core_dotclk) is a single clk_main_i pulse,
+  --      i.e. a 25 % duty cycle, and its rising edge coincides with the falling edge of PHI2.
+  --      cart_dotclk_shape_proc turns it into a square wave (2 ticks high, 2 ticks low) and
+  --      places it so that both PHI2 edges sit one full clk_main_i tick away from the nearest
+  --      DOTCLK edge: PHI2 rises one tick after a DOTCLK falling edge and falls one tick after a
+  --      DOTCLK rising edge. The internal pixel enable is untouched.
+  --
+  --   2. The VIC-II drives BA actively high when it releases the bus. During a hardware DMA the
+  --      FPGA keeps the BA/R/W/IO1/IO2 transceiver in input mode to sense R/W, so after a VIC
+  --      stall the FPGA used to release BA from a driven low and the line crawled up through
+  --      its pull-up, right into the window in which the cartridge samples it. Now the FPGA
+  --      drives BA high for C_CART_BA_RECHARGE_TICKS before it hands the transceiver back to
+  --      input mode (cart_ba_recharge, cart_ba_drive_high). The VIC model releases BA at the
+  --      start of the VIC half of a cycle, for badlines and sprites alike, so this happens at
+  --      once and the cartridge sees a clean high long before PHI2 rises, like on a real C64;
+  --      the core serves the CPU half of that very cycle. Should BA ever rise at the very end of
+  --      the VIC half instead (a DMA write to $D011 can do that), the core serves only the next
+  --      cycle: then BA is kept low until that cycle starts and driven high at its beginning.
+  --      While the FPGA drives the transceiver, R/W is driven high, the fail-safe level (the
+  --      cartridge does not drive R/W in the VIC half, and a line left high after the release
+  --      can never turn a floating bus into a RAM write), and no RAM write is performed.
+  --
+  --   3. After BA drops, the REC still performs one bus access in the first BA-low cycle whenever
+  --      the cycle before was a write (VICE x64sc, reu_clk_inc_post_write; dw/style's
+  --      badoublewrite test): the next write of a fetch, or the next read of a swap. Reads stop
+  --      at once (stash, verify, and a swap whose read came last). A real C64 accepts this
+  --      because the VIC only takes the bus three cycles after BA fell. cart_dma_ba_proc raises
+  --      core_dma_grace for exactly that cycle when the last served DMA cycle was a write;
+  --      fpga64_sid_iec grants the cycle and handle_hardware_expansion_proc serves it in the
+  --      cartridge's direction (write for a fetch, read for a swap, told apart by the direction
+  --      of the two preceding served cycles), gated on the cartridge addressing the byte after
+  --      the previous write. An idle cartridge that merely leaves its last address on the bus is
+  --      therefore never served, and a fetch to a fixed C64 address still loses this one write,
+  --      as before.
+  --
+  -- 2 and 3 are confined to c64_exp_port_mode_i(C_SIM_CRT) = '0' with /DMA asserted, 1 to the
+  -- DOTCLK pin. SIMCRT, SIMREU and non-DMA cartridges see no change apart from the dot clock.
+  -- ---------------------------------------------------------------------------------------------
+  cart_dotclk_shape_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      core_dotclk_d1 <= core_dotclk;
+      core_dotclk_d2 <= core_dotclk_d1;
+      core_dotclk_d3 <= core_dotclk_d2;
+      cart_dotclk_q  <= core_dotclk_d2 or core_dotclk_d3;
+    end if;
+  end process cart_dotclk_shape_proc;
+
+  cart_dma_ba_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      core_ba_q        <= core_ba;
+      core_dma_cycle_q <= core_dma_cycle;
+      cart_phi2_q      <= core_phi2;
+
+      -- Ticks since the last PHI2 falling edge, saturating: 0..15 is the VIC half of the cycle
+      -- (CYCLE_EXT0..CYCLE_VIC3 in fpga64_sid_iec), 16 and above the CPU half
+      if core_phi2 = '0' and cart_phi2_q = '1' then
+        cart_phi_low_cnt <= 0;
+      elsif cart_phi_low_cnt < 31 then
+        cart_phi_low_cnt <= cart_phi_low_cnt + 1;
+      end if;
+
+      if c64_exp_port_mode_i(C_SIM_CRT) = '0' and cart_in_dma_n_q = '0' then
+        -- Remember what the cartridge did in its last served cycle (not during a grace cycle,
+        -- where the FPGA drives R/W itself) and in the one before. A served write arms exactly
+        -- one grace cycle.
+        if core_dma_cycle = '1' and core_ba = '1' and core_dma_grace = '0' then
+          if core_dma_cycle_q = '0' then          -- first tick of a served cycle: shift the history
+            core_dma_prev_we    <= core_dma_last_we;
+            core_dma_prev_valid <= core_dma_last_valid;
+            core_dma_last_valid <= '1';
+          end if;
+          core_dma_last_we      <= not cart_in_rw_q;
+          core_dma_last_addr_p1 <= cart_in_a_q + 1;
+          core_dma_grace_armed  <= not cart_in_rw_q;
+        end if;
+
+        -- 3. BA dropped right after a served write: grant one more access. Read/write before
+        --    the write means a swap, whose next access is a read; otherwise a fetch writes on.
+        if core_ba = '0' and core_ba_q = '1' and core_dma_grace_armed = '1' then
+          core_dma_grace       <= '1';
+          core_dma_grace_rd    <= core_dma_prev_valid and not core_dma_prev_we;
+          core_dma_grace_armed <= '0';
+        end if;
+        -- ... which ends with the served DMA cycle. A grace read counts as a served read for the
+        -- history (the swap continues with a write); after a grace write core_dma_last_we stays
+        -- set, the fetch continues with writes.
+        if core_dma_grace = '1' and core_dma_cycle = '0' and core_dma_cycle_q = '1' then
+          core_dma_grace <= '0';
+          if core_dma_grace_rd = '1' then
+            core_dma_prev_we    <= core_dma_last_we;
+            core_dma_prev_valid <= core_dma_last_valid;
+            core_dma_last_we    <= '0';
+          end if;
+        end if;
+
+        -- 2. BA recharge: we drive BA low during the stall ...
+        if core_ba = '0' then
+          cart_ba_recharge     <= '1';
+          cart_ba_drive_high   <= '0';
+          cart_ba_recharge_cnt <= 0;
+        elsif cart_ba_recharge = '1' then
+          -- ... and then high for C_CART_BA_RECHARGE_TICKS: at once when the VIC released BA in
+          -- its own half of the cycle (the normal case: the core serves the CPU half of this very
+          -- cycle, and the cartridge sees BA high long before PHI2 rises, like on a real C64),
+          -- otherwise (BA released at the very end of the VIC half, which the core serves only
+          -- one cycle later) at the start of the first served DMA cycle
+          if (core_ba_q = '0' and cart_phi_low_cnt <= 15) or (core_dma_cycle = '1' and core_dma_cycle_q = '0') then
+            cart_ba_drive_high <= '1';
+          end if;
+          if cart_ba_drive_high = '1' then
+            if cart_ba_recharge_cnt = C_CART_BA_RECHARGE_TICKS - 1 then
+              cart_ba_recharge <= '0'; -- cart_ba_drive_high follows one tick later: no decode glitch on BA
+            else
+              cart_ba_recharge_cnt <= cart_ba_recharge_cnt + 1;
+            end if;
+          end if;
+        else
+          cart_ba_drive_high   <= '0';
+          cart_ba_recharge_cnt <= 0;
+        end if;
+      else
+        core_dma_grace       <= '0';
+        core_dma_grace_rd    <= '0';
+        core_dma_grace_armed <= '0';
+        core_dma_last_we     <= '0';
+        core_dma_last_valid  <= '0';
+        core_dma_prev_we     <= '0';
+        core_dma_prev_valid  <= '0';
+        cart_ba_recharge     <= '0';
+        cart_ba_drive_high   <= '0';
+        cart_ba_recharge_cnt <= 0;
+      end if;
+    end if;
+  end process cart_dma_ba_proc;
 
   -- Handle signals that go to the Expansion Port hardware
   handle_hardware_expansion_proc : process (all)
@@ -1530,9 +1699,10 @@ begin
       cart_reset_o    <= reset_core_int_n when cart_reset_counter = 0 and cart_res_flckr_ign = 0 else '1';
       cart_reset_oe_o <= not cart_reset_o;
 
-      -- Directly use the core's phi2, dotclock and BA signal for the physical output...
+      -- Directly use the core's phi2 and BA signal for the physical output, the dot clock
+      -- shaped to a 50 % square wave (see cart_dotclk_shape_proc, issue #259)...
       cart_phi2_o     <= core_phi2;
-      cart_dotclock_o <= core_dotclk;
+      cart_dotclock_o <= cart_dotclk_q;
       cart_ba_o       <= core_ba;
 
       -- ...but use registered versions of address, ROML, ROMH, IO1, IO2 and RW to avoid glitches.
@@ -1584,16 +1754,49 @@ begin
         cart_d_o       <= core_dma_din;
         cart_data_oe_o <= cart_in_rw_q;
 
-        if core_ba = '0' then
-          -- When in DMA mode we need to sense the cart_in_rw_q pin. However, we also need to drive the cart_ba_o output.
-          -- Due to a hardware limitation, we can not do both at the same time. Fortunately, we don't need to,
-          -- since when BA is to be driven low, we don't care about the RW signal.
-          -- When VIC needs the bus, set cartridge signals to safe values
+        if core_ba = '0' and core_dma_grace = '1' then
+          -- Issue #259: first VIC-stall cycle after a cartridge write. The MOS 8726 REC still
+          -- performs one bus access in this cycle: the next write of a fetch, or the next read
+          -- of a swap (see comment block at cart_dma_ba_proc). Serve it in the cartridge's own
+          -- direction, and drive R/W like the cartridge does, so there is no bus fight.
           cart_ctrl_oe_o <= '1';
           cart_ba_o      <= '0';
           cart_io1_o     <= '1';
           cart_io2_o     <= '1';
+          core_dma_we    <= '0';
+          cart_data_oe_o <= '0';
+          if core_dma_grace_rd = '1' then
+            -- swap: the cartridge reads the next byte. Drive the read data (cart_d_o carries
+            -- core_dma_din, see above) only when the cartridge really addresses the next byte;
+            -- an idle cartridge leaves the previous address on the bus.
+            cart_rw_o <= '1';
+            if cart_in_a_q = core_dma_last_addr_p1 then
+              cart_data_oe_o <= '1';
+            end if;
+          else
+            -- fetch: accept the write of the next byte. The same address gate keeps an idle
+            -- cartridge (bus-held previous address) from writing stale data into RAM; a fetch to
+            -- a fixed C64 address therefore still loses this one write, as before.
+            cart_rw_o <= '0';
+            if cart_in_a_q = core_dma_last_addr_p1 then
+              core_dma_we <= '1';
+            end if;
+          end if;
+        elsif core_ba = '0' or cart_ba_recharge = '1' then
+          -- When in DMA mode we need to sense the cart_in_rw_q pin. However, we also need to drive the cart_ba_o output.
+          -- Due to a hardware limitation, we can not do both at the same time. Fortunately, we don't need to,
+          -- since when BA is to be driven low, we don't care about the RW signal.
+          -- When VIC needs the bus, set cartridge signals to safe values.
+          -- Issue #259: after the stall the same branch drives BA actively HIGH for
+          -- C_CART_BA_RECHARGE_TICKS (cart_ba_recharge, cart_ba_drive_high, see comment block at
+          -- cart_dma_ba_proc). As long as the FPGA drives the transceiver, cart_in_rw_q only
+          -- reads back our own level, so the RAM write enable is forced off explicitly.
+          cart_ctrl_oe_o <= '1';
+          cart_ba_o      <= cart_ba_drive_high;
+          cart_io1_o     <= '1';
+          cart_io2_o     <= '1';
           cart_rw_o      <= '1';
+          core_dma_we    <= '0';
           cart_data_oe_o <= '0'; -- Leave data bus floating
         end if;
       elsif (c64_ram_we = '0' and cart_out_sel = '1') or (cart_out_rw_q = '1' and cart_out_sel_q = '1') then
