@@ -93,6 +93,13 @@ Version 6 - MONTH DAY, 2026
   core saw floating data in some memory ranges instead of cartridge-provided
   RAM/ROM).
 
+* Genuine Commodore REUs (1764, 1750) on the Expansion Port: the cartridge
+  port now provides a 50 % dot clock like a real C64, and during VIC-II bus
+  pauses the core handles the BA line and the REU's final write the way a
+  real C64 does. Before, REU transfers could lose bytes and REU test programs
+  reported errors.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/259)
+
 * Increased simulated REU accuracy and therefore compatibility: fREUd demo by
   Hoaxers and TreuLove by Booze Design both now work flawlessly.
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/150 and
@@ -157,8 +164,9 @@ Version 6 - MONTH DAY, 2026
   - Super Smash
     (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/131)
 
-  - Various REUs such as: REU 1750, REU Grande, RAD Expansion Unit
-    (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/205)
+  - Various REUs such as: REU 1750, REU 1764, REU Grande, RAD Expansion Unit
+    (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/205 and
+     https://github.com/MJoergen/C64MEGA65/issues/259)
 
 * Simulated cartridges (`*.crt`) are now supporting:
 

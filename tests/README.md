@@ -5,6 +5,20 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A23 - TBD
+------------------------
+
+@TODO: Hardware REU regression for issue #259. The core now shapes the Expansion Port dot clock to a 50 % square wave, drives BA high after every VIC-II bus pause during a hardware DMA and serves the one extra write a MOS 8726 REC performs after BA dropped. Test with a genuine Commodore REU (1764 or 1750) and with the modern REUs that worked before.
+
+* @TODO Genuine 1764/1750: CMD `REUTEST` from the CMD 1750XL disk, patched so that it does not stop at the first error (lines 90 to 194, see issue #259), with the display on. Every step must report OK, in particular `Byte Addressing`, `Address Control`, `$FF00 Option` and `CBR Refresh Integrity`. Repeat with the display off (`55 POKE 53265,11`).
+* @TODO Genuine 1764/1750: Turbo REU Tester 1.2 must stay in its size detection forever (title screen only). That is the correct behavior on a 512 KB REU; leaving the loop means a REU-to-C64 copy lost a byte.
+* @TODO Genuine 1764/1750: the 10 second retention program from issue #259 (stash 64 KB, wait 10 s, verify) reports fault bit 0 with the display on and off.
+* @TODO REU Grande, RAD and TeensyROM+ as REU: the four reference demos (EXPAND, QI, Treu Love, fREUd) behave exactly as in WIP-V6-A22; GEOS with the REU as RAM disk; the patched CMD `REUTEST` with the display on, including `Bit Fill` (swap transfers) and the bytes just before and after a fetched block (a REU test that fills the buffer with a different pattern first).
+* @TODO DMA cartridges that write C64 RAM: TeensyROM (large `.crt`), Kung Fu Flash 2 (PRG load), 1541 Ultimate II+ (REU and DMA load); Sidekick64 if available.
+* @TODO Cartridges known to work in WIP-V6-A22: Idun, Kung Fu Flash, EasyFlash 3, KCS Power Cartridge, 64NIC+, RR-Net MK3, IDE64 must behave exactly as before on R3 and R6 (the dot clock on the port now looks different). A Swiftlink reproduction cartridge (issue #165) needs the dot clock and may start working.
+* @TODO The config file is named after `CORE_VERSION`, so `c64mega65-WIP-V6-A23.cfg` must be generated with `M2M/tools/make_config.sh`; verify that the settings persist across reboots.
+* @TODO Re-test issues #238 (CP/M Z80 card, clocked from the dot clock), #235 (TurboMaster V3) and #232 (Turbo Chameleon) once the REU tests pass.
+
 Version WIP-V6-A22 - TBD
 ------------------------
 

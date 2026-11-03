@@ -41,6 +41,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A20X3  | 10/09/26 | 856e70f | Fixed silent sector loss when saving to a simulated 1581 under sustained write activity (issue #248)
 | WIP-V6-A21X1  | 10/18/26 | b68949d | Write support for the built-in floppy drive as 1581, sector writes (issue #244)
 | WIP-V6-A22    | 10/23/26 | d5494f7 | Added NTSC support (issue #181)
+| WIP-V6-A23    | 11/03/26 | 2ce5e53 | Attempt to fix genuine Commodore REUs (1764/1750): faithful 50 % dot clock, BA recharge after VIC-II bus pauses and serving the 8726's extra access after BA drops (issue #259)
 
 ## Version 5.2
 

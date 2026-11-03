@@ -310,9 +310,10 @@ The physical expansion port has its own reset concerns:
   reset-adjacent trap: on R5/R6, disabling the cartridge-port level shifter
   breaks joystick port B.
 * In hardware-slot mode, the core drives ROML/ROMH/IO1/IO2/RW/address toward
-  the cartridge, but address/control timing is carefully registered. PHI2,
-  DotCLK, and BA are not registered because they already come from clean core
-  outputs and must stay phase-faithful.
+  the cartridge, but address/control timing is carefully registered. PHI2 and
+  BA are not registered because they already come from clean core outputs and
+  must stay phase-faithful; the dot clock is shaped into a registered 50 %
+  square wave (issue #259).
 * Cartridge `/RESET` defaults to sense/read mode. `main.vhd` switches it to
   drive mode only when the core has its own reset to send to the cartridge.
 * The reset driven to the cartridge is based on `reset_core_int_n`, not

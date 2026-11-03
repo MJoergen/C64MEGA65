@@ -556,8 +556,11 @@ Routing for hardware mode (`c64_exp_port_mode_i(C_SIM_CRT) = '0'`) lives in
   `cart_output_pipeline_proc` block) before being driven onto the slot —
   this is critical because real cartridges sample these on PHI2 edges and
   glitches break them.
-- `cart_phi2_o`, `cart_dotclock_o`, `cart_ba_o` go out **combinationally**
-  (must be in lockstep with the C64's clock).
+- `cart_phi2_o` and `cart_ba_o` go out **combinationally** (must be in
+  lockstep with the C64's clock); in hardware-DMA mode `cart_ba_o` is
+  additionally driven by the registered BA recharge logic. `cart_dotclock_o`
+  is the registered 50 % square wave from `cart_dotclk_shape_proc` (issue
+  #259), not the core's one-tick pixel enable.
 - `cart_a_o` carries the registered address. In Ultimax + VIC fetch the
   upper bits are forced via `cart_out_a` so the cart sees `$3xxx` mapped to
   the ROMH window.
@@ -590,7 +593,21 @@ boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
    `core_dma_we <= not cart_in_rw_q`) and returns read data via
    `cart_d_o <= core_dma_din`; and
 4. yields to the VIC when `core_ba = '0'` (drives safe values, lets the VIC
-   take its cycle).
+   take its cycle), with three refinements from issue #259 (see the comment
+   block at `cart_dma_ba_proc` in `main.vhd`): in the first BA-low cycle after
+   a cartridge write the core serves one more access (`core_dma_grace`, a
+   `dma_grace` input of `fpga64_sid_iec`), because a MOS 8726 REC still
+   performs it: the next write of a fetch or the next read of a swap, gated
+   on the cartridge addressing the byte after the previous write; after each
+   stall BA is driven actively high for a few ticks (`cart_ba_recharge`,
+   `cart_ba_drive_high`) instead of being released from a driven low (the VIC
+   model releases BA at the start of the VIC half for badlines and sprites
+   alike); and the cartridge-port dot
+   clock is a 50 % square wave with its edges one tick away from the PHI2
+   edges (`cart_dotclk_shape_proc`), while the core's internal pixel enable
+   stays a one-tick pulse. `CORE/vhdl/test/tb_cartport/run.sh` simulates both
+   mechanisms with the real process text spliced out of `main.vhd` and
+   `fpga64_sid_iec.vhd`; run it after touching either.
 
 The same `core_dma` interface is shared with SIMREU and the `.crt` cacher (see
 `handle_cores_expansion_port_signals_proc`). So the older statement "MEGA65
