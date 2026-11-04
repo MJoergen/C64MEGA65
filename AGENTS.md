@@ -595,10 +595,13 @@ boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
 4. yields to the VIC when `core_ba = '0'` (drives safe values, lets the VIC
    take its cycle), with three refinements from issue #259 (see the comment
    block at `cart_dma_ba_proc` in `main.vhd`): in the first BA-low cycle after
-   a cartridge write the core serves one more access (`core_dma_grace`, a
-   `dma_grace` input of `fpga64_sid_iec`), because a MOS 8726 REC still
-   performs it: the next write of a fetch or the next read of a swap, gated
-   on the cartridge addressing the byte after the previous write; after each
+   a served cartridge access the core serves one more access (`core_dma_grace`,
+   a `dma_grace` input of `fpga64_sid_iec`), because a MOS 8726 REC still
+   performs it: after a write, the next write of a fetch (gated on the
+   cartridge addressing the byte after the previous write) or the next read of
+   a swap; after a read, the read that a stash or a verify repeats after the
+   stall (read data driven, no address gate), but not after a swap's read,
+   which follows a write; after each
    stall BA is driven actively high for a few ticks (`cart_ba_recharge`,
    `cart_ba_drive_high`) instead of being released from a driven low (the VIC
    model releases BA at the start of the VIC half for badlines and sprites

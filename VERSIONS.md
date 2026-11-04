@@ -94,10 +94,12 @@ Version 6 - MONTH DAY, 2026
   RAM/ROM).
 
 * The hardware cartridge port now provides a 50 % dot clock like a real C64,
-  and during VIC-II bus pauses the core handles the BA line and the REU's 
-  final write the way a real C64 does. Before, REU transfers could lose bytes
-  and REU test programs reported errors. This improvement should improve the
-  compatibility beyond REUs to active and DMA-heavy hardware cartridges.
+  and during VIC-II bus pauses the core handles the BA line and the REU's
+  accesses right after a pause begins (its final write, and the read it
+  repeats afterwards) the way a real C64 does. Before, REU transfers could
+  lose bytes and REU test programs reported errors. This improvement should
+  improve the compatibility beyond REUs to active and DMA-heavy hardware
+  cartridges.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/259)
 
 * Increased simulated REU accuracy and therefore compatibility: fREUd demo by
