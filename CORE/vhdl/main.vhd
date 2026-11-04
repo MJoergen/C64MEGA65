@@ -839,9 +839,9 @@ architecture synthesis of main is
   signal   core_dma_last_addr_p1: unsigned(15 downto 0) := (others => '0'); -- address of that cycle plus one (registered: keeps the adder off the write-enable path)
   signal   core_dma_prev_we     : std_logic := '0';             -- direction of the served cycle before the last one
   signal   core_dma_prev_valid  : std_logic := '0';
-  signal   core_dma_grace_armed : std_logic := '0';             -- a served write arms exactly one grace cycle
-  signal   core_dma_grace       : std_logic := '0';             -- first BA-low cycle after a write: serve one more access
-  signal   core_dma_grace_rd    : std_logic := '0';             -- ... as a read (swap) instead of a write (fetch)
+  signal   core_dma_grace_armed : std_logic := '0';             -- a served access arms exactly one grace cycle (not a swap's read)
+  signal   core_dma_grace       : std_logic := '0';             -- first BA-low cycle after a served access: serve one more access
+  signal   core_dma_grace_rd    : std_logic := '0';             -- ... as a read (stash, verify, swap) instead of a write (fetch)
   signal   cart_ba_recharge     : std_logic := '0';             -- BA was driven low and must be driven high again
   signal   cart_ba_drive_high   : std_logic := '0';             -- drive BA high right now (C_CART_BA_RECHARGE_TICKS)
   signal   cart_ba_recharge_cnt : natural range 0 to C_CART_BA_RECHARGE_TICKS - 1 := 0;
@@ -1487,18 +1487,27 @@ begin
   --      cartridge does not drive R/W in the VIC half, and a line left high after the release
   --      can never turn a floating bus into a RAM write), and no RAM write is performed.
   --
-  --   3. After BA drops, the REC still performs one bus access in the first BA-low cycle whenever
-  --      the cycle before was a write (VICE x64sc, reu_clk_inc_post_write; dw/style's
-  --      badoublewrite test): the next write of a fetch, or the next read of a swap. Reads stop
-  --      at once (stash, verify, and a swap whose read came last). A real C64 accepts this
-  --      because the VIC only takes the bus three cycles after BA fell. cart_dma_ba_proc raises
-  --      core_dma_grace for exactly that cycle when the last served DMA cycle was a write;
+  --   3. After BA drops, the REC still performs one bus access in the first BA-low cycle. A real
+  --      C64 accepts this because the VIC only takes the bus three cycles after BA fell (AEC
+  --      stays high, the RAM answers). Measured (VICE x64sc, reu_clk_inc_post_write; dw/style's
+  --      badoublewrite test; our 1-fetch runs on A22 and A23): after a write the access is
+  --      counted, i.e. the next write of a fetch, or the next read of a swap. After a read the
+  --      access is not counted (stashes are never corrupted by stalls), but every verify that a
+  --      stall interrupts reports a FAULT: the working hypothesis is that the REC, like a 6510
+  --      holding a read cycle with RDY low, repeats the read after the stall and nevertheless
+  --      feeds the data latched in the first BA-low cycle to its comparator. On A23 that cycle
+  --      had a released data bus, drifting from the previous byte toward $FF through the port
+  --      pull-ups, which no verify can match. cart_dma_ba_proc therefore raises core_dma_grace
+  --      for exactly that cycle after every served access except a swap's read (a read that
+  --      follows a write: the REC stops at once there and a served read could fight its write);
   --      fpga64_sid_iec grants the cycle and handle_hardware_expansion_proc serves it in the
-  --      cartridge's direction (write for a fetch, read for a swap, told apart by the direction
-  --      of the two preceding served cycles), gated on the cartridge addressing the byte after
-  --      the previous write. An idle cartridge that merely leaves its last address on the bus is
-  --      therefore never served, and a fetch to a fixed C64 address still loses this one write,
-  --      as before.
+  --      cartridge's direction, told apart by the direction of the two preceding served cycles:
+  --      a write for a fetch, gated on the cartridge addressing the byte after the previous
+  --      write (an idle cartridge that merely leaves its last address on the bus is never
+  --      served, and a fetch to a fixed C64 address still loses this one write, as before); a
+  --      read for a stash, a verify or a swap, with the read data driven whatever address the
+  --      cartridge shows, since a fixed-C64-address transfer reads the same address again and
+  --      read data driven at an idle cartridge harms nothing.
   --
   -- 2 and 3 are confined to c64_exp_port_mode_i(C_SIM_CRT) = '0' with /DMA asserted, 1 to the
   -- DOTCLK pin. SIMCRT, SIMREU and non-DMA cartridges see no change apart from the dot clock.
@@ -1530,8 +1539,12 @@ begin
 
       if c64_exp_port_mode_i(C_SIM_CRT) = '0' and cart_in_dma_n_q = '0' then
         -- Remember what the cartridge did in its last served cycle (not during a grace cycle,
-        -- where the FPGA drives R/W itself) and in the one before. A served write arms exactly
-        -- one grace cycle.
+        -- where the FPGA drives R/W itself) and in the one before. A served access arms exactly
+        -- one grace cycle, except a read that follows a write (a swap's read: the REC stops at
+        -- once when BA drops after it, and the FPGA must not drive read data against the write
+        -- a DMA master of another make might perform there). The history is shifted in the
+        -- first tick of the served cycle, so from the second tick on core_dma_prev_* describe
+        -- the cycle before this one; the last tick decides.
         if core_dma_cycle = '1' and core_ba = '1' and core_dma_grace = '0' then
           if core_dma_cycle_q = '0' then          -- first tick of a served cycle: shift the history
             core_dma_prev_we    <= core_dma_last_we;
@@ -1540,14 +1553,16 @@ begin
           end if;
           core_dma_last_we      <= not cart_in_rw_q;
           core_dma_last_addr_p1 <= cart_in_a_q + 1;
-          core_dma_grace_armed  <= not cart_in_rw_q;
+          core_dma_grace_armed  <= (not cart_in_rw_q) or not (core_dma_prev_valid and core_dma_prev_we);
         end if;
 
-        -- 3. BA dropped right after a served write: grant one more access. Read/write before
-        --    the write means a swap, whose next access is a read; otherwise a fetch writes on.
+        -- 3. BA dropped right after a served access: grant one more access, as a read after a
+        --    read (stash, verify, or the first access of a session) and after a write that
+        --    followed a read (a swap, whose next access is a read); after a write that followed
+        --    a write (a fetch) as a write.
         if core_ba = '0' and core_ba_q = '1' and core_dma_grace_armed = '1' then
           core_dma_grace       <= '1';
-          core_dma_grace_rd    <= core_dma_prev_valid and not core_dma_prev_we;
+          core_dma_grace_rd    <= (not core_dma_last_we) or (core_dma_prev_valid and not core_dma_prev_we);
           core_dma_grace_armed <= '0';
         end if;
         -- ... which ends with the served DMA cycle. A grace read counts as a served read for the
@@ -1755,10 +1770,11 @@ begin
         cart_data_oe_o <= cart_in_rw_q;
 
         if core_ba = '0' and core_dma_grace = '1' then
-          -- Issue #259: first VIC-stall cycle after a cartridge write. The MOS 8726 REC still
-          -- performs one bus access in this cycle: the next write of a fetch, or the next read
-          -- of a swap (see comment block at cart_dma_ba_proc). Serve it in the cartridge's own
-          -- direction, and drive R/W like the cartridge does, so there is no bus fight.
+          -- Issue #259: first VIC-stall cycle after a served cartridge access. The MOS 8726 REC
+          -- still performs one bus access in this cycle: the next write of a fetch, the next
+          -- read of a swap, or the repeated read of a stash or verify (see comment block at
+          -- cart_dma_ba_proc). Serve it in the cartridge's own direction, and drive R/W like the
+          -- cartridge does, so there is no bus fight.
           cart_ctrl_oe_o <= '1';
           cart_ba_o      <= '0';
           cart_io1_o     <= '1';
@@ -1766,13 +1782,12 @@ begin
           core_dma_we    <= '0';
           cart_data_oe_o <= '0';
           if core_dma_grace_rd = '1' then
-            -- swap: the cartridge reads the next byte. Drive the read data (cart_d_o carries
-            -- core_dma_din, see above) only when the cartridge really addresses the next byte;
-            -- an idle cartridge leaves the previous address on the bus.
-            cart_rw_o <= '1';
-            if cart_in_a_q = core_dma_last_addr_p1 then
-              cart_data_oe_o <= '1';
-            end if;
+            -- stash, verify, swap: the cartridge reads. Drive the read data (cart_d_o carries
+            -- core_dma_din for the address the cartridge shows, see above) without an address
+            -- gate: a fixed-C64-address transfer reads the same address again, and read data
+            -- driven at an idle cartridge harms nothing.
+            cart_rw_o      <= '1';
+            cart_data_oe_o <= '1';
           else
             -- fetch: accept the write of the next byte. The same address gate keeps an idle
             -- cartridge (bus-held previous address) from writing stale data into RAM; a fetch to
