@@ -20,9 +20,12 @@ Branch state: `reu1764` = WIP-V6-A24. A23 = commits 2ce5e53, 1213bed, 94b496f; A
 grace in `CORE/vhdl/main.vhd` plus three bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`,
 section 9) and 39d75f3 (bump); submodule `CORE/C64_MiSTerMEGA65` @ 98492d1. A23 was built, timing
 closed, and tested by Joe3f00ff on 2026-11-03 (CMD test and round 2): **it fixed the lost fetch
-bytes and nothing else**. A24 is a candidate fix under test (section 9): built by sy2002 after
-2026-11-04, Joe runs `3-verify`, `9-values` and the CMD test on it after round 3 on A23. Do not
-merge `reu1764` into `develop`.
+bytes and nothing else**. A24 is a candidate fix under test (section 9): built by sy2002 on
+2026-11-05 from 4074da1 (R3: WNS 0.346 ns, WHS 0.044 ns; R6: WNS 0.183 ns, WHS 0.036 ns; no
+re-roll, sign-off gates passed) and posted to the issue on 2026-11-05 together with
+`reu-tests3.zip` and `PROTOCOL-round3.md`. **Nothing of A24 has run on hardware yet; Joe3f00ff is
+its first tester** (round 3 on A23 first, then `3-verify`, `9-values` and the CMD test on A24).
+A24 went to Joe only, not to the community. Do not merge `reu1764` into `develop`.
 
 Folder contents:
 
