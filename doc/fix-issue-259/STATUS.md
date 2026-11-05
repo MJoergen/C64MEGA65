@@ -73,6 +73,14 @@ Display off (`55 POKE 53265,11`): run B (A22, Oct 25) all OK except Interrupt Re
 (one-off, unexplained); run D (A22, Oct 26) all OK including the 10 s refresh check. Turbo REU
 Tester 1.2 on A22, display on: left its size-detection loop (it must loop forever on a 512 KB
 REU), then printed OK for 20+ banks. Real C64 with the same REU (Gross test program): OK.
+Regression evidence for the A23 port changes (Kugelblitz360, 2026-11-04, issue comment
+6636575530): TeensyROM+ in NTSC and PAL runs 1 MB EasyFlash images with bank switching and BA
+halt, its internal REU, its Expansion Port test and the Gameboy and Doom virtual machines exactly
+as on A22; Kung Fu Flash 2 did not work before and does not work now. One data point, but a
+fully-fledged DMA cartridge with no side effect from the dot clock, the BA recharge and the
+write grace. It says nothing about the A24 read grace, which drives read data in the first
+BA-low cycle after a cartridge read; a TeensyROM+ run on A24 would close that gap.
+
 Round 2 (2026-11-03, the seven BASIC programs of section 7, simulated REU off, JiffyDOS, HDMI 720p,
 photos in `REU-Test-Results_A22-A23.pdf` attached to the issue):
 
