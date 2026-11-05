@@ -5,6 +5,65 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X1 - TBD
+--------------------------
+
+@TODO: Test the turbo modes (issue #87) on R3 and R6 at least (R4/R5 when available), in PAL and in NTSC. `Turbo mode` (`Off`, `C128`, `Smart`) and `Turbo speed` (`2x`, `3x`, `4x`) are in the `Model` submenu; changing them never resets the C64. Where timing matters, test with `HDMI: Flicker-free` on and off. Measure the effective speed instead of assuming the nominal factor (I/O, badlines and sprite DMA keep C64 timing), see section 3 of `doc/dev-turbo/TEST-PLAN.md`. Items marked **(community)** are for Boris and other community testers, who get asked on GitHub (#87) when WIP-V6-A22X1 is ready. The design is in `doc/dev-turbo/TURBO-SPEC.md`.
+
+Regression with turbo `Off`:
+
+* @TODO The usual demo set (`tests/demos.md`), a few games, hardware and simulated cartridges: identical to WIP-V6-A22.
+
+C128 mode:
+
+* @TODO **(community)** Rescue on Fractalus, patched by Boris (MagicDesk `.crt`, https://webdrive.commodoregames.net/SHARE_AL9YKJD5OG), in `2x` and `4x`: faster 3D, correct picture. Once as a simulated cartridge, once from a real cartridge (KFF or EF3).
+* @TODO **(community)** Uridium+ (uses the C128 2 MHz mode: more background stars).
+* @TODO **(community)** The original Rescue on Fractalus (reportedly fails on a real C128 because it touches `$D030`): see what happens in C128 mode.
+* @TODO Software that never touches `$D030` stays at 1 MHz: a demo with C128 mode on behaves exactly like `Off`.
+* @TODO `PRINT PEEK(53296)`: 255 with C128 mode off; 254 with C128 mode on; `POKE 53296,1` switches turbo on, `POKE 53296,0` off again.
+* @TODO The `$D030` bit survives menu changes and is cleared only by a C64 reset: `POKE 53296,1` with turbo `Off`, then select `C128`: the turbo is on at once; switch to `Off` and back to `C128`: still on; reset the C64: off. This is MiSTer behavior.
+* @TODO In C128 mode a program that reads `$D030` to detect a C128 sees one (254 instead of 255) and may take its C128 code path: try a program with such a check, if one is at hand.
+
+Smart mode:
+
+* @TODO **(community)** Test Drive II (the game behind #87) in `2x` / `3x` / `4x`.
+* @TODO Loading and saving: simulated 1541 (D64 with the standard loader, a fastloader game, `SAVE`), simulated 1581 (D81), the built-in floppy drive as 1581, JiffyDOS (`@$` and a JiffyDOS load), a real drive or SD2IEC on the IEC port.
+* @TODO **(community)** Rescue on Fractalus (patched) in Smart: screen corruption expected; this documents why such software needs C128 mode.
+* @TODO **(community)** Koronis Rift V2.1 beta (EasyFlash `.crt`, https://webdrive.commodoregames.net/SHARE_BGVKGUOOR4) in Smart `4x`: does its C64 Ultimate speed check pass, and if so, does its 4 MHz version play correctly? Holding left SHIFT at the title picture skips the check.
+* @TODO A timing-critical demo in Smart: breaks as expected (for the documentation).
+
+Real cartridges in turbo (C128 and Smart, `2x` and `4x`, R3 and R6). Every failure here is a bug to fix: real cartridges stay usable in turbo.
+
+* @TODO **(community)** KFF with both patched games (exercises the cartridge timing fix of `TURBO-SPEC.md` section 2.2).
+* @TODO EF3: menu, then start a game; on R3/R3A/R4 the EF3 reset detection (`cartridge_heuristics_inst`).
+* @TODO EF3 on R3/R3A/R4 in Smart mode (`2x` and `4x`): start a game from the EF3 menu. The C64 resets and the game starts; the core keeps the turbo off while the EF3 detection is armed.
+* @TODO Writes to a real cartridge happen exactly once in turbo (Ultimax writes, flash command sequences): in Smart `4x`, write an EasyFlash `.crt` to an EF3 with EasyProg (or another flash tool), let it verify the flash content, then start the written program. **Use a spare cartridge:** a failed write sequence can leave the flash in an unusable state.
+* @TODO A freezer (Action Replay, Retro Replay or Final Cartridge III): freeze and resume in turbo.
+* @TODO IDE64 (Ultimax unmapped path).
+* @TODO GMod2.
+* @TODO A hardware REU with DMA (REU Grande or 1764): DMA forces turbo off.
+* @TODO A hardware REU transfer that a write to `$FF00` starts (command register with the `$FF00` trigger, for example a small test program that sets up the transfer and then writes to `$FF00`), in Smart `4x`: the transfer starts and the data is correct.
+
+Simulated cartridges and REU:
+
+* @TODO Bank-switch-heavy simulated cartridges (EasyFlash, GMod2, Magic Desk) in `4x`.
+* @TODO Simulated REU on R3 and R6 in `4x`: a REU test program (for example the CMD REU test used in #259) and a REU game or demo (R3 shares the HyperRAM with the HDMI scaler).
+* @TODO Simulated REU together with a simulated cartridge.
+
+Clocks and drift:
+
+* @TODO The 1541 drift tests and the programs of #2 (Input 64 1/1985) in `2x` / `3x` / `4x`, with `HDMI: Flicker-free` on and off: unchanged behavior expected.
+* @TODO TOD accuracy (10 minutes against a stopwatch) with turbo `4x`, PAL and NTSC: same result as with turbo `Off`.
+
+OSM and settings:
+
+* @TODO Summary line: `Model: PAL` (turbo `Off`), `Model: PAL C128 2x`, `Model: NTSC Smart 4x`.
+* @TODO The `Turbo speed` block (headline, `2x` / `3x` / `4x` and the blank line above it) is hidden while turbo is `Off` and appears for `C128` and `Smart`; the menu never shows two blank lines in a row.
+* @TODO Changing turbo mode or speed does not reset the C64 and takes effect immediately.
+* @TODO PAL/NTSC switch with turbo on: the machine-mode reset happens, the turbo setting stays, the `$D030` bit is cleared.
+* @TODO Config-file persistence: settings persist only if the SD card holds the file `/c64/c64mega65-WIP-V6-A22X1.cfg`, created with `M2M/tools/make_config.sh` (see section 5 of `AGENTS.md`). Select `Smart` and `4x`, save the settings, power cycle: both are restored, and the summary line shows them.
+* @TODO A config file copied from WIP-V6-A22 may carry a turbo setting: A22 had the turbo items selectable but inactive, so a turbo choice made there becomes active in this version. Check the `Model:` summary line after the first start with such a file.
+
 Version WIP-V6-A22 - TBD
 ------------------------
 

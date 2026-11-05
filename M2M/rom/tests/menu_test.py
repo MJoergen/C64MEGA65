@@ -132,11 +132,11 @@ V6_MENU = [
     (" Off",                     "TURBO_MODE", ["STDSEL"]),
     (" C128",                    "TURBO_MODE", []),
     (" Smart",                   "TURBO_MODE", []),
-    ("",                         None, ["LINE"]),
-    (" Turbo speed",             None, ["HEADLINE"]),
-    (" 2x",                      "TURBO_SPEED", ["STDSEL"]),
-    (" 3x",                      "TURBO_SPEED", []),
-    (" 4x",                      "TURBO_SPEED", []),
+    ("",                         None, ["LINE"]),         # dep: C128 or Smart
+    (" Turbo speed",             None, ["HEADLINE"]),     # dep: C128 or Smart
+    (" 2x",                      "TURBO_SPEED", ["STDSEL"]),  # dep: C128 or Smart
+    (" 3x",                      "TURBO_SPEED", []),      # dep: C128 or Smart
+    (" 4x",                      "TURBO_SPEED", []),      # dep: C128 or Smart
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 2
     (" Flip joystick ports",     "FLIP_JOYS", ["SINGLESEL"]),
@@ -299,10 +299,15 @@ def dep_value(gid, mask):
 
 # flat index -> (mother group name, 4-bit item mask); the dependent lines of
 # the V6 menu: the per-drive mount lines + internal-1581 status lines (#93)
-# and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229)
+# and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229), plus
+# the "Turbo speed" block (separator, headline, 2x/3x/4x) that is only visible
+# while the turbo mode is C128 or Smart (#87): a mother in the same submenu
 V6_DEPS = {
     2:  ("DRV8_MODE", 0b0011), 3: ("DRV8_MODE", 0b0100),
     4:  ("DRV9_MODE", 0b0011), 5: ("DRV9_MODE", 0b0100),
+    46: ("TURBO_MODE", 0b0110), 47: ("TURBO_MODE", 0b0110),
+    48: ("TURBO_MODE", 0b0110), 49: ("TURBO_MODE", 0b0110),
+    50: ("TURBO_MODE", 0b0110),
     57: ("MACHINE_MODE", 0b0001), 58: ("MACHINE_MODE", 0b0010),
     59: ("MACHINE_MODE", 0b0001), 60: ("MACHINE_MODE", 0b0010),
     61: ("MACHINE_MODE", 0b0001), 62: ("MACHINE_MODE", 0b0010),
@@ -838,7 +843,8 @@ def deps_resolve_fixtures():
     fx.append(("single-select off/on", g, r))
     # no dependencies at all
     fx.append(("none", [1, 2, 0x1000], [0, 0, 0]))
-    # the real V6 menu: masks 0b0011/0b0100 (drives) and 0b0001/0b0010 (HDMI)
+    # the real V6 menu: masks 0b0011/0b0100 (drives), 0b0001/0b0010 (HDMI)
+    # and 0b0110 (Turbo speed block)
     fx.append(("v6 real menu", menu_masked(V6_MENU),
                menu_deps_raw(V6_MENU, V6_DEPS)))
     return fx
@@ -940,6 +946,14 @@ def deps_build_fixtures():
     fx.append(("v6 drive 9 Always", v6g, v6res, s, 0))
     # the HDMI submenu level with the PAL machine mode: NTSC variants hidden
     fx.append(("v6 HDMI level PAL", v6g, v6res, menu_stdsel(V6_MENU), 3))
+    # the Model submenu level (#87): turbo Off (factory default) hides the
+    # Turbo speed block (separator, headline, 2x/3x/4x = idx 46..50); C128
+    # and Smart show it - a mother in the same submenu as its dependents
+    fx.append(("v6 Model level turbo Off", v6g, v6res, menu_stdsel(V6_MENU), 2))
+    for name, idx in (("C128", 44), ("Smart", 45)):
+        s = menu_stdsel(V6_MENU)
+        s[43], s[idx] = 0, 1
+        fx.append(("v6 Model level turbo " + name, v6g, v6res, s, 2))
     return fx
 
 
@@ -1008,7 +1022,8 @@ def deps_minhid_fixtures():
     """(name, groups, raw) -> expected sum via deps_minhid."""
     fx = []
     # the real V6 arrays: DRV8_MODE min 1 + DRV9_MODE min 1 + MACHINE_MODE
-    # min 4 (in the PAL state the four NTSC HDMI lines are hidden) = 6
+    # min 4 (in the PAL state the four NTSC HDMI lines are hidden) + TURBO_MODE
+    # min 0 (C128 and Smart show the whole Turbo speed block) = 6
     fx.append(("v6 real menu", menu_masked(V6_MENU),
                menu_deps_raw(V6_MENU, V6_DEPS)))
     # no dependencies at all -> 0
@@ -1561,7 +1576,199 @@ def nav2_script():
     return groups, stdsel, s.keys, s.trace
 
 
-NAV3_LABELS = [" Tog", " D:%s", " E:%s", " S:%s", " F", " G", " back", " quit"]
+# ---------------------------------------------------------------------------
+# Intended layout of the Model submenu (#87): the "Turbo speed" block
+# (separator, headline, 2x/3x/4x) is visible only while the turbo mode is
+# C128 or Smart, so the submenu view (headline "Model" through " Back") shows
+# 12 lines with Off and 17 with C128 or Smart
+# ---------------------------------------------------------------------------
+
+MODEL_VISIBLE = {"Off": 12, "C128": 17, "Smart": 17}
+
+
+def model_submenu_span(menu):
+    """Flat indices (opener, closer) of the " Model: %s" submenu."""
+    o = [i for i, (t, _, _) in enumerate(menu) if t == " Model: %s"][0]
+    depth = 0
+    for i in range(o, len(menu)):
+        f = tuple(menu[i][2])
+        if f == OPEN:
+            depth += 1
+        elif f == CLOSE:
+            depth -= 1
+            if depth == 0:
+                return o, i
+    raise AssertionError("the Model submenu has no closer")
+
+
+def visible_lines(groups, level, resolved, stdsel):
+    """Flat indices of the lines visible in the view of the given level."""
+    b = build_new(groups, level, resolved, stdsel)
+    return [i for i, w in enumerate(b["arr"]) if w & 0x8000]
+
+
+def double_separators(vis, labels):
+    """Pairs of visible separator lines (empty label) that follow each other
+    directly in a view; vis is the list of visible flat indices."""
+    return [(a, b) for a, b in zip(vis, vis[1:])
+            if labels[a] == "" and labels[b] == ""]
+
+
+def mother_states(menu, mother):
+    """Every selectable state of a dependency mother group as a dict
+    {flat index: selected 0/1} over its members."""
+    mem = group_members(menu, mother)
+    if "SINGLESEL" in menu[mem[0]][2]:
+        return [{mem[0]: 0}, {mem[0]: 1}]
+    return [{j: int(j == k) for j in mem} for k in mem]
+
+
+def menu_layout_errors():
+    """The intended layout of the V6 menu, checked on the golden model:
+    (1) no view shows two separator lines in a row, in every combination of
+    the states of all dependency mothers; (2) the Model submenu shows
+    MODEL_VISIBLE lines per turbo mode, with the Turbo speed block exactly
+    while the turbo mode is C128 or Smart; (3) the turbo toggle walk of
+    nav_turbo_toggles() passes on the complete V6 menu with dependencies on.
+    Returns a list of error strings."""
+    import itertools
+    errors = []
+    menu = V6_MENU
+    labels = [t for t, _, _ in menu]
+    g = menu_masked(menu)
+    s0 = menu_stdsel(menu)
+    res = resolve_deps(g, menu_deps_raw(menu, V6_DEPS))
+    mothers = []
+    for i in sorted(V6_DEPS):
+        if V6_DEPS[i][0] not in mothers:
+            mothers.append(V6_DEPS[i][0])
+    doubles = set()
+    for combo in itertools.product(*[mother_states(menu, m) for m in mothers]):
+        s = list(s0)
+        for state in combo:
+            for j, v in state.items():
+                s[j] = v
+        for lv in range(num_regions(g) + 1):
+            for a, b in double_separators(visible_lines(g, lv, res, s), labels):
+                doubles.add((lv, a, b))
+    for lv, a, b in sorted(doubles):
+        errors.append("view %d shows the separators %d and %d in a row in "
+                      "some state of the dependency mothers" % (lv, a, b))
+
+    opener, _ = model_submenu_span(menu)
+    level = build_new(g, 0)["arr"][opener] & 0x7FFF
+    turbo = group_members(menu, "TURBO_MODE")
+    speed = group_members(menu, "TURBO_SPEED")
+    names = [labels[j].strip() for j in turbo]
+    if sorted(names) != sorted(MODEL_VISIBLE):
+        errors.append("TURBO_MODE items %r, MODEL_VISIBLE expects %r"
+                      % (names, sorted(MODEL_VISIBLE)))
+    else:
+        for k, name in zip(turbo, names):
+            s = list(s0)
+            for j in turbo:
+                s[j] = int(j == k)
+            vis = visible_lines(g, level, res, s)
+            if len(vis) != MODEL_VISIBLE[name]:
+                errors.append("Model submenu with turbo %s: %d visible lines, "
+                              "expected %d" % (name, len(vis),
+                                               MODEL_VISIBLE[name]))
+            if [j in vis for j in speed] != [name != "Off"] * len(speed):
+                errors.append("Model submenu with turbo %s: the Turbo speed "
+                              "items are %s" % (name, "shown" if name == "Off"
+                                                else "hidden"))
+    try:
+        nav_turbo_v6_model()
+    except AssertionError as e:
+        errors.append("turbo toggle walk on the V6 menu: %s" % e)
+    return errors
+
+
+def nav_turbo_toggles(s, ofs):
+    """Toggle the radio mother TURBO_MODE in its own view: Off -> C128 ->
+    Smart -> Off. s is a NavSim at the main level whose menu holds the V6
+    Model submenu at V6 flat index + ofs (the dependency feature on). After
+    each toggle the cursor must stay on the toggled item (the structure
+    rebuild of the mother toggle), the view must show MODEL_VISIBLE lines
+    without double separators, and the Turbo speed block must be visible
+    exactly for C128 and Smart. The cursor moves prove the visibility in the
+    emulator trace as well: with Off, DOWN from Smart lands on Back; with
+    C128 or Smart it lands on 2x."""
+    opener, closer = [i + ofs for i in model_submenu_span(V6_MENU)]
+    off, c128, smart = [i + ofs for i in group_members(V6_MENU, "TURBO_MODE")]
+    speed = [i + ofs for i in group_members(V6_MENU, "TURBO_SPEED")]
+    pal = group_members(V6_MENU, "MACHINE_MODE")[0] + ofs
+    names = {off: "Off", c128: "C128", smart: "Smart"}
+
+    s.until(KEY_DOWN, opener)
+    s.feed(KEY_SELECT)                  # enter the Model submenu
+    assert s.cursor == pal, "enter landed on %d, not on PAL" % s.cursor
+    level = s.level
+
+    def check(item, cursor=None):
+        name = names[item]
+        cursor = item if cursor is None else cursor
+        vis = [i for i, w in enumerate(s._struct()["arr"]) if w & 0x8000]
+        assert (s.level, s.cursor) == (level, cursor), (
+            "turbo %s: level/cursor %d/%d, expected %d/%d"
+            % (name, s.level, s.cursor, level, cursor))
+        assert s.sel[item] == 1, "turbo %s is not selected" % name
+        assert len(vis) == MODEL_VISIBLE[name], (
+            "turbo %s: %d visible lines, expected %d"
+            % (name, len(vis), MODEL_VISIBLE[name]))
+        assert [i in vis for i in speed] == [item != off] * len(speed), (
+            "turbo %s: wrong Turbo speed visibility" % name)
+        assert not double_separators(vis, s.labels), (
+            "turbo %s: double separator" % name)
+
+    check(off, pal)                     # factory default: block hidden
+    s.until(KEY_DOWN, smart)
+    s.feed(KEY_DOWN)                    # hidden block: Smart -> Back
+    assert s.cursor == closer, "Off: DOWN from Smart went to %d" % s.cursor
+    s.until(KEY_UP, c128)
+    s.feed(KEY_SELECT)                  # Off -> C128: the block appears
+    check(c128)
+    s.feed(KEY_DOWN)                    # Smart
+    s.feed(KEY_DOWN)                    # the first speed item
+    assert s.cursor == speed[0], "C128: DOWN from Smart went to %d" % s.cursor
+    s.feed(KEY_UP)                      # back to Smart
+    s.feed(KEY_SELECT)                  # C128 -> Smart: the block stays
+    check(smart)
+    s.feed(KEY_DOWN)
+    assert s.cursor == speed[0], "Smart: DOWN went to %d" % s.cursor
+    s.until(KEY_UP, off)
+    s.feed(KEY_SELECT)                  # Smart -> Off: the block hides
+    check(off)
+    for expect in (c128, smart, closer):    # Off, C128, Smart, then Back
+        s.feed(KEY_DOWN)
+        assert s.cursor == expect, "Off: DOWN went to %d, expected %d" % (
+            s.cursor, expect)
+    s.feed(KEY_SELECT)                  # leave via Back
+    assert (s.level, s.cursor) == (0, opener), "Back did not return to main"
+
+
+def nav_turbo_v6_model():
+    """The turbo toggle walk on the complete V6 menu with the dependency
+    feature on (model only; scenario 3 runs the same walk in the emulator
+    on a verbatim copy of the Model submenu)."""
+    s = NavSim(menu_masked(V6_MENU), menu_stdsel(V6_MENU), nav_start(),
+               labels=[t for t, _, _ in V6_MENU],
+               raw_deps=menu_deps_raw(V6_MENU, V6_DEPS))
+    s.run_start()
+    nav_turbo_toggles(s, 0)
+    assert s.feed(KEY_MENUUP) == "close", "Run/Stop at main did not close"
+
+
+# Scenario 3 appends a verbatim copy of the V6 Model submenu (opener through
+# closer, with its real group words and OPTM_DEP2 dependencies) to the
+# synthetic lines 0..6, so the emulator runs the turbo toggle walk on the real
+# layout: a radio mother whose dependent lines live in the same view
+NAV3_SYN_N = 7
+_NAV3_MO, _NAV3_MC = model_submenu_span(V6_MENU)
+NAV3_MODEL = list(range(_NAV3_MO, _NAV3_MC + 1))    # V6 flat indices
+NAV3_MODEL_OFS = NAV3_SYN_N - _NAV3_MO              # V6 index -> NAV3 index
+NAV3_LABELS = ([" Tog", " D:%s", " E:%s", " S:%s", " F", " G", " back"]
+               + [V6_MENU[i][0] for i in NAV3_MODEL] + [" quit"])
 
 
 NAV3_START = 1                          # deliberately a dep-hidden line: the
@@ -1576,7 +1783,12 @@ def nav3_script():
     (idx 4) is dependent drives the enter-scan dependency skip
     (_OPTM_RUN_SM_2); the start cursor sits on the dep-hidden idx 1 and
     drives the _OPTM_RUN_INI* entry normalization. All three are no-ops for
-    the deps-off scenarios 1 and 2."""
+    the deps-off scenarios 1 and 2. The copied V6 Model submenu (region 2)
+    then drives the turbo toggle walk of nav_turbo_toggles(): a radio
+    mother toggled in the same view as its dependent lines."""
+    v6g = menu_masked(V6_MENU)
+    v6raw = menu_deps_raw(V6_MENU, V6_DEPS)
+    v6sel = menu_stdsel(V6_MENU)
     groups = [
         0x8001,   # 0 single-select toggle, mother gid 1
         0x0002,   # 1 dependent radio gid 2, mask 0b10: same view as the mother
@@ -1585,12 +1797,17 @@ def nav3_script():
         0x0004,   # 4 dependent radio gid 4, mask 0b10: first content of reg. 1
         0x0005,   # 5 radio gid 5 (always visible)
         0xC0FF,   # 6 close region 1
-        0x00FF,   # 7 Close Menu
+    ] + [v6g[i] for i in NAV3_MODEL] + [   # 7.. region 2: the Model submenu
+        0x00FF,   # Close Menu
     ]
-    raw = [0] * 8
+    n = len(groups)
+    raw = [0] * n
     raw[1] = 0x1000 | (0b10 << 8) | 1   # dep(gid 1, mask 0b10): visible if ON
     raw[4] = 0x1000 | (0b10 << 8) | 1
-    stdsel = [0] * 8                    # toggle OFF
+    for i in NAV3_MODEL:                # the real Turbo speed dependencies
+        raw[i + NAV3_MODEL_OFS] = v6raw[i]
+    stdsel = ([0] * NAV3_SYN_N          # toggle OFF
+              + [v6sel[i] for i in NAV3_MODEL] + [0])   # PAL, Off, 2x
     s = NavSim(groups, stdsel, NAV3_START, labels=NAV3_LABELS, raw_deps=raw)
     s.run_start()                       # normalization: idx1 is dep-hidden ->
     assert s.cursor == 2                # the cursor advances to idx2
@@ -1609,6 +1826,7 @@ def nav3_script():
     assert (s.level, s.cursor) == (1, 4)
     s.feed(KEY_MENUUP)
     assert (s.level, s.cursor) == (0, 3)
+    nav_turbo_toggles(s, NAV3_MODEL_OFS)   # Model submenu: Off/C128/Smart/Off
     r = s.feed(KEY_MENUUP)              # Run/Stop at main: close
     assert r == "close"
     return groups, stdsel, raw, s.keys, s.trace
@@ -1872,13 +2090,15 @@ def rrnet_range():
 def vhdl_tb_vectors():
     """(28-bit address, expected 16-bit data) pairs for the SEL_OPTM_DEPS
     decoder, derived from the golden model. Closes the VHDL->QNICE raw-word
-    contract that verify()/run() otherwise never exercise (#2)."""
+    contract that verify()/run() otherwise never exercise (#2). Every line
+    of the menu is probed, not only the V6_DEPS lines: a dependency that
+    config.vhd declares but the model does not track reads back as a
+    non-zero word where the model expects 0x0000."""
     raw = menu_deps_raw(V6_MENU, V6_DEPS)
     SEL = 0x0313
     vecs = []
-    for idx in sorted(V6_DEPS):                   # every dependent line
+    for idx in range(len(V6_MENU)):               # every line: dependent or 0
         vecs.append((SEL << 12 | idx, raw[idx]))
-    vecs.append((SEL << 12 | 0, 0x0000))          # a non-dependent line -> 0
     vecs.append((SEL << 12 | 0xFFF, 0x2DEF))      # feature probe: dep format 2
     vecs.append((0x0999 << 12 | 0, 0xEEEE))       # unknown selector -> default
     return vecs
@@ -2039,8 +2259,57 @@ def parse_vhdl_constants(text, prefix):
     return out
 
 
+def config_deps_errors(entries, vals):
+    """Cross-check every dependency that config.vhd declares against V6_DEPS,
+    in both directions. entries are the OPTM_GROUPS source expressions and
+    vals their evaluated values, one per flat line. A line is dependent in
+    config.vhd if it calls OPTM_DEP / OPTM_DEP2 or if its value carries
+    OPTM_G_DEPENDENT (bit 29) in any other spelling; the call arguments and
+    the decoded bits must agree. Returns (errors, {flat index: (mother group
+    name, item mask)})."""
+    errors, found = [], {}
+    gname = {gid: name for name, gid in G.items()}
+    rx1 = re.compile(r"OPTM_DEP\s*\(\s*OPTM_G_(\w+)\s*,\s*(\d+)\s*\)")
+    rx2 = re.compile(r"OPTM_DEP2\s*\(\s*OPTM_G_(\w+)\s*,\s*(\d+)\s*,"
+                     r"\s*(\d+)\s*\)")
+    for i, (e, v) in enumerate(zip(entries, vals)):
+        calls = ([(m, 2 ** int(a)) for m, a in rx1.findall(e)]
+                 + [(m, 2 ** int(a) + 2 ** int(b)) for m, a, b in rx2.findall(e)])
+        if len(calls) != len(re.findall(r"OPTM_DEP2?\s*\(", e)):
+            errors.append("OPTM_GROUPS[%d] (%r): unparsable OPTM_DEP call %r"
+                          % (i, V6_MENU[i][0], e))
+            continue
+        if len(calls) > 1:
+            errors.append("OPTM_GROUPS[%d] (%r): more than one OPTM_DEP call"
+                          % (i, V6_MENU[i][0]))
+            continue
+        bits = None
+        if v >= 0 and v & F_DEPENDENT:
+            bits = (gname.get((v >> 17) & 0xFF, "gid %d" % ((v >> 17) & 0xFF)),
+                    (v >> 25) & 0xF)
+        if calls and calls[0] != bits:
+            errors.append("OPTM_GROUPS[%d] (%r): %r evaluates to dependency "
+                          "bits %r" % (i, V6_MENU[i][0], calls[0], bits))
+        if bits:
+            found[i] = bits
+    for i in sorted(set(found) | set(V6_DEPS)):
+        label = V6_MENU[i][0] if i < len(V6_MENU) else "?"
+        if i not in V6_DEPS:
+            errors.append("config.vhd line %d (%r) depends on %s mask 0b%s, "
+                          "but V6_DEPS does not track it"
+                          % (i, label, found[i][0], format(found[i][1], "04b")))
+        elif i not in found:
+            errors.append("V6_DEPS[%d] (%r) = %r, but config.vhd declares no "
+                          "dependency there" % (i, label, V6_DEPS[i]))
+        elif found[i] != V6_DEPS[i]:
+            errors.append("config.vhd line %d (%r) depends on %r, V6_DEPS "
+                          "says %r" % (i, label, found[i], V6_DEPS[i]))
+    return errors, found
+
+
 def verify():
     errors = []
+    cfg_deps = {}
     # strip VHDL comments up front: none of the parsed constants contain
     # "--" inside a string literal, but comments may contain ";" which
     # would derail the regexes below
@@ -2119,6 +2388,8 @@ def verify():
                     errors.append(
                         "OPTM_GROUPS[%d] = 0x%X, model says 0x%X (%r)"
                         % (i, a, b, V6_MENU[i][0]))
+            dep_errors, cfg_deps = config_deps_errors(entries, vals)
+            errors += dep_errors
 
     # --- config.vhd: OPTM_ITEMS string lines
     m = re.search(r"constant\s+OPTM_ITEMS\s*:\s*string\s*:=(.*?);", cfg, re.S)
@@ -2197,6 +2468,10 @@ def verify():
         errors.append("R_MENU_RRNET range mismatch: model says "
                       "%d downto %d" % (hi, lo))
 
+    # --- the intended layout of the golden model itself (Model submenu line
+    # counts, no double separators in any view and state, turbo toggle walk)
+    errors += menu_layout_errors()
+
     if errors:
         print("VERIFY FAIL (%d errors):" % len(errors))
         for e in errors:
@@ -2205,6 +2480,10 @@ def verify():
     print("VERIFY OK: config.vhd + mega65.vhd match the golden model")
     print("  OPTM_SIZE=%d  OPTM_DY=%d  regions=%d  C_MENU constants=%d"
           % (n, exp_dy, num_regions(menu_masked(V6_MENU)), len(C_MENU)))
+    print("  dependent lines=%d (every OPTM_DEP/OPTM_DEP2 in config.vhd is "
+          "tracked in V6_DEPS)" % len(cfg_deps))
+    print("  layout: Model submenu %s visible lines, no double separators"
+          % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
     # additionally drive the real SEL_OPTM_DEPS decoder through ghdl, if present
     return vhdl_check()
 
@@ -2240,6 +2519,16 @@ def run():
     emu = os.path.join(REPO, "M2M/QNICE/emulator/qnice")
     mon = os.path.join(REPO, "M2M/QNICE/monitor/monitor.out")
     fails = 0
+    layout = menu_layout_errors()       # golden-model layout, no emulator
+    if layout:
+        print("FAIL: menu layout")
+        for e in layout:
+            print("  -", e)
+        fails += 1
+    else:
+        print("PASS: menu layout (Model submenu %s visible lines, no double "
+              "separators, turbo toggle walk)"
+              % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
     for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test",
                "optm_deps_test", "optm_live_test"):
         r = subprocess.run([asm, tb + ".asm"], cwd=HERE,

@@ -33,6 +33,18 @@ Version 6 - MONTH DAY, 2026
   NTSC frame rate of 59.83 Hz.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/181)
 
+* Turbo modes: Choose "Turbo mode" and "Turbo speed" (2x, 3x or 4x) in the
+  "Model" submenu. "Off" (default) is a standard 1 MHz C64. "C128" runs the
+  CPU faster only while a program sets bit 0 of `$D030`, the 2 MHz switch of
+  the C128, so software made for it turns the turbo on and off by itself.
+  "Smart" is always fast but falls back to 1 MHz for half a second after
+  activity on the clock line of the IEC bus (as on the MiSTer), so that
+  loading from disk keeps working, while timing-critical games and demos may
+  break. Video, sound, timers and DMA keep their original timing, and
+  hardware cartridges stay usable because every access to the expansion port
+  still runs at 1 MHz.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/87)
+
 * Full DMA support for hardware cartridges such as hardware REUs (for example
   REU Grande), Sidekick64, TeensyROM and more.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/199)

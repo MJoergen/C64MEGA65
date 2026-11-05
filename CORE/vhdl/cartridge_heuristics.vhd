@@ -24,6 +24,13 @@
 -- More details about the EF3:
 -- https://github.com/MJoergen/C64MEGA65/issues/60
 --
+-- Turbo mode (GitHub issue #87):
+-- ==============================
+--
+-- The last three stages expect one CPU access per falling edge of phi2, i.e. a C64 running at
+-- 1 MHz. busy_o is '1' while a detection is in progress (from the write to DE00 until the
+-- decision), so that main.vhd can pause the turbo mode for these few microseconds.
+--
 -- done by MJoergen and sy2002 in 2023 and licensed under GPL v3
 ----------------------------------------------------------------------------------
 
@@ -44,7 +51,8 @@ entity cartridge_heuristics is
       c64_ram_addr_i       : in  std_logic_vector(15 downto 0);
       phi2_i               : in  std_logic;
 
-      is_an_EF3_o          : out std_logic
+      is_an_EF3_o          : out std_logic;
+      busy_o               : out std_logic    -- detection in progress: the C64 must run at 1 MHz
    );
 end entity cartridge_heuristics;
 
@@ -62,6 +70,10 @@ architecture synthesis of cartridge_heuristics is
    signal counter : natural range 0 to 200*32; -- Multiply by 32, because the main clock is 32 MHz.
 
 begin
+
+   -- Turbo mode: a detection is in progress from STAGE1_ST to STAGE5_ST. Neither IDLE_ST nor
+   -- DONE_ST (which is left only by a reset or by removing the cartridge) slows down the C64.
+   busy_o <= '0' when state_ef3 = IDLE_ST or state_ef3 = DONE_ST else '1';
 
    p_EasyFlash_3 : process (clk_main_i)
    begin

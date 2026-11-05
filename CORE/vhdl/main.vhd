@@ -61,6 +61,14 @@ entity main is
     clk_main_speed_i       : in    natural;
     video_retro15khz_i     : in    std_logic;
 
+    -- Turbo mode (GitHub issue #87), encoded like the turbo_mode and turbo_speed ports of the MiSTer core:
+    -- c64_turbo_mode_i: bit 0 = C128 (turbo while a program sets bit 0 of $D030), bit 1 = Smart (turbo except
+    --    for 0.5 s after any IEC clock activity, see turbo_smart_iec_detector_proc), "00" = Off.
+    --    A change never resets the C64 and takes effect within one 1 MHz cycle.
+    -- c64_turbo_speed_i: "00" = 2x, "01" = 3x, "10" = 4x (up to 2, 3 or 4 CPU accesses per 1 MHz cycle)
+    c64_turbo_mode_i       : in    std_logic_vector(1 downto 0); -- bit 0 = C128, bit 1 = Smart, "00" = Off
+    c64_turbo_speed_i      : in    std_logic_vector(1 downto 0); -- "00" = 2x, "01" = 3x, "10" = 4x
+
     -- SID and CIA versions
     c64_sid_ver_i          : in    std_logic_vector(1 downto 0); -- SID version, 0=6581, 1=8580, low bit = left SID
     c64_sid_port_i         : in    unsigned(2 downto 0);         -- Right SID Port: 0=same as left, 1=DE00, 2=D420, 3=D500, 4=DF00
@@ -707,6 +715,22 @@ architecture synthesis of main is
   signal   p1581_diag_dam_miss     : std_logic;
   signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
+  -- Turbo mode (issue #87): Smart disk-activity detector (turbo_smart_iec_detector_proc).
+  -- turbo_disk_access = '1' while there was IEC clock activity within the last 0.5 s; it switches
+  -- the Smart mode back to 1 MHz. hw_iec_clk_n_in comes straight from the asynchronous pin of the
+  -- hardware IEC port (handle_hardware_iec_proc), so the detector reads it through its own 2-FF
+  -- synchronizer (hw_iec_clk_n_d, hw_iec_clk_n_sync); the existing IEC paths stay untouched.
+  signal   turbo_disk_access : std_logic := '0';
+  signal   hw_iec_clk_n_d    : std_logic := '1';
+  signal   hw_iec_clk_n_sync : std_logic := '1';
+  attribute async_reg of hw_iec_clk_n_d    : signal is "true";
+  attribute async_reg of hw_iec_clk_n_sync : signal is "true";
+
+  -- Turbo mode as the core gets it (core_turbo_mode, see fpga64_sid_iec_inst): Smart is masked by
+  -- turbo_disk_access, and both modes pause while the EF3 heuristics are busy (turbo_ef3_pause).
+  signal   turbo_ef3_pause   : std_logic;
+  signal   core_turbo_mode   : std_logic_vector(1 downto 0);
+
   -- unprocessed video output of the C64 core
   signal   vga_hs    : std_logic;
   signal   vga_vs    : std_logic;
@@ -752,6 +776,9 @@ architecture synthesis of main is
   -- prevent_reset = '0', because a lost mode-change reset would leave the KERNAL in the wrong region.
   -- For the same reason a pulse that is running when prevent_reset rises is aborted and re-armed: the
   -- C64 always gets one complete C_MODE_RST_LEN pulse after the write-back.
+  --
+  -- Changes of the turbo settings (c64_turbo_mode_i, c64_turbo_speed_i, issue #87) never reset the C64:
+  -- the core picks them up at its next turbo decision, i.e. within one 1 MHz cycle.
   --
   -- A reset that is coming from a hardware cartridge via cart_in_reset_n_q (which is low active) is treated
   -- just like reset_soft_i. We can assume that the pulse will be long enough because cartridges are
@@ -815,6 +842,7 @@ architecture synthesis of main is
   signal   core_dotclk          : std_logic;
   signal   core_phi2            : std_logic;
   signal   core_phi2_prev       : std_logic;
+  signal   core_cpu_deferred    : std_logic;  -- turbo: the pending CPU access waits for the next clean 1 MHz cycle
   signal   cartridge_bank_raddr : std_logic_vector(24 downto 0);
 
   -- Core's DMA interface (for hardware DMA cartridges and SIMREU)
@@ -837,6 +865,7 @@ architecture synthesis of main is
   signal   cart_out_d_q      : unsigned( 7 downto 0); -- held copy of the C64's outgoing write byte
   signal   cart_out_sel      : std_logic;             -- combinational: any cart-window access decoded RIGHT NOW
   signal   cart_out_sel_q    : std_logic;             -- registered:    any cart-window access still showing at the pin
+  signal   exp_port_we       : std_logic;             -- C64 write enable as the expansion port sees it, see below
 
   -- Cart-port input registration: see comment block at cart_input_pipeline_proc below
   signal   cart_in_dma_n_q   : std_logic;
@@ -871,6 +900,7 @@ architecture synthesis of main is
   signal   cart_reset_counter : natural range 0 to C_EF3_RESET_LEN := 0;
   signal   cart_res_flckr_ign : natural range 0 to 2;                          -- avoid a short cart_reset_o after cart_reset_counter reached zero
   signal   cart_is_an_ef3     : std_logic;
+  signal   cart_heur_busy     : std_logic;                                     -- EF3 detection in progress
 
   -- RAM Expansion Unit (REU)
   signal   reu_cfg       : std_logic_vector(1 downto 0);
@@ -1214,6 +1244,12 @@ begin
   -- MiSTer Commodore 64 core / main machine
   --------------------------------------------------------------------------------------------------
 
+  -- Turbo mode (issue #87), bit 0 = C128, bit 1 = Smart: like MiSTer's c64.sv, Smart is masked while the
+  -- Smart disk-activity detector sees IEC clock activity (turbo_disk_access). Both modes pause while the
+  -- EF3 heuristics are busy (turbo_ef3_pause, see cartridge_heuristics_inst).
+  core_turbo_mode(0) <= c64_turbo_mode_i(0) and not turbo_ef3_pause;
+  core_turbo_mode(1) <= c64_turbo_mode_i(1) and not turbo_disk_access and not turbo_ef3_pause;
+
   fpga64_sid_iec_inst : entity work.fpga64_sid_iec
     port map (
       clk32         => clk_main_i,
@@ -1245,9 +1281,9 @@ begin
 
       cia_mode      => c64_cia_ver_i,      -- 0 - 6526 "old", 1 - 8521 "new"
 
-      -- Turbo Mode
-      turbo_mode    => "00",
-      turbo_speed   => "00",
+      -- Turbo Mode (issue #87): bit 0 = C128, bit 1 = Smart, see core_turbo_mode above
+      turbo_mode    => core_turbo_mode,
+      turbo_speed   => c64_turbo_speed_i,
       sim_crt_i     => c64_exp_port_mode_i(C_SIM_CRT), -- turbo mode for SIMCRTs and protection for hardware cartridges
 
       -- VGA/SCART interface
@@ -1279,6 +1315,7 @@ begin
       iof           => core_iof,           -- output: aka IO2. CPU access to 0xDFxx
       dotclk        => core_dotclk,        -- output
       phi2          => core_phi2,          -- output
+      cpu_deferred  => core_cpu_deferred,  -- output: turbo, the pending CPU access waits for a clean 1 MHz cycle
 
       -- dma access
       dma_req       => core_dma_req,       -- input
@@ -1377,6 +1414,18 @@ begin
                             cart_out_io1_n    = '0' or cart_out_io2_n    = '0' or
                             core_umax_unmapped   = '1' else '0';
 
+  -- Turbo mode (issue #87): the C64's write enable as the expansion port sees it.
+  -- In turbo mode, a CPU access that is not turbo-eligible (I/O, IO1/IO2, the cartridge areas, the write
+  -- to $FF00) waits for the next clean 1 MHz cycle, and core_cpu_deferred is '1' while it waits. Such a
+  -- waiting write must not reach the port: a cartridge that samples R/W at the falling edge of PHI2 would
+  -- see it twice, in the waiting cycle and again in the clean cycle. The core already gates the strobes
+  -- ROML, ROMH, IO1 and IO2 of a waiting access; this covers the areas without a strobe, i.e. the Ultimax
+  -- unmapped area and the $FF00 trigger of a hardware REU. While core_cpu_deferred = '1', R/W stays high
+  -- and the data bus behaves as for a read. The simulated REU uses exp_port_we, too, so that its $FF00
+  -- trigger fires in the clean cycle in which the CPU actually writes, as with turbo off.
+  -- With turbo off, core_cpu_deferred is constantly '0', so exp_port_we equals c64_ram_we.
+  exp_port_we <= c64_ram_we and not core_cpu_deferred;
+
   -- The address mux in fpga64_buslogic.vhd has multiple inputs (cpuHasBus, aec, cpuAddr,
   -- vicAddr) that change on the same clock edge, producing combinational glitches during
   -- CPU<->VIC bus handoffs. These glitches reach the Expansion Port connector on address,
@@ -1402,7 +1451,7 @@ begin
       cart_out_romh_n_q <= cart_out_romh_n;
       cart_out_io1_n_q  <= cart_out_io1_n;
       cart_out_io2_n_q  <= cart_out_io2_n;
-      cart_out_rw_q     <= not c64_ram_we;
+      cart_out_rw_q     <= not exp_port_we;   -- R/W stays high for a waiting turbo-mode access (see exp_port_we)
       cart_out_d_q      <= c64_ram_data_o;
       cart_out_sel_q    <= cart_out_sel;
     end if;
@@ -1596,16 +1645,17 @@ begin
           cart_rw_o      <= '1';
           cart_data_oe_o <= '0'; -- Leave data bus floating
         end if;
-      elsif (c64_ram_we = '0' and cart_out_sel = '1') or (cart_out_rw_q = '1' and cart_out_sel_q = '1') then
+      -- exp_port_we instead of c64_ram_we: a waiting turbo-mode write behaves as a read (see exp_port_we)
+      elsif (exp_port_we = '0' and cart_out_sel = '1') or (cart_out_rw_q = '1' and cart_out_sel_q = '1') then
         cart_data_oe_o <= '0';                  -- input (FPGA tri-stated, cart may drive)
         cart_in_data <= cart_in_d_q;
       else
         cart_data_oe_o <= '1';                  -- output (FPGA drives)
-        if c64_ram_we = '1' and cart_out_sel = '1' then
+        if exp_port_we = '1' and cart_out_sel = '1' then
           cart_d_o <= c64_ram_data_o;           -- live cart write: drive byte early for setup margin
         elsif cart_out_rw_q = '0' and cart_out_sel_q = '1' then
           cart_d_o <= cart_out_d_q;                 -- registered cart write: hold byte through the pin tail
-        elsif c64_ram_we = '0' then
+        elsif exp_port_we = '0' then
           cart_d_o <= c64_ram_data_i;           -- preserved non-cart default: mirror C64 read data
         else
           cart_d_o <= c64_ram_data_o;           -- preserved non-cart default: mirror C64 write data
@@ -1777,8 +1827,17 @@ begin
       c64_ram_we_i   => c64_ram_we,
       c64_ram_addr_i => std_logic_vector(c64_ram_addr_o),
       phi2_i         => core_phi2,
-      is_an_ef3_o    => cart_is_an_ef3
+      is_an_ef3_o    => cart_is_an_ef3,
+      busy_o         => cart_heur_busy
     ); -- cartridge_heuristics_inst
+
+  -- Turbo mode (issue #87): the EF3 detection expects one CPU access per 1 MHz cycle
+  -- (see cartridge_heuristics.vhd), so the turbo mode pauses while a detection is in progress, i.e. for a
+  -- few microseconds after a write to $DE00 while a 16K cartridge is in the expansion port. This applies
+  -- only where the detection is used: in hardware-cartridge mode on the boards that need
+  -- handle_cartridge_triggered_resets_proc (R3/R3A/R4).
+  turbo_ef3_pause <= cart_heur_busy when (G_BOARD = "MEGA65_R3" or G_BOARD = "MEGA65_R4") and
+                                         c64_exp_port_mode_i(C_SIM_CRT) = '0' else '0';
 
   -- Cartridge-specific workaround due to the fact, that R3/R3A and R4 boards do not allow cartridges to pull the reset line to low (i.e. trigger a reset)
   handle_cartridge_triggered_resets_proc : process (clk_main_i)
@@ -1861,7 +1920,7 @@ begin
       cpu_addr  => c64_ram_addr_o,
       cpu_dout  => c64_ram_data_o,
       cpu_din   => reu_dout,
-      cpu_we    => c64_ram_we,
+      cpu_we    => exp_port_we,         -- not c64_ram_we: the $FF00 trigger must fire in the clean cycle (turbo mode)
       cpu_cs    => reu_iof,
       irq       => reu_irq
     ); -- reu_inst
@@ -2160,6 +2219,53 @@ begin
       iec_srq_n_sync <= iec_srq_n_d;
     end if;
   end process iec_srq_sync_proc;
+
+  --------------------------------------------------------------------------------------------------
+  -- Turbo mode "Smart": disk-activity detector (issue #87)
+  --------------------------------------------------------------------------------------------------
+
+  -- 2-FF synchronizer for the clock line of the hardware IEC port, used only by the detector below.
+  -- hw_iec_clk_n_in is the asynchronous pin iec_clk_n_i while the hardware IEC port is enabled and
+  -- '1' otherwise (handle_hardware_iec_proc).
+  hw_iec_clk_sync_proc : process (clk_main_i)
+  begin
+    if rising_edge(clk_main_i) then
+      hw_iec_clk_n_d    <= hw_iec_clk_n_in;
+      hw_iec_clk_n_sync <= hw_iec_clk_n_d;
+    end if;
+  end process hw_iec_clk_sync_proc;
+
+  -- Same semantics as disk_access in MiSTer's c64.sv: every edge of an IEC clock line sets
+  -- turbo_disk_access and restarts a 0.5 s timer (clk_main_speed_i / 2 cycles of clk_main_i); when the
+  -- timer has expired, turbo_disk_access returns to '0'. While it is '1', the Smart mode runs at 1 MHz
+  -- (see core_turbo_mode), so that loading from disk keeps working.
+  -- Watched lines: c64_iec_clk_out (C64 -> bus), c64_iec_clk_in (simulated drives -> C64) and the
+  -- clock line of the hardware IEC port (real drives); there is no parallel cable (PARPORT => 0).
+  -- The detector is independent of the C64 resets. Its internal state lives in process variables and
+  -- the marker lines must stay as they are: the testbench in CORE/vhdl/test/tb_turbo/ extracts the
+  -- process between them and fails if its copy differs.
+  -- [turbo_smart_iec_detector begin]
+  turbo_smart_iec_detector_proc : process (clk_main_i)
+    variable clk_out_prev : std_logic := '1';
+    variable clk_in_prev  : std_logic := '1';
+    variable hw_clk_prev  : std_logic := '1';
+    variable timer        : natural range 0 to 2**25 - 1 := 0;
+  begin
+    if rising_edge(clk_main_i) then
+      if c64_iec_clk_out /= clk_out_prev or c64_iec_clk_in /= clk_in_prev or hw_iec_clk_n_sync /= hw_clk_prev then
+        turbo_disk_access <= '1';
+        timer := clk_main_speed_i / 2;
+      elsif timer /= 0 then
+        timer := timer - 1;
+      else
+        turbo_disk_access <= '0';
+      end if;
+      clk_out_prev := c64_iec_clk_out;
+      clk_in_prev  := c64_iec_clk_in;
+      hw_clk_prev  := hw_iec_clk_n_sync;
+    end if;
+  end process turbo_smart_iec_detector_proc;
+  -- [turbo_smart_iec_detector end]
 
   --------------------------------------------------------------------------------------------------
   -- MiSTer IEC drives

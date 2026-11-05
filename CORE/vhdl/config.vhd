@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A22";
+constant CORE_VERSION : string := "WIP-V6-A22X1";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -457,7 +457,7 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Turbo mode\n"              &
    "\n"                         &
-   " Off\n"                     &  -- the whole turbo block is not yet wired in mega65.vhd
+   " Off\n"                     &
    " C128\n"                    &
    " Smart\n"                   &
    "\n"                         &
@@ -641,8 +641,8 @@ constant OPTM_G_OSM_MODE      : integer := 19;
 constant OPTM_G_ABOUT_HELP    : integer := 20;
 constant OPTM_G_REU           : integer := 21;
 constant OPTM_G_MACHINE_MODE  : integer := 22;  -- PAL/NTSC (#181): VIC-II, core clock and HDMI modes; a change resets the C64
-constant OPTM_G_TURBO_MODE    : integer := 23;  -- not yet wired
-constant OPTM_G_TURBO_SPEED   : integer := 24;  -- not yet wired
+constant OPTM_G_TURBO_MODE    : integer := 23;  -- Off / C128 / Smart (#87); no reset on change
+constant OPTM_G_TURBO_SPEED   : integer := 24;  -- 2x / 3x / 4x (#87); hidden while the turbo mode is Off
 constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes (59.94 Hz), see #181/#105
 constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
@@ -727,11 +727,14 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_TURBO_MODE    + OPTM_G_STDSEL,    -- Off
                                              OPTM_G_TURBO_MODE,                       -- C128
                                              OPTM_G_TURBO_MODE,                       -- Smart
-                                             OPTM_G_LINE,
-                                             OPTM_G_HEADLINE,                         -- Turbo speed
-                                             OPTM_G_TURBO_SPEED   + OPTM_G_STDSEL,    -- 2x
-                                             OPTM_G_TURBO_SPEED,                      -- 3x
-                                             OPTM_G_TURBO_SPEED,                      -- 4x
+                                             -- The "Turbo speed" block (separator, headline, 2x/3x/4x) is only visible
+                                             -- while the turbo mode is C128 or Smart, like on MiSTer; the separator
+                                             -- after 4x stays, so neither state shows a double blank line
+                                             OPTM_G_LINE                            + OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2),
+                                             OPTM_G_HEADLINE                        + OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2), -- Turbo speed
+                                             OPTM_G_TURBO_SPEED   + OPTM_G_STDSEL   + OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2), -- 2x
+                                             OPTM_G_TURBO_SPEED                     + OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2), -- 3x
+                                             OPTM_G_TURBO_SPEED                     + OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2), -- 4x
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Model: %s"
 

@@ -260,6 +260,8 @@ architecture synthesis of MEGA65_Core is
 -- C64 specific signals for PAL/NTSC and core speed switching
 signal c64_rom                    : std_logic_vector(1 downto 0); -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
 signal c64_ntsc                   : std_logic;               -- global switch: 0 = PAL mode, 1 = NTSC mode
+signal c64_turbo_mode             : std_logic_vector(1 downto 0); -- bit 0: C128, bit 1: Smart, "00" = Off
+signal c64_turbo_speed            : std_logic_vector(1 downto 0); -- "00" = 2x, "01" = 3x, "10" = 4x
 signal c64_clock_speed            : natural;                 -- clock speed depending on PAL/NTSC
 signal main_hdmi_ff               : std_logic;               -- HDMI flicker-free switch of the active standard
 signal c64_exp_port_mode          : std_logic_vector(3 downto 0);
@@ -423,7 +425,7 @@ constant C_MENU_DRV9_UNMOUNT  : natural := 22;
 constant C_MENU_EXP_PORT_HW   : natural := 28;
 constant C_MENU_SIM_CRT       : natural := 29;
 constant C_MENU_SIM_REU       : natural := 31;
--- Model submenu: the machine mode selects PAL or NTSC; turbo is not yet wired
+-- Model submenu: the machine mode selects PAL or NTSC; turbo mode and turbo speed go to main.vhd
 -- C_MENU_MODEL is the flat index of the " Model: %s" submenu opener; the
 -- custom SUBMENU_SUMMARY callback in m2m-rom.asm uses it to recognize that line
 constant C_MENU_MODEL         : natural := 35;
@@ -685,6 +687,15 @@ begin
    -- main_osm_control_i is already synchronized into the main clock domain by the framework.
    c64_ntsc          <= main_osm_control_i(C_MENU_MACHINE_NTSC);
 
+   -- Turbo mode from the "Model" submenu (GitHub issue #87), encoded like the turbo_mode and
+   -- turbo_speed ports of the MiSTer core. Off (C_MENU_TURBO_OFF) sets neither mode bit.
+   -- A change never resets the C64 and takes effect within one 1 MHz cycle.
+   c64_turbo_mode(0) <= main_osm_control_i(C_MENU_TURBO_C128);
+   c64_turbo_mode(1) <= main_osm_control_i(C_MENU_TURBO_SMART);
+   c64_turbo_speed   <= "10" when main_osm_control_i(C_MENU_TURBO_4X) = '1' else
+                        "01" when main_osm_control_i(C_MENU_TURBO_3X) = '1' else
+                        "00";   -- C_MENU_TURBO_2X (group default)
+
    -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
    c64_rom <= "00" when main_osm_control_i(C_MENU_KERNAL_JIFFY)   else
               "10" when main_osm_control_i(C_MENU_KERNAL_GS)      else
@@ -804,6 +815,10 @@ begin
          c64_ntsc_i             => c64_ntsc,
          clk_main_speed_i       => c64_clock_speed,
          video_retro15kHz_i     => main_osm_control_i(C_MENU_VGA_15KHZHSVS) or main_osm_control_i(C_MENU_VGA_15KHZCS),
+
+         -- Turbo mode (bit 0: C128, bit 1: Smart, "00" = Off) and speed ("00" = 2x, "01" = 3x, "10" = 4x)
+         c64_turbo_mode_i       => c64_turbo_mode,
+         c64_turbo_speed_i      => c64_turbo_speed,
 
          -- SID and CIA versions
          c64_sid_ver_i          => sid_setup,
