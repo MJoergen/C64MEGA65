@@ -4,7 +4,7 @@ Entry point for anyone, human or coding agent, who picks up this work. Read this
 
 ## 0. TL;DR
 
-* **Phase:** implementation, simulation and independent reviews done (section 8); committed and pushed on branch `turbo-mode` in the main repo and in the submodule (2026-11-05); next: Vivado builds (the maintainer) and hardware tests.
+* **Phase:** implemented, simulated, reviewed, committed and pushed (main repo `b21f164` + docs `446bc95`, submodule `7d80b3e`, branch `turbo-mode` in both); R3 and R6 bitstreams built and verified (2026-11-05/06); next: hardware tests of the core team and QA, then the GitHub call for community testers in #87. A fresh session picks up incoming test reports with section 9.
 * **Scope (locked):** exactly the turbo modes of the MiSTer C64 core: `Off`, `C128` and `Smart`, each at `2x`, `3x` or `4x`. The OSM items for this already exist in `config.vhd`; only the wiring is missing (`main.vhd` hardcodes `turbo_mode => "00"` and `turbo_speed => "00"`).
 * **Branch and version (locked):** branch `turbo-mode`, created off `develop`; `CORE_VERSION` becomes `WIP-V6-A22X1`.
 * **Baseline:** `develop` at `55918e6` (`WIP-V6-A22`), submodule `CORE/C64_MiSTerMEGA65` at `650c6b5`.
@@ -79,7 +79,7 @@ No scope decision is open. Details to settle in `TURBO-SPEC.md`:
 1. Done 2026-11-05: submodule commit on its branch `turbo-mode`, then the main-repo commit with the pointer bump, both pushed to `origin` (`git log -1 turbo-mode` in each repository).
 2. Vivado builds R3 and R6 (then R4/R5); check the R3 timing report, because `cpu_deferred` adds one decode level in front of the cartridge-port R/W and data registers.
 3. Hardware tests of the core team and QA per the `Version WIP-V6-A22X1 - TBD` section of `tests/README.md`; then the GitHub call for community testers in #87 (L10).
-4. At release: date and commit of the `doc/inofficial.md` row; remove "Turbo mode" from `ROADMAP.md` (as done for NTSC in `12b201f`).
+4. At release: remove "Turbo mode" from `ROADMAP.md` (as done for NTSC in `12b201f`). The `doc/inofficial.md` row is filled (11/05/26, `b21f164`).
 
 ## 6. How to resume
 
@@ -157,3 +157,19 @@ Fix-round design (step F1, final RTL):
 * Accepted residuals: waiting accesses to the Ultimax unmapped area show their address as a read (no strobe exists there); in `C128` mode `$D030` reads `$FF` during the EF3 pause; the RR-Net MK3 enable flag (`$DE80`/`$DE88` decode without strobe) can be set about 1 µs early by a waiting write (idempotent).
 
 Re-review of the fix delta (reviewer D, independent micro-bench with the real `cartridge_heuristics.vhd`): no high or medium findings. Confirmed at 2x/3x/4x: EF3 detected, each Ultimax write once at the pins, each `$FF00` write once at a PHI2 falling edge; by code reading: no bus contention or wrong data direction (cart reads/writes, unmapped area, IO1/IO2, hardware DMA, VIC/BA phases), SIMREU correct (trigger in step with the executed write, register access unchanged), EF3 pause cannot stick, `$FF00`/`cpu_deferred` safe under DMA and BA, I1 holds for every changed expression. Low notes: `$D030` quirk during the EF3 pause (documented); turbo gain reduced for bank-switch-heavy real cartridges on R3/R3A/R4 (documented in spec 3.3); a waiting access to the Ultimax unmapped area shows as a dummy read (before: phantom write; IDE64 stays a hardware test item), and a write strobe derived combinationally by a cartridge could see a glitch of a few ns when R/W and address change together; `cpu_deferred` adds one decode level to `exp_port_we` (check the R3 timing report of the first build).
+
+## 9. Handover: handling test reports
+
+Read first: section 0 (state), 1.1 (decisions L1-L10, binding), 5 (open items), the notes of section 8 (final RTL design, accepted residuals), then `TURBO-SPEC.md` and `CORE/vhdl/test/tb_turbo/README.md`. Line numbers in `RESEARCH.md` and `recon_map.md` refer to the pre-implementation baseline `55918e6` / `650c6b5`; use the identifiers.
+
+Triage of a report:
+
+1. Collect: board (R3/R3A/R4/R5/R6), PAL/NTSC, turbo mode and speed, expansion port mode (hardware slot, SIMCRT, SIMREU), cartridge type, program, `HDMI: Flicker-free`.
+2. Does it also happen with turbo `Off`? Then it is not a turbo regression: turbo `Off` is cycle-identical to `WIP-V6-A22` (I1, proven in simulation), so compare with A22 instead.
+3. Expected behavior, not a bug: timing-critical games and demos break in `Smart` (use `Off` or `C128`); software that writes junk to `$D030` switches turbo on in `C128` mode; the effective speed is below the nominal factor (I/O, badlines, sprites); IEC transfers in `C128` mode at turbo speed fail as on a real C128; the accepted residuals of section 8 (EF3 pause on R3/R4, `$D030` quirk during the pause, dummy reads in the Ultimax unmapped area, RR-Net MK3 enable flag).
+4. Logic bugs: reproduce in `CORE/vhdl/test/tb_turbo` (extend `gen_cart.py` / `evaluate.py`), fix, then run `CORE/vhdl/test/tb_turbo/run.sh all` (must stay PASS, about 4 minutes) and `python3 M2M/rom/tests/menu_test.py verify` (plus `run` after menu changes). The bench copies main.vhd glue blocks verbatim and fails if they drift: update the copies together with main.vhd.
+5. Hardware-cartridge problems: check the clean-cycle rule (spec I2, 2.2-2.4) first; the port must show every CPU write exactly once.
+
+Working rules (from the maintainer): commit and push only when asked (the maintainer usually commits with SourceTree); no `Co-Authored-By: Claude` trailer; agents at effort xhigh or lower, at most 4 CPU cores while the maintainer is at the computer, every agent brief with the harness note (frequent small tool calls and status lines); adversarial review by agents that get the code and the requirements, not the conclusions; no config-file reminders (`make_release.py` packages the `.cfg`); Markdown must render in Marked 2 (no bare `$` or `==` in prose). New alpha versions after A22X1 get their number from the maintainer.
+
+Open items: R4/R5 builds; at release removing "Turbo mode" from `ROADMAP.md` (the `doc/inofficial.md` row is filled: 11/05/26, `b21f164`); the GitHub call for testers in #87 when the core team is done; build VM: delete `/var/crash/_usr_bin_prlusmd.0.crash`, consider 12-16 GB RAM.
