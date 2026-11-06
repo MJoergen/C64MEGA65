@@ -87,5 +87,5 @@ Collected from #87, #242, the linked sources and the analysis in `RESEARCH.md`. 
 * The `Turbo speed` block (headline, `2x` / `3x` / `4x` and the blank line above it) is hidden while turbo is `Off` and appears for `C128` and `Smart`; no view shows two blank lines in a row.
 * Changing turbo mode or speed does not reset the C64 and takes effect immediately.
 * PAL/NTSC switch with turbo on: the machine-mode reset happens, the turbo setting stays, the `$D030` bit is cleared.
-* Config file persistence (decision L7): settings persist only with the file `/c64/c64mega65-WIP-V6-A22X1.cfg` on the SD card, created with `M2M/tools/make_config.sh` (`AGENTS.md` section 5); select `Smart` and `4x`, save, power cycle: both are restored.
+* Config file persistence (decision L7): select `Smart` and `4x`, save, power cycle: both are restored.
 * A config file copied from WIP-V6-A22 may carry a turbo setting (A22 had the turbo items selectable but inactive): check the `Model:` summary line after the first start with such a file.

@@ -51,7 +51,7 @@ No scope decision is open. Details to settle in `TURBO-SPEC.md`:
 | P2 | `TURBO-SPEC.md` | DONE 2026-11-05 |
 | P3 | Branch `turbo-mode`, implementation (see `recon_map.md`) | DONE 2026-11-05 (uncommitted) |
 | P4 | Simulation (`TEST-PLAN.md` section 2, `TURBO-SPEC.md` section 6) | DONE 2026-11-05: `CORE/vhdl/test/tb_turbo/run.sh all` PASS |
-| P5 | Vivado builds: R3 and R6 first, then R4/R5 | TODO (the maintainer runs the builds; an agent uses at most 4 CPU cores while the maintainer works on this machine) |
+| P5 | Vivado builds: R3 and R6 first, then R4/R5 | R3 and R6 DONE 2026-11-05 from `b21f164` / submodule `7d80b3e`: 0 errors, 0 critical warnings, warning counts identical to the previous builds, timing met (R3 WNS 0.203 ns / WHS 0.025 ns, R6 WNS 0.135 ns / WHS 0.027 ns, no re-roll), configuration CRCs recomputed and matching; R4/R5 TODO |
 | P6 | Hardware tests (`TEST-PLAN.md`), community test round | TODO |
 | P7 | Docs (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, user docs), merge into `develop` | TODO |
 
@@ -99,6 +99,7 @@ No scope decision is open. Details to settle in `TURBO-SPEC.md`:
 * **2026-11-05:** #242 closed by the maintainer. `TURBO-SPEC.md` written. Branches `turbo-mode` created in the main repo (off `55918e6`) and in the submodule (off `650c6b5`). Implementation and simulation agents launched (section 8).
 * **2026-11-05:** implementation, two independent adversarial reviews, RTL and docs fix round, re-review of the fix and the full simulation done; everything passes; waiting for the maintainer's review and commit approval.
 * **2026-11-05:** committed and pushed on `turbo-mode` (submodule first, then the main repo with the pointer bump); the maintainer starts the Vivado builds.
+* **2026-11-06:** R3 and R6 bitstreams verified (sources, logs, timing, header, length, CRC). The Ubuntu dialog seen during the R3 build was the apport/update-notifier prompt for a stale crash report of the Parallels Tools helper `prlusmd` from the previous VM shutdown (2026-11-05 00:50); nothing crashed during the builds. Vivado's build re-saves `CORE-R3.xpr`/`CORE-R6.xpr` (project path, file order): bookkeeping, not to be committed.
 
 ## 8. Implementation run (live)
 
@@ -120,7 +121,7 @@ Implementation notes (step A):
 * `iec_clk_n_i` reaches `main.vhd` unsynchronized (straight from the pin in all four `top_mega65-r*.vhd`), so the Smart detector reads `hw_iec_clk_n_sync` from a new two-flip-flop synchronizer (`hw_iec_clk_sync_proc`, `ASYNC_REG`); existing IEC paths are untouched. Detector: `turbo_smart_iec_detector_proc` between the marker lines, state in variables, no reset.
 * Menu: `OPTM_DEP2(OPTM_G_TURBO_MODE, 1, 2)` on lines 46-50 (separator, `Turbo speed` headline, `2x`/`3x`/`4x`). `Off` shows `Smart, separator, Back`; `C128`/`Smart` show the speed block. `menu_test.py` got matching `V6_DEPS` entries and three emulator fixtures. `OPTM_SIZE` unchanged (189).
 * Upstream `d6048db` is probably a no-op in our fork (turbo states already require `cs_turbo_eligible`); the benches verify this (spec 6c).
-* Open for the maintainer: `ROADMAP.md` still lists "Turbo mode" as planned; the new `CORE_VERSION` means a new config file name (`c64mega65-WIP-V6-A22X1.cfg`), as for every alpha.
+* Open for the maintainer: `ROADMAP.md` still lists "Turbo mode" as planned.
 
 Review findings (step E, integration):
 
