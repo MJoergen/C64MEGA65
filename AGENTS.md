@@ -594,14 +594,17 @@ boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
    `cart_d_o <= core_dma_din`; and
 4. yields to the VIC when `core_ba = '0'` (drives safe values, lets the VIC
    take its cycle), with three refinements from issue #259 (see the comment
-   block at `cart_dma_ba_proc` in `main.vhd`): in the first BA-low cycle after
-   a served cartridge access the core serves one more access (`core_dma_grace`,
-   a `dma_grace` input of `fpga64_sid_iec`), because a MOS 8726 REC still
-   performs it: after a write, the next write of a fetch (gated on the
-   cartridge addressing the byte after the previous write) or the next read of
-   a swap; after a read, the read that a stash or a verify repeats after the
-   stall (read data driven, no address gate), but not after a swap's read,
-   which follows a write; after each
+   block at `cart_dma_ba_proc` in `main.vhd`): after a served cartridge access
+   the core keeps serving the cartridge in the BA-low cycles in which a real
+   C64 still answers the bus, i.e. before the VIC takes it in the fourth
+   (`core_dma_grace`, a `dma_grace` input of `fpga64_sid_iec`), because a MOS
+   8726 REC still accesses it: after a write, one more access in the first
+   BA-low cycle, the next write of a fetch (gated on the cartridge addressing
+   the byte after the previous write) or the next read of a swap; after a
+   read, the held read of a stash or a verify in all three cycles (read data
+   driven, no address gate; the REC's verify compares that data, so a floating
+   bus reports a FAULT), but not after a swap's read, which follows a write;
+   after each
    stall BA is driven actively high for a few ticks (`cart_ba_recharge`,
    `cart_ba_drive_high`) instead of being released from a driven low (the VIC
    model releases BA at the start of the VIC half for badlines and sprites

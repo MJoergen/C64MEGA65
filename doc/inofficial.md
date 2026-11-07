@@ -43,6 +43,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A22    | 10/23/26 | d5494f7 | Added NTSC support (issue #181)
 | WIP-V6-A23    | 11/03/26 | 2ce5e53 | Attempt to fix genuine Commodore REUs (1764/1750): faithful 50 % dot clock, BA recharge after VIC-II bus pauses and serving the 8726's extra access after BA drops (issue #259)
 | WIP-V6-A24    | 11/04/26 | ade48e6 | Candidate fix for the REU verify faults that remained in A23: the core also serves the read a MOS 8726 REC repeats after BA drops (issue #259)
+| WIP-V6-A24X1  | 11/07/26 | cff5e95 | Fix for the REU verify faults: the core serves a MOS 8726 REC's held reads in all three BA-low cycles in which a real C64 still answers the bus, A24 served only the first (issue #259)
 
 ## Version 5.2
 

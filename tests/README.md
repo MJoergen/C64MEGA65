@@ -5,6 +5,15 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A24X1 - TBD
+--------------------------
+
+@TODO: Fix for the REU verify faults of issue #259, superseding the WIP-V6-A24 candidate. A MOS 8726 REC keeps its read on the bus for the three cycles after the VIC-II pulls BA low, during which a real C64 still answers (AEC stays high), and its verify compares the data of every one of them; the core now serves all three cycles (WIP-V6-A24 served only the first and left the data bus floating in the other two, which the port pull-ups turn into `$FF`). Everything listed under WIP-V6-A23 applies unchanged; in addition:
+
+* @TODO Genuine 1764/1750, display on: `3-VERIFY` (round-2 disk), `9-VALUES` and `12-POSITION` (round-3 disk) from `doc/fix-issue-259/tests/` report zero faults (`12-POSITION`: every line-50 run ends with `80 255 1`), the patched CMD `REUTEST` reports OK in every step, including `Block/Page Addressing`, `Byte Addressing`, `Address Control` and `CBR Refresh Integrity`, and the round-4 programs of `doc/fix-issue-259/tests/round4/` (`PROTOCOL-round4.md`) report no wrong byte after swaps with the display on.
+* @TODO Modern DMA cartridges (REU Grande, RAD, TeensyROM+, 1541 Ultimate II+, Kung Fu Flash 2): no change against WIP-V6-A23. The core now drives read data onto the port in the first three BA-low cycles after a cartridge read, which a master that stops at once simply ignores.
+* @TODO The config file is named after `CORE_VERSION`, so `c64mega65-WIP-V6-A24X1.cfg` must be generated with `M2M/tools/make_config.sh`.
+
 Version WIP-V6-A24 - TBD
 ------------------------
 
