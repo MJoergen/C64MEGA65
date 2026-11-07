@@ -2,30 +2,33 @@
 
 Running record of the investigation. Read this before touching `reu1764` again.
 
-**Resume checklist for the next session, once Joe3f00ff has posted his round-3 results:**
+**Resume checklist for the next session, once Joe3f00ff has posted his round-4 results:**
 
-1. Read this file completely, then `PROTOCOL-round3.md` (what he was asked to run) and section 7b
-   (what each outcome means).
+1. Read this file completely, then `PROTOCOL-round4.md` (what he was asked to run) and section 7c
+   (what each outcome means). Section 6c holds the root cause as established after round 3; do not
+   re-derive sections 6, 6b and 6c.
 2. Fetch the new issue comments and photos (`gh issue view 259 --repo MJoergen/C64MEGA65 --json comments`;
    images are `github.com/user-attachments/assets/<id>`, downloadable with `curl -H "Authorization: Bearer $(gh auth token)"`).
-3. Fill in the round-3 results table and map every outcome with section 7b; sections 6 and 6b list
-   what is already excluded, do not re-derive it.
-4. Only then decide between a core change (section 9) and the logic-analyzer or ILA capture
-   (section 8). Do not launch VICE on this machine (windows pop up); the VICE command-line tools
-   `petcat` and `c1541` in `/Applications/Vice/bin` are fine, `tests/round3/build.sh` uses them.
-Everything marked *verified* was checked against code, disassembly or the official
+3. Fill in the round-4 results and map every outcome with section 7c. All zero on A24X1 closes the
+   issue (then: Kugelblitz360's DMA-cartridge regression, merge into `develop`, community build).
+   Faults left on A24X1: `14-ffff` on A24 and on A24X1 says whether the REC drives its address
+   during the held reads (section 7c); then section 8 (ILA or logic analyzer) is the next step.
+Do not launch VICE on this machine (windows pop up); the VICE command-line tools `petcat` and
+`c1541` in `/Applications/Vice/bin` are fine, `tests/round3/build.sh` and `tests/round4/build.sh`
+use them. Everything marked *verified* was checked against code, disassembly or the official
 documents named below; everything else is marked as a hypothesis.
 
-Branch state: `reu1764` = WIP-V6-A24. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6 (read
-grace in `CORE/vhdl/main.vhd` plus three bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`,
-section 9) and 39d75f3 (bump); submodule `CORE/C64_MiSTerMEGA65` @ 98492d1. A23 was built, timing
-closed, and tested by Joe3f00ff on 2026-11-03 (CMD test and round 2): **it fixed the lost fetch
-bytes and nothing else**. A24 is a candidate fix under test (section 9): built by sy2002 on
-2026-11-05 from 4074da1 (R3: WNS 0.346 ns, WHS 0.044 ns; R6: WNS 0.183 ns, WHS 0.036 ns; no
-re-roll, sign-off gates passed) and posted to the issue on 2026-11-05 together with
-`reu-tests3.zip` and `PROTOCOL-round3.md`. **Nothing of A24 has run on hardware yet; Joe3f00ff is
-its first tester** (round 3 on A23 first, then `3-verify`, `9-values` and the CMD test on A24).
-A24 went to Joe only, not to the community. Do not merge `reu1764` into `develop`.
+Branch state: `reu1764` = WIP-V6-A24X1. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6
+(read grace, superseded) and 39d75f3 (bump); A24X1 = the commits of 2026-11-07 on top of 8e7e1c1
+(three grace cycles for reads in `CORE/vhdl/main.vhd`, bench scenarios in
+`CORE/vhdl/test/tb_cartport/gen_tb.py`, bump, this record, `PROTOCOL-round4.md`, `tests/round4/`);
+submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
+(CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
+2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
+changed nothing against A23** (section 1c). A24X1 is the fix derived from round 3 (sections 6c and
+9); **it has not been synthesized or run on hardware yet**: sy2002 builds it (Vivado in the Ubuntu
+VM), then Joe3f00ff runs `PROTOCOL-round4.md`. A24 and A24X1 go to Joe only, not to the community.
+Do not merge `reu1764` into `develop` before round 4 is clean.
 
 Folder contents:
 
@@ -45,7 +48,12 @@ Folder contents:
 - `decoded/vice-reu-c-ba-functions.txt`: the VICE x64sc BA handling of the REU (`reu.c`) and the
   `vicii_cycle_reu` / `vicii_steal_cycles` callbacks.
 - `decoded/dis6502.py`: the disassembler used (`dis6502.py <file> <offset> <org> <len>`).
-- `PROTOCOL-for-Joe.md`: the test protocol, ready to paste into the GitHub issue.
+- `PROTOCOL-for-Joe.md`, `PROTOCOL-round3.md`, `PROTOCOL-round4.md`: the test protocols of rounds 2,
+  3 and 4, as pasted into the GitHub issue (round 4: to be pasted together with the A24X1 build).
+- `tests/round4/`: `13-swapchk.bas` (swap integrity with the display on, byte by byte) and
+  `14-ffff.s` + `.bas` (verify with the KERNAL banked out and a chosen byte at `$FFFF`: tells a
+  floating data bus from a floating address bus), `build.sh` producing `reu-tests4.d64` / `.zip`,
+  `validate.py` (py65 smoke test of the machine code).
 
 Reference documents (public):
 
@@ -101,6 +109,29 @@ The verify fault rates equal the probability that a transfer of that length over
 `(200*63*256/504 + 256) / (312*63)` = 0.34, a 4096-cycle window with 0.82): **every interrupted verify
 faults**, whatever the data, on A22 and A23 alike.
 
+## 1c. Round 3 (2026-11-06, Joe3f00ff, issue comment 6686590417, `A23-Tests.pdf` and `A24-Tests.pdf`)
+
+All on A23 with the display on unless noted (the programs of section 7b):
+
+| Program | Result |
+|---|---|
+| `8-swap` | before: FAULT FAULT FAULT; after 1-byte fetch, after 1-byte swap, after re-stash, after 256-byte swap with the display off, after 16 KB swap with the display on plus re-stash: FAULT FAULT FAULT each. A swap changes nothing |
+| `9-values` | faults in 50: `$FF` 0, `$00` 20, `$AA` 15, `$55` 17, `$FE` 18, `$7F` 16, `$0F` 16, `$F0` 16 |
+| `10-after` | 7 faults in 20 (runs 3, 5, 7, 8, 10, 19 visible: fault at byte 39, 3, 119, 248, 88, 82 with remaining length `255 - byte`, status 48), `REU DATA INTACT` after every one, 0 wrong REU bytes; control with byte 100 changed and the display off: `ST 48 FAULT AT BYTE 100` |
+| `11-bitfill` | variants 0 (exact chain), 1 (no swap), 2 (no sprites), 3 (CLI), 4 (no `$FF00`), 5 (no fetch), 7 (stash, fixed-REU verify, verify), 8 (planted error) and 9 (planted error, display off): `R 4 C 4 CPU 0 1ST 1`; variant 6 (stash plus fixed-C64 verify): `R 0 C 4 CPU 0 1ST 2` |
+| `12-position` | line 50 (badline at 51), 10 runs: `ST 48 BYTE 49 LEN 206 CYC 113 END 51` every time, display-off status 80; line 52 (control), 10 runs: `ST 80 BYTE 255 LEN 1 CYC 275 END 56` every time |
+
+On A24 (the read grace of section 9, first BA-low cycle served), display on:
+
+| Program | Result |
+|---|---|
+| `3-verify` | 256 B 0..255: 29 faults in 100; 256 B `$AA`: 36 in 100; 4 KB: 22 in 25; 64 KB fixed-C64 `$AA`: 10 in 10; 16 KB fixed-C64: 25 in 25 (A23: 34, 34, 22, 10, 25) |
+| `9-values` | faults in 50: `$FF` 0, `$00` 18, `$AA` 16, `$55` 16, `$FE` 18, `$7F` 19, `$0F` 17, `$F0` 11 |
+| CMD REUTEST | Buffer Memory OK, Block/Page OK, Byte Addressing err 1 (page 8), Interrupt OK, Address Control err 3, `$FF00` OK, CBR err a, Bit Fill `(00) ... (ff) : OK`; stopwatch for the Bit Fill line: **about 6 s** (64 s if all transfers ran) |
+
+Kugelblitz360 on A24 (2026-11-05): TeensyROM+ and EasyFlash testing without regressions; Kernal
+replacement (EasyFlash 3, TeensyROM) did not work before and does not work now; KFF2 unchanged.
+
 ## 2. What the test programs really do (verified by disassembly)
 
 All CMD transfers use command values `$B0..$B3` (execute, autoload, immediate; stash, fetch,
@@ -121,10 +152,10 @@ swap, verify). The C64 buffer is `$5000..$8FFF`. `SB` = `$FA` = result, `$FB` = 
 Consequences that matter:
 
 - Every failing phase fails in a **verify** (or, on A22, in a fetch: Address Control 4, `$FF00`).
-- Bit Fill never fails although its two verifies per quarter see the same badlines (plus the
-  sprite stalls) as everything else. Its data is uniform, so a stale byte on the bus or a lost
-  write is invisible; a missing or misplaced REU byte would be visible through the chain
-  stash, swap, stash, fetch, verify and never shows.
+- Bit Fill does fail (section 6c.4, established after round 3): its first verify faults for every
+  pattern but `$FF`, the machine code returns `$FA = 1`, and the modified BASIC wrapper that Joe
+  runs (the one without the error stop) ignores it. The earlier reading of the photos as "1024
+  passing verifies" was wrong.
 - CBR a is the twin of Bit Fill's last verify (fixed-C64, uniform `$AA`) but with 64 KB instead
   of 16 KB, no sprites, directly after a stash, and 66 ms after the bytes were written. It fails
   in every display-on run.
@@ -133,10 +164,10 @@ Consequences that matter:
 - Bit Fill is run by the BASIC wrapper for all 16 patterns `$00`, `$11`, ..., `$FF` (line 191
   `FOR I=0 TO 255 STEP 17`), 8 banks and 4 quarters each; it checks the FAULT bit with
   `LDA #$20 / BIT $DF00` two instructions after every verify, exactly like the phases that do fail
-  (Block/Page `$325E`, Byte Addressing `$33A5`, Address Control `$35A2`, CBR `$3648`), so the check is
-  neither blind nor late. The display is never switched off by REUTEST. The photos of every
-  display-on run show `(00) :(11) ... :(ff) : OK`: 1024 verifies of 16 KB, each overlapping about 21
-  badlines, without a single fault.
+  (Block/Page `$325E`, Byte Addressing `$33A5`, Address Control `$35A2`, CBR `$3648`), and on a fault
+  it leaves the loops at once with `$FA = 1` (`$345F` / `$3470` branch to `$3495`). The original
+  BASIC line 194 (`IF PEEK(SB)<>0 THEN 1500`) would stop with "Error!" at `(00)`; the modified copy
+  prints the next pattern instead. The display is never switched off by REUTEST.
 
 Turbo REU Tester 1.2 (unpacked): the size loop (`$0AD4`) stashes a 25-byte text from `$0B92` to
 bank N address `$0800`, poisons only the first N/64 bytes of `$0200` (N = KB counter high byte),
@@ -276,7 +307,7 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
    verifies are interrupted, so roughly 50 faults mean the stall, roughly 100 mean the display
    itself.
 
-## 6b. Deductions after round 2
+## 6b. Deductions after round 2 (kept as written; 6c supersedes items 5, 6 and 9)
 
 1. **Confirmed: A22 lost one write per stall in fetches, A23 serves it.** `1-fetch` on A22 shows one
    never-written byte per interrupted run; A23 is clean in 20 runs. The REC drives the next
@@ -342,6 +373,61 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
     genuine mismatch sets FAULT on the MEGA65). `10-after` now ends with a display-off verify
     of 256 bytes with byte 100 changed by the CPU and prints the fault byte from the registers.
 
+## 6c. Deductions after round 3 (the root cause)
+
+1. **Every interrupted verify compares its REU byte against exactly `$FF`** (`9-values`: `$FF`
+   never faults, 0 of 50 on A23 and on A24; every other value, `$FE` and `$7F` included, faults at
+   the stall rate of about 17 in 50). That is the level of a port line nobody drives: the 4.7 kOhm
+   pull-ups (section 3) raise a released line to 5 V within the cycle. Not VIC data (that would
+   let `$FF` fault sometimes and the other values pass sometimes), not a stale byte.
+2. **The fault is a false compare on the first stalled byte, the REU data is intact.** `10-after`:
+   seven faults, zero wrong REU bytes, the positive control reports byte 100. `12-position`: the
+   verify started at line 50 faults on byte 49 in ten of ten runs (the raster sync has no jitter),
+   with the REC releasing the bus 94 cycles after the command (`113 - 19`, the control run at line
+   52 reports 275 for 256 reads): 49 reads before the badline, the 43-cycle stall (BA low in cycles
+   12..54), the fault on byte 49, VICE's extra cycle. The transfer ends in line 51.
+3. **A24 changed nothing**, although it drove the RAM byte for the address the cartridge shows
+   during the whole first BA-low cycle (bench S2/S8 of `tb_cartport`, the branch in
+   `handle_hardware_expansion_proc`). So the failing compare is not fed from that cycle alone.
+   The REC cannot have released its address lines there while reading: on a real C64 a released
+   address bus drifts within the cycle (TTL input currents of the 74LS257 multiplexers) and the
+   verify would fail there too. The resume cycle is excluded as well: the C64 RAM is a BRAM that
+   is read continuously, `fpga64_buslogic` puts the DMA address on it from tick 16, so the FPGA
+   drives the correct byte about 60 ns after PHI2 rises, earlier than the DRAM of a real C64, as
+   long as the cartridge's address is on the pins by tick 16; a REC that drove it later would fail
+   on a real C64, whose DRAM latches the row address with RAS at the PHI2 rise. What remains is
+   the **second and third BA-low cycle**: the FPGA served neither (A22 to A24 tri-state the data
+   bus there, `cart_data_oe_o <= '0'` in the stall branch), a real C64 answers both (AEC stays
+   high in phi2 for exactly three BA-low cycles; the VIC model does the same, `baCnt` and
+   `addrValid` in `video_vicII_656x.vhd`), and a REC that keeps its read on the bus like a 6510
+   with RDY low, latching and comparing in every such cycle, sees `$FF` there on the MEGA65 and
+   valid RAM on a real C64. Stashes survive because the held reads store the garbage at the same,
+   non-advancing REU address and the counted read after the stall overwrites it. Fetches lost
+   exactly one write per stall on A22 because the REC counts the write of the first BA-low cycle
+   (VICE) and whatever it repeats afterwards is a repeat of the next byte, which it writes again
+   after the stall. This is the mechanism A24X1 is built on (section 9); `14-ffff` (section 7c)
+   checks the one assumption that has no direct measurement yet, that the REC drives its address
+   during the held reads.
+4. **The Bit Fill paradox is resolved** (verified by disassembly, `$33F4..$34A7`): Bit Fill
+   resets its own state (`$FC = 0` at `$3413`, length `$4000`, `$DF0A` written before every
+   quarter, all commands with autoload), runs the seven-transfer chain per quarter, and after each
+   verify executes `LDA #$20 / BIT $DF00 / BNE $3495`, where `$3495` sets `$FA = 1` and returns.
+   For every pattern except `$FF` the first fixed-REU verify of quarter 0 (16 KB, always hit by a
+   badline) faults, and the machine code returns after one of 32 quarters, about 0.09 s. Joe's
+   modified BASIC (the copy without the error stop, 2026-10-26) does not act on `PEEK(SB)` and
+   prints the next pattern. Only `$FF` runs all 32 quarters (4.0 s) and passes vacuously, because
+   `$FF` cannot fault (item 1). 4.0 s plus 15 times 0.09 s plus BASIC overhead = 5.7 to 7 s; Joe's
+   stopwatch says about 6 s. `11-bitfill` variant 0 (`$AA`) faulting on A23 is the same thing
+   under our control; a variant with `$FF` would pass. The swap, the sprites, the chain and the
+   "1024 verifies" were never involved; 6b.5 and 6b.9 are void. Prediction for Joe:
+   `:PRINTPEEK(SB);` after `SYS ML+15` prints 1 for `(00)` to `(ee)` and 0 for `(ff)` on A24, and
+   0 sixteen times on A24X1.
+5. **Sprite stalls fault like badlines**: `11-bitfill` variant 9 (display off, eight sprites on)
+   faulted its fixed-C64 verifies (`C 4`), and only sprite DMA stalls the bus there. Consistent
+   with the three-cycle window being the VIC's AEC rule for every BA source.
+6. **No swap has ever been checked byte by byte after a stall** (every swap test could only report
+   the verify fault that followed); `13-swapchk` does it on A24X1.
+
 ## 7. Experiments for Joe (`tests/reu-tests.d64`, BASIC, simulated REU must be off)
 
 All transfers use autoload commands 176..179 (`$B0..$B3`); the display is switched with
@@ -376,6 +462,24 @@ PRG (`LOAD"name",8` and `RUN`, nothing else). Every program prints its own verdi
 | `11-bitfill` | the exact REUTEST Bit Fill chain in machine code (variant 0 is a cycle-exact copy of `$3426..$3470` up to the first fault: SEI, `$FF00`, 8 sprites, per quarter stash/swap/stash/fetch/CPU check/verify fixed-REU/verify fixed-C64, pattern `$AA`, bank 0, 4 quarters), then variants: 1 no swap, 2 no sprites, 3 CLI, 4 no `$FF00`, 5 no fetch, 6 stash+verify only (CBR a with 16 KB), 7 stash+fixed-REU verify+verify (`7-chain` c in machine code), 8 the exact chain with `$55` planted by the CPU into `$7000` after every fetch, 9 the same with the display off. Per variant it prints `r` (fixed-REU verifies faulted, of 4), `c` (fixed-C64 verifies faulted, of 4; variant 6 has no `r`), `cpu` (CPU checks failed) and `1st` (first fault: quarter times 2, plus 1 for fixed-REU or 2 for fixed-C64; 0 = none). The CPU fills `$5000-$8FFF` with `$AA` at entry so every variant verifies valid data | read variant 9 first: `r 4` means the chain's fixed-REU verifies do compare (the planted byte `$2000` of every quarter is found with no stalls around), `r 0` means they do not, Bit Fill is blind and the paradox is gone (then look for the reason the REC skips or empties a verify issued 17 cycles after a fetch with `$DF0A = $40`). Variant 8 adds the stalls: `r 4 c 0` = the verifies compare and the fixed-C64 verify survives stalls in this chain (mechanism A), `r 4 c 4` = no immunity at all in our replay. Variant 0 with `r 0 c 0` reproduces the paradox under our control; the first variant with faults names the element that protects Bit Fill. Variant 0 faulting: the paradox was an artifact of something outside the chain (bank loop, pattern loop, the BASIC program), re-read `cmd-reutest-basic.bas`. Variants 6 and 7 passing while the BASIC twins fault: the difference is BASIC versus machine code (IRQ, timing gap, dummy read of `$DF01` by the POKE) |
 | `12-position` | machine code: 256-byte 0..255 verify without autoload started at the beginning of raster line 50 (badline at 51: BA falls after about 47..57 served bytes, the line-start jitter is 0..10 cycles and the command is written at cycle 18..28) and at line 52 (the transfer ends in line 56, the next badline is 59), 10 runs each, one screen per line with a key wait between them; per run: `st` status, `byte` = fault index from `$DF02/03` (255 with `len 1` = ran to the end), `len` remaining length, `cyc` = CIA timer count from 6 cycles before the command write to 14 cycles after the CPU resumed (transfer = `cyc - 20`), `end` = raster line right after the transfer | line 52: all `byte 255 len 1`, `cyc` about 280 (control). Line 50: `byte` 46..58 = the fault is at the first stall (H1 or a resume problem); `cyc` about byte + 70 = the transfer ended with the stall; `byte` far from 46..58 or spread over the transfer = not a stall-start effect. The spread over the 10 runs mirrors the sync jitter. `st` 48 = FAULT plus the 1764 size bit, 112 = FAULT with end of block |
 
+## 7c. Round 4 experiments (`tests/round4/reu-tests4.d64`, simulated REU off, see `PROTOCOL-round4.md`)
+
+Part A on A24 (`14-ffff` only), part B on A24X1: `3-verify`, `9-values`, `12-position`,
+`11-bitfill`, `13-swapchk`, `14-ffff`, `1-fetch`, `2-stash`, the CMD test with the display on and
+the stopwatch (expected about 64 s for the Bit Fill line, and 0 sixteen times with the
+`PRINTPEEK(SB);` addition).
+
+| Program | What it does | What the outcome means |
+|---|---|---|
+| `13-swapchk` | C64 `$4000..$40FF` holds `i`, REU `$0000..` holds `255-i`; 20 times: 256-byte swap with the display on, then with the display off a CPU check of the C64 side and a fetch of the REU side into `$4200` with a CPU check (after an odd number of swaps the C64 holds `255-i` and the REU `i`); then a 16 KB swap at `$5000` with page-dependent data (`(i + i/256) and 255` against its complement, REU bank 1) checked the same way, about three minutes of BASIC | any wrong byte, with run, position and both values, is a swap damaged by a stall: the position relative to the stall tells whether the read half or the write half went wrong. All zero: swaps survive stalls on A24X1 |
+| `14-ffff` | machine code: `$01 = $35` (KERNAL and BASIC out, I/O in), a chosen byte F stored at RAM `$FFFF`, 256-byte incrementing verifies of uniform data D with the display on, 50 runs, for (D, F) = (`$FF`, `$00`), (`$00`, `$00`), (`$00`, `$FF`), (`$FF`, `$FF`) | on A24: faults only in line 2 (D = `$00`, F = `$00`) and 3 (`$00`, `$FF`), i.e. whenever D is not `$FF` = the comparator sees a floating **data** bus (the REC drives its address, the FPGA simply does not answer in the second and third BA-low cycle: A24X1 fixes it). Faults only in lines 1 (`$FF`, `$00`) and 3 (`$00`, `$FF`), i.e. whenever D differs from F = the REC's **address** lines float during the held read and the FPGA serves RAM `$FFFF` (then A24X1 cannot help; the core would have to serve the last address instead, or the data of the previous read, and section 8 is next). On A24X1: all four lines zero |
+
+Expected on A24X1 for the round-2 and round-3 programs: `3-verify` and `9-values` zero faults;
+`12-position` line 50 like line 52 (`80 255 1`, `CYC` about 318 = 275 plus the 43-cycle stall,
+`END` 55); `11-bitfill` `R 0 C 0` for variants 0..7 and `R 4 C 0` for 8 and 9 (the planted byte is
+found, the fixed-C64 verifies no longer fault, with the display on or off); `1-fetch` and
+`2-stash` unchanged (0 bad bytes).
+
 ## 8. Logic analyzer capture (when Joe gets one, about two weeks)
 
 Channels, in priority order: PHI2, BA, /DMA, R/W, /IO2, A0..A3, D0..D7, DOTCLK; at least 25 MHz
@@ -401,9 +505,29 @@ round-2 programs, then further BASIC experiments derived from their outcome, bec
 through Vivado is a lot of work for him; the ILA only if BASIC-level tests cannot pin the cause.
 Building a QNICE debug device (as done for the physical floppy work) is explicitly a last resort.
 
-## 9. The A24 core change (commit ade48e6), and other ideas
+## 9. The core changes: A24X1 (the fix), A24 (superseded), and other ideas
 
-- **Read grace, implemented 2026-11-04 in `CORE/vhdl/main.vhd` (`cart_dma_ba_proc`,
+- **A24X1: three grace cycles for reads, implemented 2026-11-07 in `CORE/vhdl/main.vhd`
+  (`cart_dma_ba_proc`, `handle_hardware_expansion_proc`, constant `C_CART_DMA_GRACE_RD_CYCLES = 3`,
+  counter `core_dma_grace_cnt`).** After a served read (stash, verify, the first access of a
+  session) and after a swap's write, `core_dma_grace` now stays up for three served BA-low cycles,
+  each served as a read with the RAM byte for the address the cartridge shows (BA driven low, R/W
+  driven high, no RAM write); after a fetch's write exactly one grace cycle as a write with the
+  address gate, as in A23; none after a swap's read (a read that follows a write), as in A24; the
+  grace ends early if BA rises, and all state clears when /DMA goes high. `fpga64_sid_iec` grants
+  the CPU half of any cycle with `dma_grace` set, unchanged; the VIC model keeps `addrValid`
+  (`aec`) low in the CPU half while `baCnt < 4` (`video_vicII_656x.vhd` lines 325..340 and
+  694..700), for badlines and sprites alike, so the VIC never needs the three CPU halves the grace
+  uses; this is the same three-cycle window in which a real C64's AEC stays high. Bench
+  (`CORE/vhdl/test/tb_cartport/run.sh`, PASS): S2 three grace reads with data driven, fourth stall
+  cycle floating; S7 the swap's grace read lasts three cycles; S8 first read of a session; new S9
+  BA rising after two BA-low cycles ends the grace, the resume cycle is served normally; S1, S3,
+  S4, S4b, S5, S6, S7b, S7c unchanged. GHDL analysis of `main.vhd` against HEAD: identical
+  diagnostics (only the expected missing sub-entities). Risk: a DMA master of another make that
+  writes in the second or third BA-low cycle after a read would meet driven read data for those
+  cycles (same class as A23's write grace meeting an idle master; the REC never writes there, and
+  such a write was never accepted anyway). Not yet synthesized; sy2002 builds WIP-V6-A24X1.
+- **A24 (commit ade48e6), superseded: read grace in the first BA-low cycle only**, implemented 2026-11-04 in `CORE/vhdl/main.vhd` (`cart_dma_ba_proc`,
   `handle_hardware_expansion_proc`, commit ade48e6) and benched** (`CORE/vhdl/test/tb_cartport/run.sh`: scenarios
   S2 read-read-stall, S7c swap read then stall, S8 first read then stall, all PASS). After a served
   read the first BA-low cycle is served as a read: BA driven low, R/W driven high, the read data
