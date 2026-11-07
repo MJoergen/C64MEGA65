@@ -27,9 +27,12 @@ submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f0
 (CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
 2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
 changed nothing against A23** (section 1c). A24X1 is the fix derived from round 3 (sections 6c and
-9); **it has not been synthesized or run on hardware yet**: sy2002 builds it (Vivado in the Ubuntu
-VM), then Joe3f00ff runs `PROTOCOL-round4.md`. A24 and A24X1 go to Joe only, not to the community.
-Do not merge `reu1764` into `develop` before round 4 is clean.
+9), built by sy2002 on 2026-11-07 from 6298a9d (R3: WNS 0.366 ns, WHS 0.010 ns; R6: WNS 0.317 ns,
+WHS 0.036 ns; no re-roll, sign-off gates passed, DRC clean) and posted to the issue on 2026-11-07
+(comment 6709358244: `C64MEGA65-WIP-V6-A24X1.zip`, `reu-tests4.zip`, the round-4 protocol).
+**Nothing of A24X1 has run on hardware yet; Joe3f00ff is its first tester** (`14-ffff` on A24
+first, then everything on A24X1). A24 and A24X1 go to Joe only, not to the community. Do not merge
+`reu1764` into `develop` before round 4 is clean.
 
 Folder contents:
 
@@ -593,7 +596,8 @@ Building a QNICE debug device (as done for the physical floppy work) is explicit
   review that were not taken, to keep the build free of new surfaces: a run-time register for
   the grace length (0..3) at `$D03F` and an address-hold diagnostic readable through IO1; one
   hardware session with them would tell which of the three cycles carries the held read, which
-  the fix does not need to know. Not yet synthesized; sy2002 builds WIP-V6-A24X1.
+  the fix does not need to know. Built as WIP-V6-A24X1 on 2026-11-07 (timing in the branch-state
+  paragraph at the top) and posted to the issue the same day; round 4 is pending.
 - **A24 (commit ade48e6), superseded: read grace in the first BA-low cycle only**, implemented 2026-11-04 in `CORE/vhdl/main.vhd` (`cart_dma_ba_proc`,
   `handle_hardware_expansion_proc`, commit ade48e6) and benched** (`CORE/vhdl/test/tb_cartport/run.sh`: scenarios
   S2 read-read-stall, S7c swap read then stall, S8 first read then stall, all PASS). After a served
