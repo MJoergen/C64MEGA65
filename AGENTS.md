@@ -613,7 +613,10 @@ boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
    edges (`cart_dotclk_shape_proc`), while the core's internal pixel enable
    stays a one-tick pulse. `CORE/vhdl/test/tb_cartport/run.sh` simulates both
    mechanisms with the real process text spliced out of `main.vhd` and
-   `fpga64_sid_iec.vhd`; run it after touching either.
+   `fpga64_sid_iec.vhd`; `CORE/vhdl/test/tb_vicdma/run.sh` puts the real VIC-II,
+   bus logic and C64 RAM around the same spliced processes with a behavioral 8726
+   under badline and sprite stalls (about two minutes, GHDL); run both after
+   touching either file.
 
 The same `core_dma` interface is shared with SIMREU and the `.crt` cacher (see
 `handle_cores_expansion_port_signals_proc`). So the older statement "MEGA65

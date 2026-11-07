@@ -21,7 +21,8 @@ documents named below; everything else is marked as a hypothesis.
 Branch state: `reu1764` = WIP-V6-A24X1. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6
 (read grace, superseded) and 39d75f3 (bump); A24X1 = cff5e95 (three grace cycles for reads in
 `CORE/vhdl/main.vhd`, bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`), 791e457 (bump)
-and dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`), all of 2026-11-07;
+dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`) and 8a58cfb (one grace read after a
+swap's write, `14-ffff` sharpened, after the adversarial review), all of 2026-11-07;
 submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
 (CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
 2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
@@ -251,8 +252,9 @@ DOTCLK    A22: 32 ns pulses rising at the edges into ticks 3,7,11,...,31 (one co
 BA (VIC)  changes at the edge into tick 1, badline and sprite stalls alike (= 63 ns after PHI2 fell)
 grant     cpuHasBus for the CPU half is decided at the edge into tick 16 from baLoc, ba_dma, dma_grace
 /DMA      sampled into dma_active at ticks 1 and 9 only
-RAM write a cartridge write is executed on every tick 16..31 with the registered pins (1 tick late);
-          the final write uses the pins as they were just before the PHI2 falling edge
+RAM write a cartridge write reaches the RAM in one tick only, tick 28 (CYCLE_CPUC, the only tick with
+          ramCE), with the registered pins of tick 27, about 130 ns before PHI2 falls (tb_vicdma:
+          2048 of 2048 DMA writes in tick 28); a master that drives its write data later is missed
 ```
 
 - `BA`, `R/W`, `/IO1`, `/IO2` share one level-shifter direction (`cart_ctrl_oe_o`). During a DMA
@@ -456,7 +458,8 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
    `cpu_data_in_proc`) and the FPGA drives it against the cartridge's ROM data in every served
    cycle; a 1541 Ultimate II+ with a cartridge image and its REU could notice, a 1764 cannot. A
    fetch to a fixed C64 address still loses its first-BA-low-cycle write (the address gate), as
-   since A23.
+   since A23. Two more pre-existing details found by the RTL bench are listed in section 9 (the
+   one-tick R/W overlap at a fetch stall, and the write grace disarmed by a served idle cycle).
 
 ## 7. Experiments for Joe (`tests/reu-tests.d64`, BASIC, simulated REU must be off)
 
@@ -558,10 +561,31 @@ Building a QNICE debug device (as done for the physical floppy work) is explicit
   cycle floating; S7 the swap's grace read lasts one cycle, the second BA-low cycle floats; S8
   first read of a session; new S9 BA rising after two BA-low cycles ends the grace, the resume
   cycle is served normally; S1, S3, S4, S4b, S5, S6, S7b, S7c unchanged. GHDL analysis of
-  `main.vhd` against HEAD: identical diagnostics (only the expected missing sub-entities). An RTL
-  bench with the real VIC-II and bus-logic entities (`CORE/vhdl/test/tb_vicdma/`, in progress)
-  checks that the grant of the second and third BA-low cycle changes nothing the VIC fetches and
-  that the data path delivers the right byte in every grace cycle. Risk: a DMA master of another
+  `main.vhd` against HEAD: identical diagnostics (only the expected missing sub-entities).
+  **RTL bench `CORE/vhdl/test/tb_vicdma/run.sh` (PASS, about 100 s with four parallel GHDL runs):**
+  the whole real `fpga64_sid_iec.vhd` (CPU, SID, CIAs and the color table replaced by stubs; a CPU
+  stub replays register writes with T65 timing) with the real `video_vicii_656x`,
+  `fpga64_buslogic`, color RAM and the `dualport_2clk_ram` C64 RAM, plus every Expansion Port
+  process of `main.vhd` spliced verbatim, and a behavioral 8726 that holds a read for three
+  BA-low cycles and counts the write of the first; PAL text screen with eight sprites, three
+  frames, 75 badline and 384 sprite stalls, verifies hit by 19 badline and 125 sprite stalls,
+  fetches by 5 and 27. Results: C1 the VIC's pixel output and every VIC fetch are identical tick
+  by tick with and without the REC's transfers, with the fix and with the A24 variant
+  (`C_CART_DMA_GRACE_RD_CYCLES` set to 1 by text substitution), while a negative control with
+  four grace cycles changes 1327 pixels and 288 fetches, so the bench would catch an overreach;
+  C2 no DMA-served CPU half ever has AEC high, and AEC first appears in the fourth BA-low cycle in
+  every one of the 459 stalls; C3 the read data is valid from tick 17 in every served grace cycle
+  and the fourth BA-low cycle floats from tick 1; C4 with the fix 0 faults in 6 transfers, with
+  the A24 variant exactly two faults per stall (held reads 2 and 3, every faulty byte `$FF`, none
+  with uniform `$FF` data), i.e. Joe's hardware signature reproduced; C5 fetches lose nothing with
+  either variant; C6 the sprite stalls behave like the badline stalls. Two things the bench
+  showed on the side, both pre-existing since A23 and not changed by A24X1: in tick 1 of the
+  first BA-low cycle after a fetch's write the stall branch drives R/W high for one tick (32 ns)
+  before the grace cycle takes over, against the REC's low (electrically harmless, and A23's
+  fetches are clean on hardware); and a master that resumed one cycle after seeing BA high (not
+  the 8726's behavior per VICE) would lose a fetch byte when a sprite-7 stall, a single BA-high
+  cycle and a badline follow each other, because the served idle cycle turns the history into a
+  swap and disarms the write grace. Risk: a DMA master of another
   make that writes in the second or third BA-low cycle after two reads would meet driven read
   data for those cycles (same class as A23's write grace meeting an idle master; the REC never
   writes there, such a write was never accepted anyway, and the level shifter wins the fight:
