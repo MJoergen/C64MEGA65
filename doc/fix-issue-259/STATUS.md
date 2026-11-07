@@ -19,9 +19,9 @@ use them. Everything marked *verified* was checked against code, disassembly or 
 documents named below; everything else is marked as a hypothesis.
 
 Branch state: `reu1764` = WIP-V6-A24X1. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6
-(read grace, superseded) and 39d75f3 (bump); A24X1 = the commits of 2026-11-07 on top of 8e7e1c1
-(three grace cycles for reads in `CORE/vhdl/main.vhd`, bench scenarios in
-`CORE/vhdl/test/tb_cartport/gen_tb.py`, bump, this record, `PROTOCOL-round4.md`, `tests/round4/`);
+(read grace, superseded) and 39d75f3 (bump); A24X1 = cff5e95 (three grace cycles for reads in
+`CORE/vhdl/main.vhd`, bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`), 791e457 (bump)
+and dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`), all of 2026-11-07;
 submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
 (CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
 2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
@@ -395,8 +395,15 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
    is read continuously, `fpga64_buslogic` puts the DMA address on it from tick 16, so the FPGA
    drives the correct byte about 60 ns after PHI2 rises, earlier than the DRAM of a real C64, as
    long as the cartridge's address is on the pins by tick 16; a REC that drove it later would fail
-   on a real C64, whose DRAM latches the row address with RAS at the PHI2 rise. What remains is
-   the **second and third BA-low cycle**: the FPGA served neither (A22 to A24 tri-state the data
+   on a real C64, whose DRAM latches the row address with RAS at the PHI2 rise. The decisive
+   evidence for the resume cycle is simpler, though (adversarial review, 2026-11-07): stashes
+   use the same C64-side resume read and store correct data (`2-stash`, `4-long` m3 with 64 KB,
+   Turbo), fetches use the same REU-side resume read and deliver correct data (`1-fetch` on A23,
+   poison value 255), so the resume read is good on both sides. (The value `$FF` alone does not
+   exclude a latch during a VIC half: the FPGA tri-states D0..D7 during both halves of every
+   stall cycle and during the first ticks of the resume cycle, so such a latch would read `$FF`
+   too; what excludes it is the real C64, whose bus carries VIC data in those halves.) What
+   remains is the **second and third BA-low cycle**: the FPGA served neither (A22 to A24 tri-state the data
    bus there, `cart_data_oe_o <= '0'` in the stall branch), a real C64 answers both (AEC stays
    high in phi2 for exactly three BA-low cycles; the VIC model does the same, `baCnt` and
    `addrValid` in `video_vicII_656x.vhd`), and a REC that keeps its read on the bus like a 6510
@@ -407,7 +414,18 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
    (VICE) and whatever it repeats afterwards is a repeat of the next byte, which it writes again
    after the stall. This is the mechanism A24X1 is built on (section 9); `14-ffff` (section 7c)
    checks the one assumption that has no direct measurement yet, that the REC drives its address
-   during the held reads.
+   during the held reads. The round-3 facts do not *force* this mechanism; they force "the
+   comparator took a `$FF` operand from an access whose data neither a stash stores nor a fetch
+   writes", and the held read in the AEC window is the most economical way to get there. The
+   one alternative that survives on paper (adversarial review): the REU-side operand is `$FF`,
+   i.e. a verify-only DRAM read inside the REC disturbed by a MEGA65-specific edge, such as the
+   stall-end BA rise coinciding with a DOTCLK edge on A23/A24 (both at the edge into tick 2).
+   Against it: the fault rates are identical on A22, where BA was released through the pull-up
+   and the dot clock had a different shape and phase, and fetches read the DRAM at the resume
+   without error. A24X1 decides: it serves the second and third BA-low cycle and changes no
+   edge. Also to be confirmed in round 4: Joe really booted A24 (the core version is shown in
+   the core's About screen and in the config file name); equal counts are also what an A23 boot
+   gives.
 4. **The Bit Fill paradox is resolved** (verified by disassembly, `$33F4..$34A7`): Bit Fill
    resets its own state (`$FC = 0` at `$3413`, length `$4000`, `$DF0A` written before every
    quarter, all commands with autoload), runs the seven-transfer chain per quarter, and after each
@@ -427,6 +445,18 @@ RAM write a cartridge write is executed on every tick 16..31 with the registered
    with the three-cycle window being the VIC's AEC rule for every BA source.
 6. **No swap has ever been checked byte by byte after a stall** (every swap test could only report
    the verify fault that followed); `13-swapchk` does it on A24X1.
+7. **Side effects of the grace reads on other DMA masters** (adversarial review): a grace cycle is
+   granted with `cpuHasBus = '1'`, so the full memory map is decoded and an I/O address on the bus
+   is really read (`$DC0D`/`$DD0D` clear ICR flags, `$D01E`/`$D01F` the collision registers).
+   For a REC this is what a real C64 does; for a master that idles in those cycles with an I/O
+   address left on the bus it is a spurious read, up to three per stall (A24: one). No known
+   master ends a transfer that way (a REC releases /DMA after its last access). Pre-existing and
+   unrelated to the grace, noted for later: a DMA read from `$8000..$BFFF` or `$E000..$FFFF`
+   while a cartridge ROM is mapped returns `cart_in_data = $00` (the hardware-cart branch of
+   `cpu_data_in_proc`) and the FPGA drives it against the cartridge's ROM data in every served
+   cycle; a 1541 Ultimate II+ with a cartridge image and its REU could notice, a 1764 cannot. A
+   fetch to a fixed C64 address still loses its first-BA-low-cycle write (the address gate), as
+   since A23.
 
 ## 7. Experiments for Joe (`tests/reu-tests.d64`, BASIC, simulated REU must be off)
 
@@ -472,7 +502,7 @@ the stopwatch (expected about 64 s for the Bit Fill line, and 0 sixteen times wi
 | Program | What it does | What the outcome means |
 |---|---|---|
 | `13-swapchk` | C64 `$4000..$40FF` holds `i`, REU `$0000..` holds `255-i`; 20 times: 256-byte swap with the display on, then with the display off a CPU check of the C64 side and a fetch of the REU side into `$4200` with a CPU check (after an odd number of swaps the C64 holds `255-i` and the REU `i`); then a 16 KB swap at `$5000` with page-dependent data (`(i + i/256) and 255` against its complement, REU bank 1) checked the same way, about three minutes of BASIC | any wrong byte, with run, position and both values, is a swap damaged by a stall: the position relative to the stall tells whether the read half or the write half went wrong. All zero: swaps survive stalls on A24X1 |
-| `14-ffff` | machine code: `$01 = $35` (KERNAL and BASIC out, I/O in), a chosen byte F stored at RAM `$FFFF`, 256-byte incrementing verifies of uniform data D with the display on, 50 runs, for (D, F) = (`$FF`, `$00`), (`$00`, `$00`), (`$00`, `$FF`), (`$FF`, `$FF`) | on A24: faults only in line 2 (D = `$00`, F = `$00`) and 3 (`$00`, `$FF`), i.e. whenever D is not `$FF` = the comparator sees a floating **data** bus (the REC drives its address, the FPGA simply does not answer in the second and third BA-low cycle: A24X1 fixes it). Faults only in lines 1 (`$FF`, `$00`) and 3 (`$00`, `$FF`), i.e. whenever D differs from F = the REC's **address** lines float during the held read and the FPGA serves RAM `$FFFF` (then A24X1 cannot help; the core would have to serve the last address instead, or the data of the previous read, and section 8 is next). On A24X1: all four lines zero |
+| `14-ffff` | machine code: `$01 = $35` (KERNAL and BASIC out, I/O in), the buffer at `$2000..$20FF` (its half-floated supersets `$2100..$3FFF`, `$6000..$7FFF`, `$A000..$BFFF`, `$E000..$FFFF` contain no I/O), a chosen byte F stored in all of those ranges including `$FFFF` (NMI vector parked on an RTI), 256-byte incrementing verifies of uniform data D without autoload, each started at raster line 50 like `12-position` (badline at 51, the held read is byte 49), 10 runs per pair, for (D, F) = (`$FF`, `$00`), (`$00`, `$00`), (`$00`, `$FF`), (`$FF`, `$FF`), (`$55`, `$AA`), (`$AA`, `$55`), (`$AA`, `$AA`); prints faults of 10 and the fault byte of the first fault | on A24: 10 of 10 exactly in the lines with D not `$FF` (lines 2, 3, 5, 6, 7), byte 49 = the comparator sees a floating **data** bus (the REC drives its address; A24X1 fixes it). 10 of 10 exactly where D differs from F (lines 1, 3, 5, 6) = the REC's **address** lines float during the held read and the FPGA serves F (A24X1 cannot help; the core would have to serve the address of the last served read, and section 8 is next). Faults in both kinds of line = both; a byte other than 49 = the fault is not the held read. On A24X1: all seven lines 0 of 10; any remaining fault pattern reads as above |
 
 Expected on A24X1 for the round-2 and round-3 programs: `3-verify` and `9-values` zero faults;
 `12-position` line 50 like line 52 (`80 255 1`, `CYC` about 318 = 275 plus the 43-cycle stall,
@@ -509,24 +539,37 @@ Building a QNICE debug device (as done for the physical floppy work) is explicit
 
 - **A24X1: three grace cycles for reads, implemented 2026-11-07 in `CORE/vhdl/main.vhd`
   (`cart_dma_ba_proc`, `handle_hardware_expansion_proc`, constant `C_CART_DMA_GRACE_RD_CYCLES = 3`,
-  counter `core_dma_grace_cnt`).** After a served read (stash, verify, the first access of a
-  session) and after a swap's write, `core_dma_grace` now stays up for three served BA-low cycles,
+  counter `core_dma_grace_cnt`, flag `core_dma_grace_long`).** After a served read (stash, verify,
+  the first access of a session) `core_dma_grace` now stays up for three served BA-low cycles,
   each served as a read with the RAM byte for the address the cartridge shows (BA driven low, R/W
-  driven high, no RAM write); after a fetch's write exactly one grace cycle as a write with the
-  address gate, as in A23; none after a swap's read (a read that follows a write), as in A24; the
-  grace ends early if BA rises, and all state clears when /DMA goes high. `fpga64_sid_iec` grants
+  driven high, no RAM write); after a swap's write exactly one grace cycle as a read (the swap's
+  counted next read, as in A24; a swap never compares, and a master of another make might drive
+  its next write there, so the cycles after it stay unserved, a point from the adversarial
+  review); after a fetch's write exactly one grace cycle as a write with the address gate, as in
+  A23; none after a swap's read (a read that follows a write), as in A24; the grace ends early if
+  BA rises, and all state clears when /DMA goes high. Nothing changes for cartridges that do not
+  assert /DMA (the whole logic sits inside `cart_in_dma_n_q = '0'`) and nothing for SIMCRT or
+  SIMREU. `fpga64_sid_iec` grants
   the CPU half of any cycle with `dma_grace` set, unchanged; the VIC model keeps `addrValid`
   (`aec`) low in the CPU half while `baCnt < 4` (`video_vicII_656x.vhd` lines 325..340 and
   694..700), for badlines and sprites alike, so the VIC never needs the three CPU halves the grace
   uses; this is the same three-cycle window in which a real C64's AEC stays high. Bench
   (`CORE/vhdl/test/tb_cartport/run.sh`, PASS): S2 three grace reads with data driven, fourth stall
-  cycle floating; S7 the swap's grace read lasts three cycles; S8 first read of a session; new S9
-  BA rising after two BA-low cycles ends the grace, the resume cycle is served normally; S1, S3,
-  S4, S4b, S5, S6, S7b, S7c unchanged. GHDL analysis of `main.vhd` against HEAD: identical
-  diagnostics (only the expected missing sub-entities). Risk: a DMA master of another make that
-  writes in the second or third BA-low cycle after a read would meet driven read data for those
-  cycles (same class as A23's write grace meeting an idle master; the REC never writes there, and
-  such a write was never accepted anyway). Not yet synthesized; sy2002 builds WIP-V6-A24X1.
+  cycle floating; S7 the swap's grace read lasts one cycle, the second BA-low cycle floats; S8
+  first read of a session; new S9 BA rising after two BA-low cycles ends the grace, the resume
+  cycle is served normally; S1, S3, S4, S4b, S5, S6, S7b, S7c unchanged. GHDL analysis of
+  `main.vhd` against HEAD: identical diagnostics (only the expected missing sub-entities). An RTL
+  bench with the real VIC-II and bus-logic entities (`CORE/vhdl/test/tb_vicdma/`, in progress)
+  checks that the grant of the second and third BA-low cycle changes nothing the VIC fetches and
+  that the data path delivers the right byte in every grace cycle. Risk: a DMA master of another
+  make that writes in the second or third BA-low cycle after two reads would meet driven read
+  data for those cycles (same class as A23's write grace meeting an idle master; the REC never
+  writes there, such a write was never accepted anyway, and the level shifter wins the fight:
+  logic garbage for that master, no damage); the I/O side effect of 6c.7. Options from the
+  review that were not taken, to keep the build free of new surfaces: a run-time register for
+  the grace length (0..3) at `$D03F` and an address-hold diagnostic readable through IO1; one
+  hardware session with them would tell which of the three cycles carries the held read, which
+  the fix does not need to know. Not yet synthesized; sy2002 builds WIP-V6-A24X1.
 - **A24 (commit ade48e6), superseded: read grace in the first BA-low cycle only**, implemented 2026-11-04 in `CORE/vhdl/main.vhd` (`cart_dma_ba_proc`,
   `handle_hardware_expansion_proc`, commit ade48e6) and benched** (`CORE/vhdl/test/tb_cartport/run.sh`: scenarios
   S2 read-read-stall, S7c swap read then stall, S8 first read then stall, all PASS). After a served

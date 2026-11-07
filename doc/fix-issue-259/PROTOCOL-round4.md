@@ -9,7 +9,7 @@ Hi Joe, thank you for round 3 and for the stopwatch, that number turned out to b
 
 **Disk:** `reu-tests4.d64` (attached) holds two new programs; the round-2 and round-3 disks are needed again as well. Simulated REU **off**, display mode as usual. `LOAD"name",8` and `RUN`, nothing else.
 
-**Part A, still on Alpha 24** (one program, two minutes): `14-FFFF`. It runs verifies with the screen on while the KERNAL ROM is switched off and a chosen byte sits at address `$FFFF`. If the REU reads an empty data bus, the result depends only on the data (`255` passes, `0` faults); if the address bus is empty instead, the result depends on whether the data equals the byte at `$FFFF`. Please photograph the four result lines. On Alpha 24X1 this program should report zero faults in all four lines.
+**Part A, still on Alpha 24** (one program, one minute): `14-FFFF`. It runs verifies with the screen on while the KERNAL ROM is switched off and a chosen byte F sits at `$FFFF` and in every RAM range an empty address bus could land in; every verify starts at raster line 50, so the VIC-II interrupts each one at byte 49, and each of the seven data/F pairs runs ten times. If the REU reads an empty data bus, a line faults exactly when the data is not 255; if the address bus is empty instead, a line faults exactly when the data differs from F. The last column is the byte at which the first fault of the line was reported; it should be 49. Please photograph the seven result lines. On Alpha 24X1 this program should report 0 faults in all seven lines, and if the core version was ever in doubt: the About screen of the core and the name of the config file on the SD card show it.
 
 **Part B, on Alpha 24X1** (attached as `C64MEGA65-WIP-V6-A24X1.zip`), please run and photograph the final screen of each:
 
@@ -18,7 +18,7 @@ Hi Joe, thank you for round 3 and for the stopwatch, that number turned out to b
 3. `12-POSITION` (round-3 disk): expected that the line-50 screen now looks like the line-52 screen, i.e. every run `80 255 1`, the cycle count about 43 higher than at line 52 (the pause itself, during which the REU now simply waits), `END` 55 instead of 56.
 4. `11-BITFILL` (round-3 disk): expected `R 0 C 0` for variations 0 to 7 and `R 4 C 0` for 8 and 9 (the planted byte must still be found; the fixed-C64 verifies must not fault any more, with the screen on or off).
 5. `13-SWAPCHK` (round-4 disk, about four minutes, most of it BASIC checking 16 KB byte by byte): expected `wrong bytes: 0` in all three summary lines. This is the first test that checks swaps with the screen on byte by byte; the earlier swap tests could only report the verify fault.
-6. `14-FFFF` (round-4 disk): expected zero faults in all four lines.
+6. `14-FFFF` (round-4 disk): expected 0 faults in all seven lines.
 7. `1-FETCH` and `2-STASH` (round-2 disk): regression, expected `0 BAD BYTES` as on Alpha 23.
 8. The patched CMD REUTEST with the screen on: expected OK in every step, including `Block/Page Addressing`, `Byte Addressing`, `Address Control` and `CBR Refresh Integrity`. With the stopwatch, the Bit Fill line should now take about 64 seconds (all 16 patterns run completely), and with the `PRINTPEEK(SB);` addition it should print `0` sixteen times.
 

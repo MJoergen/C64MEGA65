@@ -41,17 +41,21 @@ def run(mpu, mem, entry, limit=2_000_000):
     return False
 
 ok = True
-for status, exp_faults in ((0x60, 50), (0x40, 0), (0x20, 50)):
-    for d, f in ((255, 0), (0, 0), (0, 255), (255, 255)):
+for status, exp_faults in ((0x60, 10), (0x40, 0), (0x20, 10)):
+    for d, f in ((255, 0), (0, 0), (0, 255), (255, 255), (85, 170), (170, 85), (170, 170)):
         mpu, mem = make_mpu("14-ffff.prg", status)
         mem[0x01] = 0x37; mem[0xD011] = 0x1B
-        mem[0x0C03], mem[0x0C04], mem[0x0C05] = d, f, 50
+        mem[0x0C03], mem[0x0C04], mem[0x0C05] = d, f, 10
         done = run(mpu, mem, 0x0C00)
         faults, chk = mem[0x0C06], mem[0x0C07]
-        good = done and faults == exp_faults and chk == status and mem[0x01] == 0x37 and mem[0xFFFF] == f
-        good &= all(mem[0x4000 + i] == d for i in range(256)) and (mem[0xD011] & 0x10) == 0x10
-        good &= mem[0xDF03] == 0x40 and mem[0xDF08] == 1 and mem[0xDF0A] == 0
-        print(f"14-ffff status ${status:02X} d={d} f={f}: done={done} faults={faults} chk={chk:#x} $01={mem[0x01]:#x} $FFFF={mem[0xFFFF]} -> {'ok' if good else 'FAIL'}")
+        good = done and faults == exp_faults and chk == status and mem[0x01] == 0x37
+        good &= all(mem[0x2000 + i] == d for i in range(256)) and (mem[0xD011] & 0x10) == 0x10
+        good &= all(mem[a] == f for a in list(range(0x2100, 0x4000, 0x7F)) + list(range(0x6000, 0x8000, 0x7F)) + list(range(0xA000, 0xC000, 0x7F)) + list(range(0xE000, 0xFFFA, 0x7F)) + [0x20FF + 1, 0x3FFF, 0x7FFF, 0xBFFF, 0xFFF9, 0xFFFC, 0xFFFF])
+        good &= all(mem[a] == 0 for a in (0x1FFF, 0x4000, 0x5FFF, 0x8000, 0x9FFF, 0xC000, 0xDFFF))   # untouched neighbours
+        good &= mem[0xFFFA] | (mem[0xFFFB] << 8) == next(a for a in range(0x0C00, 0x0D00) if mem[a] == 0x40 and mem[a - 1] == 0x60)  # the RTI after the RTS
+        good &= mem[0xDF03] == 0x20 and mem[0xDF08] == 1 and mem[0xDF0A] == 0
+        if exp_faults: good &= (mem[0x0C08], mem[0x0C09]) == (mem[0xDF02], mem[0xDF03])
+        print(f"14-ffff status ${status:02X} d={d} f={f}: done={done} faults={faults} chk={chk:#x} $01={mem[0x01]:#x} $FFFF={mem[0xFFFF]} nmi={mem[0xFFFA] | (mem[0xFFFB] << 8):#x} -> {'ok' if good else 'FAIL'}")
         ok &= good
 print("RESULT:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)
