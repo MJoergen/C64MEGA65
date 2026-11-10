@@ -1043,6 +1043,7 @@ def deps_minhid_fixtures():
 # ---------------------------------------------------------------------------
 
 KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5, 6
+KEY_FIRST, KEY_LAST = 7, 8      # Cursor left / Cursor right (issue #258)
 
 
 class NavSim:
@@ -1154,6 +1155,21 @@ class NavSim:
                 break
         self.cursor = c
 
+    def _jump(self, last):
+        """Cursor left / right (issue #258): the first / last line of the flat
+        list that is visible in the current (sub)menu and selectable. This
+        is the intended behavior written down directly - deliberately not a
+        port of the assembly, which reuses the cursor-up/down search with a
+        wrapped start position."""
+        arr = self._struct()["arr"]
+        order = range(self.n - 1, -1, -1) if last else range(self.n)
+        for c in order:
+            w = self.g[c]
+            if (arr[c] & 0x8000) and ((w & SUBMENU) or (w & 0xFF)):
+                self.cursor = c
+                return
+        raise AssertionError("no selectable line in the current view")
+
     def _leave(self):
         b = self._struct()
         self.level = b["parent"]
@@ -1216,6 +1232,10 @@ class NavSim:
             self._move(-1)
         elif k == KEY_DOWN:
             self._move(+1)
+        elif k == KEY_FIRST:
+            self._jump(last=False)
+        elif k == KEY_LAST:
+            self._jump(last=True)
         elif k == KEY_CLOSE:
             self.trace.append("R C=%04X" % self.cursor)
             return "close"
@@ -1468,6 +1488,12 @@ def nav_script():
 
     s.run_start()                   # the testbed draws before OPTM_RUN
     assert s.cursor == 2            # start line: visible and selectable
+    s.feed(KEY_LAST)                # Cursor right: last item (#258)
+    assert s.cursor == 188          # "Close Menu"
+    s.feed(KEY_FIRST)               # Cursor left: first item (#258)
+    assert s.cursor == 2            # the first mount line
+    s.feed(KEY_FIRST)               # already there: stays
+    assert s.cursor == 2
     s.feed(KEY_UP)                  # wrap to "Close Menu" (188)
     assert s.cursor == 188
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
@@ -1493,6 +1519,10 @@ def nav_script():
     s.until(KEY_DOWN, 67)           # to nested "HDMI: %s" (filter)
     s.feed(KEY_SELECT)              # enter region 4 (depth 2)
     assert (s.level, s.cursor) == (4, 70)
+    s.feed(KEY_LAST)                # last item of the nested view: " Back"
+    assert (s.level, s.cursor) == (4, 79)
+    s.feed(0x8000 | KEY_FIRST)      # background redraw + first item
+    assert (s.level, s.cursor) == (4, 70)
     s.until(KEY_DOWN, 79)           # to the " Back" closer line
     s.feed(KEY_SELECT)              # leave via the closer
     assert (s.level, s.cursor) == (3, 67)
@@ -1501,6 +1531,11 @@ def nav_script():
     s.until(KEY_DOWN, 131)          # to "Volume: %s" - entering this region
     s.feed(KEY_SELECT)              # is the regression case for the percent-
     assert (s.level, s.cursor) == (8, 134)   # terminated-label scanner bug
+    s.feed(KEY_LAST)                # last item of the Volume view: " Back"
+    last_vol = s.cursor
+    assert s.level == 8 and last_vol > 134 and s.g[last_vol] == 0xC0FF
+    s.feed(KEY_FIRST)               # first item: " 100%"
+    assert (s.level, s.cursor) == (8, 134)
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
     assert (s.level, s.cursor) == (0, 131)
     s.until(KEY_DOWN, 157)          # to "Advanced Settings"
@@ -1513,6 +1548,10 @@ def nav_script():
     assert (s.level, s.cursor) == (10, 164)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
     assert s.cursor == 174          # lands on the closer line
+    s.feed(KEY_FIRST)               # first item of the depth-2 OSM view
+    assert (s.level, s.cursor) == (10, 164)
+    s.feed(0x8000 | KEY_LAST)       # background redraw + last item
+    assert (s.level, s.cursor) == (10, 174)
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
@@ -1722,6 +1761,10 @@ def nav_turbo_toggles(s, ofs):
             "turbo %s: double separator" % name)
 
     check(off, pal)                     # factory default: block hidden
+    s.feed(KEY_LAST)                    # Cursor right: " Back" (#258)
+    assert s.cursor == closer, "Off: LAST went to %d" % s.cursor
+    s.feed(KEY_FIRST)                   # Cursor left: PAL
+    assert s.cursor == pal, "Off: FIRST went to %d" % s.cursor
     s.until(KEY_DOWN, smart)
     s.feed(KEY_DOWN)                    # hidden block: Smart -> Back
     assert s.cursor == closer, "Off: DOWN from Smart went to %d" % s.cursor
@@ -1734,6 +1777,11 @@ def nav_turbo_toggles(s, ofs):
     s.feed(KEY_UP)                      # back to Smart
     s.feed(KEY_SELECT)                  # C128 -> Smart: the block stays
     check(smart)
+    s.feed(KEY_LAST)                    # Cursor right: " Back", also with
+    assert s.cursor == closer, "Smart: LAST went to %d" % s.cursor
+    s.feed(KEY_UP)                      # the speed block visible: UP from
+    assert s.cursor == speed[-1], "Smart: UP from Back went to %d" % s.cursor
+    s.until(KEY_UP, smart)              # Back is 4x; back to Smart
     s.feed(KEY_DOWN)
     assert s.cursor == speed[0], "Smart: DOWN went to %d" % s.cursor
     s.until(KEY_UP, off)
@@ -1811,18 +1859,31 @@ def nav3_script():
     s = NavSim(groups, stdsel, NAV3_START, labels=NAV3_LABELS, raw_deps=raw)
     s.run_start()                       # normalization: idx1 is dep-hidden ->
     assert s.cursor == 2                # the cursor advances to idx2
+    s.feed(KEY_LAST)                    # Cursor right: "Close Menu" (#258)
+    assert s.cursor == n - 1
+    s.feed(KEY_FIRST)                   # Cursor left: the toggle
+    assert s.cursor == 0
+    s.until(KEY_DOWN, 2)                # back to idx2 (skips hidden idx1)
     s.until(KEY_UP, 0)                  # to the toggle (skips hidden idx1)
     s.feed(KEY_SELECT)                  # toggle ON  -> redraw, idx1 appears
     s.feed(KEY_SELECT)                  # toggle OFF -> redraw, idx1 hidden
     s.until(KEY_DOWN, 3)                # to the submenu opener
     s.feed(KEY_SELECT)                  # enter: idx4 dep-hidden (OFF), scan
     assert (s.level, s.cursor) == (1, 5)   # skips it -> lands on idx5
+    s.feed(KEY_LAST)                    # last item: the closer idx6
+    assert (s.level, s.cursor) == (1, 6)
+    s.feed(KEY_FIRST)                   # first item: idx4 is dep-hidden, so
+    assert (s.level, s.cursor) == (1, 5)   # it must be idx5
     s.feed(KEY_MENUUP)                  # back to main, cursor on the opener
     assert (s.level, s.cursor) == (0, 3)
     s.until(KEY_UP, 0)                  # back to the toggle
     s.feed(KEY_SELECT)                  # toggle ON
     s.until(KEY_DOWN, 3)               # to the opener (idx1 is visible now)
     s.feed(KEY_SELECT)                  # enter: idx4 now visible -> lands there
+    assert (s.level, s.cursor) == (1, 4)
+    s.feed(KEY_LAST)                    # last item: the closer idx6
+    assert (s.level, s.cursor) == (1, 6)
+    s.feed(KEY_FIRST)                   # first item: idx4, visible now
     assert (s.level, s.cursor) == (1, 4)
     s.feed(KEY_MENUUP)
     assert (s.level, s.cursor) == (0, 3)
@@ -2659,6 +2720,22 @@ MUTANTS = [
      "M2M/rom/optm_deps.asm",
      "RBRA    _DMH_NEXT, Z            ; yes: already counted",
      "RBRA    _DMH_SEENN, Z           ; yes: already counted"),
+    ("menu.asm  Cursor left starts the search on the current line (#258)",
+     "M2M/rom/menu.asm",
+     "MOVE    R0, R2                  ; R2: last line of the list\n                SUB     1, R2\n",
+     "MOVE    R2, R2\n                MOVE    R2, R2\n"),
+    ("menu.asm  Cursor right starts the search on the current line (#258)",
+     "M2M/rom/menu.asm",
+     "XOR     R2, R2                  ; R2: line 0",
+     "MOVE    R2, R2                  ; R2: line 0"),
+    ("menu.asm  Cursor left and right swapped (#258)",
+     "M2M/rom/menu.asm",
+     "_OPTM_RUN_FL1   CMP     OPTM_KEY_FIRST, R8      ; key: first item?",
+     "_OPTM_RUN_FL1   CMP     OPTM_KEY_LAST, R8       ; key: first item?"),
+    ("menu.asm  Cursor right ignored (#258)",
+     "M2M/rom/menu.asm",
+     "RBRA    _OPTM_RUN_5A, !Z        ; no: check other key\n                XOR     R2, R2",
+     "RBRA    _OPTM_RUN_5A, 1         ; no: check other key\n                XOR     R2, R2"),
     ("optm_deps.asm  MINHID tests only state 0 of a single-select mother",
      "M2M/rom/optm_deps.asm",
      "MOVE    2, R7                   ; single-select: states 0 and 1",

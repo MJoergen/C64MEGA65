@@ -146,6 +146,7 @@ constant HELP_2 : string :=
 
    " Help:               Open/close menu\n" &
    " Run/Stop:           Leave sub-menu\n" &
+   " Cursor left/right:  First/last item\n" &
    " Settings are saved when closing the menu\n\n" &
 
    " When browsing for D64/D81, CRT and PRG:\n\n" &

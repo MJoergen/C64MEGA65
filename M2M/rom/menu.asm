@@ -30,6 +30,8 @@ OPTM_KEY_SELECT .EQU 3                          ; normally this is Return
 OPTM_KEY_CLOSE  .EQU 4                          ; normally this is Help
 OPTM_KEY_SELALT .EQU 5                          ; normally this is Space
 OPTM_KEY_MENUUP .EQU 6                          ; normally this is Run/Stop
+OPTM_KEY_FIRST  .EQU 7                          ; normally this is Cursor left
+OPTM_KEY_LAST   .EQU 8                          ; normally this is Cursor right
 
 ; ----------------------------------------------------------------------------
 ; Action codes for the OPTM_FP_SELECT function
@@ -112,7 +114,7 @@ OPTM_FP_LINE    .EQU 4
 ; R9=3: select highlighted headline/title
 OPTM_FP_SELECT  .EQU 5
 
-; Waits until one of the six Option Menu keys is pressed
+; Waits until one of the eight Option Menu keys is pressed
 ; and returns the OPTM_KEY_* code in R8
 OPTM_FP_GETKEY  .EQU 6
 
@@ -729,7 +731,7 @@ _OPTM_RUN_2     MOVE    OPTM_FP_SELECT, R7      ; unselect old item
 
                 ; Cursor down
 _OPTM_RUN_3     CMP     OPTM_KEY_DOWN, R8       ; key: down?
-                RBRA    _OPTM_RUN_5A, !Z        ; no: check other key
+                RBRA    _OPTM_RUN_FL1, !Z       ; no: check other key
 
 _OPTM_RUN_4     MOVE    R0, R7                  ; yes: wrap around at bottom?
                 SUB     1, R7
@@ -764,6 +766,28 @@ _OPTM_KD_WA     MOVE    @R7, R7
                 CMP     0, R6                   ; menu item found?
                 RBRA    _OPTM_RUN_2, !Z         ; yes: unselect cur. and go on
                 RBRA    _OPTM_RUN_4, 1          ; no: continue searching
+
+                ; Jump to the first item of the current (sub)menu, like the
+                ; file browser does on Cursor left when everything fits on
+                ; one page: put the cursor on the last line of the flat list
+                ; and let the cursor-down search run; it wraps around to the
+                ; top and stops at the first selectable line that is visible
+                ; in the current (sub)menu, so it skips the same lines as
+                ; cursor up/down do (other submenus, separators, headlines,
+                ; dependency-hidden lines)
+_OPTM_RUN_FL1   CMP     OPTM_KEY_FIRST, R8      ; key: first item?
+                RBRA    _OPTM_RUN_FL2, !Z       ; no: check other key
+                MOVE    R0, R2                  ; R2: last line of the list
+                SUB     1, R2
+                RBRA    _OPTM_RUN_4, 1          ; search down from there
+
+                ; Jump to the last item of the current (sub)menu (Cursor
+                ; right): the mirror image, the cursor-up search starts on
+                ; line 0, wraps around to the bottom and searches upwards
+_OPTM_RUN_FL2   CMP     OPTM_KEY_LAST, R8       ; key: last item?
+                RBRA    _OPTM_RUN_5A, !Z        ; no: check other key
+                XOR     R2, R2                  ; R2: line 0
+                RBRA    _OPTM_RUN_1, 1          ; search up from there
 
                 ; Close menu key
 _OPTM_RUN_5A    CMP     OPTM_KEY_CLOSE, R8      ; key: close?

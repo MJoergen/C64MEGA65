@@ -1173,7 +1173,7 @@ _OPTM_FPS_L     CMP     R2, R4
 _OPTM_FPS_RET   DECRB
                 RET                
 
-; Waits until one of the five Option Menu keys is pressed
+; Waits until one of the eight Option Menu keys is pressed
 ; and returns the OPTM_KEY_* code in R8
 ;
 ; since the "wait for keypress" loop would otherwise block the entire QNICE
@@ -1232,8 +1232,18 @@ _OPTM_GK_3      CMP     M2M$KEY_HELP, R8        ; Help (close menu)
                 RBRA    _OPTMGK_RET, 1
 
 _OPTM_GK_4      CMP     M2M$KEY_RUNSTOP, R8     ; Run/Stop (one menu level up)
-                RBRA    _OPTMGK_LOOP, !Z        ; other key: ignore
+                RBRA    _OPTM_GK_5, !Z
                 MOVE    OPTM_KEY_MENUUP, R8
+                RBRA    _OPTMGK_RET, 1
+
+_OPTM_GK_5      CMP     M2M$KEY_LEFT, R8        ; Cursor left (first item)
+                RBRA    _OPTM_GK_6, !Z
+                MOVE    OPTM_KEY_FIRST, R8
+                RBRA    _OPTMGK_RET, 1
+
+_OPTM_GK_6      CMP     M2M$KEY_RIGHT, R8       ; Cursor right (last item)
+                RBRA    _OPTMGK_LOOP, !Z        ; other key: ignore
+                MOVE    OPTM_KEY_LAST, R8
 
 _OPTMGK_RET     DECRB
                 RET
