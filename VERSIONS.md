@@ -33,23 +33,8 @@ Version 6 - MONTH DAY, 2026
   NTSC frame rate of 59.83 Hz.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/181)
 
-* Turbo modes: Choose "Turbo mode" and "Turbo speed" (2x, 3x or 4x) in the
-  "Model" submenu. "Off" (default) is a standard 1 MHz C64. "C128" runs the
-  CPU faster only while a program sets bit 0 of `$D030`, the 2 MHz switch of
-  the C128, so software made for it turns the turbo on and off by itself.
-  "Smart" is always fast but falls back to 1 MHz for half a second after
-  activity on the clock line of the IEC bus (as on the MiSTer), so that
-  loading from disk keeps working, while timing-critical games and demos may
-  break. Video, sound, timers and DMA keep their original timing, and
-  hardware cartridges stay usable because every access to the expansion port
-  still runs at 1 MHz.
-  Caps Lock is the turbo key: while Caps Lock is on (its LED lights up), the
-  C64 runs in "Smart" mode at 4x, no matter what the menu says. Switch Caps
-  Lock off and the menu setting applies again. This way you can keep, for
-  example, "C128" at 4x as your permanent setting and switch to "Smart" only
-  when you need it. The Caps Lock state is never saved: the MEGA65 keyboard
-  remembers it by itself, so the LED always shows whether the Caps Lock turbo
-  is on.
+* Turbo modes: "C128" (fast while a program sets `$D030`) and "Smart" (fast
+  except during disk access) at 2x, 3x or 4x. Caps Lock toggles Smart 4x.
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/87 and
    https://github.com/MJoergen/C64MEGA65/issues/261)
 
