@@ -1,0 +1,96 @@
+----------------------------------------------------------------------------------------------------
+-- Caps Lock bench (GitHub issue #261), part 2: the turbo decode of CORE/vhdl/mega65.vhd
+--
+-- Template: run.sh copies the C_MENU_TURBO_* constants and the turbo decode (the statements from
+-- "c64_turbo_mode(0) <=" to the end of the "c64_turbo_speed" assignment) verbatim out of the
+-- current CORE/vhdl/mega65.vhd into the two marker lines below and fails if it cannot find them.
+-- The bench then checks all 3 x 3 x 2 combinations of turbo mode, turbo speed and Caps Lock, each
+-- with all other menu bits at '0' and at '1'.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity tb_capslock_decode is
+end entity tb_capslock_decode;
+
+architecture sim of tb_capslock_decode is
+
+-- @MEGA65_CONSTANTS@
+
+   signal main_osm_control_i   : std_logic_vector(255 downto 0) := (others => '0');
+   signal main_kb_capslock_n_i : std_logic := '1';
+   signal c64_turbo_mode       : std_logic_vector(1 downto 0);
+   signal c64_turbo_speed      : std_logic_vector(1 downto 0);
+
+begin
+
+-- @MEGA65_DECODE@
+
+   stimulus : process
+      type nat3_t is array (0 to 2) of natural;
+      type slv3_t is array (0 to 2) of std_logic_vector(1 downto 0);
+      constant C_MODE_BIT  : nat3_t := (C_MENU_TURBO_OFF, C_MENU_TURBO_C128, C_MENU_TURBO_SMART);
+      constant C_SPEED_BIT : nat3_t := (C_MENU_TURBO_2X, C_MENU_TURBO_3X, C_MENU_TURBO_4X);
+      constant C_MODE_EXP  : slv3_t := ("00", "01", "10");   -- Off, C128, Smart
+      constant C_SPEED_EXP : slv3_t := ("00", "01", "10");   -- 2x, 3x, 4x
+      variable osm         : std_logic_vector(255 downto 0);
+      variable exp_mode    : std_logic_vector(1 downto 0);
+      variable exp_speed   : std_logic_vector(1 downto 0);
+      variable cases       : natural := 0;
+      variable errors      : natural := 0;
+   begin
+      for background in 0 to 1 loop
+         for caps in 0 to 1 loop
+            for m in 0 to 2 loop
+               for sp in 0 to 2 loop
+                  -- the other menu bits are all '0' or all '1'; within the two turbo groups exactly
+                  -- one item is selected, as the OSM guarantees for radio-button groups
+                  if background = 0 then
+                     osm := (others => '0');
+                  else
+                     osm := (others => '1');
+                  end if;
+                  for i in 0 to 2 loop
+                     osm(C_MODE_BIT(i))  := '0';
+                     osm(C_SPEED_BIT(i)) := '0';
+                  end loop;
+                  osm(C_MODE_BIT(m))  := '1';
+                  osm(C_SPEED_BIT(sp)) := '1';
+                  main_osm_control_i <= osm;
+                  if caps = 1 then
+                     main_kb_capslock_n_i <= '0';   -- Caps Lock engaged (LED on)
+                     exp_mode  := "10";             -- Smart ...
+                     exp_speed := "10";             -- ... at 4x, whatever the menu says
+                  else
+                     main_kb_capslock_n_i <= '1';
+                     exp_mode  := C_MODE_EXP(m);
+                     exp_speed := C_SPEED_EXP(sp);
+                  end if;
+                  wait for 10 ns;
+                  cases := cases + 1;
+                  if c64_turbo_mode /= exp_mode or c64_turbo_speed /= exp_speed then
+                     errors := errors + 1;
+                     report "TB_ERROR: background " & integer'image(background) & ", Caps Lock " &
+                            integer'image(caps) & ", menu mode " & integer'image(m) & ", menu speed " &
+                            integer'image(sp) & ": mode " & to_string(c64_turbo_mode) & " speed " &
+                            to_string(c64_turbo_speed) & ", expected mode " & to_string(exp_mode) &
+                            " speed " & to_string(exp_speed) severity error;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+      end loop;
+      report "TB: decode: " & integer'image(cases) & " cases, " & integer'image(errors) & " errors";
+      if errors = 0 then
+         report "TB: RESULT PASS";
+      else
+         report "TB: RESULT FAIL";
+      end if;
+      wait;
+   end process stimulus;
+
+end architecture sim;

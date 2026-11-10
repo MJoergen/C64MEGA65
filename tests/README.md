@@ -5,6 +5,29 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X2 - TBD
+--------------------------
+
+@TODO: Test the Caps Lock turbo key (issue #261) and the new menu navigation (issue #258) on R3 and R6 at least (R4/R5 when available). Everything of WIP-V6-A22X1 below still applies. For measuring the speed use the same method as for A22X1 (section 3 of `doc/dev-turbo/TEST-PLAN.md`).
+
+Caps Lock turbo:
+
+* @TODO Caps Lock off (LED off): the core runs exactly the turbo setting of the `Model` submenu; check `Off`, `C128 4x` and `Smart 2x`.
+* @TODO Caps Lock on (LED on): `Smart 4x`, whatever the menu says: with `Off`, with `C128 2x` (a program that leaves `$D030` alone is fast anyway) and with `Smart 2x` (faster than before). The summary line of the `Model` submenu keeps showing the menu setting.
+* @TODO Caps Lock off again: back to the menu setting at once, no reset. Toggle quickly a few times while a program runs: no crash, no reset.
+* @TODO The Caps Lock turbo stays on while the on-screen menu is open (press Help with the LED on; a running program keeps its speed) and while a file is loaded from the file browser.
+* @TODO PAL and NTSC; switching the machine mode with the LED on resets the C64 as usual and it comes up in `Smart 4x`.
+* @TODO The LED is on when the core starts (switch Caps Lock on in another core or in the MEGA65 core, then start the C64 core without a power cycle): the C64 runs in `Smart 4x` right from the start; Caps Lock off returns to the menu setting.
+* @TODO Smart rules apply under Caps Lock: loading from a simulated drive, from the built-in floppy as 1581 and from a real IEC device works (turbo pauses during IEC activity); a real cartridge (EF3) keeps working.
+* @TODO Holding Caps Lock for about a second makes the keyboard toggle it twice (LED off, then on again); the turbo follows the LED.
+* @TODO Typing in BASIC: Caps Lock has no other effect on the C64 (no shifted letters).
+
+Menu navigation:
+
+* @TODO In the main menu and in every submenu (including the nested HDMI and OSM submenus): Cursor left jumps to the first item, Cursor right to the last item (`Close Menu` or `Back`).
+* @TODO `Model` submenu with turbo `Off` (the `Turbo speed` block is hidden) and with `Smart`: Cursor right jumps to `Back`, Cursor left to `PAL`.
+* @TODO Help screens and file browser keep their own meaning of Cursor left/right (previous/next page).
+
 Version WIP-V6-A22X1 - TBD
 --------------------------
 

@@ -16,6 +16,12 @@
 --
 -- 3) Control the drive led
 --
+-- 4) Serve the Caps Lock state (capslock_n_o): the MEGA65 keyboard itself
+--    toggles Caps Lock on every press and lights the Caps Lock LED; we can
+--    neither read nor set the LED, but the keyboard sends the very state that
+--    drives it on a dedicated line. C64MEGA65 uses it as a turbo switch
+--    (GitHub issue #261).
+--
 -- MiSTer2MEGA65 done by sy2002 and MJoergen in 2022 and licensed under GPL v3
 ----------------------------------------------------------------------------------
 
@@ -41,6 +47,11 @@ entity m2m_keyb is
       key_num_o            : out integer range 0 to 79;        -- cycles through all keys with SCAN_FREQUENCY
       key_pressed_n_o      : out std_logic;                    -- low active: debounced feedback: is kb_key_num_o pressed right now?
 
+      -- Caps Lock state, low active: '0' while Caps Lock is engaged, i.e. while the Caps Lock LED is on.
+      -- Independent of enable_core_i, so it stays valid while the core is decoupled from the keyboard
+      -- (e.g. while the on-screen menu is open). '1' until the keyboard has reported a stable state.
+      capslock_n_o         : out std_logic;
+
       -- control the drive led on the MEGA65 keyboard
       power_led_i          : in std_logic;
       power_led_col_i      : in std_logic_vector(23 downto 0); -- RGB color of power led      
@@ -60,6 +71,11 @@ signal key_num             : integer range 0 to 79;
 signal key_status_n        : std_logic;
 signal keys_n              : std_logic_vector(15 downto 0) := x"FFFF"; -- low active, "no key pressed"
 
+-- Caps Lock: raw state from the keyboard controller and the filtered state (both low active)
+signal capslock_raw_n      : std_logic;
+signal capslock_n          : std_logic := '1';
+signal capslock_cnt        : natural range 0 to 2**20 - 1 := 0;
+
 begin
    -- output the keyboard interface for the core
    key_num_o         <= key_num;
@@ -67,6 +83,9 @@ begin
    
    -- output the keyboard interface for QNICE
    qnice_keys_n_o    <= keys_n;
+
+   -- output the Caps Lock state
+   capslock_n_o      <= capslock_n;
    
    m65driver : entity work.mega65kbd_to_matrix
    port map
@@ -90,7 +109,7 @@ begin
        matrix_col       => matrix_col,
        matrix_col_idx   => matrix_col_idx,
        
-       capslock_out     => open  
+       capslock_out     => capslock_raw_n
    );
    
    m65matrix_to_keynum : entity work.matrix_to_keynum
@@ -127,6 +146,24 @@ begin
       end if;
    end process;      
    
+   -- Caps Lock: the keyboard controller samples the Caps Lock line once per keyboard frame (about every
+   -- 0.46 ms). A new state is only accepted after it was stable for 4 ms (about eight frames), so that a
+   -- single corrupted frame on the serial keyboard link cannot flip capslock_n_o. Pressing Caps Lock
+   -- switches the state at most a few times per second, so 4 ms of latency is not noticeable.
+   handle_capslock : process(clk_main_i)
+   begin
+      if rising_edge(clk_main_i) then
+         if capslock_raw_n = capslock_n then
+            capslock_cnt <= 0;
+         elsif capslock_cnt >= clk_main_speed_i / 250 then
+            capslock_n   <= capslock_raw_n;
+            capslock_cnt <= 0;
+         else
+            capslock_cnt <= capslock_cnt + 1;
+         end if;
+      end if;
+   end process;
+
    -- make qnice_keys_o a register and fill it
    -- see sysdef.asm for the key-to-bit mapping      
    handle_qnice_keys : process(clk_main_i)

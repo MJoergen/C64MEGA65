@@ -281,6 +281,7 @@ architecture synthesis of mega65_r5 is
    -- keyboard handling (incl. drive led)
    signal main_key_num           : integer range 0 to 79;
    signal main_key_pressed_n     : std_logic;
+   signal main_capslock_n        : std_logic;
    signal main_power_led         : std_logic;
    signal main_power_led_col     : std_logic_vector(23 downto 0);
    signal main_drive_led         : std_logic;
@@ -649,6 +650,7 @@ begin
       main_reset_core_o       => main_reset_core,
       main_key_num_o          => main_key_num,
       main_key_pressed_n_o    => main_key_pressed_n,
+      main_capslock_n_o       => main_capslock_n,
       main_power_led_i        => main_power_led,
       main_power_led_col_i    => main_power_led_col,
       main_drive_led_i        => main_drive_led,
@@ -875,6 +877,7 @@ begin
          -- M2M Keyboard interface
          main_kb_key_num_i       => main_key_num,
          main_kb_key_pressed_n_i => main_key_pressed_n,
+         main_kb_capslock_n_i    => main_capslock_n,
          main_power_led_o        => main_power_led,
          main_power_led_col_o    => main_power_led_col,
          main_drive_led_o        => main_drive_led,

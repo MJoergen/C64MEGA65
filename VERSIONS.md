@@ -43,7 +43,15 @@ Version 6 - MONTH DAY, 2026
   break. Video, sound, timers and DMA keep their original timing, and
   hardware cartridges stay usable because every access to the expansion port
   still runs at 1 MHz.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/87)
+  Caps Lock is the turbo key: while Caps Lock is on (its LED lights up), the
+  C64 runs in "Smart" mode at 4x, no matter what the menu says. Switch Caps
+  Lock off and the menu setting applies again. This way you can keep, for
+  example, "C128" at 4x as your permanent setting and switch to "Smart" only
+  when you need it. The Caps Lock state is never saved: the MEGA65 keyboard
+  remembers it by itself, so the LED always shows whether the Caps Lock turbo
+  is on.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/87 and
+   https://github.com/MJoergen/C64MEGA65/issues/261)
 
 * Full DMA support for hardware cartridges such as hardware REUs (for example
   REU Grande), Sidekick64, TeensyROM and more.

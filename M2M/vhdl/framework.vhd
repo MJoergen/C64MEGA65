@@ -126,6 +126,7 @@ port (
    main_reset_core_o       : out   std_logic;
    main_key_num_o          : out   integer range 0 to 79;
    main_key_pressed_n_o    : out   std_logic;
+   main_capslock_n_o       : out   std_logic;                 -- '0' while Caps Lock is engaged (LED on)
    main_power_led_i        : in    std_logic;
    main_power_led_col_i    : in    std_logic_vector(23 downto 0);
    main_drive_led_i        : in    std_logic;
@@ -617,6 +618,7 @@ begin
          enable_core_i        => main_csr_keyboard_on,
          key_num_o            => main_key_num_o,
          key_pressed_n_o      => main_key_pressed_n_o,
+         capslock_n_o         => main_capslock_n_o,
 
          -- control the drive led on the MEGA65 keyboard
          power_led_i          => main_power_led_i,

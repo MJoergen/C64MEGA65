@@ -9,6 +9,7 @@ Entry point for anyone, human or coding agent, who picks up this work. Read this
 * **Branch and version (locked):** branch `turbo-mode`, created off `develop`; `CORE_VERSION` becomes `WIP-V6-A22X1`.
 * **Baseline:** `develop` at `55918e6` (`WIP-V6-A22`), submodule `CORE/C64_MiSTerMEGA65` at `650c6b5`.
 * **This folder** lives on branch `turbo-mode` (committed together with the implementation).
+* **Follow-up `WIP-V6-A22X2` (on `develop`):** Caps Lock is the turbo key (issue #261, decision L11); bench `CORE/vhdl/test/tb_capslock/run.sh`.
 
 ## 1. Decisions
 
@@ -26,6 +27,7 @@ Entry point for anyone, human or coding agent, who picks up this work. Read this
 | L8 | This work is `WIP-V6-A22X1`. Version numbers of other work (for example the #260 NTSC sprite fix) are decided later. | 2026-11-05 | maintainer (decision D) |
 | L9 | #87 is the single issue; #242 is closed as a duplicate of #87 with the comment drafted in `~/Downloads/issue-242-closing-comment.md`. | 2026-11-05 | maintainer (decision E) |
 | L10 | Games are tested by Boris and other community testers, not by the maintainer; they are asked on GitHub (#87) when `WIP-V6-A22X1` is ready. The game items in `TEST-PLAN.md` are marked **(community)**. | 2026-11-05 | maintainer |
+| L11 | Caps Lock is the turbo key (issue #261, Kugelblitz360's proposal): while Caps Lock is on (LED on) the C64 runs `Smart` at `4x`, overriding the menu setting including `C128`; with Caps Lock off the menu setting applies. It follows the level, not the key presses: the line the keyboard sends is the register that drives the LED, so the LED is the truth, also when it is already on at power-on. Never saved and not shown in the summary line (an exception to L7; the LED is the indicator). Implemented in the turbo decode of `mega65.vhd` from the dedicated Caps Lock line of the keyboard (`m2m_keyb.vhd` `capslock_n_o`, independent of the keyboard gate that the Shell closes while the menu is open), so `main.vhd` and `tb_turbo` are unchanged. Version `WIP-V6-A22X2`. | 2026-11-10 | maintainer |
 
 ### 1.2 Open
 
@@ -100,6 +102,7 @@ No scope decision is open. Details to settle in `TURBO-SPEC.md`:
 * **2026-11-05:** implementation, two independent adversarial reviews, RTL and docs fix round, re-review of the fix and the full simulation done; everything passes; waiting for the maintainer's review and commit approval.
 * **2026-11-05:** committed and pushed on `turbo-mode` (submodule first, then the main repo with the pointer bump); the maintainer starts the Vivado builds.
 * **2026-11-06:** R3 and R6 bitstreams verified (sources, logs, timing, header, length, CRC). The Ubuntu dialog seen during the R3 build was the apport/update-notifier prompt for a stale crash report of the Parallels Tools helper `prlusmd` from the previous VM shutdown (2026-11-05 00:50); nothing crashed during the builds. Vivado's build re-saves `CORE-R3.xpr`/`CORE-R6.xpr` (project path, file order): bookkeeping, not to be committed.
+* **2026-11-10:** `WIP-V6-A22X2` on `develop`: Caps Lock turbo key (L11, issue #261) and OSM Cursor left/right = first/last item (issue #258). Verified with the new bench `CORE/vhdl/test/tb_capslock/run.sh` (keyboard chain with a behavioral MEGA65 keyboard, `mega65.vhd` decode, wiring of all four board tops, mutants), `tb_turbo/run.sh all` and `M2M/rom/tests/menu_test.py run|verify|mutate`; Vivado builds and hardware tests pending.
 
 ## 8. Implementation run (live)
 
@@ -164,7 +167,7 @@ Read first: section 0 (state), 1.1 (decisions L1-L10, binding), 5 (open items), 
 
 Triage of a report:
 
-1. Collect: board (R3/R3A/R4/R5/R6), PAL/NTSC, turbo mode and speed, expansion port mode (hardware slot, SIMCRT, SIMREU), cartridge type, program, `HDMI: Flicker-free`.
+1. Collect: board (R3/R3A/R4/R5/R6), PAL/NTSC, turbo mode and speed, the Caps Lock LED (on means `Smart 4x` whatever the menu says, L11), expansion port mode (hardware slot, SIMCRT, SIMREU), cartridge type, program, `HDMI: Flicker-free`.
 2. Does it also happen with turbo `Off`? Then it is not a turbo regression: turbo `Off` is cycle-identical to `WIP-V6-A22` (I1, proven in simulation), so compare with A22 instead.
 3. Expected behavior, not a bug: timing-critical games and demos break in `Smart` (use `Off` or `C128`); software that writes junk to `$D030` switches turbo on in `C128` mode; the effective speed is below the nominal factor (I/O, badlines, sprites); IEC transfers in `C128` mode at turbo speed fail as on a real C128; the accepted residuals of section 8 (EF3 pause on R3/R4, `$D030` quirk during the pause, dummy reads in the Ultimax unmapped area, RR-Net MK3 enable flag).
 4. Logic bugs: reproduce in `CORE/vhdl/test/tb_turbo` (extend `gen_cart.py` / `evaluate.py`), fix, then run `CORE/vhdl/test/tb_turbo/run.sh all` (must stay PASS, about 4 minutes) and `python3 M2M/rom/tests/menu_test.py verify` (plus `run` after menu changes). The bench copies main.vhd glue blocks verbatim and fails if they drift: update the copies together with main.vhd.

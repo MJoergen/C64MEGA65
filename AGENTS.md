@@ -1088,7 +1088,7 @@ hardware saw the code.
 | ------------------------- | --------------------------------------------------------- |
 | HDMI tearing / flicker    | `clk.vhd`, `mega65.vhd` (hr_core_speed), `hdmi_flicker_free.vhd`, `ascal.vhd` |
 | NTSC / PAL switch         | `clk.vhd` (four MMCMs, mux tree), `mega65.vhd` (`hr_core_speed`, `qnice_video_mode_o`), `main.vhd` (`mode_change_reset_proc`), `video_modes_pkg.vhd`, `doc/ntsc.md` |
-| Turbo mode (C128 / Smart) | `fpga64_sid_iec.vhd` `cpu_cyc` (turbo slots, clean-cycle rule for hardware carts) and the turbo decision (`turbo_m`, `cs_io`, `dma_req`), `fpga64_buslogic.vhd` `cs_turbo_eligible_o`, `main.vhd` `turbo_smart_iec_detector_proc`, `mega65.vhd` (`c64_turbo_mode`, `c64_turbo_speed`), `doc/dev-turbo/` |
+| Turbo mode (C128 / Smart) | `fpga64_sid_iec.vhd` `cpu_cyc` (turbo slots, clean-cycle rule for hardware carts) and the turbo decision (`turbo_m`, `cs_io`, `dma_req`), `fpga64_buslogic.vhd` `cs_turbo_eligible_o`, `main.vhd` `turbo_smart_iec_detector_proc`, `mega65.vhd` (`c64_turbo_mode`, `c64_turbo_speed`; the Caps Lock override `main_kb_capslock_n_i`, issue #261), `M2M/vhdl/m2m_keyb.vhd` (`capslock_n_o`), `doc/dev-turbo/`, benches `CORE/vhdl/test/tb_turbo/` and `CORE/vhdl/test/tb_capslock/` |
 | VGA / scandoubler / CSYNC | `analog_pipeline.vhd`, `vga_controller.vhd`               |
 | OSM rendering / scaling   | `vga_osm.vhd`, `video_overlay.vhd`, `vga_recover_counters.vhd` |
 | Menu items / labels       | `CORE/vhdl/config.vhd` (OPTM_ITEMS, OPTM_GROUPS, WHS)     |

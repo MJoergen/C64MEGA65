@@ -131,6 +131,7 @@ port (
    -- M2M Keyboard interface (incl. power led and drive led)
    main_kb_key_num_i       : in  integer range 0 to 79;     -- cycles through all MEGA65 keys
    main_kb_key_pressed_n_i : in  std_logic;                 -- low active: debounced feedback: is kb_key_num_i pressed right now?
+   main_kb_capslock_n_i    : in  std_logic;                 -- low active: Caps Lock is engaged (LED on), also while the OSM is open
    main_power_led_o        : out std_logic;
    main_power_led_col_o    : out std_logic_vector(23 downto 0);
    main_drive_led_o        : out std_logic;
@@ -690,9 +691,15 @@ begin
    -- Turbo mode from the "Model" submenu (GitHub issue #87), encoded like the turbo_mode and
    -- turbo_speed ports of the MiSTer core. Off (C_MENU_TURBO_OFF) sets neither mode bit.
    -- A change never resets the C64 and takes effect within one 1 MHz cycle.
-   c64_turbo_mode(0) <= main_osm_control_i(C_MENU_TURBO_C128);
-   c64_turbo_mode(1) <= main_osm_control_i(C_MENU_TURBO_SMART);
-   c64_turbo_speed   <= "10" when main_osm_control_i(C_MENU_TURBO_4X) = '1' else
+   --
+   -- Caps Lock is the turbo key (GitHub issue #261): while Caps Lock is engaged, i.e. while its LED is
+   -- on, the C64 runs in Smart mode at 4x ("10", "10"), whatever the submenu says (this overrides C128,
+   -- too); with Caps Lock off, the submenu setting applies. The override is never saved: the MEGA65
+   -- keyboard keeps the Caps Lock state by itself, so the LED always shows whether the override is
+   -- active, also right after the core started with the LED already on.
+   c64_turbo_mode(0) <= main_osm_control_i(C_MENU_TURBO_C128) and main_kb_capslock_n_i;
+   c64_turbo_mode(1) <= main_osm_control_i(C_MENU_TURBO_SMART) or not main_kb_capslock_n_i;
+   c64_turbo_speed   <= "10" when main_kb_capslock_n_i = '0' or main_osm_control_i(C_MENU_TURBO_4X) = '1' else
                         "01" when main_osm_control_i(C_MENU_TURBO_3X) = '1' else
                         "00";   -- C_MENU_TURBO_2X (group default)
 
