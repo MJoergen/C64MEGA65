@@ -29,9 +29,10 @@ Branch state: `reu1764` = WIP-V6-A24X2. A23 = commits 2ce5e53, 1213bed, 94b496f;
 `CORE/vhdl/main.vhd`, bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`), 791e457 (bump)
 dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`), 8a58cfb (one grace read after a
 swap's write, `14-ffff` sharpened, after the adversarial review) and 6298a9d (RTL bench
-`tb_vicdma`), all of 2026-11-07; A24X2 = the change of 2026-11-10 (three grace reads after a
-swap's write too, section 9; swap scenarios in both benches; `tests/round5/`,
-`PROTOCOL-round5.md`); submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
+`tb_vicdma`), all of 2026-11-07; A24X2 = 32c4331 (three grace reads after a swap's write too,
+section 9; swap scenarios in both benches), 2944e77 (bump), 7da2334 (this record,
+`PROTOCOL-round5.md`, `tests/round5/`) and 459f8b5 (`doc/inofficial.md` row), all of 2026-11-10;
+submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
 (CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
 2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
 changed nothing against A23** (section 1c). A24X1 is the fix derived from round 3 (sections 6c and
@@ -42,8 +43,10 @@ Joe3f00ff tested it on 2026-11-08 (round 4, section 1d): **with the REU working 
 start) the CMD test passes every verify phase for the first time; swaps store `$FF` in the REU
 for one byte per stall (fixed in A24X2); and for most of the session the REU did not answer at
 all**, which the A24X1 change cannot cause (section 6d.3) and which round 5 is built to pin down.
-Kugelblitz360's TeensyROM+ works on A24X1 (brief test). **A24X2 is not built yet and has not run
-on hardware.** A24, A24X1 and A24X2 go to Joe and Kugelblitz360 only, not to the community. Do not
+Kugelblitz360's TeensyROM+ works on A24X1 (brief test). A24X2 was built by sy2002 on 2026-11-10
+from the sources of 2944e77 (R3: WNS 0.259 ns, WHS 0.028 ns; R6: WNS 0.334 ns, WHS 0.036 ns; no
+re-roll, sign-off gates passed, DRC without errors, no critical warning). **It has not run on
+hardware yet.** A24, A24X1 and A24X2 go to Joe and Kugelblitz360 only, not to the community. Do not
 merge `reu1764` into `develop` before a round is clean.
 
 Folder contents:
@@ -601,9 +604,10 @@ RAM write a cartridge write reaches the RAM in one tick only, tick 28 (CYCLE_CPU
      the same start happened in rounds 1 to 3, and a cold start ends with a core start too. Test:
      the `REU CHECK` of the first program after every start; reset against power cycle.
    - *The pin timing of one build.* The port outputs pass a LUT and routing behind their
-     registers, they are not IOB registers, so the register-to-pad delays (about 2.5 ns at the
-     fast corner for `cart_data_dir_o` in the routed A24X1 R6 design) differ by a nanosecond or
-     two from build to build. It matters only if the REC's register write has almost no margin;
+     registers, they are not IOB registers, so the register-to-pad delays can differ from build
+     to build (for the one port pin the routed R6 timing reports list, `cart_data_dir_o`, the
+     fast-corner delay is 2.47 ns in A24X1 and 2.39 ns in A24X2, so these two builds are 0.1 ns
+     apart there). It matters only if the REC's register write has almost no margin;
      the nominal hold after the PHI2 fall is 31 ns for address, R/W and /IO2 and more for the
      data, and the TeensyROM+ is content. Test: the state follows the core version (A24X1 and
      A24X2 but not A24 and A23, or one build only); then `report_datasheet` of the port pins for
@@ -842,7 +846,8 @@ if round 5 shows that the state follows the core version.
   after a swap's write the FPGA drives R/W high and its read data from tick 2 of the first
   BA-low cycle, while the REC model keeps R/W low and its write data until tick 4, three ticks
   (95 ns) of opposite drive at the start of the VIC half, where nobody samples; a real REC has to
-  have R/W high again before the VIC's access anyway. **Not built and not on hardware yet.**
+  have R/W high again before the VIC's access anyway. Built as WIP-V6-A24X2 on 2026-11-10 (timing
+  in the branch-state paragraph at the top); **not on hardware yet.**
 - **A24X1: three grace cycles for reads, implemented 2026-11-07 in `CORE/vhdl/main.vhd`
   (`cart_dma_ba_proc`, `handle_hardware_expansion_proc`, constant `C_CART_DMA_GRACE_RD_CYCLES = 3`,
   counter `core_dma_grace_cnt`, flag `core_dma_grace_long`).** After a served read (stash, verify,
