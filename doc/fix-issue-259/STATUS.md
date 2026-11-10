@@ -2,37 +2,49 @@
 
 Running record of the investigation. Read this before touching `reu1764` again.
 
-**Resume checklist for the next session, once Joe3f00ff has posted his round-4 results:**
+**Resume checklist for the next session, once Joe3f00ff has posted his round-5 results:**
 
-1. Read this file completely, then `PROTOCOL-round4.md` (what he was asked to run) and section 7c
-   (what each outcome means). Section 6c holds the root cause as established after round 3; do not
-   re-derive sections 6, 6b and 6c.
-2. Fetch the new issue comments and photos (`gh issue view 259 --repo MJoergen/C64MEGA65 --json comments`;
-   images are `github.com/user-attachments/assets/<id>`, downloadable with `curl -H "Authorization: Bearer $(gh auth token)"`).
-3. Fill in the round-4 results and map every outcome with section 7c. All zero on A24X1 closes the
-   issue (then: Kugelblitz360's DMA-cartridge regression, merge into `develop`, community build).
-   Faults left on A24X1: `14-ffff` on A24 and on A24X1 says whether the REC drives its address
-   during the held reads (section 7c); then section 8 (ILA or logic analyzer) is the next step.
+1. Read this file completely, then `PROTOCOL-round5.md` (what he was asked to run) and section 7d
+   (what each outcome means). Section 6c holds the root cause, section 6d the state after round 4;
+   do not re-derive sections 6 to 6d.
+2. Fetch the new issue comments and attachments (`gh issue view 259 --repo MJoergen/C64MEGA65 --json comments`;
+   images and PDFs are `github.com/user-attachments/...`, downloadable with
+   `curl -L -H "Authorization: Bearer $(gh auth token)"`).
+3. In every photo read the `REU CHECK` lines first (section 7d): a result between a failed check and
+   the next cold start says nothing about the core. Then fill in the round-5 results and map every
+   outcome with section 7d. Everything clean on A24X2 with every check OK closes the issue (then:
+   Kugelblitz360's DMA-cartridge regression on A24X2, merge into `develop`, cleanup of the WIP notes
+   in `VERSIONS.md` and `tests/README.md`). If the REU stops answering again: Joe's answers to the
+   questions of the protocol and `15-health` after a reset, after a short power cycle and on A24
+   decide between the REU or its connection, the core start and the A24X builds (section 6d.3);
+   section 8 is the next step only if the state follows the core version.
+
 Do not launch VICE on this machine (windows pop up); the VICE command-line tools `petcat` and
-`c1541` in `/Applications/Vice/bin` are fine, `tests/round3/build.sh` and `tests/round4/build.sh`
-use them. Everything marked *verified* was checked against code, disassembly or the official
-documents named below; everything else is marked as a hypothesis.
+`c1541` in `/Applications/Vice/bin` are fine, the `build.sh` scripts of `tests/round3/` to
+`tests/round5/` use them. Everything marked *verified* was checked against code, disassembly or
+the official documents named below; everything else is marked as a hypothesis.
 
-Branch state: `reu1764` = WIP-V6-A24X1. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6
+Branch state: `reu1764` = WIP-V6-A24X2. A23 = commits 2ce5e53, 1213bed, 94b496f; A24 = ade48e6
 (read grace, superseded) and 39d75f3 (bump); A24X1 = cff5e95 (three grace cycles for reads in
 `CORE/vhdl/main.vhd`, bench scenarios in `CORE/vhdl/test/tb_cartport/gen_tb.py`), 791e457 (bump)
-dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`) and 8a58cfb (one grace read after a
-swap's write, `14-ffff` sharpened, after the adversarial review), all of 2026-11-07;
-submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
+dbcd348 (this record, `PROTOCOL-round4.md`, `tests/round4/`), 8a58cfb (one grace read after a
+swap's write, `14-ffff` sharpened, after the adversarial review) and 6298a9d (RTL bench
+`tb_vicdma`), all of 2026-11-07; A24X2 = the change of 2026-11-10 (three grace reads after a
+swap's write too, section 9; swap scenarios in both benches; `tests/round5/`,
+`PROTOCOL-round5.md`); submodule `CORE/C64_MiSTerMEGA65` @ 98492d1, unchanged. A23 was tested by Joe3f00ff on 2026-11-03
 (CMD test and round 2): it fixed the lost fetch bytes and nothing else. A24 was built by sy2002 on
 2026-11-05 from 4074da1 and tested by Joe3f00ff on 2026-11-06 (`3-verify`, `9-values`, CMD): **it
 changed nothing against A23** (section 1c). A24X1 is the fix derived from round 3 (sections 6c and
 9), built by sy2002 on 2026-11-07 from 6298a9d (R3: WNS 0.366 ns, WHS 0.010 ns; R6: WNS 0.317 ns,
 WHS 0.036 ns; no re-roll, sign-off gates passed, DRC clean) and posted to the issue on 2026-11-07
 (comment 6709358244: `C64MEGA65-WIP-V6-A24X1.zip`, `reu-tests4.zip`, the round-4 protocol).
-**Nothing of A24X1 has run on hardware yet; Joe3f00ff is its first tester** (`14-ffff` on A24
-first, then everything on A24X1). A24 and A24X1 go to Joe only, not to the community. Do not merge
-`reu1764` into `develop` before round 4 is clean.
+Joe3f00ff tested it on 2026-11-08 (round 4, section 1d): **with the REU working (after a cold
+start) the CMD test passes every verify phase for the first time; swaps store `$FF` in the REU
+for one byte per stall (fixed in A24X2); and for most of the session the REU did not answer at
+all**, which the A24X1 change cannot cause (section 6d.3) and which round 5 is built to pin down.
+Kugelblitz360's TeensyROM+ works on A24X1 (brief test). **A24X2 is not built yet and has not run
+on hardware.** A24, A24X1 and A24X2 go to Joe and Kugelblitz360 only, not to the community. Do not
+merge `reu1764` into `develop` before a round is clean.
 
 Folder contents:
 
@@ -52,12 +64,22 @@ Folder contents:
 - `decoded/vice-reu-c-ba-functions.txt`: the VICE x64sc BA handling of the REU (`reu.c`) and the
   `vicii_cycle_reu` / `vicii_steal_cycles` callbacks.
 - `decoded/dis6502.py`: the disassembler used (`dis6502.py <file> <offset> <org> <len>`).
-- `PROTOCOL-for-Joe.md`, `PROTOCOL-round3.md`, `PROTOCOL-round4.md`: the test protocols of rounds 2,
-  3 and 4, as pasted into the GitHub issue (round 4: to be pasted together with the A24X1 build).
+- `PROTOCOL-for-Joe.md`, `PROTOCOL-round3.md`, `PROTOCOL-round4.md`, `PROTOCOL-round5.md`: the test
+  protocols of rounds 2 to 5, as pasted into the GitHub issue (round 5: to be pasted together
+  with the A24X2 build).
 - `tests/round4/`: `13-swapchk.bas` (swap integrity with the display on, byte by byte) and
   `14-ffff.s` + `.bas` (verify with the KERNAL banked out and a chosen byte at `$FFFF`: tells a
   floating data bus from a floating address bus), `build.sh` producing `reu-tests4.d64` / `.zip`,
   `validate.py` (py65 smoke test of the machine code).
+- `tests/round5/`: every program of round 5 on one disk (section 7d). `reucheck.bas` holds the
+  two subroutines that `build.sh` appends to the BASIC programs (the REU check they call at
+  their start and end, and the compare of a C64 block with a REU block), `15-health.bas` is the
+  stand-alone long form of the check, `16-soak.bas` writes registers only, `12-position.s` is
+  the unchanged round-3 machine code.
+  `basicrun.py` runs a program headlessly (py65, the BASIC and KERNAL ROMs of the local VICE
+  installation, a functional model of the REC with the modes working, not answering, flaky and
+  stalled as on A24X1) and `validate.py` runs all of them and checks what they print; no VICE
+  window is involved.
 
 Reference documents (public):
 
@@ -136,6 +158,38 @@ On A24 (the read grace of section 9, first BA-low cycle served), display on:
 Kugelblitz360 on A24 (2026-11-05): TeensyROM+ and EasyFlash testing without regressions; Kernal
 replacement (EasyFlash 3, TeensyROM) did not work before and does not work now; KFF2 unchanged.
 
+## 1d. Round 4 (2026-11-08, Joe3f00ff, issue comment 6727823253, `Report-A23-A24X1.pdf`)
+
+Joe's note: "not very stable (and not error free). I got different results (up to not working at
+all) running things in a row (without restart/reboot). Only a cold start (long wait between off and
+on again!) brought the system back to working condition." The report is ordered by test number, not
+by time; the labels in quotes are his. The last column says what the photo itself proves about the
+REU at that moment (section 6d.1): *not answering* = the REC executes next to nothing, *working* =
+transfers demonstrably ran, *unknown* = the program shows nothing that would tell.
+
+| Core, program, run | Result | REU |
+|---|---|---|
+| A24, `14-ffff` (part A) | 0 faults in all seven lines, no "(fault w/ display off!)" | unknown |
+| A24X1, `3-verify` | 256 B 0..255: "(FAULT W/ DISPLAY OFF!)", then 0 faults in 100; 256 B `$AA`: 1 in 100; 4 KB: 1 in 25; 64 KB fixed-C64: 0 in 10; 16 KB fixed-C64: 0 in 25 | unknown |
+| A24X1, `9-values` | faults in 50: `$FF` 0, `$00` 0, `$AA` 1, `$55` 1, `$FE` 1, `$7F` 1, `$0F` 1, `$F0` 1 | unknown |
+| A24X1, `12-position` | off-status 16 on both screens; line 50: `16 -1 65280 19 50` twice, `48 1 65278 22 50`, then `16 1 65278 19 50` seven times; line 52: `48 2 65277 21 52`, then `16 2 65277 19 52` nine times (A23: `48 49 206 113 51` and `80 255 1 275 56`, off-status 80) | not answering |
+| A24X1, `11-bitfill` | variant 0: `R 3 C 1 CPU 0 1ST 1`; variants 1 to 8: `R 0 C 0 CPU 0 1ST 0`; variant 9: `R 2 C 0 CPU 0 1ST 191` | not answering |
+| A24X1, `13-swapchk` "run 1 in row with tests before" | every position wrong in every run (`C64` = position, `REU` = position), `WRONG BYTES: 5120`; the 16 KB part stopped by Joe after 20 minutes | not answering |
+| A24X1, `14-ffff` "run 1 after break of test 5" | 1 fault each in the lines (D, F) = (0, 255), (85, 170), (170, 170) with `BYTE` 8960, 8961, 8962; 0 in the other four | not answering |
+| A24X1, `1-fetch` | `GOT 255` at every position of every run, `TOTAL BAD BYTES: 5100` | not answering |
+| A24X1, `2-stash` "in row (no restart)" | the photo is the same image file as the `1-fetch` photo | no data |
+| A24X1, CMD REUTEST "first run in row with the other tests" | `REU not found! Possible bad connection or faulty computer.` | not answering |
+| A24X1, `14-ffff` "re-run after test with CMD-Tool failed" | 1 fault each in (255, 0), (0, 255), (85, 170), (170, 170) with `BYTE` -8184, -8127, -8126, -8125; 0 in the other three | not answering |
+| A24X1, `13-swapchk` "run 2 from cold start" | positions 59, 116, 141, 167 wrong in the runs 16 to 20, positions 16 and 247 in run 20; in every one of them one side holds 255 and the other side is right, and the 255 changes sides from run to run; `WRONG BYTES: 56`; no photo of the 16 KB part | working |
+| A24X1, `13-swapchk`, a second run (photo filed under "STASH result, after cold start") | positions 34, 109, 193, 212 in the same way (runs 15 to 20 visible), `WRONG BYTES: 50` | working |
+| A24X1, CMD REUTEST "rerun (cold start)" | 512K; Buffer Memory OK, Block/Page Addressing OK, Byte Addressing OK, **Interrupt Register err 1**, Address Control OK, `$FF00` Option OK, CBR Refresh Integrity OK, Bit Fill `(ff) : OK`, "Test Successful"; no stopwatch time and no `PRINTPEEK(SB)` output | working |
+
+Not delivered: `2-stash`; a `1-fetch`, `3-verify`, `9-values`, `12-position`, `11-bitfill` or
+`14-ffff` result from a REU that is known to work; the 16 KB swap; the Bit Fill time.
+
+Kugelblitz360 (2026-11-08, comment 6726163861): the TeensyROM+'s REU emulation and the CMD tester
+run fine on A24X1 (a brief test); he offers to repeat Joe's tests on the TeensyROM+.
+
 ## 2. What the test programs really do (verified by disassembly)
 
 All CMD transfers use command values `$B0..$B3` (execute, autoload, immediate; stash, fetch,
@@ -213,6 +267,17 @@ page 5, `EXP_Slot.SchDoc`; the same folder holds R2..R6):
   bus-hold latch, i.e. it rises with a time constant of roughly 0.3 to 1 us (bus capacitance
   including the riser). A released data bus therefore reads `$FF` well within one C64 cycle; a
   released BA (A22) crawls up in the same way, which is what A23's active drive removed.
+- **The cartridge's supply is switched by the core.** `5V_EXT` (port pins 2 and 3, and the far end
+  of all those pull-ups) comes from a load switch (U66, MP5077, current limit 3.03 A, soft start)
+  whose enable is `EXP_SLOT_EN` (FPGA pin T21, `cart_en_o`, pulled low by R261); the same signal
+  enables U9 through U65. The three transceivers are supplied from the permanent 5 V, and their
+  enables are pulled inactive (R246, R247, R251, R252, R257). While the FPGA is being configured
+  the cartridge is therefore unpowered and isolated. When a core starts, `top_mega65-r6.vhd` raises
+  `cart_en_o` and lowers the transceiver enables in the same moment (`cart_ctrl_en_o`,
+  `cart_addr_en_o`, `cart_data_en_o` are `not cart_en`), so the core drives PHI2, DOTCLK and the
+  bus lines with 5 V levels while `5V_EXT` is still ramping up. Every start of the core, a core
+  switch included, is a short power cycle for the cartridge with its inputs driven before its
+  supply is up.
 
 Board differences do not matter for a REU: R3/R3A/R4 only lack the ability to *sense* /RESET and
 to *drive* /GAME, /EXROM, /NMI, /IRQ (`top_mega65-r3.vhd`: reset output only, the other four input
@@ -464,6 +529,141 @@ RAM write a cartridge write reaches the RAM in one tick only, tick 28 (CYCLE_CPU
    since A23. Two more pre-existing details found by the RTL bench are listed in section 9 (the
    one-tick R/W overlap at a fetch stall, and the write grace disarmed by a served idle cycle).
 
+## 6d. Deductions after round 4
+
+1. **The report mixes two states of the REU, and only three screens come from a REU that worked.**
+   In most photos the REC executes next to nothing:
+   - `12-position`: off-status 16, i.e. no end of block after the stash and the verify with the
+     display off. 18 of 20 runs read `ST 16` with `CYC 19`: the CPU lost no cycle, there was no DMA
+     (256 bytes add 256 cycles, A23 showed 275). `setregs` writes address and length before every
+     run, yet `BYTE` and `LEN` only move when a transfer ran (two bytes in run 3 of the first
+     screen, one byte in run 1 of the second: `$4000`/`$FF00`, `$4002`/`$FEFE`, `$4003`/`$FEFD`).
+   - `11-bitfill`: the planted mismatch of the variants 8 and 9 is found 0 and 2 times instead of
+     4; `1ST 191` means quarter 95: the quarter loop, which ends when the read-modify-write of
+     `$DF05` has wrapped it to zero after four passes, ran at least 96 times in variant 9.
+   - `13-swapchk` run 1: 5120 is 20 x 256, no byte ever changed sides, and the fetch that reads the
+     REU side back did not run either (the column shows what `3-verify` had left at `$4200`).
+   - `14-ffff` on A24X1: `BYTE` is `$DF02/03 - $2001`; the address register held `$4301..$4303` in
+     one run and `$0009`, `$0042..$0044` in the other, never the `$2000` written before every
+     verify, and it advanced by one byte per reported fault.
+   - `1-fetch`: 5100 is 20 x 255, nothing was fetched. CMD: the detection loop (write 0..255 to six
+     registers and read them back) failed.
+
+   The three screens taken after a cold start are different: the swaps exchange all but a few of
+   their 256 bytes correctly, and the CMD test finds 512K and passes phases that need thousands
+   of transfers.
+
+2. **What "not answering" is, as far as the numbers go.** Reads work: the status reads 16 or 48,
+   address and length form a consistent pair of counters. Writes are lost almost always, whatever
+   the register: in the 18 later runs of `12-position` no write to `$DF02`, `$DF07` or `$DF08`
+   took effect (0 of 54), while 2 of its 22 commands did run; in `14-ffff` 3 and 4 of 84 commands
+   ran. A command that gets through runs with whatever the registers hold, compares the wrong
+   bytes and ends as a FAULT after one or two of them: that is every "fault" in those photos. The
+   length register is telling: it reads `$FF00` where `$0100` was written. No program writes `$FF`
+   there; it is the REC's reset value `$FFFF` with only the low byte written. So the REC had been
+   reset (a core start or the reset button), and since then `$DF07 = 0` and `$DF03 = $40` had got
+   through and `$DF08 = 1` never. `12-position` had only two tries at each before its first
+   read-back and none got through afterwards; `3-verify` and `9-values` write the same two values
+   thirteen times each. **The simpler reading is that the REU was not answering during
+   `3-verify` and `9-values` either**, i.e. from the start of that session. Their results fit: 0
+   or 1 fault per line (9 in 673 verify commands) is what the other photos of that state show.
+   The counts do not follow the stalls (0 of 10 for 64 KB verifies with about 130 stalls each, 1
+   of 100 for 256 bytes with a third of a stall each), and one fault happened with the display
+   off, where nothing can stall a transfer, followed by 100 clean repetitions of the same verify:
+   a REC that works cannot produce that, a mismatch in the data would fault every time. Neither
+   program checks that a transfer ran, so they are no evidence for or against the fix. The same holds for
+   part A: with the REU working, A24 must fault 10 of 10 in the five lines whose data is not `$FF`
+   (round 3: `12-position` on A23 faulted 10 of 10 at this very byte 49, `9-values` on A24 at the
+   stall rate). Seven zeros mean a REU that did not execute, or a core that was not A24;
+   `14-ffff` shows neither status nor length, so the photo cannot tell which.
+
+3. **The A24X1 change cannot produce that state** (verified in the RTL). A24X1 differs from A24
+   only in `cart_dma_ba_proc` and in the grace branch of `handle_hardware_expansion_proc`
+   (`git diff 39d75f3 6298a9d -- CORE/vhdl/main.vhd`). Both act only while /DMA is low and BA is
+   low, and `cart_dma_ba_proc` clears all of its registers in every tick in which /DMA is high. A
+   register write by the CPU, the CMD detection loop and a verify with the display off happen
+   with /DMA high or with BA high throughout: there A24X1 is A24, signal for signal. At the port
+   the only addition is read data on D0..D7 in the second and third BA-low cycle after a cartridge
+   read; R/W, BA, /IO1 and /IO2 are driven to the same levels as on A24 (the stall branch and the
+   grace branch drive them alike), and the REC does not drive the data lines in a stash or a
+   verify (`tb_vicdma`: no data bus fight in any verify or fetch cycle). And if item 2 is right,
+   the state was there before the first transfer that A24X1 treats differently. What remains,
+   with the evidence and the experiment of round 5 that separates them:
+   - *The REU, its riser, its contacts, its supply, its temperature.* A register write needs
+     R/W, the data lines, /IO2 and PHI2; a marginal level or contact on one of them gives exactly
+     "reads work, a few percent of the writes get through", a rate that drifts, and a cure by
+     switching off and waiting. The CMD test's own text says the same. Against it: rounds 1 to 3
+     ran on the same unit without it, as far as reported. Test: `15-health` shows which registers
+     and which bits fail; does the reset button or a short power cycle help; does A24 show it.
+   - *The REC's start.* Every start of the core is a short power cycle for the cartridge with
+     driven inputs (section 3), and a REC that comes up wrong may stay wrong until the supply has
+     really collapsed. It would explain a whole session without answers and the cure. Against it:
+     the same start happened in rounds 1 to 3, and a cold start ends with a core start too. Test:
+     the `REU CHECK` of the first program after every start; reset against power cycle.
+   - *The pin timing of one build.* The port outputs pass a LUT and routing behind their
+     registers, they are not IOB registers, so the register-to-pad delays (about 2.5 ns at the
+     fast corner for `cart_data_dir_o` in the routed A24X1 R6 design) differ by a nanosecond or
+     two from build to build. It matters only if the REC's register write has almost no margin;
+     the nominal hold after the PHI2 fall is 31 ns for address, R/W and /IO2 and more for the
+     data, and the TeensyROM+ is content. Test: the state follows the core version (A24X1 and
+     A24X2 but not A24 and A23, or one build only); then `report_datasheet` of the port pins for
+     the builds, and IOB registers.
+   - *Something in the REC that only happens once verifies survive stalls.* No mechanism known,
+     and ruled out if item 2 is right. Test: the checks stay OK until a display-on verify ran.
+
+4. **The verify fix is confirmed by the one CMD run that is known to come from a working REU.**
+   Known, because the size detection, Address Control 2 and 4 and the `$FF00` Option let the CPU
+   check data that only a fetch can have delivered, before and after the phases in question.
+   Block/Page Addressing (2048 two-byte verifies), Byte Addressing (256 page verifies of the
+   pattern 0..255 and 256 one-byte verifies), Address Control (256-byte verifies) and CBR Refresh
+   Integrity (8 banks, a 64 KB fixed-C64 verify each, twice: about 2000 badline stalls) all report
+   OK with the display on. On A22, A23 and A24 Byte Addressing and CBR failed in every display-on
+   run. Section 6c stands, and so does the one assumption it had left open: the REC drives its
+   address during the held reads, otherwise the page verifies of patterned data would see other
+   bytes. Not evidence: Bit Fill `(ff) : OK` (the copy of the BASIC that Joe runs does not stop on
+   its error, and neither the time nor `PEEK(SB)` was noted). One run on one unit: `3-verify`,
+   `9-values` and `12-position` have to repeat it under our control in round 5.
+
+5. **A swap needs the held read served too** (the two `13-swapchk` screens). After an odd number
+   of swaps the C64 must hold `255-i` and the REU `i`, after an even number the other way round.
+   Every wrong byte is a 255, on the side that the REU's byte of the damaged swap has reached by
+   then; in the run in which a position first appears (16 and 247 in run 20), the C64 side is
+   right and the REU side holds 255. So the REC wrote the correct REU byte to the C64 and stored
+   `$FF` in the REU: its latch of the C64 byte had seen a released data bus. Positions 16 and 247
+   appear in the same swap, 231 bytes or 462 cycles apart. Badlines pull BA low every 504 cycles
+   for 43 cycles; 504 - 462 = 42, the REC made exactly one access in the 43 BA-low cycles, and an
+   even distance keeps the phase. That is VICE's `reu_clk_inc_post_write`: BA fell after the
+   write of a byte and the read of the next byte ran in the first BA-low cycle, served by the
+   grace cycle that A23 introduced and that A24X1 limited to one cycle after a write. A stall
+   after the read makes no access (461 cycles, odd) and puts the next stall after a write. The
+   counts fit this and nothing else: a 256-byte swap meets about 0.7 badline stalls; the first
+   stall of a swap comes after a write in half of the cases, a second one in the same swap always
+   does. That gives about 7.6 damaged bytes in 20 swaps (found: 6 and 4), while damage at every
+   stall would give 14. So the REC treats this read like every other
+   read that is on the bus while BA is low: it holds it through the second and third BA-low cycle
+   and latches the data lines again, and after the stall it writes without reading again. A24X1
+   released the data bus in those two cycles on purpose (a swap never compares; a master of
+   another make might write there). A24X2 serves them (section 9). After the swap's read nothing
+   needs to change: the REC waits there with its latch closed, and a lost write, which would show
+   as a wrong C64 byte that is not 255, appears nowhere.
+
+6. **`Interrupt Register: err 1` for the second time** (run B on A22 with the display off,
+   2026-10-25, and now on A24X1 with the display on): a one-byte stash with `$DF09 = $C0`, after
+   which the interrupt routine must find `$DF00` with the bits 7 and 6 within about 3 ms. It does
+   not depend on stalls. A lost write of `$DF09` or of the command, a missed /IRQ and a wrong
+   status read all end as err 1; a lost register write would be the state of item 2 at a rate of
+   far below one percent. Not explained; two of about nine CMD runs. `15-health` counts 360
+   register writes per run and will show whether single writes get lost on a REU that works.
+
+7. **Fetch and stash on A24X1 are known from the CMD run only** (size detection, `$FF00` Option,
+   Address Control 2 and 4: all OK, few stalls). `1-fetch` and `2-stash` are part of round 5.
+
+8. **Consequences for the tests.** A program must prove on its own screen that the REC executed:
+   an end-of-block or fault bit after every command, and registers that hold what was written.
+   `3-verify`, `9-values`, `14-ffff` and `1-fetch` could not tell a REC that passes from a REC
+   that does nothing. Round 5 has this in every program, puts everything on one disk, and asks
+   for the events around a failing check instead of a fixed sequence.
+
 ## 7. Experiments for Joe (`tests/reu-tests.d64`, BASIC, simulated REU must be off)
 
 All transfers use autoload commands 176..179 (`$B0..$B3`); the display is switched with
@@ -516,6 +716,71 @@ Expected on A24X1 for the round-2 and round-3 programs: `3-verify` and `9-values
 found, the fixed-C64 verifies no longer fault, with the display on or off); `1-fetch` and
 `2-stash` unchanged (0 bad bytes).
 
+Outcome (section 1d, read with section 6d):
+
+| Program | Outcome | Reading |
+|---|---|---|
+| `14-ffff` on A24 (part A) | 0 of 10 in all seven lines | none of the three rows above: a working REU on A24 must fault in five lines. The REU did not execute, or the core was not A24; the program cannot show which. No decision between data bus and address bus from here |
+| `14-ffff` on A24X1 | two runs, both with the REU not answering | void (the `BYTE` values are stale address registers, not fault positions) |
+| `12-position` on A24X1 | REU not answering | void |
+| `3-verify`, `9-values` on A24X1 | 0 or 1 fault per line | void: no proof that a transfer ran, and the pattern is that of the REU not answering (6d.2) |
+| `11-bitfill` on A24X1 | REU not answering | void |
+| `13-swapchk` on A24X1 | REU not answering in run 1; from a cold start 6 and 4 damaged bytes in 20 swaps, always `$FF` on the REU side | swaps are damaged by stalls, in the read half: the latch of the C64 byte sees a released bus in the second and third BA-low cycle (6d.5) |
+| `1-fetch`, `2-stash` on A24X1 | REU not answering, no `2-stash` photo | void |
+| CMD REUTEST on A24X1 | "REU not found" in the row of tests; from a cold start every verify phase OK, Interrupt Register err 1 | the verify fix works (6d.4). The question of `14-ffff` is answered by Byte Addressing: patterned data verify correctly, so the REC drives its address during the held reads and it was the data bus alone |
+
+## 7d. Round 5 experiments (`tests/round5/reu-tests5.d64`, simulated REU off, see `PROTOCOL-round5.md`)
+
+Everything Joe needs is on one disk, built by `tests/round5/build.sh` and checked headlessly by
+`tests/round5/validate.py` (22 runs against a REC that works, one that does not answer and one
+that is stalled like on A24X1: PASS). All of it runs on A24X2 after a cold start; the seven
+programs of part A take about eight minutes together.
+
+**Every program proves on its own screen that the REC executed.** The BASIC programs call the
+subroutine of `reucheck.bas` at their start and at their end. It writes 85, 170, 165, 90 to
+`$DF02`, `$DF03`, `$DF07`, `$DF08` and reads them back, stashes one byte from `$C000` to REU
+`$02FF00` without autoload (the status must show end of block, address and length must have
+counted) and fetches it back to `$C001`. It prints `REU CHECK OK`, or `REU CHECK FAILED n:` with
+n = 1 (a register did not keep its value) + 2 (the stash did not run) + 4 (the fetch did not run
+or delivered another byte), followed by the four read-backs, the status, address low byte and
+length low byte after the stash, the status after the fetch, the byte fetched and the byte
+expected. In addition, the status read after every verify, swap, fetch and stash must show end of
+block or FAULT; a command that shows neither is counted as `NOT RUN` or printed with its status.
+`13-swapchk`, `1-fetch` and `2-stash` let the REC itself do the comparing: after the transfer
+under test (display on) they switch the display off and verify the block against a reference
+copy in another REU bank (the second subroutine of `reucheck.bas`, without autoload, restarted
+behind every mismatch), which counts every wrong byte in a fraction of a second where a BASIC
+loop needs a minute per 4 KB. A verify with the display off has worked on every core version,
+and `15-health` shows with a planted mismatch that it does report one.
+
+| Program | What it does | Expected on A24X2, and what anything else means |
+|---|---|---|
+| `15-health` | the long form of the check, 30 s, transfers with the display off: 40 writes and read-backs of two patterns for each register `$DF02..$DF0A` (count of wrong ones and the bits that came back wrong), a 256-byte stash without autoload (status, address, length), a fetch into another buffer compared by the CPU, a verify, and a verify with byte 100 changed by the CPU | `RESULT: REU AWAKE`, nine register lines with `0 0`, status 80, address 16640, length 1, 0 wrong bytes, the planted fault reported as `48 BYTE 100`. Wrong bits tell a data line (the same single bits everywhere) from writes that did not happen (all bits of the pattern). A few wrong writes among 360 on a REU that otherwise works would be the rate behind `Interrupt Register: err 1` (6d.6) |
+| `16-soak` | register writes and read-backs only, never a command, so no DMA at all; 30 minutes, about 1500 writes per minute, one line every three minutes: minute, writes, wrong, wrong since the last line | all zero. Wrong writes that set in after some minutes: the REU or the port drifts on its own (warming up, supply, contact) and the core's DMA logic is out of the picture; the same run on A23 then tells whether the build matters |
+| `3-verify` | as in round 2, with the checks | `REU CHECK OK` twice, 0 faults in all five lines |
+| `9-values` | as in round 3, with the checks | `REU CHECK OK` twice, 0 faults for all eight values |
+| `12-position` | the round-3 program unchanged; it shows status, length and cycle count of every run itself | line 52 as on A23, `80 255 1 275 56`; line 50 now `80 255 1 318 55`, the stall adds its 43 cycles (the model run gives 276 and 319). `48 49 206 113 51`: the held read still sees a released bus. `16 ... 19`: the REU does not answer |
+| `13-swapchk` | 20 swaps of 4 KB with the display on (more than 200 stalls); both sides are restored from reference copies before every swap and compared with them afterwards, so every damage is counted once, with the position of the first wrong byte and its value. Two minutes | `RUNS OK: 20 OF 20, WRONG C64: 0 REU: 0`. REU bytes wrong with `GOT 255` (the model of A24X1 gives about 200 in 20 swaps): the grace reads after the swap's write do not reach the REC (then section 8: which cycle it latches in). Wrong C64 bytes: a write of the swap was lost, i.e. the REC does write in a BA-low cycle after its read, the case A24X2 leaves unserved |
+| `1-fetch` | 20 fetches of 4 KB with the display on into a buffer that is filled with 255 before every run: more than 100 stalls (round 2 had 7). Two minutes | `RUNS OK: 20 OF 20, BAD BYTES: 0`. Wrong bytes with `GOT 255`: writes lost at stalls, as on A22 |
+| `2-stash` | 20 stashes of 4 KB with the display on into a REU area that is filled with 255 before every run. Two minutes | `RUNS OK: 20 OF 20, BAD BYTES: 0` |
+| CMD REUTEST | as before, display on | OK in every step. Another `Interrupt Register: err 1`: count it (6d.6) |
+
+How to read a report:
+
+1. Every check OK and every result as expected: the issue is solved on Joe's unit. Follow-ups as in
+   the checklist at the top.
+2. Checks OK, a result not as expected: a defect of A24X2; the table says which.
+3. A check fails: nothing after it counts until a check is OK again. What matters then is *when*
+   it failed (the first check after a start, or after which program) and *what brings the REU
+   back*: the reset button (a state of the REC that its reset clears), a power cycle of a few
+   seconds, or only a long one (charge or temperature in the REU), and whether A24 does the same
+   after the same kind of start. `16-soak` separates "on its own, with time" from "after
+   transfers". Section 6d.3 lists what each answer means.
+
+Kugelblitz360 is asked for the same disk on the TeensyROM+'s REU emulation plus his usual DMA
+regression on A24X2. A TeensyROM+ is no 8726, but a check that fails there too would point at
+the core or the board, not at Joe's unit.
+
 ## 8. Logic analyzer capture (when Joe gets one, about two weeks)
 
 Channels, in priority order: PHI2, BA, /DMA, R/W, /IO2, A0..A3, D0..D7, DOTCLK; at least 25 MHz
@@ -541,8 +806,43 @@ round-2 programs, then further BASIC experiments derived from their outcome, bec
 through Vivado is a lot of work for him; the ILA only if BASIC-level tests cannot pin the cause.
 Building a QNICE debug device (as done for the physical floppy work) is explicitly a last resort.
 
-## 9. The core changes: A24X1 (the fix), A24 (superseded), and other ideas
+State after round 4: the swap question needed no capture (6d.5). For a REU that does not answer,
+an ILA is of little use: it sees the FPGA side of the transceivers, and that the core issues a
+register write correctly is known from the RTL and from every other cartridge. What the REC
+receives during such a write (R/W, /IO2, PHI2, D0..D7 and A0..A3 at the REU's edge connector,
+the 5 V rail with a scope or a multimeter) needs the external analyzer on the REU side. The ILA,
+or a comparison of the builds' port timing (`report_datasheet` in Vivado), is the next step only
+if round 5 shows that the state follows the core version.
 
+## 9. The core changes: A24X2 (swap), A24X1 (verify), A24 (superseded), and other ideas
+
+- **A24X2: three grace reads after a swap's write too, implemented 2026-11-10 in `CORE/vhdl/main.vhd`**
+  (`cart_dma_ba_proc`: the register `core_dma_grace_long` is gone, every read grace lasts
+  `C_CART_DMA_GRACE_RD_CYCLES` cycles; reason: 6d.5). Nothing else changes: one grace write after
+  a fetch's write with its address gate, no grace after a swap's read, the early end when BA
+  rises, everything cleared when /DMA goes high. Bench `CORE/vhdl/test/tb_cartport/run.sh`
+  (PASS): S7 now checks three served grace reads after a swap's write (BA low, R/W high, data
+  driven, no RAM write), a floating fourth BA-low cycle, the history "read after write" and the
+  served write after the stall; the other scenarios are unchanged. Bench
+  `CORE/vhdl/test/tb_vicdma/run.sh` (PASS, eight runs): the behavioral 8726 now also swaps 2 KB
+  and, like the real one, counts its read in the first BA-low cycle after a write, holds it
+  through the second and third and latches the data lines in each; a stall after its read makes
+  it wait at once. New check C7: with the change, 0 of 2048 REU bytes are stored wrong in 87
+  stalls (10 badline, 77 sprite; 11 after the swap's write, 76 after its read) and the read data
+  is valid from tick 17 in all three grace cycles; with A24X1's condition restored by a text
+  substitution (run `x1`) and with the A24 variant, exactly 11 REU bytes are stored as `$FF`, one
+  per stall after a write and none after a read, the C64 side intact: Joe's picture. C1 (the
+  VIC's pixel output and every VIC fetch identical tick by tick with and without the REC's
+  transfers) and C2 (no DMA-served CPU half with AEC high) hold with the swap included, so the
+  two additional grace cycles take nothing from the VIC. GHDL analysis of `main.vhd` against
+  HEAD: identical diagnostics. Risk: a DMA master of another make that reads in the first BA-low
+  cycle after a write and then writes in the second or third meets driven read data there (its
+  write was not accepted in those cycles before either; the same class as the read grace after a
+  read). The bench also shows, unchanged since A23 and outside the verdict: at a stall right
+  after a swap's write the FPGA drives R/W high and its read data from tick 2 of the first
+  BA-low cycle, while the REC model keeps R/W low and its write data until tick 4, three ticks
+  (95 ns) of opposite drive at the start of the VIC half, where nobody samples; a real REC has to
+  have R/W high again before the VIC's access anyway. **Not built and not on hardware yet.**
 - **A24X1: three grace cycles for reads, implemented 2026-11-07 in `CORE/vhdl/main.vhd`
   (`cart_dma_ba_proc`, `handle_hardware_expansion_proc`, constant `C_CART_DMA_GRACE_RD_CYCLES = 3`,
   counter `core_dma_grace_cnt`, flag `core_dma_grace_long`).** After a served read (stash, verify,
