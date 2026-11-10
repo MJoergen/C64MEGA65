@@ -97,8 +97,9 @@ Version 6 - MONTH DAY, 2026
   and during VIC-II bus pauses the core handles the BA line and the REU's
   accesses in the first cycles of a pause (its final write, and the reads it
   keeps making while a real C64 still answers the bus) the way a real C64
-  does. Before, REU transfers could lose bytes and REU verify commands
-  reported errors whenever the VIC-II interrupted them. This improvement
+  does. Before, REU transfers could lose bytes, REU swaps could store a wrong
+  byte and REU verify commands reported errors whenever the VIC-II
+  interrupted them. This improvement
   should improve the compatibility beyond REUs to active and DMA-heavy
   hardware cartridges.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/259)

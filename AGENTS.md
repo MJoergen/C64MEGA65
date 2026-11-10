@@ -598,13 +598,15 @@ boards including R3 — it is not an R5/R6-only feature. When a cartridge pulls
    the core keeps serving the cartridge in the BA-low cycles in which a real
    C64 still answers the bus, i.e. before the VIC takes it in the fourth
    (`core_dma_grace`, a `dma_grace` input of `fpga64_sid_iec`), because a MOS
-   8726 REC still accesses it: after a write, one more access in the first
-   BA-low cycle, the next write of a fetch (gated on the cartridge addressing
-   the byte after the previous write) or the next read of a swap; after a
-   read, the held read of a stash or a verify in all three cycles (read data
-   driven, no address gate; the REC's verify compares that data, so a floating
-   bus reports a FAULT), but not after a swap's read, which follows a write;
-   after each
+   8726 REC still accesses it: after a fetch's write, the next write in the
+   first BA-low cycle (gated on the cartridge addressing the byte after the
+   previous write); after a read, the held read of a stash or a verify in all
+   three cycles, and after a swap's write the swap's next read, which the REC
+   performs in the first cycle and holds through the other two (read data
+   driven, no address gate; the REC latches that data in every cycle, so a
+   floating bus makes a verify report a FAULT and a swap store `$FF` in the
+   REU); nothing after a swap's read, which follows a write and is followed by
+   one; after each
    stall BA is driven actively high for a few ticks (`cart_ba_recharge`,
    `cart_ba_drive_high`) instead of being released from a driven low (the VIC
    model releases BA at the start of the VIC half for badlines and sprites

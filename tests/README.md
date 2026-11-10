@@ -5,6 +5,14 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A24X2 - TBD
+--------------------------
+
+@TODO: Fix for REU swaps of issue #259, on top of WIP-V6-A24X1. When the VIC-II pulls BA low right after the write half of a swap, a MOS 8726 REC reads the next byte in the first BA-low cycle and keeps that read on the bus for the next two cycles, latching the data lines again in each; WIP-V6-A24X1 served only the first cycle, so the REU stored `$FF` for that byte (one byte per VIC-II bus pause, the C64 side was correct). The core now serves all three cycles after a swap's write, exactly as after any other cartridge read. Everything listed under WIP-V6-A24X1 and WIP-V6-A23 applies unchanged; in addition:
+
+* @TODO Genuine 1764/1750, display on, after a cold start: every program of `doc/fix-issue-259/tests/round5/reu-tests5.d64` (`PROTOCOL-round5.md`) prints `REU CHECK OK` at its start and at its end; `15-HEALTH` reports `REU AWAKE`; `16-SOAK` reports no wrong register write in 30 minutes; `3-VERIFY` and `9-VALUES` report zero faults; `12-POSITION` shows `80 255 1` in every run with about 318 cycles at line 50 and 275 at line 52; `13-SWAPCHK` ends with `RUNS OK: 20 OF 20, WRONG C64: 0 REU: 0`; `1-FETCH` and `2-STASH` end with `RUNS OK: 20 OF 20, BAD BYTES: 0`; the patched CMD `REUTEST` reports OK in every step.
+* @TODO Modern DMA cartridges (REU Grande, RAD, TeensyROM+, 1541 Ultimate II+, Kung Fu Flash 2): no change against WIP-V6-A24X1. The only difference is that the core keeps driving read data in the second and third BA-low cycle when the cartridge's last two accesses were a read and then a write (a swap).
+
 Version WIP-V6-A24X1 - TBD
 --------------------------
 
