@@ -4,12 +4,12 @@
 usage: eval.py <builddir>
 
 Reads <tag>.log (STAT lines of the monitors), <tag>.pix and <tag>.fetch (VIC-II traces) of the runs
-started by run.sh, applies the expectations of each variant and prints C1..C6 and RESULT."""
+started by run.sh, applies the expectations of each variant and prints C1..C7 and RESULT."""
 import re, sys
 
 B = sys.argv[1]
-RUNS = ['ref', 'fix', 'fixff', 'a24', 'a24ff', 'neg', 'late']
-DMA_RUNS = ['fix', 'fixff', 'a24', 'a24ff']
+RUNS = ['ref', 'fix', 'fixff', 'a24', 'a24ff', 'x1', 'neg', 'late']
+DMA_RUNS = ['fix', 'fixff', 'a24', 'a24ff', 'x1']
 CLS = ['bad', 'spr']
 S, LOG = {}, {}
 for r in RUNS:
@@ -46,7 +46,7 @@ def diff(a, b):
 
 
 def stalls(r, c):
-    return sum(tot(r, c, k) for k in ('non', 'ver', 'fet'))
+    return sum(tot(r, c, k) for k in ('non', 'ver', 'fet', 'swa'))
 
 
 print("C1  VIC-II output and fetch equivalence (tick by tick, three frames, reference = no DMA)")
@@ -98,7 +98,7 @@ def c3(r, g_expect):
 
 
 print("C3  data path in every served grace cycle (ticks counted from CYCLE_EXT0, PHI2 high in 17..30)")
-for r, g in (('fix', 3), ('fixff', 3), ('a24', 1), ('a24ff', 1)):
+for r, g in (('fix', 3), ('fixff', 3), ('a24', 1), ('a24ff', 1), ('x1', 3)):
     ok, msg = c3(r, g)
     check(f"C3 {r}", ok, msg)
 
@@ -106,7 +106,7 @@ print("C4  REC verify comparator and transfer completion")
 for r in DMA_RUNS:
     a24 = r.startswith('a24')
     ff = r.endswith('ff')
-    xf = re.findall(r'XFER (\d+) (verify|fetch) +c64=\$(\w+) len=(\d+) counted=(\d+) cycles=(\d+) stalls=(\d+) held_reads=(\d+) mismatches=(\d+)', LOG[r])
+    xf = re.findall(r'XFER (\d+) (verify|fetch|swap) +c64=\$(\w+) len=(\d+) counted=(\d+) cycles=(\d+) stalls=(\d+) held_reads=(\d+) mismatches=(\d+)', LOG[r])
     ok = v(r, 'xfers_done') == v(r, 'xfers') and all(x[3] == x[4] for x in xf) and v(r, 'unserved') == 0 and v(r, 'mis_out') == 0
     totmis = sum(v(r, f'mis_{c}_{i}') for c in CLS for i in range(4))
     for c in CLS:
@@ -140,7 +140,29 @@ for r in DMA_RUNS:
           f"grace cycles served {1 if a24 else 3} in {v(r, 'grace_spr_ver_' + ('1' if a24 else '3'))}, "
           f"first AEC cycle 4 in {v(r, 'firstaec_spr_4')}/{stalls(r, 'spr')}, sprite-data phi2 samples with AEC {v(r, 'sacc_spr')}")
 
-print("Coverage (all DMA runs need badline and sprite stalls under both transfer kinds)")
+print("C7  swap: the REU side stores what the REC latched last, the C64 side is covered by C5")
+for r in DMA_RUNS:
+    sw = re.findall(rf'SWAP {r} (\d+) case1=(\d+) case2=(\d+) reu_bad=(\d+) reu_ff=(\d+)', LOG[r])
+    c1, c2, bad, ffn = (sum(int(x[i]) for x in sw) for i in (1, 2, 3, 4))
+    g = {n: sum(v(r, f'grace_{c}_swa_{n}') for c in CLS) for n in range(6)}
+    nsw = sum(tot(r, c, 'swa') for c in CLS)
+    full = r in ('fix', 'fixff')                      # the read of the first BA-low cycle is served through the AEC window
+    served = 3 if full else 1
+    ok = len(sw) > 0 and c1 > 0 and c2 > 0 and c1 + c2 == nsw and g[served] == c1 and g[0] == c2
+    ok &= all(tot(r, c, 'swa') > 0 for c in CLS)
+    if full:
+        ok &= bad == 0
+        ok &= all(v(r, f'sfv_n_{c}_{i}') == sum(v(r, f'grace_{c}_swa_{n}') for n in (3,)) and v(r, f'sfv_max_{c}_{i}') <= 20
+                  for c in CLS for i in (1, 2, 3))
+    else:
+        ok &= bad == c1 and ffn == c1                 # one byte per stall after the swap's write, always $FF
+    check(f"C7 {r}", ok,
+          f"{len(sw)} swap(s), stalls {nsw} (badline {tot(r, 'bad', 'swa')}, sprite {tot(r, 'spr', 'swa')}): BA fell after the write "
+          f"(read in the first BA-low cycle) {c1}, after the read {c2}; grace cycles served 0/1/3 in {g[0]}/{g[1]}/{g[3]} stalls; "
+          f"REU bytes stored wrong {bad}, of them $FF {ffn}" +
+          (f"; read data valid from tick <= {max(v(r, f'sfv_max_{c}_{i}') for c in CLS for i in (1, 2, 3))} in all three" if full else ""))
+
+print("Coverage (all DMA runs need badline and sprite stalls under verify and fetch)")
 for r in DMA_RUNS:
     check(f"coverage {r}", all(v(r, f'rdstalls_{c}') > 0 and tot(r, c, 'fet') > 0 for c in CLS),
           f"verify: badline {v(r, 'rdstalls_bad')}, sprite {v(r, 'rdstalls_spr')}; fetch: badline {tot(r, 'bad', 'fet')}, "

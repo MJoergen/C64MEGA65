@@ -36,6 +36,9 @@ What is generated (into <outdir>):
                          off (list printed below). N = 3 is the file as written; N = 1 (A24) and
                          N = 4 (negative control: one grace cycle too many) are text
                          substitutions of the spliced constant.
+  tb_vicdma_x1.vhd       The file as written, except that a swap's read in the first BA-low cycle
+                         is served for that one cycle only (WIP-V6-A24X1): a text substitution of
+                         one condition of cart_dma_ba_proc.
   ram_ramp.hex, ram_ff.hex  Power-on image of the 64 KB C64 RAM (loaded by the real
                          dualport_2clk_ram/tdp_ram through ROM_PRELOAD, as mega65.vhd does).
   roms/*.hex             Contents for the dprom instances of fpga64_buslogic (never selected).
@@ -439,6 +442,8 @@ def image(ff):
         m[a] = 0xFF if ff else (a & 0xFF)
     for a in range(0x6000, 0x6800):               # fetch target: differs from every byte the REC writes
         m[a] = 0x00 if ff else ((a * 7 + 3 + 128) & 0xFF)
+    for a in range(0x6800, 0x7000):               # swap area: never $FF, so a byte latched from a released bus shows
+        m[a] = (a * 11 + 5) & 0x7F
     return m
 
 
@@ -480,7 +485,7 @@ architecture sim of @ENT@ is
   constant C_TB_REC_WDATA_TICK : natural := 20;  -- ... and write data from tick 21 (~130 ns after PHI2 rose)
   constant C_TB_REC_HOLD_READS : natural := 3;   -- the REC holds a read for three BA-low cycles, then releases the bus
   type t_tb_xfer is record
-    wr    : boolean;     -- false: verify (reads), true: fetch (writes)
+    kind  : natural;     -- 1: verify (reads), 2: fetch (writes), 3: swap (read and write of every byte)
     c64   : natural;     -- C64 start address
     len   : natural;
     frame : natural;     -- start not before this frame ...
@@ -488,12 +493,13 @@ architecture sim of @ENT@ is
   end record;
   type t_tb_xfers is array (natural range <>) of t_tb_xfer;
   constant C_TB_XFERS : t_tb_xfers := (
-    (false, 16#4000#, 4096, 1, 20),
-    (false, 16#5000#, 4096, 1, 0),
-    (true,  16#6000#, 1024, 1, 0),
-    (false, 16#6000#, 1024, 1, 0),
-    (true,  16#6400#, 1024, 2, 60),
-    (false, 16#6400#, 1024, 2, 0));
+    (1, 16#4000#, 4096, 1, 20),
+    (1, 16#5000#, 4096, 1, 0),
+    (2, 16#6000#, 1024, 1, 0),
+    (1, 16#6000#, 1024, 1, 0),
+    (2, 16#6400#, 1024, 2, 60),
+    (1, 16#6400#, 1024, 2, 0),
+    (3, 16#6800#, 2048, 2, 0));
 
   signal tb_done, tb_stop      : boolean := false;
   signal tb_frame              : natural := 0;
@@ -509,7 +515,7 @@ architecture sim of @ENT@ is
   signal tb_rec_d              : unsigned(7 downto 0) := x"00";
   signal tb_rec_rw             : std_logic := '1';
   signal tb_rec_a_oe, tb_rec_rw_oe, tb_rec_d_oe : std_logic := '0';
-  signal tb_rec_kind           : natural := 0;      -- 0 idle, 1 verify, 2 fetch
+  signal tb_rec_kind           : natural := 0;      -- 0 idle, 1 verify, 2 fetch, 3 swap
   signal tb_rec_on             : std_logic := '0';  -- the REC has an access on the bus in this cycle
   signal tb_xfers_done         : natural := 0;
   -- REC -> monitor event, valid during tick 31 (set at the PHI2 falling edge)
@@ -524,7 +530,10 @@ architecture sim of @ENT@ is
 
   function h(v : unsigned) return string is begin return to_hstring(v); end;
   function b(s : std_logic) return string is begin return std_logic'image(s)(2 to 2); end;
-  function kind_s(w : boolean) return string is begin if w then return "fetch "; else return "verify"; end if; end;
+  function kind_s(k : natural) return string is
+  begin
+    if k = 2 then return "fetch "; elsif k = 3 then return "swap  "; else return "verify"; end if;
+  end;
   function rec_data(a : natural) return unsigned is
   begin
     if FF_DATA then return x"FF"; end if;
@@ -613,16 +622,24 @@ begin
   -- data at the PHI2 falling edge of each, then releases address and R/W. After a write the write in
   -- the first BA-low cycle counts (VICE reu_clk_inc_post_write), then the REC releases. It resumes in
   -- the first cycle in which it sees BA high (VICE: the wait ends in the first cycle whose BA is high).
+  -- A swap reads and then writes every byte. Its write never starts with BA low (VICE
+  -- reu_clk_inc_post_read: the REC waits at once, "case 2" below). Its read in the first BA-low cycle
+  -- after a write counts (VICE reu_clk_inc_post_write, "case 1"); the REC then holds that read through
+  -- the second and third BA-low cycle and latches the data lines again at the PHI2 falling edge of
+  -- each (the 1764 of issue #259 stores $FF in the REU for exactly this byte when the data lines are
+  -- released there), and after the stall it writes the byte without reading it again.
   tb_rec : process (clk_main_i)
     type t_st is (S_IDLE, S_RUN, S_REL, S_END);
     variable st        : t_st := S_IDLE;
     variable rp        : natural := 0;
     variable prev_phi  : std_logic := '0';
     variable xi        : natural := 0;
+    variable kind      : natural := 0;
     variable wr        : boolean := false;
     variable addr, cnt, held, idle_cyc, cycles, mis_x, held_x, stalls_x : natural := 0;
+    variable sw_c1, sw_c2, sw_bad, sw_ff : natural := 0;
     variable on_bus, ba_rise, resume : boolean := false;
-    variable dval, ev  : unsigned(7 downto 0);
+    variable dval, ev, latch, orig : unsigned(7 downto 0) := x"00";
     variable start_y   : unsigned(8 downto 0);
   begin
     if rising_edge(clk_main_i) then
@@ -634,10 +651,11 @@ begin
           if DMA_ON and xi <= C_TB_XFERS'high and idle_cyc >= 8 and
              (tb_frame > C_TB_XFERS(xi).frame or (tb_frame = C_TB_XFERS(xi).frame and tb_p_debugY >= C_TB_XFERS(xi).line)) then
             -- the first access waits for BA high like a resume (S_REL, see below)
-            st := S_REL; wr := C_TB_XFERS(xi).wr; addr := C_TB_XFERS(xi).c64; cnt := 0; held := 0;
+            st := S_REL; kind := C_TB_XFERS(xi).kind; wr := kind = 2; addr := C_TB_XFERS(xi).c64; cnt := 0; held := 0;
             cycles := 0; mis_x := 0; held_x := 0; stalls_x := 0; resume := false; start_y := tb_p_debugY;
+            sw_c1 := 0; sw_c2 := 0; sw_bad := 0; sw_ff := 0;
             tb_rec_dma_n <= '0';                       -- /DMA low from tick 1, the first access in this cycle if BA is high
-            tb_rec_kind  <= 2 when wr else 1;
+            tb_rec_kind  <= kind;
           else
             idle_cyc := idle_cyc + 1;
           end if;
@@ -646,18 +664,30 @@ begin
         tb_rec_d_oe <= '0';                            -- write data held until here
         on_bus := false;
         case st is
-          when S_RUN => on_bus := true;
+          when S_RUN =>
+            on_bus := true;
+            if kind = 3 then
+              if held > 0 and tb_net_ba = '1' then     -- BA is back while the swap holds its read: go on with the write
+                held := 0; wr := true;
+              elsif wr and tb_net_ba = '0' then        -- case 2: BA fell after the swap's read, the write waits
+                st := S_REL; on_bus := false; sw_c2 := sw_c2 + 1; stalls_x := stalls_x + 1;
+              end if;
+            end if;
           when S_REL =>
             if (not LATE_RESUME and tb_net_ba = '1') or (LATE_RESUME and resume) then
               st := S_RUN; on_bus := true; resume := false;
             end if;
           when S_END =>
             tb_rec_dma_n <= '1'; tb_rec_kind <= 0; st := S_IDLE; idle_cyc := 0;
-            report "XFER " & integer'image(xi) & " " & kind_s(wr) & " c64=$" & h(to_unsigned(C_TB_XFERS(xi).c64, 16)) &
+            report "XFER " & integer'image(xi) & " " & kind_s(kind) & " c64=$" & h(to_unsigned(C_TB_XFERS(xi).c64, 16)) &
                    " len=" & integer'image(C_TB_XFERS(xi).len) & " counted=" & integer'image(cnt) &
                    " cycles=" & integer'image(cycles) & " stalls=" & integer'image(stalls_x) &
                    " held_reads=" & integer'image(held_x) & " mismatches=" & integer'image(mis_x) &
                    " lines=" & integer'image(to_integer(start_y)) & ".." & integer'image(to_integer(tb_p_debugY));
+            if kind = 3 then
+              report "SWAP " & TAG & " " & integer'image(xi) & " case1=" & integer'image(sw_c1) & " case2=" & integer'image(sw_c2) &
+                     " reu_bad=" & integer'image(sw_bad) & " reu_ff=" & integer'image(sw_ff);
+            end if;
             xi := xi + 1; tb_xfers_done <= xi;
           when others => null;
         end case;
@@ -683,9 +713,37 @@ begin
             dval := tb_net_d;                          -- data lines during tick 30
             ev := tb_shadow.get(addr);
             tb_ev_val <= dval; tb_ev_exp <= ev;
-            if dval /= ev then tb_ev_mis <= '1'; mis_x := mis_x + 1; end if;
+            if kind = 3 then
+              latch := dval;                           -- a swap latches every read it has on the bus
+            elsif dval /= ev then
+              tb_ev_mis <= '1'; mis_x := mis_x + 1;
+            end if;
           end if;
-          if ba_rise then                              -- counted access
+          if kind = 3 then
+            if wr then                                 -- the swap's write (it only starts with BA high): the latch goes to the REU
+              tb_ev_counted <= '1'; tb_ev_pos <= 0;
+              orig := tb_shadow.get(addr);
+              if latch /= orig then
+                sw_bad := sw_bad + 1;
+                if latch = x"FF" then sw_ff := sw_ff + 1; end if;
+                if sw_bad <= 4 then
+                  report "SWAPBAD " & TAG & " $" & h(to_unsigned(addr, 16)) & " REU gets $" & h(latch) & " instead of $" & h(orig) &
+                         " line " & integer'image(to_integer(tb_p_debugY)) & " lcyc " & integer'image(tb_lcyc);
+                end if;
+              end if;
+              tb_shadow.set(addr, rec_data(addr));
+              cnt := cnt + 1; addr := addr + 1; wr := false;
+              if cnt = C_TB_XFERS(xi).len then st := S_END; end if;
+            elsif ba_rise then                         -- counted read, the write follows
+              tb_ev_counted <= '1'; tb_ev_pos <= 0; wr := true; held := 0;
+            elsif held = 0 then                        -- case 1: the read of the first BA-low cycle after a write counts ...
+              tb_ev_counted <= '1'; tb_ev_pos <= 1; held := 1; sw_c1 := sw_c1 + 1; stalls_x := stalls_x + 1;
+            else                                       -- ... and is held and latched again until the VIC takes the bus
+              held := held + 1; held_x := held_x + 1;
+              tb_ev_counted <= '0'; tb_ev_pos <= held;
+              if held = C_TB_REC_HOLD_READS then st := S_REL; held := 0; wr := true; end if;
+            end if;
+          elsif ba_rise then                           -- counted access
             tb_ev_counted <= '1'; tb_ev_pos <= 0;
             if wr then tb_shadow.set(addr, rec_data(addr)); end if;
             cnt := cnt + 1; addr := addr + 1; held := 0;
@@ -733,12 +791,14 @@ MON = r'''
     variable c_fv_min, c_fv_max : t_m(0 to 0, 1 to 4);
     variable c_mis : t_m(0 to 0, 0 to 3);
     -- totals, first index = class: 0 badline stall (>= 40 BA-low cycles), 1 sprite stall
-    variable st_n    : t_m(0 to 1, 0 to 2) := (others => (others => 0));   -- stalls by REC kind 0 none, 1 verify, 2 fetch
-    variable gr_hist : t_m(0 to 5, 0 to 5) := (others => (others => 0));   -- [class*3+kind, served grace cycles]
+    variable st_n    : t_m(0 to 1, 0 to 3) := (others => (others => 0));   -- stalls by REC kind 0 none, 1 verify, 2 fetch, 3 swap
+    variable gr_hist : t_m(0 to 7, 0 to 5) := (others => (others => 0));   -- [class*4+kind, served grace cycles]
     variable aec_h   : t_m(0 to 1, 0 to 5) := (others => (others => 0));   -- first BA-low cycle with AEC in phi2
     variable fv_min  : t_m(0 to 1, 1 to 4) := (others => (others => 99));
     variable fv_max  : t_m(0 to 1, 1 to 4) := (others => (others => -1));
     variable fv_n    : t_m(0 to 1, 1 to 4) := (others => (others => 0));
+    variable sfv_max : t_m(0 to 1, 1 to 4) := (others => (others => -1));  -- the same for the grace reads of a swap
+    variable sfv_n   : t_m(0 to 1, 1 to 4) := (others => (others => 0));
     variable mis     : t_m(0 to 1, 0 to 3) := (others => (others => 0));
     variable pg_h    : t_m(0 to 1, 0 to 5) := (others => (others => 0));
     variable pgo_min : t_m(0 to 1, 0 to 0) := (others => (others => 99));
@@ -766,7 +826,7 @@ MON = r'''
     function cname(c : natural) return string is begin if c = 0 then return "badline"; else return "sprite "; end if; end;
     function kname(k : natural) return string is
     begin
-      if k = 1 then return "verify"; elsif k = 2 then return "fetch "; else return "none  "; end if;
+      if k = 1 then return "verify"; elsif k = 2 then return "fetch "; elsif k = 3 then return "swap  "; else return "none  "; end if;
     end;
   begin
     if rising_edge(clk_main_i) then
@@ -867,10 +927,13 @@ MON = r'''
           -- the stall has ended: classify it and add it to the totals
           if lowidx >= 40 then cls := 0; else cls := 1; end if;
           st_n(cls, c_kind) := st_n(cls, c_kind) + 1;
-          gr_hist(cls * 3 + c_kind, minimum(gidx, 5)) := gr_hist(cls * 3 + c_kind, minimum(gidx, 5)) + 1;
+          gr_hist(cls * 4 + c_kind, minimum(gidx, 5)) := gr_hist(cls * 4 + c_kind, minimum(gidx, 5)) + 1;
           if lowidx >= 4 then aec_h(cls, minimum(c_first_aec, 5)) := aec_h(cls, minimum(c_first_aec, 5)) + 1; end if;
           for i in 1 to 4 loop
-            if c_fv_max(0, i) >= 0 then
+            if c_fv_max(0, i) >= 0 and c_kind = 3 then
+              sfv_n(cls, i) := sfv_n(cls, i) + 1;
+              sfv_max(cls, i) := maximum(sfv_max(cls, i), c_fv_max(0, i));
+            elsif c_fv_max(0, i) >= 0 then
               fv_n(cls, i) := fv_n(cls, i) + 1;
               fv_min(cls, i) := minimum(fv_min(cls, i), c_fv_min(0, i));
               fv_max(cls, i) := maximum(fv_max(cls, i), c_fv_max(0, i));
@@ -992,9 +1055,9 @@ MON = r'''
       if tb_stop and not printed then
         printed := true;
         for c in 0 to 1 loop
-          for k in 0 to 2 loop
+          for k in 0 to 3 loop
             stat("stalls_" & cname(c)(1 to 3) & "_" & kname(k)(1 to 3), st_n(c, k));
-            for n in 0 to 5 loop stat("grace_" & cname(c)(1 to 3) & "_" & kname(k)(1 to 3) & "_" & integer'image(n), gr_hist(c * 3 + k, n)); end loop;
+            for n in 0 to 5 loop stat("grace_" & cname(c)(1 to 3) & "_" & kname(k)(1 to 3) & "_" & integer'image(n), gr_hist(c * 4 + k, n)); end loop;
           end loop;
           for n in 0 to 5 loop stat("firstaec_" & cname(c)(1 to 3) & "_" & integer'image(n), aec_h(c, n)); end loop;
           for n in 0 to 5 loop stat("postgrace_" & cname(c)(1 to 3) & "_" & integer'image(n), pg_h(c, n)); end loop;
@@ -1004,6 +1067,8 @@ MON = r'''
             stat("fv_n_" & cname(c)(1 to 3) & "_" & integer'image(i), fv_n(c, i));
             stat("fv_min_" & cname(c)(1 to 3) & "_" & integer'image(i), fv_min(c, i));
             stat("fv_max_" & cname(c)(1 to 3) & "_" & integer'image(i), fv_max(c, i));
+            stat("sfv_n_" & cname(c)(1 to 3) & "_" & integer'image(i), sfv_n(c, i));
+            stat("sfv_max_" & cname(c)(1 to 3) & "_" & integer'image(i), sfv_max(c, i));
           end loop;
           for i in 0 to 3 loop stat("mis_" & cname(c)(1 to 3) & "_" & integer'image(i), mis(c, i)); end loop;
           stat("gviol_" & cname(c)(1 to 3), k1(c, 0));
@@ -1092,13 +1157,20 @@ MON = r'''
 # ------------------------------------------------------------------------------------------------
 # 5. write the variants
 # ------------------------------------------------------------------------------------------------
-for g in (3, 1, 4):
-    ent = f"tb_vicdma_g{g}"
-    d = decls if g == 3 else decls.replace(GRACE_DECL, f"constant C_CART_DMA_GRACE_RD_CYCLES : natural := {g}; -- [tb_vicdma] variant")
-    txt = TB.replace("@MONITOR@", MON).replace("@DECLS@", d).replace("@SPLICED@", spliced).replace("@ENT@", ent).replace("@G@", str(g))
+# WIP-V6-A24X1 served a swap's read in the first BA-low cycle only: the grace length depended on the direction of
+# the last served access. One condition of cart_dma_ba_proc restores that behavior.
+SWAP_COND = "if core_dma_grace_rd = '1' and core_dma_grace_cnt < C_CART_DMA_GRACE_RD_CYCLES - 1 then"
+SWAP_X1 = "if core_dma_grace_rd = '1' and core_dma_last_we = '0' and core_dma_grace_cnt < C_CART_DMA_GRACE_RD_CYCLES - 1 then -- [tb_vicdma] variant"
+if spliced.count(SWAP_COND) != 1:
+    die(f"'{SWAP_COND}' not found exactly once in cart_dma_ba_proc")
+for g in (3, 1, 4, 'x1'):
+    ent = f"tb_vicdma_g{g}" if g != 'x1' else "tb_vicdma_x1"
+    d = decls if g in (3, 'x1') else decls.replace(GRACE_DECL, f"constant C_CART_DMA_GRACE_RD_CYCLES : natural := {g}; -- [tb_vicdma] variant")
+    sp = spliced.replace(SWAP_COND, SWAP_X1) if g == 'x1' else spliced
+    txt = TB.replace("@MONITOR@", MON).replace("@DECLS@", d).replace("@SPLICED@", sp).replace("@ENT@", ent).replace("@G@", "3" if g == 'x1' else str(g))
     open(os.path.join(out, ent + ".vhd"), "w").write(txt)
 
 print(f"gen_tb.py: fpga64_sid_iec: cpu/sid/cia1/cia2 replaced by stubs (and the fpga64_rgbcolor LUT), power-up '0' for {len(inits)} registers")
 print(f"gen_tb.py: main.vhd: {len(pieces)} pieces spliced, {len(lines)} declarations extracted, {len(ties)} inputs tied off:")
 print("    " + ", ".join(ties))
-print("gen_tb.py: generated tb_vicdma_g3 (as written), tb_vicdma_g1 (A24), tb_vicdma_g4 (negative control)")
+print("gen_tb.py: generated tb_vicdma_g3 (as written), tb_vicdma_g1 (A24), tb_vicdma_x1 (A24X1), tb_vicdma_g4 (negative control)")
