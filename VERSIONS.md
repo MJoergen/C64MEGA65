@@ -88,8 +88,7 @@ Version 6 - MONTH DAY, 2026
   (https://github.com/MJoergen/C64MEGA65/issues/228)
 
 * On-screen menu: Cursor left jumps to the first item and cursor right to the
-  last item of the current menu or submenu (in the file browser, cursor
-  left/right are page up/down, which ends on the first/last file, too).
+  last item of the current menu or submenu.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/258)
 
 ## Improved Compatibility of the Core
