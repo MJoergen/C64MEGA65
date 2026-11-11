@@ -42,3 +42,4 @@ M2M/video_filters/*.out
 __pycache__
 .claude
 .codex
+M2M/rom/tests/shortcuts_tbgen_*.asm

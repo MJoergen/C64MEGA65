@@ -78,6 +78,7 @@ G = dict(
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35,
+    SC_F9=36, SC_F10=37, SC_F11=38, SC_F12=39, SC_F13=40, SC_F14=41,
 )
 
 OPEN = ("SUBMENU",)
@@ -269,6 +270,108 @@ V6_MENU = [
     (" On: MK2",                 "SIM_RRNET", []),
     (" On: MK3 & Std ROM",       "SIM_RRNET", []),
     (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
+    ("",                         None, ["LINE"]),
+    (" Keyboard Shortcuts",     None, OPEN),            # region 11 (in 9), #142
+    (" Keyboard Shortcuts",     None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" F9:  %s",                None, OPEN),            # region 12 (in 11)
+    (" F9 Key",                 None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F9", []),
+    (" Freeze",                 "SC_F9", ["STDSEL"]),
+    (" Mount drive 8",          "SC_F9", []),
+    (" Mount drive 9",          "SC_F9", []),
+    (" Next disk drive 8",      "SC_F9", []),
+    (" Next disk drive 9",      "SC_F9", []),
+    (" Load PRG",               "SC_F9", []),
+    (" Load CRT",               "SC_F9", []),
+    (" Flip joysticks",         "SC_F9", []),
+    (" Volume down",            "SC_F9", []),
+    (" Volume up",              "SC_F9", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 12
+    (" F10: %s",                None, OPEN),            # region 13 (in 11)
+    (" F10 Key (Shift+F9)",     None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F10", []),
+    (" Freeze",                 "SC_F10", []),
+    (" Mount drive 8",          "SC_F10", []),
+    (" Mount drive 9",          "SC_F10", []),
+    (" Next disk drive 8",      "SC_F10", []),
+    (" Next disk drive 9",      "SC_F10", []),
+    (" Load PRG",               "SC_F10", []),
+    (" Load CRT",               "SC_F10", ["STDSEL"]),
+    (" Flip joysticks",         "SC_F10", []),
+    (" Volume down",            "SC_F10", []),
+    (" Volume up",              "SC_F10", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 13
+    (" F11: %s",                None, OPEN),            # region 14 (in 11)
+    (" F11 Key",                None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F11", []),
+    (" Freeze",                 "SC_F11", []),
+    (" Mount drive 8",          "SC_F11", ["STDSEL"]),
+    (" Mount drive 9",          "SC_F11", []),
+    (" Next disk drive 8",      "SC_F11", []),
+    (" Next disk drive 9",      "SC_F11", []),
+    (" Load PRG",               "SC_F11", []),
+    (" Load CRT",               "SC_F11", []),
+    (" Flip joysticks",         "SC_F11", []),
+    (" Volume down",            "SC_F11", []),
+    (" Volume up",              "SC_F11", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 14
+    (" F12: %s",                None, OPEN),            # region 15 (in 11)
+    (" F12 Key (Shift+F11)",    None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F12", []),
+    (" Freeze",                 "SC_F12", []),
+    (" Mount drive 8",          "SC_F12", []),
+    (" Mount drive 9",          "SC_F12", []),
+    (" Next disk drive 8",      "SC_F12", []),
+    (" Next disk drive 9",      "SC_F12", []),
+    (" Load PRG",               "SC_F12", ["STDSEL"]),
+    (" Load CRT",               "SC_F12", []),
+    (" Flip joysticks",         "SC_F12", []),
+    (" Volume down",            "SC_F12", []),
+    (" Volume up",              "SC_F12", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 15
+    (" F13: %s",                None, OPEN),            # region 16 (in 11)
+    (" F13 Key",                None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F13", []),
+    (" Freeze",                 "SC_F13", []),
+    (" Mount drive 8",          "SC_F13", []),
+    (" Mount drive 9",          "SC_F13", []),
+    (" Next disk drive 8",      "SC_F13", []),
+    (" Next disk drive 9",      "SC_F13", []),
+    (" Load PRG",               "SC_F13", []),
+    (" Load CRT",               "SC_F13", []),
+    (" Flip joysticks",         "SC_F13", []),
+    (" Volume down",            "SC_F13", ["STDSEL"]),
+    (" Volume up",              "SC_F13", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 16
+    (" F14: %s",                None, OPEN),            # region 17 (in 11)
+    (" F14 Key (Shift+F13)",    None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F14", []),
+    (" Freeze",                 "SC_F14", []),
+    (" Mount drive 8",          "SC_F14", []),
+    (" Mount drive 9",          "SC_F14", []),
+    (" Next disk drive 8",      "SC_F14", []),
+    (" Next disk drive 9",      "SC_F14", []),
+    (" Load PRG",               "SC_F14", []),
+    (" Load CRT",               "SC_F14", []),
+    (" Flip joysticks",         "SC_F14", []),
+    (" Volume down",            "SC_F14", []),
+    (" Volume up",              "SC_F14", ["STDSEL"]),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 17
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 11
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 9
     ("",                         None, ["LINE"]),
@@ -1320,6 +1423,19 @@ def summ_fixtures():
     fx.append(("Advanced has no own radio group", adv, v6g, base))
     # OSM scaling: default -> 164
     fx.append(("OSM scaling default", osm, v6g, base))
+    # Keyboard Shortcuts (#142): the region of pickers has no radio group
+    # of its own; each picker summarizes its own selected action
+    f9 = flat_index(" F9:  %s")
+    f11 = flat_index(" F11: %s")
+    f13 = flat_index(" F13: %s")
+    fx.append(("Keyboard Shortcuts has no own radio group",
+               flat_index(" Keyboard Shortcuts"), v6g, base))
+    fx.append(("F9 picker default Freeze", f9, v6g, base))
+    fx.append(("F11 picker Next disk drive 8", f11, v6g,
+               sel(**{"i%d" % (f11 + 5): 0, "i%d" % (f11 + 7): 1})))
+    fx.append(("F13 picker across bit 255/256", f13, v6g, base))
+    fx.append(("F13 picker Off at bit 254", f13, v6g,
+               sel(**{"i%d" % (f13 + 12): 0, "i%d" % (f13 + 3): 1})))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1489,13 +1605,13 @@ def nav_script():
     s.run_start()                   # the testbed draws before OPTM_RUN
     assert s.cursor == 2            # start line: visible and selectable
     s.feed(KEY_LAST)                # Cursor right: last item (#258)
-    assert s.cursor == 188          # "Close Menu"
+    assert s.cursor == flat_index(" Close Menu")
     s.feed(KEY_FIRST)               # Cursor left: first item (#258)
     assert s.cursor == 2            # the first mount line
     s.feed(KEY_FIRST)               # already there: stays
     assert s.cursor == 2
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (188)
-    assert s.cursor == 188
+    s.feed(KEY_UP)                  # wrap to "Close Menu"
+    assert s.cursor == flat_index(" Close Menu")
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 7)            # to "Drive Settings" (issue #93)
@@ -1559,6 +1675,36 @@ def nav_script():
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 9
     assert (s.level, s.cursor) == (9, 161)
+    s.feed(KEY_MENUUP)              # pop to main
+    assert (s.level, s.cursor) == (0, 157)
+    # Keyboard Shortcuts (#142): pickers two submenu levels below Advanced
+    # Settings; the F13 picker straddles OSM control bit 255/256
+    ks = flat_index(" Keyboard Shortcuts")       # opener of region 11
+    f11 = flat_index(" F11: %s")                 # opener of region 14
+    f13 = flat_index(" F13: %s")                 # opener of region 16
+    s.feed(KEY_SELECT)              # enter region 9 again
+    assert (s.level, s.cursor) == (9, 160)
+    s.until(KEY_DOWN, ks)           # to "Keyboard Shortcuts"
+    s.feed(KEY_SELECT)              # enter region 11 (depth 2)
+    assert s.level == 11 and ks < s.cursor < f11
+    s.until(KEY_DOWN, f11)          # to " F11: %s"
+    s.feed(KEY_SELECT)              # enter region 14 (depth 3)
+    assert s.level == 14 and f11 + 3 <= s.cursor <= f11 + 13
+    s.until(KEY_DOWN, f11 + 7)      # to " Next disk drive 8"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    s.feed(KEY_LAST)                # last item of the picker: " Back"
+    assert (s.level, s.cursor) == (14, f11 + 15)
+    s.feed(KEY_SELECT)              # leave via the closer
+    assert (s.level, s.cursor) == (11, f11)
+    s.until(KEY_DOWN, f13)          # to " F13: %s"
+    s.feed(KEY_SELECT)              # enter region 16 (depth 3)
+    assert s.level == 16
+    s.until(KEY_DOWN, f13 + 3 + 10) # to " Volume up" (bit 264)
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    s.feed(KEY_MENUUP)              # pop to region 11, cursor on the opener
+    assert (s.level, s.cursor) == (11, f13)
+    s.feed(KEY_MENUUP)              # pop to region 9
+    assert (s.level, s.cursor) == (9, ks)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 157)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
@@ -2098,6 +2244,13 @@ C_MENU = [
     ("C_MENU_TURBO_3X",     "TURBO_SPEED", 1),
     ("C_MENU_TURBO_4X",     "TURBO_SPEED", 2),
     ("C_MENU_RTC_GEOS",     "RTC_GEOS", 0),
+    ("C_MENU_SC_F9",      "SC_F9", 0),   # first item ("Off") of the F9 picker (#142)
+    ("C_MENU_SC_F10",     "SC_F10", 0),   # first item ("Off") of the F10 picker (#142)
+    ("C_MENU_SC_F11",     "SC_F11", 0),   # first item ("Off") of the F11 picker (#142)
+    ("C_MENU_SC_F12",     "SC_F12", 0),   # first item ("Off") of the F12 picker (#142)
+    ("C_MENU_SC_F13",     "SC_F13", 0),   # first item ("Off") of the F13 picker (#142)
+    ("C_MENU_SC_F14",     "SC_F14", 0),   # first item ("Off") of the F14 picker (#142)
+    ("C_MENU_VOLUME_100",   "VOLUME", 0),   # 100%: first item of the volume radio group
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
     # decodes its three "On" items as one slice, see rrnet_range() below
 ]

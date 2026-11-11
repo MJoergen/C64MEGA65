@@ -226,6 +226,9 @@ _HLP_HEAP1_OK   MOVE    MENU_HEAP_SIZE, R8
 
                 ; run the menu
 _HLP_HEAP2_OK   RSUB    ROSM_REM_OLD, 1         ; remember current settings
+                MOVE    OPTM_DIRECT, R8         ; invisible session of a
+                CMP     0, @R8                  ; keyboard shortcut?
+                RBRA    _HLP_DIRECT, !Z         ; yes (see shortcuts.asm)
                 RSUB    OPTM_SHOW, 1            ; fill VRAM
                 RSUB    SCR$OSM_O_ON, 1         ; make overlay visible
                 MOVE    OPTM_SELECTED, R9       ; use recently selected line
@@ -246,6 +249,18 @@ _HLP_HEAP2_OK   RSUB    ROSM_REM_OLD, 1         ; remember current settings
                 RBRA    _HLP_RET, 1
 _HLP_RESETPOS   MOVE    OPTM_START, R0
                 MOVE    @R0, @R9
+                RBRA    _HLP_RET, 1
+
+                ; Invisible menu session of a keyboard shortcut (C64MEGA65
+                ; issue #142): run the routine of the shortcut instead of the
+                ; interactive menu. The menu window is never shown. Saving the
+                ; settings, waiting until the keys are released and
+                ; reconnecting keyboard and joysticks work exactly as when the
+                ; user closes the menu. The last selected line (LRS) of the
+                ; user stays untouched.
+_HLP_DIRECT     RSUB    SC$IN_SESSION, 1
+                RSUB    SCR$OSM_OFF, 1          ; hide a file browser, if any
+                RSUB    ROSM_SAVE, 1            ; save settings if appropriate
 
                 ; when the menu was exited via "Close" + Return or via
                 ; Run/Stop, make sure that the Return key press is not
@@ -914,15 +929,25 @@ _ROSMS_0        MOVE    R1, R8                  ; R8: vdrive id of curr. drv
 
 _ROSMS_NOWR     MOVE    LOG_STR_CFG_NO, R8
                 SYSCALL(puts, 1)
+                MOVE    ROSM_FORCE, R8          ; a forced save of a keyboard
+                CMP     0, @R8                  ; shortcut tries again later
+                RBRA    _ROSMS_RET, Z
+                MOVE    2, @R8
                 RBRA    _ROSMS_RET, 1
 
 _ROSMS_1        ; Iterate through the 16 windows of M2M$CFM_DATA to detect
-                ; changes because we only save if there are changes
+                ; changes because we only save if there are changes. A
+                ; keyboard shortcut that changed settings while the menu was
+                ; closed forces the save (ROSM_FORCE, see shortcuts.asm):
+                ; ROSM_CHANGES only compares with the state at menu start.
+                MOVE    ROSM_FORCE, R8
+                CMP     0, @R8
+                RBRA    _ROSMS_1F, !Z
                 RSUB    ROSM_CHANGES, 1
                 RBRA    _ROSMS_RET, !C
 
                 ; Start at the beginning of the config file
-                MOVE    CONFIG_FILE, R8
+_ROSMS_1F       MOVE    CONFIG_FILE, R8
                 XOR     R9, R9                  ; restart reading from byte 0
                 XOR     R10, R10
                 SYSCALL(f32_fseek, 1)

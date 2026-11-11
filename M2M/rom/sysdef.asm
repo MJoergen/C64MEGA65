@@ -168,6 +168,10 @@ M2M$KEY_RUNSTOP     .EQU 0x0040
 M2M$KEY_HELP        .EQU 0x0080
 M2M$KEY_F1          .EQU 0x0100
 M2M$KEY_F3          .EQU 0x0200
+M2M$KEY_F9          .EQU 0x0400             ; keyboard shortcuts (C64MEGA65
+M2M$KEY_F11         .EQU 0x0800             ; issue #142): F10, F12 and F14
+M2M$KEY_F13         .EQU 0x1000             ; are F9, F11 and F13 plus Shift
+M2M$KEY_SHIFT       .EQU 0x2000             ; left or right Shift
 
 ; ----------------------------------------------------------------------------
 ; 256-bit General purpose control flags

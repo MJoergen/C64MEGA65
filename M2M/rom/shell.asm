@@ -110,6 +110,7 @@ START_SHELL     MOVE    LOG_M2M, R8             ; M2M start message
                 RSUB    VD_INIT, 1              ; virtual drive system
                 RSUB    CRTROM_INIT, 1          ; CRT/ROM loader system
                 RSUB    KEYB$INIT, 1            ; keyboard library
+                RSUB    SC$INIT, 1              ; keyboard shortcuts
                 RSUB    HELP_MENU_INIT, 1       ; menu library
                 RSUB    CRTROM_AUTOLOAD, 1      ; auto-load ROMs
 
@@ -182,6 +183,7 @@ MAIN_LOOP       RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
                 RSUB    KEYB$GETKEY, 1
 
                 RSUB    CHECK_DEBUG, 1          ; (Run/Stop+Cursor Up) + Help
+                RSUB    SC$MAIN, 1              ; keyboard shortcuts F9..F14
                 RSUB    HELP_MENU, 1            ; check/manage help menu
                 RSUB    LOG_COREINFO, 1         ; once: log core info
 
@@ -1580,6 +1582,7 @@ FRAME_FULLSCR   SYSCALL(enter, 1)
 #include "gencfg.asm"
 #include "options.asm"
 #include "selectfile.asm"
+#include "shortcuts.asm"
 #include "strings.asm"
 #include "vdrives.asm"
 #include "whs.asm"

@@ -394,7 +394,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 189; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 291; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -615,6 +615,109 @@ constant OPTM_ITEMS        : string :=
    " On: MK3 & Custom ROM\n"    &
 
    "\n"                         &
+   " Keyboard Shortcuts\n"      &  -- Keyboard Shortcuts submenu (#142), nested inside Advanced Settings
+   " Keyboard Shortcuts\n"      &
+   "\n"                         &
+   " F9:  %s\n"                 &  -- picker: what F9 does
+   " F9 Key\n"                  &
+   "\n"                         &
+   " Off\n"                     &  -- the order of these 11 actions is fixed: C_MENU_SC_* in mega65.vhd and the
+   " Freeze\n"                  &  -- shortcut dispatcher in m2m-rom.asm use the ordinal within the picker
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   " F10: %s\n"                 &  -- picker: what F10 does (the Shift layer of the key)
+   " F10 Key (Shift+F9)\n"      &
+   "\n"                         &
+   " Off\n"                     &
+   " Freeze\n"                  &
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   " F11: %s\n"                 &  -- picker: what F11 does
+   " F11 Key\n"                 &
+   "\n"                         &
+   " Off\n"                     &
+   " Freeze\n"                  &
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   " F12: %s\n"                 &  -- picker: what F12 does (the Shift layer of the key)
+   " F12 Key (Shift+F11)\n"     &
+   "\n"                         &
+   " Off\n"                     &
+   " Freeze\n"                  &
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   " F13: %s\n"                 &  -- picker: what F13 does
+   " F13 Key\n"                 &
+   "\n"                         &
+   " Off\n"                     &
+   " Freeze\n"                  &
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   " F14: %s\n"                 &  -- picker: what F14 does (the Shift layer of the key)
+   " F14 Key (Shift+F13)\n"     &
+   "\n"                         &
+   " Off\n"                     &
+   " Freeze\n"                  &
+   " Mount drive 8\n"           &
+   " Mount drive 9\n"           &
+   " Next disk drive 8\n"       &
+   " Next disk drive 9\n"       &
+   " Load PRG\n"                &
+   " Load CRT\n"                &
+   " Flip joysticks\n"          &
+   " Volume down\n"             &
+   " Volume up\n"               &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Keyboard Shortcuts
+   "\n"                         &
+   " Back\n"                    &  -- returns to Advanced Settings
+
+   "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
    "\n"                         &
@@ -658,6 +761,12 @@ constant OPTM_G_DRV8_UNMOUNT  : integer := 32;  -- drive 8: unmount the disk ima
 constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Off" is the factory default here (issue #93)
 constant OPTM_G_DRV9_UNMOUNT  : integer := 34;  -- drive 9: unmount the disk image on a soft core reset
 constant OPTM_G_SIM_RRNET     : integer := 35;  -- simulated RR-Net: only Off vs. On is wired, the MK2/MK3 variants are not, yet
+constant OPTM_G_SC_F9         : integer := 36;  -- Keyboard Shortcuts (#142): action of F9, a radio group of 11 actions
+constant OPTM_G_SC_F10        : integer := 37;  -- action of F10 (Shift+F9)
+constant OPTM_G_SC_F11        : integer := 38;  -- action of F11
+constant OPTM_G_SC_F12        : integer := 39;  -- action of F12 (Shift+F11)
+constant OPTM_G_SC_F13        : integer := 40;  -- action of F13
+constant OPTM_G_SC_F14        : integer := 41;  -- action of F14 (Shift+F13)
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
 -- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
@@ -883,6 +992,109 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SIM_RRNET,                        -- On: MK2
                                              OPTM_G_SIM_RRNET,                        -- On: MK3 & Std ROM
                                              OPTM_G_SIM_RRNET,                        -- On: MK3 & Custom ROM
+
+                                             OPTM_G_LINE,
+                                             OPTM_G_SUBMENU,                          -- open "Keyboard Shortcuts", nested
+                                             OPTM_G_HEADLINE,                         -- Keyboard Shortcuts
+                                             OPTM_G_LINE,
+                                             OPTM_G_SUBMENU,                          -- open "F9:  %s", nested
+                                             OPTM_G_HEADLINE,                         -- F9 Key
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F9,                            -- Off
+                                             OPTM_G_SC_F9         + OPTM_G_STDSEL,    -- Freeze (default for F9)
+                                             OPTM_G_SC_F9,                            -- Mount drive 8
+                                             OPTM_G_SC_F9,                            -- Mount drive 9
+                                             OPTM_G_SC_F9,                            -- Next disk drive 8
+                                             OPTM_G_SC_F9,                            -- Next disk drive 9
+                                             OPTM_G_SC_F9,                            -- Load PRG
+                                             OPTM_G_SC_F9,                            -- Load CRT
+                                             OPTM_G_SC_F9,                            -- Flip joysticks
+                                             OPTM_G_SC_F9,                            -- Volume down
+                                             OPTM_G_SC_F9,                            -- Volume up
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F9:  %s"
+                                             OPTM_G_SUBMENU,                          -- open "F10: %s", nested
+                                             OPTM_G_HEADLINE,                         -- F10 Key (Shift+F9)
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F10,                           -- Off
+                                             OPTM_G_SC_F10,                           -- Freeze
+                                             OPTM_G_SC_F10,                           -- Mount drive 8
+                                             OPTM_G_SC_F10,                           -- Mount drive 9
+                                             OPTM_G_SC_F10,                           -- Next disk drive 8
+                                             OPTM_G_SC_F10,                           -- Next disk drive 9
+                                             OPTM_G_SC_F10,                           -- Load PRG
+                                             OPTM_G_SC_F10        + OPTM_G_STDSEL,    -- Load CRT (default for F10)
+                                             OPTM_G_SC_F10,                           -- Flip joysticks
+                                             OPTM_G_SC_F10,                           -- Volume down
+                                             OPTM_G_SC_F10,                           -- Volume up
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F10: %s"
+                                             OPTM_G_SUBMENU,                          -- open "F11: %s", nested
+                                             OPTM_G_HEADLINE,                         -- F11 Key
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F11,                           -- Off
+                                             OPTM_G_SC_F11,                           -- Freeze
+                                             OPTM_G_SC_F11        + OPTM_G_STDSEL,    -- Mount drive 8 (default for F11)
+                                             OPTM_G_SC_F11,                           -- Mount drive 9
+                                             OPTM_G_SC_F11,                           -- Next disk drive 8
+                                             OPTM_G_SC_F11,                           -- Next disk drive 9
+                                             OPTM_G_SC_F11,                           -- Load PRG
+                                             OPTM_G_SC_F11,                           -- Load CRT
+                                             OPTM_G_SC_F11,                           -- Flip joysticks
+                                             OPTM_G_SC_F11,                           -- Volume down
+                                             OPTM_G_SC_F11,                           -- Volume up
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F11: %s"
+                                             OPTM_G_SUBMENU,                          -- open "F12: %s", nested
+                                             OPTM_G_HEADLINE,                         -- F12 Key (Shift+F11)
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F12,                           -- Off
+                                             OPTM_G_SC_F12,                           -- Freeze
+                                             OPTM_G_SC_F12,                           -- Mount drive 8
+                                             OPTM_G_SC_F12,                           -- Mount drive 9
+                                             OPTM_G_SC_F12,                           -- Next disk drive 8
+                                             OPTM_G_SC_F12,                           -- Next disk drive 9
+                                             OPTM_G_SC_F12        + OPTM_G_STDSEL,    -- Load PRG (default for F12)
+                                             OPTM_G_SC_F12,                           -- Load CRT
+                                             OPTM_G_SC_F12,                           -- Flip joysticks
+                                             OPTM_G_SC_F12,                           -- Volume down
+                                             OPTM_G_SC_F12,                           -- Volume up
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F12: %s"
+                                             OPTM_G_SUBMENU,                          -- open "F13: %s", nested
+                                             OPTM_G_HEADLINE,                         -- F13 Key
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F13,                           -- Off
+                                             OPTM_G_SC_F13,                           -- Freeze
+                                             OPTM_G_SC_F13,                           -- Mount drive 8
+                                             OPTM_G_SC_F13,                           -- Mount drive 9
+                                             OPTM_G_SC_F13,                           -- Next disk drive 8
+                                             OPTM_G_SC_F13,                           -- Next disk drive 9
+                                             OPTM_G_SC_F13,                           -- Load PRG
+                                             OPTM_G_SC_F13,                           -- Load CRT
+                                             OPTM_G_SC_F13,                           -- Flip joysticks
+                                             OPTM_G_SC_F13        + OPTM_G_STDSEL,    -- Volume down (default for F13)
+                                             OPTM_G_SC_F13,                           -- Volume up
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F13: %s"
+                                             OPTM_G_SUBMENU,                          -- open "F14: %s", nested
+                                             OPTM_G_HEADLINE,                         -- F14 Key (Shift+F13)
+                                             OPTM_G_LINE,
+                                             OPTM_G_SC_F14,                           -- Off
+                                             OPTM_G_SC_F14,                           -- Freeze
+                                             OPTM_G_SC_F14,                           -- Mount drive 8
+                                             OPTM_G_SC_F14,                           -- Mount drive 9
+                                             OPTM_G_SC_F14,                           -- Next disk drive 8
+                                             OPTM_G_SC_F14,                           -- Next disk drive 9
+                                             OPTM_G_SC_F14,                           -- Load PRG
+                                             OPTM_G_SC_F14,                           -- Load CRT
+                                             OPTM_G_SC_F14,                           -- Flip joysticks
+                                             OPTM_G_SC_F14,                           -- Volume down
+                                             OPTM_G_SC_F14        + OPTM_G_STDSEL,    -- Volume up (default for F14)
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F14: %s"
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Keyboard Shortcuts"
 
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Advanced Settings"
