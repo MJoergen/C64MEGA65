@@ -24,7 +24,8 @@ _DIRBR_DSDESIZE .EQU    2                       ; amount of characters in sum
 ; Read and sort all contents of the given path into a heap memory structure
 ; Input:
 ;   R8: Pointer to valid device handle
-;   R9: Pointer to path that shall be listed (zero-terminated string)
+;   R9: Pointer to path that shall be listed (zero-terminated string) or
+;       0 to list the currently active directory of the device handle
 ;  R10: Pointer to heap
 ;  R11: Maximum amount of available heap memory
 ;  R12: Optional filter function that filters out files of a certain name.
@@ -64,14 +65,16 @@ DIRBROWSE_READ  INCRB
                 MOVE    R12, @R6
                 MOVE    _DIRBR_FILTWRAP, R6     ; R6: internal wrapper func.
 
-                ; change directory to given path and then obtain the
+                ; change directory to given path (if any) and then obtain the
                 ; directory handle: R8: device handle, R9: path
 _DIRBR_START    XOR     R10, R10                ; use "/" as separator char
+                MOVE    R9, R9                  ; no path given?
+                RBRA    _DIRBR_OPEN, Z          ; yes: stay where we are
                 SYSCALL(f32_cd, 1)              ; change directory
                 CMP     0, R9                   ; everything OK?
                 RBRA    _DIRBR_RD_ECD, !Z       ; no: error and exit
                                                 ; R8: still contains dev. hndl
-                MOVE    _DIRBR_FH, R9           ; R9: empty directory handle
+_DIRBR_OPEN     MOVE    _DIRBR_FH, R9           ; R9: empty directory handle
                 SYSCALL(f32_od, 1)              ; obtain directory handle
                 MOVE    R8, R7                  ; R7: directory handle
                 CMP     0, R9                   ; everything OK?
@@ -148,6 +151,75 @@ _DIRBR_RD_RET   DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
+; Find the file that follows a given file in a list from DIRBROWSE_READ
+;
+; Directories are skipped and after the last file the search wraps around to
+; the first file of the list, so the files form a ring in exactly the order
+; in which the file browser shows them. The given file is identified by its
+; start cluster (an open file handle knows it as FAT32$FDH_START_CLUS_*),
+; which is robust and needs no copy of its long name. If the given file is
+; not part of the list (for example because it was beyond the memory limit
+; of the list), then the first file of the list is returned.
+;
+; Input:
+;   R8: Head of the linked list (as returned by DIRBROWSE_READ), may be 0
+;   R9: Start cluster of the given file: low word
+;  R10: Start cluster of the given file: high word
+; Output:
+;   R8: (unchanged)
+;   R9: List element of the given file or 0 if it is not part of the list
+;  R10: List element of the next file or 0 if there are no files in the
+;       list; if the given file is the only one, then R10 equals R9
+;  R11: Absolute index of R10 within the list (head = 0); this is the cursor
+;       position of the file browser that selects R10
+; ----------------------------------------------------------------------------
+
+DIRBROWSE_NEXT  INCRB
+
+                MOVE    R8, R0                  ; R0: current element
+                XOR     R1, R1                  ; R1: index of R0
+                XOR     R2, R2                  ; R2: first file of the list
+                XOR     R3, R3                  ; R3: index of R2
+                XOR     R4, R4                  ; R4: element of given file
+
+_DIRBR_NX_LOOP  MOVE    R0, R0                  ; end of list reached?
+                RBRA    _DIRBR_NX_WRAP, Z       ; yes: wrap around
+
+                ; the data blob ends with the directory flag and the start
+                ; cluster (low, high)
+                MOVE    R0, R5
+                ADD     SLL$DATA_SIZE, R5
+                ADD     @R5, R5                 ; R5: start cluster high
+                MOVE    @R5, R6                 ; R6: start cluster high
+                MOVE    @--R5, R7               ; R7: start cluster low
+                MOVE    @--R5, R5               ; 0=file, 1=directory
+                RBRA    _DIRBR_NX_NEXT, !Z      ; skip directories
+
+                MOVE    R2, R2                  ; first file of the list?
+                RBRA    _DIRBR_NX_CHK, !Z       ; no
+                MOVE    R0, R2                  ; yes: remember it
+                MOVE    R1, R3
+_DIRBR_NX_CHK   MOVE    R4, R4                  ; given file passed?
+                RBRA    _DIRBR_NX_FOUND, !Z     ; yes: this is the next file
+                CMP     R6, R10                 ; is this the given file?
+                RBRA    _DIRBR_NX_NEXT, !Z
+                CMP     R7, R9
+                RBRA    _DIRBR_NX_NEXT, !Z
+                MOVE    R0, R4                  ; yes: the next file wins
+
+_DIRBR_NX_NEXT  MOVE    @R0, R0                 ; SLL$NEXT is at offset 0
+                ADD     1, R1
+                RBRA    _DIRBR_NX_LOOP, 1
+
+_DIRBR_NX_WRAP  MOVE    R2, R0                  ; first file of the list..
+                MOVE    R3, R1                  ; ..or 0 if there is none
+_DIRBR_NX_FOUND MOVE    R4, R9
+                MOVE    R0, R10
+                MOVE    R1, R11
+                DECRB
+                RET
+
+; ----------------------------------------------------------------------------
 ; Internal helper functions
 ; ----------------------------------------------------------------------------
 
@@ -187,7 +259,7 @@ _DIRBR_NEWELM   INCRB
                 MOVE    R7, R8
                 SYSCALL(strlen, 1)
                 ADD     1, R9                   ; R9: length of file name str.
-                ADD     1, R9                   ; space for attributes
+                ADD     3, R9                   ; space for flag and cluster
                 MOVE    _DIRBR_ENTRY, R7
                 ADD     FAT32$DE_ATTRIB, R7
                 AND     FAT32$FA_DIR, @R7       ; is it a directory?
@@ -200,6 +272,7 @@ _DIRBR_NEWELM   INCRB
                 ; data blob using this memory layout:
                 ; filename (+ "<" and ">" if directory)
                 ; dir-flag: 0: normal file, 1: directory
+                ; start cluster: low word, high word (see DIRBROWSE_NEXT)
 _DIRBR_NEWELM2  MOVE    R5, R7                  ; current heap memory
                 ADD     R9, R7                  ; memory needed by new entry
                 MOVE    R7, R10                 ; return new heap memory
@@ -226,6 +299,10 @@ _DIRBR_NEWELM3  MOVE    _DIRBR_ENTRY, R7        ; copy file name
 
 _DIRBR_NEWELM4  ADD     1, R3                   ; skip zero terminator
                 MOVE    R6, @R3++               ; add directory flag
+                MOVE    _DIRBR_ENTRY, R7        ; add start cluster
+                ADD     FAT32$DE_CLUS_LO, R7    ; (DE_CLUS_HI follows)
+                MOVE    @R7++, @R3++
+                MOVE    @R7, @R3++
 
                 MOVE    R3, R8                  ; R8: adjusted head of heap
                 MOVE    R11, R9                 ; R9: pointer to new element

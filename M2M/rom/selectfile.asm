@@ -438,14 +438,14 @@ _IL_KEY_RETURN  MOVE    R3, R8                  ; R8: currently visible head
 
                 ; depending on if a directory of a file was selected:
                 ; change directory or load data; we therefore need to
-                ; find the flag that contains the info "directory" or "file"
+                ; find the flag that contains the info "directory" or "file":
+                ; it sits in front of the two start cluster words at the end
+                ; of the data blob (see _DIRBR_NEWELM in dirbrowse.asm)
 _ELEMENT_FOUND  MOVE    R11, R8                 ; R11: selected SLL element
                 ADD     SLL$DATA_SIZE, R8
-                MOVE    @R8, R9
-                MOVE    R11, R8
-                ADD     SLL$OVRHD_SIZE, R8
-                ADD     R9, R8
-                CMP     0, @--R8                ; 0=file, 1=directory
+                MOVE    @R8, R8
+                ADD     R11, R8
+                CMP     0, @R8                  ; 0=file, 1=directory
                 RBRA    _RETNAME, Z             ; return name
 
                 ; change directory
