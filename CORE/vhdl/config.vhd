@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A22X2";
+constant CORE_VERSION : string := "WIP-V6-A22X3";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -158,7 +158,8 @@ constant HELP_2 : string :=
    " F3:                 Back SD card\n" &
    " Enter:              Mount drive\n" &
    "                     Load CRT or PRG\n" &
-   " Space:              Unmount drive\n\n" &
+   " Space:              Unmount drive\n" &
+   "                     Unload CRT\n\n" &
 
    " System reset:\n\n" &
 
@@ -446,7 +447,7 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Use hardware slot\n"       &
    " Simulate cartridge:\n"     &
-   " CRT:%s\n"                  &  -- %s will be replaced by OPTM_S_CRTROM when no cartridge is loaded, otherwise by the filename of the cartridge
+   " CRT:%s\n"                  &  -- %s will be replaced by OPTM_S_CRTROM when no cartridge is loaded, otherwise by the filename of the cartridge; Space unloads it (UNLOAD_CRTROM in m2m-rom.asm)
    " Simulate 1750 REU 512KB\n" &
    "\n"                         &
    " C64 Configuration\n"       &

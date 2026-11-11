@@ -155,6 +155,7 @@ begin
          clk_i               => clk,
          rst_i               => rst,
          req_start_i         => req_start,
+         req_eject_i         => '0',
          req_length_i        => req_length,
          req_address_i       => req_address,
          resp_status_o       => resp_status,

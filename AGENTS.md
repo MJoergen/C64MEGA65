@@ -826,10 +826,30 @@ touching any reset-adjacent code. Key invariants:
    the C64 re-enter the cart after a `.crt` mount) would itself wipe the
    `cartridge.vhd` `bank_lo/hi/exrom/game` registers. See the comment at
    `main.vhd:1095-1099`.
+7. **Unloading a `.crt` (Space on `CRT:` in the OSM, issue #153).** CSR
+   status "idle" means "no cartridge": `sw_cartridge_csr.vhd` turns it into
+   `req_eject`, and `crt_parser.vhd` then reports id 0, EXROM/GAME `$FF` and
+   size 0 (the power-on values) whenever it is idle, already in the clock
+   cycle in which the parse status turns "idle". The statuses "loading" and
+   "error" keep the current cartridge, as before; `LOAD_IMAGE` sets
+   "loading" only after `PREP_LOAD_IMAGE` accepted a file, so a rejected
+   file (for example a `.crt` that is too large) leaves the loaded one
+   untouched. The Shell side is `UNLOAD_CRTROM` (`m2m-rom.asm`) +
+   `CRTROM_M_UNLD` (`crts-and-roms.asm`): in "Simulate cartridge" mode it
+   asserts the soft reset (`M2M$CSR_RESET`), checks the virtual drives for
+   unsaved data (if there is any, `prevent_reset` swallows the reset, so it
+   releases it and ignores the key), lets the parser go idle and releases
+   the reset via `RESET_CORE`, so `cart_soft_reset` re-initializes
+   `cartridge_inst` with id 0 (an eject *without* that reset would leave
+   e.g. the EasyFlash RAM at `$DF00` visible). `cartridge.vhd` clears
+   `roml_we_o` on that re-initialization (before, a Super Snapshot V5 left
+   its RAM mapped over ROML, so the next `.crt` did not start). In "Use
+   hardware slot" mode there is no reset; switching back to "Simulate
+   cartridge" resets anyway (`OSM_SEL_POST`).
 
 When debugging "cart doesn't autostart", "cart can't be exited via reset",
-or "EF3 menu does nothing": work through this list before doing anything
-else.
+"cart comes back after unloading" or "EF3 menu does nothing": work through
+this list before doing anything else.
 
 ### 4.7 Cross-reference
 
@@ -1101,6 +1121,7 @@ hardware saw the code.
 | Hardware cart port        | `main.vhd` `handle_hardware_expansion_proc` (lines 884–940), `cart_output_pipeline_proc` |
 | EF3 / KFF doesn't reset C64 (R3/R3A/R4) | `cartridge_heuristics.vhd`, `main.vhd:1004-1054`         |
 | Cart won't autostart / can't be exited  | `main.vhd` `cpu_data_in_proc` ($8xxx mask), `cold_start_done` flag |
+| `.crt` unload (Space on `CRT:`) misbehaves | `UNLOAD_CRTROM` + `OSM_SEL_PRE` (`m2m-rom.asm`), `CRTROM_M_UNLD` (`crts-and-roms.asm`), `HANDLE_MOUNTING` (`shell.asm`), `req_eject` in `sw_cartridge_csr.vhd` / `crt_parser.vhd`; benches `CORE/vhdl/test/tb_crt_eject/run.sh` and `M2M/rom/tests/crt_unload_test.py` (issue #153) |
 | Keyboard                  | `keyboard.vhd`, `M2M/vhdl/m2m_keyb.vhd`                   |
 | Reset / data corruption   | `main.vhd` RESET SEMANTICS block, `vdrives.vhd` (cache_dirty / prevent_reset) |
 | QNICE Shell behavior      | `M2M/rom/shell.asm` + neighbors; callbacks in `CORE/m2m-rom/m2m-rom.asm` |

@@ -114,6 +114,8 @@ LOG_STR_ROMPRS  .ASCII_W "Parsing CRT/ROM image: "
 LOG_STR_ROMPRSO .ASCII_W "OK\n"
 LOG_STR_ROMPRSE .ASCII_W "ERROR #"
 LOG_STR_ROMPRSC .ASCII_W ": "
+LOG_STR_ROMUNL  .ASCII_W "Unloaded CRT/ROM #"
+LOG_STR_ROMUNLT .ASCII_W " (parser did not report idle)"
 
 LOG_STR_ARSTART .ASCII_W " auto-load ROMs are part of this core:\n"
 LOG_STR_ARLINE1 .ASCII_W "  ROM #"
@@ -255,3 +257,5 @@ ERR_FATAL_INST8 .EQU 8  ; options.asm        _OPTM_CBS_I
 ERR_FATAL_INST9 .EQU 9  ; options.asm        _OPTM_CBS_I4
 ERR_FATAL_INSTA .EQU 10 ; shell.asm:         _HM_SDMOUNTED6B
 ERR_FATAL_INSTB .EQU 11 ; options.asm        _OPTM_GK_CRTROM
+ERR_FATAL_INSTC .EQU 12 ; crts-and-roms.asm  CRTROM_M_UNLD
+ERR_FATAL_INSTD .EQU 13 ; shell.asm:         _HM_UNLOADED

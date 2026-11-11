@@ -378,7 +378,9 @@ pre-empt or follow up on the framework's action:
   not already in "Simulate cartridge" mode, it switches to that mode with
   `M2M$FORCE_MENU` and soft-resets, so the running C64 does not hang while the
   hardware slot is decoupled and the file selector is open. (If sim-cartridge
-  mode is already active, it does nothing.)
+  mode is already active, it does nothing.) `Space` on a loaded `.crt` does
+  not load but unload (see `UNLOAD_CRTROM` below), so in that case the mode
+  stays as it is.
 * `OSM_SEL_POST` performs the *auto soft-reset on settings that need a clean
   restart* — changing the Kernal (`C64_OPTM_G_KERNAL_MODES`), the
   expansion-port mode (`C64_OPTM_G_EXP_PORT`) or the simulated REU
@@ -386,6 +388,31 @@ pre-empt or follow up on the framework's action:
   (`C64_OPTM_G_HDMI_FILTER`) it instead *hot-reloads* the coefficients with
   `LOAD_HDMI_FILTER` and does **not** reset — the C64 keeps running and the new
   filter appears on the next frame.
+
+**`UNLOAD_CRTROM` — Space on a loaded CRT/ROM.** When the user presses `Space`
+on the menu line of a manually loadable CRT/ROM that is loaded, the Shell
+(`HANDLE_MOUNTING` in `shell.asm`) asks the core what that means. Carry=0 lets
+`Space` work like `Return` (file browser); Carry=1 means the core has handled
+it, and the Shell then shows the load status on the line and redraws the menu.
+The C64 unloads the `.crt` (issue #153) and keeps the old behavior for
+*PRG: Load*. Unloading goes through the Shell library function `CRTROM_M_UNLD`
+(`crts-and-roms.asm`): it sets the CSR status of the device to "idle", waits
+until the parser reports "idle" and clears the load flag. In the RTL,
+`sw_cartridge_csr.vhd` turns the status "idle" into `req_eject`, and
+`crt_parser.vhd` then reports the neutral cartridge of the power-on state (id 0,
+EXROM and GAME high). In "Simulate cartridge" mode the C64 is held in reset
+around the unload (`M2M$CSR_RESET`, then `RESET_CORE`), so it never runs while
+the cartridge disappears and `cartridge.vhd` restarts in its neutral state. The
+key is ignored while a virtual drive still has unsaved data, because `main.vhd`
+drops resets during a write-back (`prevent_reset`); the check runs while the
+reset is already asserted, when the simulated drives cannot start a new write.
+In "Use hardware slot" mode the C64 does not see the `.crt`, so there is no
+reset. For the same reason, `LOAD_IMAGE` sets a CRT/ROM device to "loading"
+only after `PREP_LOAD_IMAGE` accepted the file: a rejected file leaves the
+loaded cartridge and its menu line untouched, so `Space` can still unload it.
+Benches:
+`CORE/vhdl/test/tb_crt_eject/` (RTL) and `M2M/rom/tests/crt_unload_test.py`
+(Shell).
 
 **`SUBMENU_SUMMARY` — live submenu summaries.** A submenu opener in `config.vhd`
 can contain a `%s`, e.g. `" Model: %s"` or `" Kernal: %s"`. Each time the main

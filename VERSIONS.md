@@ -84,6 +84,13 @@ Version 6 - MONTH DAY, 2026
   (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/225 and
    https://github.com/MJoergen/C64MEGA65/issues/226)
 
+* Unload a simulated cartridge (`*.crt`): press `Space` on the `CRT:` line of
+  the on-screen menu. This is like pulling the cartridge out of the C64: the
+  C64 restarts without it and the menu shows `CRT:<Load>` again. With "Use
+  hardware slot" the C64 does not use the `.crt`, so it is just unloaded and
+  the C64 keeps running. `Return` on `CRT:` still loads another `.crt`.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/153)
+
 * The file browser loads large directories up to 15x faster.
   (https://github.com/MJoergen/C64MEGA65/issues/228)
 
@@ -204,6 +211,10 @@ Version 6 - MONTH DAY, 2026
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 ## Bugfixes
+
+* After a Super Snapshot V5 simulated cartridge (`*.crt`), the next `.crt`
+  did not start until the MEGA65 was switched off, because Super Snapshot's
+  RAM stayed mapped where the next cartridge's ROM belongs.
 
 * Fixed a silent disk image corruption that could occur when the file browser
   was opened or an image was mounted while a drive was still saving its cache
