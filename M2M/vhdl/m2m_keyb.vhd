@@ -71,6 +71,10 @@ signal key_num             : integer range 0 to 79;
 signal key_status_n        : std_logic;
 signal keys_n              : std_logic_vector(15 downto 0) := x"FFFF"; -- low active, "no key pressed"
 
+-- left and right Shift key (low active); qnice_keys_n_o reports Shift if either of them is pressed
+signal shift_left_n        : std_logic := '1';
+signal shift_right_n       : std_logic := '1';
+
 -- Caps Lock: raw state from the keyboard controller and the filtered state (both low active)
 signal capslock_raw_n      : std_logic;
 signal capslock_n          : std_logic := '1';
@@ -165,23 +169,35 @@ begin
    end process;
 
    -- make qnice_keys_o a register and fill it
-   -- see sysdef.asm for the key-to-bit mapping      
+   -- see sysdef.asm for the key-to-bit mapping (M2M$KEY_* constants)
+   --
+   -- F9, F11 and F13 are the physical keys; F10, F12 and F14 are Shift+F9, Shift+F11 and Shift+F13.
+   -- The Shell resolves the configurable keyboard shortcuts (GitHub issue #142) from bits 10 to 13.
+   -- Bits 14 and 15 are unused and stay '1'.
    handle_qnice_keys : process(clk_main_i)
    begin
-      if rising_edge(clk_main_i) then      
+      if rising_edge(clk_main_i) then
          case key_num is
-            when 73        => keys_n(0) <= key_status_n;     -- Cursor up
-            when 7         => keys_n(1) <= key_status_n;     -- Cursor down
-            when 74        => keys_n(2) <= key_status_n;     -- Cursor left
-            when 2         => keys_n(3) <= key_status_n;     -- Cursor right
-            when 1         => keys_n(4) <= key_status_n;     -- Return
-            when 60        => keys_n(5) <= key_status_n;     -- Space
-            when 63        => keys_n(6) <= key_status_n;     -- Run/Stop
-            when 67        => keys_n(7) <= key_status_n;     -- Help
-            when 4         => keys_n(8) <= key_status_n;     -- F1
-            when 5         => keys_n(9) <= key_status_n;     -- F3
+            when 73        => keys_n(0)  <= key_status_n;    -- Cursor up
+            when 7         => keys_n(1)  <= key_status_n;    -- Cursor down
+            when 74        => keys_n(2)  <= key_status_n;    -- Cursor left
+            when 2         => keys_n(3)  <= key_status_n;    -- Cursor right
+            when 1         => keys_n(4)  <= key_status_n;    -- Return
+            when 60        => keys_n(5)  <= key_status_n;    -- Space
+            when 63        => keys_n(6)  <= key_status_n;    -- Run/Stop
+            when 67        => keys_n(7)  <= key_status_n;    -- Help
+            when 4         => keys_n(8)  <= key_status_n;    -- F1
+            when 5         => keys_n(9)  <= key_status_n;    -- F3
+            when 68        => keys_n(10) <= key_status_n;    -- F9
+            when 69        => keys_n(11) <= key_status_n;    -- F11
+            when 70        => keys_n(12) <= key_status_n;    -- F13
+            when 15        => shift_left_n  <= key_status_n; -- left Shift
+            when 52        => shift_right_n <= key_status_n; -- right Shift
             when others    => null;
          end case;
+
+         -- bit 13: Shift, i.e. the left or the right Shift key (or both) is pressed
+         keys_n(13) <= shift_left_n and shift_right_n;
       end if;
-   end process;   
+   end process;
 end beh;

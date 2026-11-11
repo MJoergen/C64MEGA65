@@ -52,7 +52,7 @@ port (
    qnice_flip_joyports_o   : out std_logic;
 
    -- On-Screen-Menu selections
-   qnice_osm_control_i     : in  std_logic_vector(255 downto 0);
+   qnice_osm_control_i     : in  std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register
    qnice_gp_reg_i          : in  std_logic_vector(255 downto 0);
@@ -119,7 +119,7 @@ port (
    main_pause_core_i       : in  std_logic;
 
    -- On-Screen-Menu selections
-   main_osm_control_i      : in  std_logic_vector(255 downto 0);
+   main_osm_control_i      : in  std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register converted to main clock domain
    main_qnice_gp_reg_i     : in  std_logic_vector(255 downto 0);
@@ -278,7 +278,10 @@ signal c64_drive_unmount          : std_logic_vector(C_VDNUM - 1 downto 0);  -- 
 -- C64 config settings
 signal sid_setup                  : std_logic_vector(1 downto 0);
 signal sid_port                   : natural range 0 to 4;
-signal main_volume                : natural range 0 to 20;   -- OSM "Volume" slider step: 0 = 0%/mute .. 20 = 100% (5% each)
+signal main_volume                : natural range 0 to 20 := 20;   -- OSM "Volume" slider step: 0 = 0%/mute .. 20 = 100% (5% each)
+
+-- Keyboard shortcuts F9 to F14 (issue #142): bit n = '1' means that F(9+n) is configured as the freezer key
+signal main_sc_freeze             : std_logic_vector(5 downto 0);
 
 -- C64 RAM
 signal main_ram_addr              : unsigned(15 downto 0);         -- C64 address bus
@@ -493,6 +496,9 @@ constant C_MENU_KERNAL_JIFFY  : natural := 128;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
 subtype C_MENU_VOLUME is natural range 154 downto 134;
+-- First item (100%) of the Volume radio group, i.e. C_MENU_VOLUME'low (checked by an assertion in
+-- the architecture body); the Shell needs it for the "Volume down" and "Volume up" shortcuts
+constant C_MENU_VOLUME_100    : natural := 134;
 -- Advanced Settings submenu
 constant C_MENU_RTC_GEOS      : natural := 160;         -- GEOS Real-Time-Clock, see #133, #164 and #187
 subtype C_MENU_OSM_SCALING is natural range 172 downto 164;
@@ -502,6 +508,24 @@ constant C_MENU_8521          : natural := 175;
 -- Simulated RR-Net (issue #234): the RR-Net radio group runs 179 .. 182, with "Off" first at
 -- 179. Only the three "On" items are sliced here; "Off" is encoded as "none of them selected"
 subtype R_MENU_RRNET is natural range 182 downto 180;
+-- Keyboard Shortcuts submenu (GitHub issue #142): one key picker for each of the function keys
+-- F9 to F14 (F10, F12 and F14 are Shift+F9, Shift+F11 and Shift+F13). Each picker is a radio group
+-- of 11 items in a fixed order; the constants below are the flat index of its first item ("Off"),
+-- and item n of a picker is at C_MENU_SC_Fx + n:
+--    0 = Off, 1 = Freeze, 2 = Mount drive 8, 3 = Mount drive 9, 4 = Next disk drive 8,
+--    5 = Next disk drive 9, 6 = Load PRG, 7 = Load CRT, 8 = Flip joysticks, 9 = Volume down,
+--    10 = Volume up
+-- Freeze is handled in VHDL (main_sc_freeze, keyboard.vhd and main.vhd), all other actions are
+-- handled by the Shell (m2m-rom.asm).
+constant C_MENU_SC_F9         : natural := 190;
+constant C_MENU_SC_F10        : natural := 206;
+constant C_MENU_SC_F11        : natural := 222;
+constant C_MENU_SC_F12        : natural := 238;
+constant C_MENU_SC_F13        : natural := 254;
+constant C_MENU_SC_F14        : natural := 270;
+-- Ordinal of the Freeze item within a key picker. Deliberately not named with the menu index prefix:
+-- make_rom.sh exports every menu index constant to the Shell, and this is an ordinal, not an index.
+constant C_SC_FREEZE          : natural := 1;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -766,18 +790,45 @@ begin
    -- Master volume: the OSM "Volume" slider (C_MENU_VOLUME) is a 21-way radio
    -- group in 5% steps. Its lowest bit (C_MENU_VOLUME'low) is 100% and its
    -- highest bit is 0%, so translate the one-hot selection into a 0..20 step
-   -- index (0 = 0%/mute, 20 = 100%). Default to 100% if nothing is (yet)
-   -- selected. The perceptual, loudness-linear attenuation itself is applied in
-   -- main.vhd (see C_VOL_LUT there), so it affects HDMI and analog audio alike.
-   volume_decode_proc : process (all)
+   -- index (0 = 0%/mute, 20 = 100%). If more than one bit is set, the highest
+   -- one (the lowest volume) wins. The perceptual, loudness-linear attenuation
+   -- itself is applied in main.vhd (see C_VOL_LUT there), so it affects HDMI and
+   -- analog audio alike.
+   --
+   -- The decoder is a register that HOLDS its value while no bit of the group is
+   -- set; it starts at 100%. Reason: the Shell writes the menu bits one at a time
+   -- (also when the "Volume down" and "Volume up" keyboard shortcuts of issue #142
+   -- move the slider), and the framework moves every bit of the menu vector into
+   -- the main clock domain on its own. So while the selection moves from one item
+   -- to the next, the main clock domain can briefly see no bit or both bits set.
+   -- Holding the last value on "no bit" and preferring the lower volume on "two
+   -- bits" means that only the old and the new volume are ever applied; a decoder
+   -- that falls back to 100% on "no bit" would let a single loud sample through
+   -- (main.vhd applies the gain without smoothing), which is audible as a click.
+   volume_decode_proc : process (main_clk_o)
    begin
-      main_volume <= 20;                                        -- default 100%
-      for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
-         if main_osm_control_i(b) = '1' then
-            main_volume <= C_MENU_VOLUME'high - b;              -- bit 114 -> 20 (100%) .. bit 134 -> 0 (0%)
-         end if;
-      end loop;
+      if rising_edge(main_clk_o) then
+         for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
+            if main_osm_control_i(b) = '1' then
+               main_volume <= C_MENU_VOLUME'high - b;           -- bit 134 -> 20 (100%) .. bit 154 -> 0 (0%)
+            end if;
+         end loop;
+      end if;
    end process volume_decode_proc;
+
+   assert C_MENU_VOLUME_100 = C_MENU_VOLUME'low
+      report "C_MENU_VOLUME_100 must be the first item of C_MENU_VOLUME"
+      severity failure;
+
+   -- Keyboard shortcuts F9 to F14 (issue #142): the Freeze item of each key picker; keyboard.vhd
+   -- resolves F9 versus F10 etc. via Shift and main.vhd passes the result to simulated freezer
+   -- cartridges only. All other shortcut actions are handled by the Shell.
+   main_sc_freeze(0) <= main_osm_control_i(C_MENU_SC_F9  + C_SC_FREEZE);
+   main_sc_freeze(1) <= main_osm_control_i(C_MENU_SC_F10 + C_SC_FREEZE);
+   main_sc_freeze(2) <= main_osm_control_i(C_MENU_SC_F11 + C_SC_FREEZE);
+   main_sc_freeze(3) <= main_osm_control_i(C_MENU_SC_F12 + C_SC_FREEZE);
+   main_sc_freeze(4) <= main_osm_control_i(C_MENU_SC_F13 + C_SC_FREEZE);
+   main_sc_freeze(5) <= main_osm_control_i(C_MENU_SC_F14 + C_SC_FREEZE);
 
    -- MEGA65's power led: By default, it is on and glows green when the MEGA65 is powered on.
    -- We switch it to blue when a long reset is detected and as long as the user keeps pressing the preset button
@@ -856,6 +907,9 @@ begin
          -- M2M Keyboard interface
          kb_key_num_i           => main_kb_key_num_i,
          kb_key_pressed_n_i     => main_kb_key_pressed_n_i,
+
+         -- Keyboard shortcuts: bit n = '1' means that F(9+n) is configured as the freezer key
+         kb_sc_freeze_i         => main_sc_freeze,
 
          -- MEGA65 joysticks and paddles
          joy_1_up_n_i           => main_joy_1_up_n_i ,

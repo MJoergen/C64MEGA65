@@ -1,0 +1,284 @@
+----------------------------------------------------------------------------------------------------
+-- Keyboard shortcuts bench (GitHub issue #142), part 3: decodes of CORE/vhdl/mega65.vhd and the
+-- freezer cartridge gate of CORE/vhdl/main.vhd
+--
+-- Template: run.sh copies verbatim out of the current CORE/vhdl/mega65.vhd
+--    * the constants C_MENU_VOLUME (subtype), C_MENU_VOLUME_100, C_MENU_SC_F9 .. C_MENU_SC_F14 and
+--      C_SC_FREEZE,
+--    * the declarations of main_volume and main_sc_freeze (including the power-up value),
+--    * volume_decode_proc, the assertion on C_MENU_VOLUME_100 and the six main_sc_freeze assignments
+-- and out of the current CORE/vhdl/main.vhd
+--    * the crt_is_freezer assignment and the expression of the freeze_key_i association of
+--      cartridge_inst
+-- into the marker lines below and fails if it cannot find them. The menu vector of the bench has
+-- 512 bits; the decodes only use bits below that, whatever the width in mega65.vhd is.
+--
+-- Checks of the volume decoder:
+--    * power-up: 100% (20) while no bit of the Volume group is set
+--    * every single item: step 20 (100%) .. 0 (0%)
+--    * every transition between two of the 21 items, both ways the Shell and the per-bit clock
+--      domain crossing can tear it: first "no bit set" (the old value must be held) and first
+--      "both bits set" (the lower volume wins); a monitor checks in every clock cycle of a
+--      transition that main_volume is the old or the new value and nothing else
+--    * all of this with all other menu bits at '0' and at '1'
+-- Checks of the freezer key bits: for each key picker F9 .. F14 and each of its 11 items, with the
+-- other pickers at "Off", main_sc_freeze has exactly the bit of that key set if the item is Freeze;
+-- all pickers at Freeze give "111111".
+-- Checks of the cartridge gate: for the cartridge ids 0 .. 300 and 16#FFFF# and all four combinations
+-- of Restore and the freezer key, freeze_key_i of cartridge_inst is '1' if Restore is held, or if the
+-- freezer key is held and the id is 1 (Action Replay), 3 (Final Cartridge III) or 20 (Super
+-- Snapshot V5); otherwise '0'.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity tb_shortcuts_decode is
+end entity tb_shortcuts_decode;
+
+architecture sim of tb_shortcuts_decode is
+
+-- @MEGA65_CONSTANTS@
+
+-- @MEGA65_SIGNALS@
+
+   constant C_PERIOD          : time := 10 ns;
+   signal main_clk_o          : std_logic := '0';
+   signal running             : boolean   := true;
+   signal main_osm_control_i  : std_logic_vector(511 downto 0) := (others => '0');
+
+   -- transition monitor: while mon_on, main_volume must be mon_a or mon_b in every clock cycle
+   signal mon_on              : boolean := false;
+   signal mon_a               : natural range 0 to 20 := 20;
+   signal mon_b               : natural range 0 to 20 := 20;
+   signal mon_err             : natural := 0;
+   signal powerup_err         : natural := 0;
+   signal powerup_on          : boolean := true;
+
+   -- the cartridge gate of main.vhd
+   signal cartridge_id_i      : std_logic_vector(15 downto 0) := (others => '0');
+   signal restore_key_n       : std_logic := '1';
+   signal freeze_key_n        : std_logic := '1';
+   signal crt_is_freezer      : std_logic;
+   signal freeze_key          : std_logic;
+
+begin
+
+   main_clk_o <= not main_clk_o after C_PERIOD / 2 when running;
+
+-- @MEGA65_DECODE@
+
+-- @MAIN_CART_GATE@
+
+   monitor : process (main_clk_o)
+   begin
+      if falling_edge(main_clk_o) then
+         if mon_on and main_volume /= mon_a and main_volume /= mon_b then
+            mon_err <= mon_err + 1;
+            report "TB_ERROR: during a transition " & integer'image(mon_a) & " -> " & integer'image(mon_b) &
+                   " main_volume was " & integer'image(main_volume) severity error;
+         end if;
+         if powerup_on and main_volume /= 20 then
+            powerup_err <= powerup_err + 1;
+         end if;
+      end if;
+   end process monitor;
+
+   stimulus : process
+
+      variable errors : natural := 0;
+      variable cases  : natural := 0;
+      variable osm    : std_logic_vector(511 downto 0);
+      variable bg     : std_logic;
+
+      procedure clocks(n : natural) is
+      begin
+         for i in 1 to n loop
+            wait until rising_edge(main_clk_o);
+         end loop;
+         wait until falling_edge(main_clk_o);
+      end procedure;
+
+      procedure check_volume(expected : natural; label_s : string) is
+      begin
+         cases := cases + 1;
+         if main_volume /= expected then
+            errors := errors + 1;
+            report "TB_ERROR: " & label_s & ": main_volume = " & integer'image(main_volume) & ", expected " &
+                   integer'image(expected) severity error;
+         end if;
+      end procedure;
+
+      -- the menu bit of volume step v (20 = 100% = first item, 0 = 0% = last item)
+      function vbit(v : natural) return natural is
+      begin
+         return C_MENU_VOLUME'high - v;
+      end function;
+
+      -- the menu vector with the background value outside the Volume group and only step v inside
+      procedure set_only(v : integer) is
+      begin
+         osm := (others => bg);
+         for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
+            osm(b) := '0';
+         end loop;
+         if v >= 0 then
+            osm(vbit(v)) := '1';
+         end if;
+         main_osm_control_i <= osm;
+      end procedure;
+
+      type t_pickers is array (0 to 5) of natural;
+      constant C_PICKERS : t_pickers := (C_MENU_SC_F9, C_MENU_SC_F10, C_MENU_SC_F11,
+                                         C_MENU_SC_F12, C_MENU_SC_F13, C_MENU_SC_F14);
+      variable exp_sc : std_logic_vector(5 downto 0);
+
+   begin
+      ------------------------------------------------------------------------------------------------
+      -- power-up: nothing selected yet -> 100%
+      ------------------------------------------------------------------------------------------------
+      clocks(10);
+      powerup_on <= false;
+      wait for 0 ns;
+      if powerup_err /= 0 then
+         errors := errors + 1;
+         report "TB_ERROR: power-up: main_volume was not 20 in " & integer'image(powerup_err) & " cycles" severity error;
+      else
+         report "TB: power-up: main_volume = 20 (100%) while no bit is set OK";
+      end if;
+
+      for background in 0 to 1 loop
+         if background = 0 then
+            bg := '0';
+         else
+            bg := '1';
+         end if;
+
+         ---------------------------------------------------------------------------------------------
+         -- every single item
+         ---------------------------------------------------------------------------------------------
+         for v in 0 to 20 loop
+            set_only(v);
+            clocks(2);
+            check_volume(v, "background " & std_logic'image(bg) & ", single item " & integer'image(v));
+         end loop;
+
+         ---------------------------------------------------------------------------------------------
+         -- every transition a -> b, torn both ways
+         ---------------------------------------------------------------------------------------------
+         for a in 0 to 20 loop
+            for b in 0 to 20 loop
+               if a /= b then
+                  -- first "no bit set": hold a
+                  set_only(a);
+                  clocks(2);
+                  mon_a <= a; mon_b <= b; mon_on <= true;
+                  set_only(-1);
+                  clocks(3);
+                  check_volume(a, "transition " & integer'image(a) & " -> " & integer'image(b) & ", no bit set");
+                  set_only(b);
+                  clocks(2);
+                  check_volume(b, "transition " & integer'image(a) & " -> " & integer'image(b) & ", done");
+                  mon_on <= false;
+
+                  -- first "both bits set": the lower volume wins
+                  set_only(a);
+                  clocks(2);
+                  mon_on <= true;
+                  osm(vbit(b)) := '1';
+                  main_osm_control_i <= osm;
+                  clocks(3);
+                  check_volume(minimum(a, b), "transition " & integer'image(a) & " -> " & integer'image(b) &
+                               ", both bits set");
+                  set_only(b);
+                  clocks(2);
+                  check_volume(b, "transition " & integer'image(a) & " -> " & integer'image(b) & ", done");
+                  mon_on <= false;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+      report "TB: volume: " & integer'image(cases) & " checks";
+
+      ------------------------------------------------------------------------------------------------
+      -- freezer key bits
+      ------------------------------------------------------------------------------------------------
+      for k in 0 to 5 loop
+         for item in 0 to 10 loop
+            osm := (others => '0');
+            for p in 0 to 5 loop
+               osm(C_PICKERS(p)) := '1';                    -- "Off"
+            end loop;
+            osm(C_PICKERS(k))        := '0';
+            osm(C_PICKERS(k) + item) := '1';
+            main_osm_control_i <= osm;
+            wait for 1 ns;
+            exp_sc := (others => '0');
+            if item = 1 then
+               exp_sc(k) := '1';
+            end if;
+            cases := cases + 1;
+            if main_sc_freeze /= exp_sc then
+               errors := errors + 1;
+               report "TB_ERROR: picker F" & integer'image(9 + k) & ", item " & integer'image(item) &
+                      ": main_sc_freeze = " & to_string(main_sc_freeze) & ", expected " & to_string(exp_sc)
+                      severity error;
+            end if;
+         end loop;
+      end loop;
+      osm := (others => '0');
+      for p in 0 to 5 loop
+         osm(C_PICKERS(p) + 1) := '1';
+      end loop;
+      main_osm_control_i <= osm;
+      wait for 1 ns;
+      cases := cases + 1;
+      if main_sc_freeze /= "111111" then
+         errors := errors + 1;
+         report "TB_ERROR: all pickers at Freeze: main_sc_freeze = " & to_string(main_sc_freeze) severity error;
+      end if;
+
+      ------------------------------------------------------------------------------------------------
+      -- cartridge gate
+      ------------------------------------------------------------------------------------------------
+      for id in 0 to 301 loop
+         for keys in 0 to 3 loop
+            if id = 301 then
+               cartridge_id_i <= x"FFFF";
+            else
+               cartridge_id_i <= std_logic_vector(to_unsigned(id, 16));
+            end if;
+            if keys mod 2 = 1 then restore_key_n <= '0'; else restore_key_n <= '1'; end if;
+            if keys / 2 = 1  then freeze_key_n  <= '0'; else freeze_key_n  <= '1'; end if;
+            wait for 1 ns;
+            cases := cases + 1;
+            if (keys mod 2 = 1) or (keys / 2 = 1 and (id = 1 or id = 3 or id = 20)) then
+               if freeze_key /= '1' then
+                  errors := errors + 1;
+                  report "TB_ERROR: cartridge id " & integer'image(id) & ", Restore " & std_logic'image(restore_key_n) &
+                         ", freezer key " & std_logic'image(freeze_key_n) & ": freeze_key_i = '0', expected '1'" severity error;
+               end if;
+            elsif freeze_key /= '0' then
+               errors := errors + 1;
+               report "TB_ERROR: cartridge id " & integer'image(id) & ", Restore " & std_logic'image(restore_key_n) &
+                      ", freezer key " & std_logic'image(freeze_key_n) & ": freeze_key_i = '1', expected '0'" severity error;
+            end if;
+         end loop;
+      end loop;
+
+      wait for 0 ns;
+      errors := errors + mon_err;
+      report "TB: decode: " & integer'image(cases) & " checks, " & integer'image(errors) & " errors";
+      if errors = 0 then
+         report "TB: RESULT PASS";
+      else
+         report "TB: RESULT FAIL";
+      end if;
+      running <= false;
+      wait;
+   end process stimulus;
+
+end architecture sim;

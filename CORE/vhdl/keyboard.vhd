@@ -36,7 +36,12 @@ entity keyboard is
       -- Interface to the MEGA65 keyboard
       key_num_i            : in integer range 0 to 79;   -- cycles through all MEGA65 keys
       key_pressed_n_i      : in std_logic;               -- low active: debounced feedback: is kb_key_num_i pressed right now?
-      
+
+      -- Configurable keyboard shortcuts (GitHub issue #142): bit n = '1' means that the function key
+      -- F(9+n) is configured as the freezer key: bit 0 = F9, 1 = F10, 2 = F11, 3 = F12, 4 = F13, 5 = F14.
+      -- F10, F12 and F14 are Shift+F9, Shift+F11 and Shift+F13 on the MEGA65 keyboard.
+      sc_freeze_i          : in std_logic_vector(5 downto 0);
+
       -- Interface to the MEGA65 joysticks
       joy_1_up_n_i         : in std_logic;
       joy_1_down_n_i       : in std_logic;
@@ -70,7 +75,8 @@ entity keyboard is
       
       -- Special keys
       restore_n            : out std_logic;  -- Restore key = NMI
-      freeze_n             : out std_logic   -- F9 key = freezer key for simulated cartridges
+      freeze_n             : out std_logic   -- low while a function key that is configured as the
+                                             -- freezer key (sc_freeze_i) is held
    );
 end keyboard;
 
@@ -169,6 +175,21 @@ signal autokey_next  : t_autokey_state := IDLE_ST;
 signal autokey_key   : natural range 0 to 79;
 signal autokey_delay : natural range 0 to C_AK_DELAY;
 
+-- Configurable keyboard shortcuts (GitHub issue #142): the physical function keys F9, F11 and F13.
+-- With Shift they are F10, F12 and F14, so index i of these arrays stands for F(9+2i) and, shifted,
+-- for F(10+2i), which is bit 2i (unshifted) or 2i+1 (shifted) of sc_freeze_i.
+type t_sc_keys is array (0 to 2) of natural range 0 to 79;
+constant C_SC_KEYS  : t_sc_keys := (m65_f9, m65_f11, m65_f13);
+
+signal sc_down      : std_logic_vector(0 to 2) := (others => '0');  -- '1' while the physical key is held
+signal sc_shifted   : std_logic_vector(0 to 2) := (others => '0');  -- '1' if Shift was held when it went down
+signal sc_freeze    : std_logic_vector(0 to 2);                     -- '1' while the key acts as freezer key
+signal sc_held      : std_logic;                                    -- '1' while F9, F11 or F13 is held
+
+-- The physical Shift keys as the CIA sees them (low active): masked while F9, F11 or F13 is held
+signal left_shift_n  : std_logic;
+signal right_shift_n : std_logic;
+
 begin
 
    -- TBD: These output signals should be connected to the CIA.
@@ -185,8 +206,56 @@ begin
    joy_2_fire_n_o  <= '1';
 
    restore_n   <= key_pressed_n(m65_restore);
-   freeze_n    <= key_pressed_n(m65_f9);
-   
+
+   ------------------------------------------------------------------------------
+   -- Configurable keyboard shortcuts F9 to F14 (GitHub issue #142)
+   --
+   -- F10, F12 and F14 are Shift+F9, Shift+F11 and Shift+F13. Shift is sampled at
+   -- the moment the physical function key goes down and decides between the two
+   -- functions for the whole key press: pressing or releasing Shift while the
+   -- function key is held does not change it. Only the Freeze action is handled
+   -- here; the Shell handles all other actions via the QNICE key bits of
+   -- m2m_keyb.vhd.
+   --
+   -- freeze_n is low as long as a function key is held whose resolved function
+   -- (e.g. F9 or F10) is configured as the freezer key. cartridge.vhd detects the
+   -- edge itself.
+   --
+   -- F9 to F14 do not exist on a C64 keyboard and are not part of the C64 matrix.
+   -- So that Shift+F9 and friends do not reach the C64 as a plain Shift, the CIA
+   -- does not see the physical Shift keys while F9, F11 or F13 is held. The Shift
+   -- that the MEGA65's cursor up and cursor left keys synthesize in the matrix is
+   -- not affected.
+   ------------------------------------------------------------------------------
+
+   shortcut_keys_proc : process (clk_main_i)
+   begin
+      if rising_edge(clk_main_i) then
+         for i in C_SC_KEYS'range loop
+            if key_pressed_n(C_SC_KEYS(i)) = '0' then
+               if sc_down(i) = '0' then
+                  -- the key goes down: latch Shift (left or right) for this key press
+                  sc_shifted(i) <= not (key_pressed_n(m65_left_shift) and key_pressed_n(m65_right_shift));
+               end if;
+               sc_down(i) <= '1';
+            else
+               sc_down(i) <= '0';
+            end if;
+         end loop;
+      end if;
+   end process shortcut_keys_proc;
+
+   gen_sc_freeze : for i in C_SC_KEYS'range generate
+      sc_freeze(i) <= sc_down(i) and sc_freeze_i(2 * i + 1) when sc_shifted(i) = '1' else
+                      sc_down(i) and sc_freeze_i(2 * i);
+   end generate gen_sc_freeze;
+
+   freeze_n      <= not (sc_freeze(0) or sc_freeze(1) or sc_freeze(2));
+
+   sc_held       <= sc_down(0) or sc_down(1) or sc_down(2);
+   left_shift_n  <= key_pressed_n(m65_left_shift)  or sc_held;
+   right_shift_n <= key_pressed_n(m65_right_shift) or sc_held;
+
    keyboard_state : process(clk_main_i)
    begin
       if rising_edge(clk_main_i) then
@@ -281,7 +350,7 @@ begin
                      (cia1_pbo_i(4) or key_pressed_n(m65_z))            and
                      (cia1_pbo_i(5) or key_pressed_n(m65_s))            and
                      (cia1_pbo_i(6) or key_pressed_n(m65_e))            and                  
-                     (cia1_pbo_i(7) or key_pressed_n(m65_left_shift))   and
+                     (cia1_pbo_i(7) or left_shift_n)                   and
                      joy_2_down_n_i;
 
    cia1_pai_o(2) <=  cia1_pao_i(2)                                      and
@@ -333,8 +402,9 @@ begin
                      (cia1_pbo_i(2) or key_pressed_n(m65_semicolon))    and
                      (cia1_pbo_i(3) or key_pressed_n(m65_clr_home))     and
                      
-                     -- right shift pressed or one of the "extended" arrow keys "up" and "left" of the MEGA65
-                     (cia1_pbo_i(4) or (key_pressed_n(m65_right_shift)
+                     -- right shift pressed (masked while F9, F11 or F13 is held, see above) or one of the
+                     -- "extended" arrow keys "up" and "left" of the MEGA65
+                     (cia1_pbo_i(4) or (right_shift_n
                                     and key_pressed_n(m65_up_crsr)
                                     and key_pressed_n(m65_left_crsr)))  and
                                                                
@@ -411,8 +481,9 @@ begin
                      (cia1_pao_i(4) or key_pressed_n(m65_m))            and
                      (cia1_pao_i(5) or key_pressed_n(m65_dot))          and
 
-                     -- right shift pressed or one of the "extended" arrow keys "up" and "left" of the MEGA65                     
-                     (cia1_pao_i(6) or (key_pressed_n(m65_right_shift)
+                     -- right shift pressed (masked while F9, F11 or F13 is held, see above) or one of the
+                     -- "extended" arrow keys "up" and "left" of the MEGA65
+                     (cia1_pao_i(6) or (right_shift_n
                                     and key_pressed_n(m65_up_crsr)
                                     and key_pressed_n(m65_left_crsr)))  and
                                           
@@ -444,7 +515,7 @@ begin
                      (cia1_pao_i(0) or (key_pressed_n(m65_vert_crsr)
                                     and key_pressed_n(m65_up_crsr)))    and
                                     
-                     (cia1_pao_i(1) or key_pressed_n(m65_left_shift))   and
+                     (cia1_pao_i(1) or left_shift_n)                   and
                      (cia1_pao_i(2) or key_pressed_n(m65_x))            and
                      (cia1_pao_i(3) or key_pressed_n(m65_v))            and
                      (cia1_pao_i(4) or key_pressed_n(m65_n))            and
