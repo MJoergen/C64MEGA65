@@ -5,6 +5,20 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X3 - TBD
+--------------------------
+
+@TODO: Test the larger bank cache for simulated cartridges (issue #255) on R3/R3A and R6 at least (R4/R5 when available). Everything of WIP-V6-A22X2 still applies.
+
+Bank cache for simulated cartridges (32 instead of 8 ROML and ROMH banks):
+
+* @TODO "Eye of the Beholder" V1.00 (EasyFlash `.crt`, https://csdb.dk/release/?id=226060) as simulated cartridge: choose `Quickstart game` in its main menu, then walk and turn continuously for several minutes (`W`, `S`, `Q`, `E`), bumping into walls included. Expected: no flickering line directly below the bitmap area, the three message lines and the `CAMP` button never vanish for a frame, the sprite overlay of the 3D view does not flicker. WIP-V6-A22X2 shows one of these glitches every few seconds while moving. A single glitch is still possible when something is drawn for the first time (its bank is fetched from the HyperRAM once); note how often that happens.
+* @TODO The same on VGA and on HDMI, in PAL; on R3/R3A the HDMI scaler shares the HyperRAM, so run it there with `HDMI: Flicker-free` on, too.
+* @TODO The same with the simulated REU switched on (it shares the HyperRAM with the bank cache).
+* @TODO Stand still in "Eye of the Beholder" for five minutes: no flicker.
+* @TODO Regression: the other simulated cartridges of the usual set start and run as before, in particular the bank-switch-heavy ones (EasyFlash, GMod2, Magic Desk, Ocean) and the freezers (Action Replay, Final Cartridge III, Super Snapshot); mount a second `.crt` while one is running, soft reset and hard reset with a `.crt` mounted.
+* @TODO A 1 MB EasyFlash `.crt` and a small 8 kB `.crt` load and start on R3 and R6.
+
 Version WIP-V6-A22X2 - TBD
 --------------------------
 

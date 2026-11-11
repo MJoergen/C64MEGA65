@@ -17,10 +17,11 @@ entity tdp_ram is
       -- Deliberately UNCONSTRAINED with an empty default: a default constrained
       -- to (2**ADDR_WIDTH)*DATA_WIDTH forces every instance to elaborate a full
       -- all-zero constant and then walk a 2**ADDR_WIDTH slice loop, even when it
-      -- has no pattern to load. For the 32k x 16 .crt bank cache in
-      -- sw_cartridge_wrapper.vhd that is a 512 kbit constant plus 32768
-      -- iterations, which drives Vivado's synth_design into an out-of-memory
-      -- kill. Only instances that really pass a pattern should pay for it.
+      -- has no pattern to load. For the 128k x 16 .crt bank cache in
+      -- sw_cartridge_wrapper.vhd that is a 2 Mbit constant plus 131072
+      -- iterations; a quarter of that already drives Vivado's synth_design
+      -- into an out-of-memory kill. Only instances that really pass a pattern
+      -- should pay for it.
       INIT_VAL     : std_logic_vector := ""
    );
    port (

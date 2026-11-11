@@ -205,6 +205,16 @@ Version 6 - MONTH DAY, 2026
 
 ## Bugfixes
 
+* Simulated cartridges (`*.crt`) that work with many banks at once showed
+  flickering lines where the game splits the screen, for example the
+  EasyFlash version of "Eye of the Beholder" below its 3D view while the
+  party moves. Each bank that had to be fetched from the HyperRAM stopped
+  the C64's CPU for more than a raster line, so that the game's raster
+  interrupts ran late. The core now keeps 32 instead of 8 banks ready, so
+  that a game that works with up to 32 banks only waits for the HyperRAM
+  when it uses a bank for the first time.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/255)
+
 * Fixed a silent disk image corruption that could occur when the file browser
   was opened or an image was mounted while a drive was still saving its cache
   to the SD card ("yellow drive led"): the affected drive lost the bytes it

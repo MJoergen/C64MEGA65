@@ -69,7 +69,17 @@ end entity sw_cartridge_wrapper;
 
 architecture synthesis of sw_cartridge_wrapper is
 
-   constant C_CACHE_SIZE : natural := 3;
+   -- The BRAM bank cache holds 2**C_CACHE_SIZE ROML banks and as many ROMH banks.
+   --
+   -- Selecting a bank that is not in the cache stops the C64's CPU while the bank is copied
+   -- from the HyperRAM (bank_wait): about 90 PHI2 cycles for the two 8 kB halves of an
+   -- EasyFlash bank, more on boards where the HDMI scaler shares the HyperRAM. The VIC-II
+   -- keeps running in the meantime, so a cartridge that works with more banks than the
+   -- cache holds gets its raster interrupts served late and its screen splits flicker.
+   -- "Eye of the Beholder" (EasyFlash) works with up to 24 banks while the player moves
+   -- and flickered with the former 8 banks per half (GitHub issue #255).
+   -- 32 banks per half take 2 x 64 RAMB36.
+   constant C_CACHE_SIZE : natural := 5;
 
    -- Request and response
    signal qnice_req_status        : std_logic_vector(15 downto 0);
