@@ -5,6 +5,21 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X3 - TBD
+--------------------------
+
+@TODO: Test the keyboard shortcuts (issue #142) on R3 and R6 at least (R4/R5 when available). Everything of WIP-V6-A22X2 below still applies.
+
+* @TODO The menu has a new submenu `Advanced Settings` / `Keyboard Shortcuts` with one line per key `F9` to `F14`; each opens a list of 11 actions. Defaults: `F9` Freeze, `F10` Load CRT, `F11` Mount drive 8, `F12` Load PRG, `F13` Volume down, `F14` Volume up. Changed assignments survive a power cycle (config file).
+* @TODO Freeze (default `F9`): freezes simulated Action Replay, Final Cartridge III and Super Snapshot V5 `*.crt` files; does nothing with other `*.crt` files, with a hardware cartridge and without a cartridge. Assign Freeze to another key (for example `F12`): that key freezes, `F9` no longer does. `Restore` still only sends an NMI (Run/Stop + Restore works with a freezer `*.crt` inserted).
+* @TODO Mount drive 8 / 9: the file browser opens directly while the C64 keeps running; selecting an image mounts it and returns to the running program (the menu is never shown); Run/Stop in the browser returns without changes. Drive 9 off (default): message `Drive 9 is off`. Drive set to `Internal 1581`: message `Drive 8 is the internal 1581`. While a disk image is being saved: message `Drive 8 is still saving`.
+* @TODO Next disk drive 8 / 9: with a multi-disk game in one folder (for example `game-1.d64`, `game-2.d64`, `game-3.d64`) each press mounts the next image and shows its name; after the last image it starts again with the first. Nothing mounted yet: the file browser opens. Only one image in the folder: message `no other disk image`. Also test D81 images and a folder with mixed D64/D81/other files (only the images the browser shows are used).
+* @TODO Load PRG and Load CRT: browser opens directly; the PRG autostarts; a CRT switches the Expansion Port to `Simulate cartridge` (from `Use hardware slot` the C64 is reset first, like in the menu).
+* @TODO Flip joysticks: each press toggles the joystick ports and shows `Joystick ports: flipped` or `normal`; the menu item `Flip joystick ports` shows the same state; the setting is saved about three seconds later (survives a power cycle).
+* @TODO Volume down/up (`F13`/`F14`): 5% steps with the message `Volume: 75%`; holding the key repeats; stops at 0% and 100%; the `Volume` submenu shows the same value; saved about three seconds after the last change; no clicks while stepping.
+* @TODO `F10`, `F12` and `F14` (with `Shift`): while `F9`, `F11` or `F13` is held, the C64 does not see `Shift` (in BASIC: hold `F11`, then press `C=` and `Shift` together: the character set must not switch). Pressing `Shift` only after the F-key does not change the action of that key press.
+* @TODO The shortcuts do nothing while the on-screen menu is open; `Help` still opens the menu, also while a message is visible.
+
 Version WIP-V6-A22X2 - TBD
 --------------------------
 
