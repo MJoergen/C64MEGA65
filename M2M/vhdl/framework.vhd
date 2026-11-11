@@ -131,7 +131,7 @@ port (
    main_power_led_col_i    : in    std_logic_vector(23 downto 0);
    main_drive_led_i        : in    std_logic;
    main_drive_led_col_i    : in    std_logic_vector(23 downto 0);
-   main_osm_control_m_o    : out   std_logic_vector(255 downto 0);
+   main_osm_control_m_o    : out   std_logic_vector(511 downto 0);
    main_qnice_gp_reg_o     : out   std_logic_vector(255 downto 0);
    main_audio_l_i          : in    signed(15 downto 0);
    main_audio_r_i          : in    signed(15 downto 0);
@@ -216,7 +216,7 @@ port (
    qnice_ascal_polyphase_i : in    std_logic;
    qnice_ascal_triplebuf_i : in    std_logic;
    qnice_flip_joyports_i   : in    std_logic;
-   qnice_osm_control_m_o   : out   std_logic_vector(255 downto 0);
+   qnice_osm_control_m_o   : out   std_logic_vector(511 downto 0);
    qnice_gp_reg_o          : out   std_logic_vector(255 downto 0);
 
    -- QNICE device management
@@ -789,7 +789,7 @@ begin
    i_qnice2main: xpm_cdc_array_single
       generic map (
          DEST_SYNC_FF => 2,
-         WIDTH        => 615
+         WIDTH        => 871
       )
       port map (
          src_clk                    => qnice_clk,
@@ -799,13 +799,13 @@ begin
          src_in(3)                  => qnice_csr_joy1_on,
          src_in(4)                  => qnice_csr_joy2_on,
          src_in(5)                  => qnice_flip_joyports_i,
-         src_in(261 downto 6)       => qnice_osm_control_m_o,
-         src_in(517 downto 262)     => qnice_gp_reg_o,
-         src_in(525 downto 518)     => std_logic_vector(qnice_pot1_x_n),
-         src_in(533 downto 526)     => std_logic_vector(qnice_pot1_y_n),
-         src_in(541 downto 534)     => std_logic_vector(qnice_pot2_x_n),
-         src_in(549 downto 542)     => std_logic_vector(qnice_pot2_y_n),
-         src_in(614 downto 550)     => qnice_rtc,
+         src_in(517 downto 6)       => qnice_osm_control_m_o,
+         src_in(773 downto 518)     => qnice_gp_reg_o,
+         src_in(781 downto 774)     => std_logic_vector(qnice_pot1_x_n),
+         src_in(789 downto 782)     => std_logic_vector(qnice_pot1_y_n),
+         src_in(797 downto 790)     => std_logic_vector(qnice_pot2_x_n),
+         src_in(805 downto 798)     => std_logic_vector(qnice_pot2_y_n),
+         src_in(870 downto 806)     => qnice_rtc,
          dest_clk                   => main_clk_i,
          dest_out(0)                => main_qnice_reset_o,
          dest_out(1)                => main_qnice_pause_o,
@@ -813,13 +813,13 @@ begin
          dest_out(3)                => main_csr_joy1_on,
          dest_out(4)                => main_csr_joy2_on,
          dest_out(5)                => main_flip_joyports,
-         dest_out(261 downto 6)     => main_osm_control_m_o,
-         dest_out(517 downto 262)   => main_qnice_gp_reg_o,
-         dest_out(525 downto 518)   => main_pot1_x_o,
-         dest_out(533 downto 526)   => main_pot1_y_o,
-         dest_out(541 downto 534)   => main_pot2_x_o,
-         dest_out(549 downto 542)   => main_pot2_y_o,
-         dest_out(614 downto 550)   => main_rtc_o
+         dest_out(517 downto 6)     => main_osm_control_m_o,
+         dest_out(773 downto 518)   => main_qnice_gp_reg_o,
+         dest_out(781 downto 774)   => main_pot1_x_o,
+         dest_out(789 downto 782)   => main_pot1_y_o,
+         dest_out(797 downto 790)   => main_pot2_x_o,
+         dest_out(805 downto 798)   => main_pot2_y_o,
+         dest_out(870 downto 806)   => main_rtc_o
       ); -- i_qnice2main
 
    -- Clock domain crossing: QNICE to HR

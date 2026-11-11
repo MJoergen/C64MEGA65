@@ -288,7 +288,7 @@ architecture synthesis of mega65_r6 is
    signal main_drive_led_col     : std_logic_vector(23 downto 0);
 
    -- QNICE On Screen Menu selections
-   signal main_osm_control_m     : std_logic_vector(255 downto 0);
+   signal main_osm_control_m     : std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register
    signal main_qnice_gp_reg      : std_logic_vector(255 downto 0);
@@ -429,7 +429,7 @@ architecture synthesis of mega65_r6 is
    signal qnice_flip_joyports    : std_logic;
 
    -- QNICE On Screen Menu selections
-   signal qnice_osm_control_m    : std_logic_vector(255 downto 0);
+   signal qnice_osm_control_m    : std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register
    signal qnice_gp_reg           : std_logic_vector(255 downto 0);

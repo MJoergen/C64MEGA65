@@ -212,9 +212,10 @@ domain (heavy commenting in the file marks each section):
 
 - **QNICE clock domain** — connects to QNICE's MMIO bus. Outputs OSM/video
   config (DVI/HDMI, scandoubler, ascal_mode, retro15kHz, csync, etc.) and
-  receives `qnice_osm_control_i` (the menu state) and `qnice_gp_reg_i`. Also
-  exposes `qnice_dev_*` for core-specific devices (RAM, CRT cache, mount
-  buffer, kernel ROMs — see `globals.vhd` `C_DEV_*` constants).
+  receives `qnice_osm_control_i` (the 512-bit menu state) and
+  `qnice_gp_reg_i`. Also exposes `qnice_dev_*` for core-specific devices
+  (RAM, CRT cache, mount buffer, kernel ROMs — see `globals.vhd` `C_DEV_*`
+  constants).
 - **HyperRAM clock domain (`hr_clk`)** — Avalon master for SIMCRT (cartridge
   bank cache backing store) and SIMREU. `hr_high_i / hr_low_i` from M2M tell
   us whether the core is faster/slower than the HDMI fifo level (drives the
@@ -334,8 +335,13 @@ on `main_clk`). M2M splits it:
   Group IDs are referenced both in VHDL (`C_MENU_*` bit positions in
   mega65.vhd) and QNICE asm (e.g. `C64_OPTM_G_LOAD_PRG` in
   `CORE/m2m-rom/m2m-rom.asm`).
-- The current state of the menu is exposed as `qnice_osm_control_i(255 downto
-  0)` (and the CDC'd `main_osm_control_i`) — one bit per item.
+- The current state of the menu is exposed as `qnice_osm_control_i(511 downto
+  0)` (and the CDC'd `main_osm_control_i`) — one bit per item, so a menu can
+  have up to 512 items (the Shell rejects an `OPTM_SIZE` outside 1..512 at
+  startup). QNICE writes it in 32 banks of 16 bits (`M2M$CFM_ADDR` 0..31,
+  `M2M$CFM_DATA`); `M2M/rom/tests/cfm_test.py` checks the register, the bank
+  math of `M2M$GET_SETTING`/`M2M$SET_SETTING` and the change detection of the
+  settings saving end to end in a ghdl simulation of the real QNICE.
 - Screens (Welcome, Help) are also in `config.vhd`, in the `WHS` array
   (record of pages of strings).
 - The framework's address-decoding process at the bottom of `config.vhd`

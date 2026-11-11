@@ -73,7 +73,7 @@ HANDLE_DEV      .BLOCK  FAT32$DEV_STRUCT_SIZE
 ;   specified by CFG_FILE (config.vhd) exists and has exactly the size of
 ;   OPTM_SIZE (config.vhd). The convention "checking CONFIG_FILE for not null"
 ;   can be used as a trigger for various actions in the shell.
-; * OLD_SETTINGS is used to determine changes in the 256-bit (16-word)
+; * OLD_SETTINGS is used to determine changes in the 512-bit (32-word)
 ;   M2M$CFM_DATA register so that we can implement a smart saving mechanism:
 ;   When pressing "Help" to close the on-screen-menu, we only save the
 ;   settings to the SD card when the settings changed.
@@ -81,7 +81,7 @@ HANDLE_DEV      .BLOCK  FAT32$DEV_STRUCT_SIZE
 ;   data integrity: see comment for ROSM_INTEGRITY in options.asm
 CONFIG_DEVH     .BLOCK  FAT32$DEV_STRUCT_SIZE
 CONFIG_FILE     .BLOCK  FAT32$FDH_STRUCT_SIZE
-OLD_SETTINGS    .BLOCK  16
+OLD_SETTINGS    .BLOCK  M2M$CFM_BANKS
 INITIAL_SD      .BLOCK  1
 
 SD_ACTIVE       .BLOCK 1                        ; currently active SD card

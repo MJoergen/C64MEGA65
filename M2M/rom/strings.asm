@@ -172,7 +172,7 @@ ERR_FATAL_STOP  .ASCII_W "\nCore stopped. Please reset the machine.\n"
 ERR_ITEMIDX     .ASCII_W "Item index = error code.\n"
 
 ERR_F_MENUSIZE  .ASCII_P "config.vhd: Illegal menu size (OPTM_SIZE):\n"
-                .ASCII_W "Must be between 1 and 254\n"
+                .ASCII_W "Must be between 1 and 512\n"
 ERR_F_MENUSTART .ASCII_P "config.vhd: No start menu item tag\n"
                 .ASCII_W "(OPTM_G_START) found in OPTM_GROUPS\n"
 ; The messages below are raised via FATAL_IDX, which appends ERR_ITEMIDX, so

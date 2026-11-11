@@ -313,10 +313,12 @@ HELP_MENU_INIT  SYSCALL(enter, 1)
                 MOVE    OPTM_ICOUNT, R0
                 MOVE    R7, @R0
 
-                ; check, if menu size in config.vhd is between 1 and 254
+                ; check, if menu size in config.vhd is between 1 and 512:
+                ; the menu state is one bit per item in the 512-bit
+                ; M2M$CFM_DATA register (M2M$CFM_BANKS windows of 16 bits)
                 MOVE    1, R9
                 MOVE    R7, R8
-                MOVE    255, R10
+                MOVE    513, R10
                 SYSCALL(in_range_u, 1)          ; R9 <= R8 < R10?
                 RBRA    _HLP_ITEM, C           ; yes: search start item
                 MOVE    ERR_F_MENUSIZE, R8      ; no: fatal error and end
@@ -470,7 +472,7 @@ _HLP_CA_8       MOVE    R8, R0
                 SYSCALL(crlf, 1)                
 
                 MOVE    R0, R8                  ; R8: file handle
-                MOVE    M2M$CFM_ADDR, R0        ; R0: select "bank" (0..15)
+                MOVE    M2M$CFM_ADDR, R0        ; R0: select "bank" (0..31)
                 MOVE    M2M$CFM_DATA, R1        ; R1: menu settings
                 XOR     R2, R2                  ; R2: current "bank"/"window"
                 MOVE    OPTM_ICOUNT, R3         ; R3: amount of bits to write
@@ -507,7 +509,7 @@ _HLP_CA_14      SUB     1, R3                   ; done reading config file?
                 RBRA    _HLP_CA_10, !Z          ; next bit
 
                 ADD     1, R2                   ; next M2M$CFM_DATA window
-                CMP     16, R2
+                CMP     M2M$CFM_BANKS, R2
                 RBRA    _HLP_CA_9, !Z
 
 _HLP_CA_15      RBRA    _HLP_S3, 1              ; Case (a) successful
@@ -521,17 +523,17 @@ _HLP_STDSEL     MOVE    LOG_STR_CFG_STD, R8
 
                 ; Get the standard selectors (which menu items are selcted by
                 ; default) from config.vhd and store them in M2M$CFM_DATA                
-                MOVE    M2M$CFM_ADDR, R0        ; R0: select "bank" (0..15)
+                MOVE    M2M$CFM_ADDR, R0        ; R0: select "bank" (0..31)
                 MOVE    M2M$CFM_DATA, R1        ; R1: write data
-                MOVE    16, R2                  ; init all "banks" to zero
-                MOVE    15, @R0                 ; (@R0 can only store values
-_HLP_S0         MOVE    0, @R1                  ; between 0 and 15, so we need
-                SUB     1, R2                   ; R2 to count)
-                RBRA    _HLP_S0E, Z             ; Make sure that @R0 = 0 when
-                SUB     1, @R0                  ; we leave this loop
-                RBRA    _HLP_S0, 1
+                XOR     R2, R2                  ; init all "banks" to zero
+_HLP_S0         MOVE    R2, @R0
+                MOVE    0, @R1
+                ADD     1, R2
+                CMP     M2M$CFM_BANKS, R2
+                RBRA    _HLP_S0, !Z
+                MOVE    0, @R0                  ; leave with @R0 = 0
 
-_HLP_S0E        MOVE    M2M$RAMROM_4KWIN, R2
+                MOVE    M2M$RAMROM_4KWIN, R2
                 MOVE    M2M$CFG_OPTM_STDSEL, @R2
                 MOVE    M2M$RAMROM_DATA, R2     ; R2: read config.vhd data
                 MOVE    R7, R3                  ; R3: amount of menu items
@@ -783,15 +785,16 @@ ROSM_REM_OLD    INCRB
                 CMP     0, @R0
                 RBRA    _ROSMRO_RET, Z
 
-                ; Copy by iterating through the 16 "windows" of M2M$CFM_DATA
-                XOR     R0, R0                  ; R1 is only 4-bits (0..15)
+                ; Copy by iterating through all M2M$CFM_BANKS "windows" of
+                ; M2M$CFM_DATA
+                XOR     R0, R0                  ; R1 is only 5-bits (0..31)
                 MOVE    M2M$CFM_ADDR, R1
                 MOVE    M2M$CFM_DATA, R2
                 MOVE    OLD_SETTINGS, R3
 _ROSMRO_LOOP    MOVE    R0, @R1                 ; new M2M$CFM_DATA "window"
                 MOVE    @R2, @R3++              ; copy to OLD_SETTINGS
                 ADD     1, R0
-                CMP     16, R0
+                CMP     M2M$CFM_BANKS, R0
                 RBRA    _ROSMRO_LOOP, !Z
 
 _ROSMRO_RET     DECRB
@@ -834,7 +837,7 @@ _ROSMI_RET      SYSCALL(leave, 1)
 ; Returns C=1 (Carry flag), if there are changes C=0 otherwise
 ROSM_CHANGES    SYSCALL(enter, 1)
 
-                XOR     R0, R0                  ; R1 is only 4-bits (0..15)
+                XOR     R0, R0                  ; R1 is only 5-bits (0..31)
                 MOVE    M2M$CFM_ADDR, R1
                 MOVE    M2M$CFM_DATA, R2
                 MOVE    OLD_SETTINGS, R3
@@ -882,7 +885,7 @@ _ROSMC_INCBIT   ADD     1, R4
 
                 ADD     1, R0                   ; next M2M$CFM_DATA "window"
                 ADD     1, R3                   ; next OLD_SETTINGS "window"
-                CMP     16, R0
+                CMP     M2M$CFM_BANKS, R0
                 RBRA    _ROSMC_LOOP, !Z
 
 _ROSMC_C0       AND     0xFFFB, SR              ; no changes: clear Carry
@@ -935,7 +938,7 @@ _ROSMS_NOWR     MOVE    LOG_STR_CFG_NO, R8
                 MOVE    2, @R8
                 RBRA    _ROSMS_RET, 1
 
-_ROSMS_1        ; Iterate through the 16 windows of M2M$CFM_DATA to detect
+_ROSMS_1        ; Iterate through the windows of M2M$CFM_DATA to detect
                 ; changes because we only save if there are changes. A
                 ; keyboard shortcut that changed settings while the menu was
                 ; closed forces the save (ROSM_FORCE, see shortcuts.asm):
@@ -956,8 +959,8 @@ _ROSMS_1F       MOVE    CONFIG_FILE, R8
                 MOVE    ERR_FATAL_ROSMS, R8     ; yes: fatal; R9: error code
                 RBRA    FATAL, 1
 
-                ; Save settings by iterating through the 16 windows of
-                ; M2M$CFM_DATA (accessed by R1 & R2; R8: file handle) and then
+                ; Save settings by iterating through the M2M$CFM_BANKS windows
+                ; of M2M$CFM_DATA (accessed by R1 & R2; R8: file handle) and then
                 ; going from the lowest bit to the highest and saving each
                 ; set-bit as a "1" and each deleted-bit as a "0".
                 ;
@@ -1021,7 +1024,7 @@ _ROSMS_6        ADD     1, R3                   ; all menu items written?
                 RBRA    _ROSMS_4A, !Z           ; next bit
 
                 ADD     1, R0                   ; next M2M$CFM_DATA "window"
-                CMP     16, R0
+                CMP     M2M$CFM_BANKS, R0
                 RBRA    _ROSMS_3, !Z
 
                 ; Flush SD card write buffer (R8: file handle) to write

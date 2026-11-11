@@ -398,6 +398,7 @@ constant OPTM_SIZE         : natural := 291; -- amount of items including empty 
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
+                                             -- Valid range: 1 to 512 (the menu state is the 512-bit osm_control vector)
 
 -- Net size of the Options menu on the screen in characters (excluding the frame, which is hardcoded to two characters)
 -- Without submenus: Use OPTM_SIZE as height, otherwise use the height of the largest menu view (usually the main menu):
@@ -1229,7 +1230,7 @@ begin
             when SEL_OPTM_HELP         => data_o <= x"000" & "000" & std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(13));
             when SEL_OPTM_SINGLESEL    => data_o <= x"000" & "000" & std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(15));
             when SEL_OPTM_CRTROM       => data_o <= x"000" & "000" & std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(16));
-            when SEL_OPTM_ICOUNT       => data_o <= x"00" & std_logic_vector(to_unsigned(OPTM_SIZE, 8));
+            when SEL_OPTM_ICOUNT       => data_o <= std_logic_vector(to_unsigned(OPTM_SIZE, 16));   -- Shell accepts 1..512 (osm_control is 512 bits)
             when SEL_OPTM_DIMENSIONS   => data_o <= getDXDY(OPTM_DX, OPTM_DY, index);
             when SEL_OPTM_DEPS         => if index = 4095 then               -- smart dependencies (OPTM_DEP):
                                             data_o <= x"2DEF";               -- magic "DEPendency Format 2" feature probe (item mask)
