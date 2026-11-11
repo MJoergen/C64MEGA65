@@ -83,6 +83,29 @@
                 MOVE    LT_E_CLOSED_PAINT, R10
                 RSUB    LT_CHECK_WORD, 1
 
+                ; OPTM_SET without a running menu (the invisible menu session
+                ; of a keyboard shortcut, C64MEGA65 issue #142): it updates
+                ; the selection data but must not touch the screen or go
+                ; fatal (OPTM_STRUCT is 0 now, see the check above)
+                MOVE    1, R8                   ; single-select line 1: on
+                MOVE    1, R9
+                RSUB    OPTM_SET, 1
+                MOVE    LT_STDSEL, R8
+                ADD     1, R8
+                MOVE    @R8, R8
+                MOVE    1, R9
+                MOVE    LT_E_SET_CLOSED, R10
+                RSUB    LT_CHECK_WORD, 1
+                MOVE    1, R8                   ; and off again
+                XOR     R9, R9
+                RSUB    OPTM_SET, 1
+                MOVE    LT_STDSEL, R8
+                ADD     1, R8
+                MOVE    @R8, R8
+                XOR     R9, R9
+                MOVE    LT_E_SET_CLOSED, R10
+                RSUB    LT_CHECK_WORD, 1
+
                 MOVE    LT_S_INACTIVE, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
@@ -445,6 +468,7 @@ LT_E_CLOSED_ST     .ASCII_W "structure set after run"
 LT_E_CLOSED_TXT    .ASCII_W "closed backing text"
 LT_E_CLOSED_PAINT  .ASCII_W "closed update painted"
 LT_E_FATAL         .ASCII_W "fatal callback"
+LT_E_SET_CLOSED    .ASCII_W "OPTM_SET without a running menu"
 
 ; The component under test
 #include "../menu.asm"

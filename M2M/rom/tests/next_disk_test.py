@@ -60,8 +60,8 @@ LONG_STEM = ("The Very Long Adventure Game With A Name That Goes On And On "
              "Beyond Everything A File Browser Can Show On One Line - Side ")
 
 
-def F(name, attr=ATTR_ARCHIVE):
-    return {"name": name, "dir": False, "attr": attr}
+def F(name, attr=ATTR_ARCHIVE, empty=False):
+    return {"name": name, "dir": False, "attr": attr, "empty": empty}
 
 
 def D(name, children):
@@ -83,6 +83,8 @@ TREE = [
         D("B.D64", []),                 # a folder named like an image
         F("intro.prg"),
         F("Game Disk 1.d64"),
+        F("Empty A.d64", empty=True),   # zero-length files share start
+        F("Empty B.d64", empty=True),   # cluster 0: never part of the ring
         F("a.D81"),
     ]),
     D("NUMS", [
@@ -259,6 +261,10 @@ class Image:
                 size = self.dir_size(ch, False)
                 ch["chain"] = self.alloc(-(-size // CLUS_BYTES))
                 ch["cluster"] = ch["chain"][0]
+            elif ch.get("empty"):
+                ch["size"] = 0                  # FAT32: no cluster at all,
+                ch["chain"] = []                # start cluster 0
+                ch["cluster"] = 0
             else:
                 ch["size"] = 100 + len(ch["name"])
                 ch["chain"] = self.alloc(1)
@@ -402,7 +408,7 @@ def expected(root):
         for data, is_dir, clus in lst:
             out.append("E %04X %04X %04X %s" % (int(is_dir), clus >> 16,
                                                  clus & 0xFFFF, data))
-        files = [i for i, it in enumerate(lst) if not it[1]]
+        files = [i for i, it in enumerate(lst) if not it[1] and it[2] != 0]
         mclus = find(root, mounted)["cluster"]
         cur = next((i for i in files if lst[i][2] == mclus), None)
         out.append("CUR " + (lst[cur][0] if cur is not None else "-"))

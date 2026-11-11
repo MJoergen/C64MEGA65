@@ -194,6 +194,9 @@ _DIRBR_NX_LOOP  MOVE    R0, R0                  ; end of list reached?
                 MOVE    @--R5, R7               ; R7: start cluster low
                 MOVE    @--R5, R5               ; 0=file, 1=directory
                 RBRA    _DIRBR_NX_NEXT, !Z      ; skip directories
+                MOVE    R6, R5                  ; skip empty files: they all
+                OR      R7, R5                  ; have start cluster 0, which
+                RBRA    _DIRBR_NX_NEXT, Z       ; is ambiguous (endless walk)
 
                 MOVE    R2, R2                  ; first file of the list?
                 RBRA    _DIRBR_NX_CHK, !Z       ; no
