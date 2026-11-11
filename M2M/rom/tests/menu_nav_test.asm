@@ -357,5 +357,5 @@ NT_SCRIPT_POS   .BLOCK 1
 NT_SCRIPT_END   .BLOCK 1
 NT_SCEN         .BLOCK 1
 NT_CURSOR       .BLOCK 1
-NT_STDSEL       .BLOCK 256
-NT_LINES        .BLOCK 256
+NT_STDSEL       .BLOCK 512                      ; N words for N <= 512
+NT_LINES        .BLOCK 512

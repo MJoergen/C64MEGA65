@@ -66,7 +66,7 @@ port (
    qnice_ascal_polyphase_i   : in  std_logic;
    qnice_ascal_triplebuf_i   : in  std_logic;
    qnice_flip_joyports_i     : in  std_logic;
-   qnice_osm_control_m_o     : out std_logic_vector(255 downto 0);
+   qnice_osm_control_m_o     : out std_logic_vector(511 downto 0);
    qnice_gp_reg_o            : out std_logic_vector(255 downto 0);
 
    -- Control and status register that QNICE uses to control the Core

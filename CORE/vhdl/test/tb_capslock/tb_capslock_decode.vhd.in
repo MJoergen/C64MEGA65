@@ -21,7 +21,7 @@ architecture sim of tb_capslock_decode is
 
 -- @MEGA65_CONSTANTS@
 
-   signal main_osm_control_i   : std_logic_vector(255 downto 0) := (others => '0');
+   signal main_osm_control_i   : std_logic_vector(511 downto 0) := (others => '0');
    signal main_kb_capslock_n_i : std_logic := '1';
    signal c64_turbo_mode       : std_logic_vector(1 downto 0);
    signal c64_turbo_speed      : std_logic_vector(1 downto 0);
@@ -37,7 +37,7 @@ begin
       constant C_SPEED_BIT : nat3_t := (C_MENU_TURBO_2X, C_MENU_TURBO_3X, C_MENU_TURBO_4X);
       constant C_MODE_EXP  : slv3_t := ("00", "01", "10");   -- Off, C128, Smart
       constant C_SPEED_EXP : slv3_t := ("00", "01", "10");   -- 2x, 3x, 4x
-      variable osm         : std_logic_vector(255 downto 0);
+      variable osm         : std_logic_vector(511 downto 0);
       variable exp_mode    : std_logic_vector(1 downto 0);
       variable exp_speed   : std_logic_vector(1 downto 0);
       variable cases       : natural := 0;

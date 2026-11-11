@@ -170,7 +170,7 @@ M2M$KEY_F1          .EQU 0x0100
 M2M$KEY_F3          .EQU 0x0200
 
 ; ----------------------------------------------------------------------------
-; 256-bit General purpose control flags
+; General purpose control flags
 ; ----------------------------------------------------------------------------
 
 ; 256-bit directly controled by the programmer (not used by the Shell)
@@ -180,13 +180,14 @@ M2M$KEY_F3          .EQU 0x0200
 M2M$CFD_ADDR        .EQU 0xFFF0
 M2M$CFD_DATA        .EQU 0xFFF1
 
-; 256-bit controled by the Shell via the options menu, i.e. the menu that
+; 512-bit controled by the Shell via the options menu, i.e. the menu that
 ; opens when the core is running and the user presses "Help" on the keyboard:
 ; the bit order is: bit 0 = topmost menu entry, the mapping is 1-to-1 to
-; OPTM_ITEMS / OPTM_GROUPS in config.vhd
-; exposed by QNICE via control_m_o; M2M$CFM_ADDR runs from 0 to 15
+; OPTM_ITEMS / OPTM_GROUPS in config.vhd, so a menu can have up to 512 items
+; exposed by QNICE via control_m_o; M2M$CFM_ADDR runs from 0 to 31
 M2M$CFM_ADDR        .EQU 0xFFF2
 M2M$CFM_DATA        .EQU 0xFFF3
+M2M$CFM_BANKS       .EQU 32     ; amount of 16-bit M2M$CFM_DATA windows
 
 ; ----------------------------------------------------------------------------
 ; MMIO 4k-segmented access to RAMs, ROMs and similarily behaving devices

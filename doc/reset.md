@@ -643,7 +643,7 @@ other bits.
 | `sd_inuse_wr` | 7 | 0 | Firmware writes bit 7 as 1 | Firmware writes bit 7 as 0 | Selects forced internal/external card when forced mode is active. |
 | `ascal_usage` | 11 | 1 | Firmware writes bit 11 as 1 | Firmware writes bit 11 as 0 | Selects whether `ascal_mode_o` follows `ascal_mode_i` automatically. |
 
-The 256-bit menu state is not `csr_osm_o`. Menu state is `control_m_o`,
+The 512-bit menu state is not `csr_osm_o`. Menu state is `control_m_o`,
 written through `$FFF2`/`$FFF3`, synchronized as `qnice_osm_control_m_o` and
 then `main_osm_control_i`. `csr_osm_o` only says whether the overlay is drawn.
 

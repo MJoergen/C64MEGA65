@@ -52,7 +52,7 @@ port (
    qnice_flip_joyports_o   : out std_logic;
 
    -- On-Screen-Menu selections
-   qnice_osm_control_i     : in  std_logic_vector(255 downto 0);
+   qnice_osm_control_i     : in  std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register
    qnice_gp_reg_i          : in  std_logic_vector(255 downto 0);
@@ -119,7 +119,7 @@ port (
    main_pause_core_i       : in  std_logic;
 
    -- On-Screen-Menu selections
-   main_osm_control_i      : in  std_logic_vector(255 downto 0);
+   main_osm_control_i      : in  std_logic_vector(511 downto 0);
 
    -- QNICE general purpose register converted to main clock domain
    main_qnice_gp_reg_i     : in  std_logic_vector(255 downto 0);

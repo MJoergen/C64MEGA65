@@ -28,8 +28,9 @@
 ;   bits  7-0 : mother group id (1..254)
 ; The resolved per-line dependency word (produced by OPTM_DEPS_RESOLVE):
 ;   bit 15    : valid (1 = this line is dependent)
-;   bits 11-8 : mother item mask (copied through from the raw word)
-;   bits  7-0 : flat index of the FIRST member of the mother group
+;   bits 12-9 : mother item mask (bits 11-8 of the raw word, moved up by one)
+;   bits  8-0 : flat index of the FIRST member of the mother group (0..511,
+;               the whole range of the 512-bit menu state M2M$CFM_DATA)
 ;
 ; done by sy2002 in 2026 and licensed under GPL v3
 ; ****************************************************************************
@@ -83,9 +84,9 @@ OPTM_DEP_OK     INCRB
                 MOVE    @R5, R5
 
                 MOVE    R1, R6                  ; R6: first member of the mother
-                AND     0x00FF, R6
+                AND     0x01FF, R6
                 MOVE    R1, R7                  ; R7: item mask (bits 3..0)
-                SHR     8, R7
+                SHR     9, R7
                 AND     0x000F, R7
 
                 MOVE    R4, R2                  ; R2: GROUPS[first member]
@@ -185,7 +186,7 @@ _ODA_LOOP       CMP     R3, R4                  ; all lines scanned?
                 MOVE    R5, R6
                 AND     0x8000, R6              ; is line R4 dependent?
                 RBRA    _ODA_NEXT, Z            ; no
-                AND     0x00FF, R5              ; R5: its controlling line index
+                AND     0x01FF, R5              ; R5: its controlling line index
                 MOVE    R2, R6                  ; R6: GROUPS[controlling line]
                 ADD     R5, R6
                 CMP     @R6, R8                 ; same group as the change?
@@ -204,8 +205,8 @@ _ODA_NO         AND     0xFFFB, SR              ; clear Carry: no effect
 ; OPTM_DEPS_RESOLVE: Resolve the raw dependency array in place
 ;
 ; Run once per menu open (see HELP_MENU). Rewrites every raw dependency word
-; into the resolved form expected by OPTM_DEP_OK: the item mask is copied
-; through (bits 11-8) and the controlling-line field (bits 7-0) receives the
+; into the resolved form expected by OPTM_DEP_OK: the item mask moves from
+; bits 11-8 to bits 12-9 and the controlling-line field (bits 8-0) receives the
 ; flat index of the FIRST member of the mother group -- for both mother types;
 ; OPTM_DEP_OK branches on the single-select flag of that line at runtime.
 ; Lines that carry no dependency become 0. Assumes the structure was validated
@@ -246,8 +247,9 @@ _RES_LOOP       CMP     R2, R3                  ; all lines done?
 
 _RES_DEP        MOVE    R8, R4                  ; R4: mother group id
                 AND     0x00FF, R4
-                MOVE    R8, R5                  ; R5: item mask, kept in place
-                AND     0x0F00, R5              ; (bits 11-8, as in the raw word)
+                MOVE    R8, R5                  ; R5: item mask, moved from
+                AND     0x0F00, R5              ; bits 11-8 of the raw word to
+                ADD     R5, R5                  ; bits 12-9 (shift left by one)
 
                 XOR     R6, R6                  ; R6: inner index j
                 XOR     R7, R7                  ; R7: member count
