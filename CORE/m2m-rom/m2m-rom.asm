@@ -1205,9 +1205,6 @@ _CUSTOM_MSG_RET DECRB
 ; testbed M2M/rom/tests/shortcuts_test.asm can include them
 #include "shortcuts_c64.asm"
 
-; TEMP142: remove after merging the agent branches
-#include "TEMP142_stubs.asm"
-
 ; ----------------------------------------------------------------------------
 ; Core specific constants and strings
 ; ----------------------------------------------------------------------------

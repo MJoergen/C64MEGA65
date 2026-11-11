@@ -39,4 +39,3 @@ SC_DIGITS       .BLOCK 4                        ; digits of a number in a messag
 
 ; Deferred saving of settings that shortcuts changed while the OSM was closed
 SC_SAVE_T       .BLOCK 1                        ; IO$CYC_MID of the last change
-OPTM_DIRECT     .BLOCK 1                        ; TEMP142: defined by mh_142_nextdisk

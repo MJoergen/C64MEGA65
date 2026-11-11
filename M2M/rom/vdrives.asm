@@ -18,12 +18,24 @@
 ; and an array of RAM buffers for the disk images
 VD_INIT         SYSCALL(enter, 1)
 
+                ; HANDLE_MOUNTING: no direct mode, nothing preselected and no
+                ; remembered folders for VD_NEXT_DISK (consecutive variables)
+                XOR     R2, R2                  ; R2: zero
+                MOVE    OPTM_DIRECT, R1
+                MOVE    R2, @R1++               ; OPTM_DIRECT
+                MOVE    R2, @R1++               ; HM_PRESELECT
+                MOVE    R2, @R1++               ; VD_SDGEN
+
                 ; initialize the double-indirectly located file handles for
-                ; the virtual drive system
+                ; the virtual drive system and VD_NXT_INFO
                 MOVE    HNDL_VD_FILES, R8
                 MOVE    VDRIVES_MAX, R9
 _VDI_L1         MOVE    @R8++, R0               ; double indirection leads..
-                MOVE    0, @R0                  ; to the data of the file hdl
+                MOVE    R2, @R0                 ; to the data of the file hdl
+                MOVE    R2, @R1++               ; VD_NXT_INFO: 4 words/drive
+                MOVE    R2, @R1++
+                MOVE    R2, @R1++
+                MOVE    R2, @R1++
                 SUB     1, R9
                 RBRA    _VDI_L1, !Z
 
@@ -529,5 +541,201 @@ VD_DRV_WRITE    INCRB
                 ADD     R8, @R0                 ; drive windows are ascending
                 MOVE    R10, @R9
 
+                DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; Next disk
+; ----------------------------------------------------------------------------
+
+; Mount the disk image that follows the currently mounted disk image of a
+; virtual drive in the same folder.
+;
+; Order and file filter are exactly the ones of the file browser: the list
+; comes from DIRBROWSE_READ with FILTER_FILES in the context CTX_MOUNT_DISKIMG
+; (the menu group id that FILTER_FILES gets in R11 is not set up: the C64
+; core does not need it for disk images). Folders are skipped and after the
+; last image the search wraps around to the first one. Images that
+; PREP_LOAD_IMAGE rejects are skipped, too. If the mounted image is not part
+; of the list of its folder, then the first image of the folder is mounted.
+; The mount itself is done by HANDLE_MOUNTING with a preselected file
+; (HM_PRESELECT), so the result equals a manual mount via the file browser,
+; and the file browser afterwards continues in this folder with the cursor
+; on the new image.
+;
+; Needs to run inside an options menu session (HANDLE_MOUNTING uses OPTM_SET)
+; with OPTM_DIRECT set and the OSM hidden. While the image is loading, the
+; full-screen window shows the progress bar; the OSM is hidden again when
+; VD_NEXT_DISK returns. HANDLE_IO is not polled meanwhile.
+;
+; Input:
+;   R8: Virtual drive number
+; Output:
+;   R8: 0 = OK: the next disk image is mounted
+;       1 = No disk image is mounted on this drive
+;       2 = There is no other (valid) disk image in the folder
+;       3 = The write cache of the drive is dirty (saving is pending)
+;       4 = SD card changed since the mount or folder is not readable
+;       5 = Any other error (reserved: currently not returned)
+;       In all cases but 0 the drive and its disk image did not change. The
+;       file browser state may have changed (it is always consistent).
+;   R9: If R8 = 0: File name of the new disk image (zero terminated); it
+;       points into the file browser heap and is valid until the next
+;       operation of the file browser or of VD_NEXT_DISK
+;   R10..R12: Not preserved
+VD_NEXT_DISK    INCRB
+
+                MOVE    R8, R7                  ; R7: virtual drive number
+                MOVE    1, R6                   ; R6: status: not mounted
+                RSUB    VD_MOUNTED, 1
+                RBRA    _VDNX_RET, !C
+
+                ; The SD card must not have changed since the image was
+                ; mounted: neither right now nor by a re-mount meanwhile
+                MOVE    4, R6                   ; status: SD card changed
+                MOVE    SD_CHANGED, R0
+                MOVE    @R0, R0
+                RBRA    _VDNX_RET, !Z
+                MOVE    R7, R0                  ; R0: VD_NXT_INFO of drive
+                ADD     R0, R0
+                ADD     R0, R0
+                ADD     VD_NXT_INFO, R0
+                MOVE    @R0++, R1               ; 0: no folder remembered
+                RBRA    _VDNX_RET, Z
+                MOVE    VD_SDGEN, R2
+                CMP     @R2, R1
+                RBRA    _VDNX_RET, !Z
+                MOVE    @R0++, R2               ; R2: folder: 1st cluster low
+                MOVE    @R0++, R3               ; R3: folder: 1st cluster high
+                                                ; R0: browser stack of folder
+
+                ; Reuse the sorted list of the file browser if it belongs to
+                ; this folder and to this drive (see _HM_SDMOUNTED2 for the
+                ; FB_LASTCALLER encoding); otherwise read the folder
+                MOVE    R7, R4
+                SWAP    R4, R4                  ; R4: vdrive id + mode 0
+                MOVE    HANDLE_DEV, R1
+                ADD     FAT32$DEV_AD_1STCLUS_LO, R1
+                CMP     @R1++, R2               ; R1: DEV_AD_1STCLUS_HI
+                RBRA    _VDNX_READ, !Z
+                CMP     @R1, R3
+                RBRA    _VDNX_READ, !Z
+                MOVE    FB_LASTCALLER, R8
+                CMP     @R8, R4
+                RBRA    _VDNX_READ, !Z
+                MOVE    FB_HEAD, R5
+                MOVE    @R5, R5                 ; R5: sorted directory list
+                RBRA    _VDNX_FIND, !Z
+
+_VDNX_READ      MOVE    R3, @R1                 ; change to the folder
+                MOVE    R2, @--R1
+                MOVE    SF_CONTEXT, R8          ; file filter context
+                MOVE    CTX_MOUNT_DISKIMG, @R8
+                MOVE    HANDLE_DEV, R8
+                XOR     R9, R9                  ; read the active directory
+                MOVE    FB_HEAP, R10
+                MOVE    @R10, R10
+                MOVE    HEAP_SIZE, R11
+                MOVE    FILTER_FILES, R12
+                RSUB    DIRBROWSE_READ, 1       ; R10: list, R11: status
+                MOVE    R10, R5                 ; R5: sorted directory list
+
+                ; The list replaced the one of the file browser: Make it the
+                ; state of the file browser for this drive, as if the user had
+                ; browsed to this folder: one cursor position (0) per folder
+                ; level on the browser stack. Without a usable list, reset
+                ; the file browser instead.
+                RSUB    FB_RE_INIT, 1
+                MOVE    4, R6                   ; status: folder not readable
+                CMP     2, R11                  ; incomplete list: use it
+                RBRA    _VDNX_INST, Z
+                MOVE    R11, R11
+                RBRA    _VDNX_RET, !Z
+_VDNX_INST      MOVE    2, R6                   ; status: no other image
+                MOVE    R5, R5                  ; empty folder?
+                RBRA    _VDNX_RET, Z
+                MOVE    FB_HEAD, R8
+                MOVE    R5, @R8
+                MOVE    FB_LASTCALLER, R8
+                MOVE    R4, @R8
+                MOVE    @R0, R1                 ; R1: browser stack of folder
+                MOVE    FB_STACK, R8
+                MOVE    R1, @R8
+                MOVE    FB_STACK_INIT, R8
+                MOVE    @R8, R8
+                ADD     2, R8                   ; R8: bottom of browser stack
+_VDNX_STACK     CMP     R8, R1
+                RBRA    _VDNX_FIND, Z
+                MOVE    0, @R1++
+                RBRA    _VDNX_STACK, 1
+
+                ; Next image after the mounted one (by its start cluster)
+_VDNX_FIND      MOVE    HNDL_VD_FILES, R10
+                ADD     R7, R10
+                MOVE    @R10, R10
+                ADD     FAT32$FDH_START_CLUS_LO, R10
+                MOVE    @R10++, R9              ; FDH_START_CLUS_HI follows
+                MOVE    @R10, R10
+                MOVE    R5, R8
+                RSUB    DIRBROWSE_NEXT, 1       ; R10: candidate, R11: index
+                MOVE    R9, R4                  ; R4: end of circle or 0
+_VDNX_CHK       MOVE    2, R6                   ; status: no other image
+                MOVE    R10, R10                ; no image at all?
+                RBRA    _VDNX_RET, Z
+                CMP     R10, R4                 ; circle complete?
+                RBRA    _VDNX_RET, Z
+                MOVE    R4, R4                  ; mounted image not in list:
+                RBRA    _VDNX_TRY, !Z           ; the first candidate marks..
+                MOVE    R10, R4                 ; ..the end of the circle
+_VDNX_TRY       MOVE    R10, R2                 ; R2: candidate
+                MOVE    R11, R3                 ; R3: index of candidate
+                MOVE    R10, R1
+                ADD     SLL$DATA, R1            ; R1: file name
+
+                ; Check the candidate with PREP_LOAD_IMAGE before mounting it:
+                ; LOAD_IMAGE reopens the file handle of the drive, so if it
+                ; rejected the image, then the drive would keep the old image
+                ; while its handle would point to the new file.
+                MOVE    HANDLE_DEV, R8
+                MOVE    _DIRBR_FH, R9           ; scratch file handle
+                MOVE    R1, R10
+                XOR     R11, R11
+                SYSCALL(f32_fopen, 1)
+                MOVE    R10, R10
+                RBRA    _VDNX_SKIP, !Z
+                MOVE    R9, R8                  ; R8: file handle
+                MOVE    CTX_MOUNT_DISKIMG, R9   ; R9: context, R10: 0
+                RSUB    PREP_LOAD_IMAGE, 1
+                MOVE    R8, R8
+                RBRA    _VDNX_LOAD, Z
+_VDNX_SKIP      MOVE    R2, R10                 ; continue after the candidate:
+                ADD     SLL$DATA_SIZE, R10      ; its start cluster is at the..
+                ADD     @R10, R10               ; ..end of its data blob
+                MOVE    @R10, R11
+                MOVE    @--R10, R9
+                MOVE    R11, R10
+                MOVE    R5, R8
+                RSUB    DIRBROWSE_NEXT, 1
+                RBRA    _VDNX_CHK, 1
+
+                ; Mount the candidate the regular way, but without browser
+_VDNX_LOAD      MOVE    HM_PRESELECT, R0
+                MOVE    R1, @R0
+                MOVE    R7, R8                  ; R8: virtual drive number
+                XOR     R9, R9                  ; R9: not OPTM_KEY_SELALT
+                XOR     R10, R10                ; R10: virtual drive mode
+                RSUB    HANDLE_MOUNTING, 1
+                MOVE    @R0, R8                 ; not consumed: the write..
+                XOR     @R0, @R0                ; ..cache is dirty
+                MOVE    3, R6                   ; status: write cache dirty
+                MOVE    R8, R8
+                RBRA    _VDNX_RET, !Z
+                MOVE    FB_STACK, R8            ; cursor of the file browser..
+                MOVE    @R8, R8                 ; ..on the new image
+                MOVE    R3, @R8
+                XOR     R6, R6                  ; status: OK
+
+_VDNX_RET       MOVE    R6, R8
+                MOVE    R1, R9
                 DECRB
                 RET

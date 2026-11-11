@@ -216,6 +216,15 @@ MAIN_LOOP       RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
 ;  R10=Mode selector:
 ;      0: Virtual drives
 ;      1: Manually loadable CRTs/ROMs
+;
+; Direct mode: If OPTM_DIRECT (shell_vars.asm) is non-zero, then the options
+; menu is neither redrawn nor shown when HANDLE_MOUNTING returns: every exit
+; path hides the OSM, including the full-screen window of the file browser.
+; The menu state (OPTM_SET, %s replacement strings) is updated nevertheless.
+;
+; Preselected file: If HM_PRESELECT (shell_vars.asm) is non-zero, then the
+; file browser is skipped once and the zero terminated file name it points to
+; is used as if the user had selected it in the file browser (VD_NEXT_DISK).
 HANDLE_MOUNTING SYSCALL(enter, 1)
 
                 MOVE    R8, R7                  ; R7: drive or CRT/ROM number
@@ -256,6 +265,8 @@ _HM_RETRY_MOUNT RSUB    FRAME_FULLSCR, 1
 
 _HM_SDUNMOUNTED MOVE    1, R9                   ; partition #1 hardcoded
                 SYSCALL(f32_mnt_sd, 1)
+                MOVE    VD_SDGEN, R10           ; new SD card mount: folders..
+                ADD     1, @R10                 ; ..remembered so far are void
                 CMP     0, R9                   ; R9=error code; 0=OK
                 RBRA    _HM_SDMOUNTED2, Z
 
@@ -329,7 +340,10 @@ _HM_SDMOUNTEDXS MOVE    SF_CONTEXT, R8
                 MOVE    CTX_MOUNT_DISKIMG, @R8
                 RBRA    _HM_SDMOUNTEDX2, 1
 _HM_SDMOUNTEDX1 MOVE    CTX_LOAD_ROM, @R8 
-_HM_SDMOUNTEDX2 RSUB    SELECT_FILE, 1
+_HM_SDMOUNTEDX2 MOVE    HM_PRESELECT, R9        ; file preselected?
+                MOVE    @R9, R8                 ; R8: its name
+                RBRA    _HM_PRESEL, !Z          ; yes: skip the file browser
+                RSUB    SELECT_FILE, 1
 
                 ; No error and no special status
                 CMP     0, R9
@@ -344,8 +358,14 @@ _HM_SDCHANGED   MOVE    LOG_STR_SD, R8
                 MOVE    HANDLE_DEV, R8          ; reset device handle
                 MOVE    0, @R8
                 RSUB    FB_RE_INIT, 1           ; reset file browser
-                MOVE    0, @R0                  ; reset SD_CHANGED
+                MOVE    SD_CHANGED, R0          ; not every path that leads..
+                MOVE    0, @R0                  ; ..here sets R0: reset flag
                 RBRA    _HM_SDUNMOUNTED, 1      ; re-mount, re-browse files
+
+                ; preselected file: use it only once (a retry after an error
+                ; goes to the file browser)
+_HM_PRESEL      XOR     @R9, @R9
+                RBRA    _HM_SDMOUNTED3, 1
 
                 ; Cancelled via Run/Stop
 _HM_SDMOUNTED2A CMP     2, R9                   ; Run/Stop?
@@ -558,6 +578,21 @@ _HM_SDMOUNTED6A MOVE    R9, R6                  ; R6: disk image type
                 MOVE    R6, R12                 ; R12: disk image type
                 RSUB    VD_STROBE_IM, 1         ; notify MiSTer
 
+                ; remember the folder of the image for VD_NEXT_DISK in the
+                ; four words of VD_NXT_INFO for this drive
+                MOVE    R7, R1
+                ADD     R1, R1
+                ADD     R1, R1
+                ADD     VD_NXT_INFO, R1
+                MOVE    VD_SDGEN, R0
+                MOVE    @R0, @R1++              ; current SD card mount
+                MOVE    HANDLE_DEV, R0          ; active directory = folder
+                ADD     FAT32$DEV_AD_1STCLUS_LO, R0
+                MOVE    @R0++, @R1++            ; first cluster: low word
+                MOVE    @R0, @R1++              ; first cluster: high word
+                MOVE    FB_STACK, R0
+                MOVE    @R0, @R1                ; depth of the folder
+
                 MOVE    LOG_STR_MOUNT, R8
                 SYSCALL(puts, 1)
                 MOVE    R7, R8
@@ -582,8 +617,15 @@ _HM_SDMOUNTED6C MOVE    R9, R8                  ; R8: menu index
                 ; to we need to check for that and act accordingly
                 RSUB    _OPTM_GK_MNT, 1
 
-                ; 6. Redraw and show the OSM
-_HM_SDMOUNTED7  RSUB    OPTM_SHOW, 1            
+                ; 6. Redraw and show the OSM; all exits pass this point.
+                ; In direct mode (see OPTM_DIRECT in shell_vars.asm) the
+                ; OSM stays hidden instead, which also hides the full-screen
+                ; window of the file browser. All state updates above
+                ; (OPTM_SET, %s strings, VD_STROBE_IM, ...) happen anyway.
+_HM_SDMOUNTED7  MOVE    OPTM_DIRECT, R8
+                MOVE    @R8, R8
+                RBRA    _HM_DIRECT, !Z
+                RSUB    OPTM_SHOW, 1
                 RSUB    SCR$OSM_O_ON, 1
                 RBRA    _HM_RET, 1
 
@@ -647,6 +689,7 @@ _HM_MOUNTED_1   MOVE    R9, R8                  ; menu index
                 RSUB    OPTM_SET, 1
                 RBRA    _HM_START_MOUNT, 1      ; show browser and mount
 
+_HM_DIRECT      RSUB    SCR$OSM_OFF, 1          ; direct mode: OSM stays off
 _HM_RET         RSUB    VD_MNT_ST_SET, 1        ; remember mount status
                 SYSCALL(leave, 1)
                 RET
