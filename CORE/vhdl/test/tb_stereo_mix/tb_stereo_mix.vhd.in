@@ -1,0 +1,164 @@
+----------------------------------------------------------------------------------------------------
+-- Stereo Mix bench (GitHub issue #247), part 1: the audio path of CORE/vhdl/main.vhd
+--
+-- Template: run.sh copies the volume LUT (type vol_lut_t and constant C_VOL_LUT) and the two
+-- processes audio_stereo_mix_proc and audio_volume_proc verbatim out of the current
+-- CORE/vhdl/main.vhd into the two marker lines below and fails if it cannot find them. The bench
+-- reads the vectors that golden.py writes (an independent transcription of aud_mix_top from
+-- MiSTer's sys/audio_out.sv plus the master volume) and compares both channels bit by bit.
+--
+-- Phase 1 applies every vector for two clock cycles and checks it at the end of the second one
+-- (the arithmetic). Phase 2 pins the latency: it streams one new sample per clock cycle, in blocks
+-- with a constant mode and volume, and expects each sample at the output exactly two clock cycles
+-- later (crossfeed register, then volume register). A shallower or deeper pipeline fails here.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use std.textio.all;
+
+entity tb_stereo_mix is
+   generic (
+      G_VECTORS : string := "vectors.txt";
+      G_STREAM  : string := "stream.txt"
+   );
+end entity tb_stereo_mix;
+
+architecture sim of tb_stereo_mix is
+
+-- @MAIN_DECLS@
+
+   signal clk_main_i         : std_logic := '0';
+   signal alo                : std_logic_vector(15 downto 0) := (others => '0');
+   signal aro                : std_logic_vector(15 downto 0) := (others => '0');
+   signal mix_l              : signed(15 downto 0);
+   signal mix_r              : signed(15 downto 0);
+   signal audio_stereo_mix_i : std_logic_vector(1 downto 0) := "00";
+   signal audio_volume_i     : natural range 0 to 20 := 20;
+   signal audio_left_o       : signed(15 downto 0);
+   signal audio_right_o      : signed(15 downto 0);
+   signal done               : boolean := false;
+
+begin
+
+   clk_main_i <= not clk_main_i after 15 ns when not done;
+
+-- @MAIN_PROCS@
+
+   stimulus : process
+      file     f        : text;
+      variable ln       : line;
+      variable mode     : integer;
+      variable step     : integer;
+      variable l, r     : integer;
+      variable el, er   : integer;
+      variable n        : natural := 0;
+      variable errors   : natural := 0;
+      variable per_mode : integer_vector(0 to 3) := (others => 0);
+      variable status   : file_open_status;
+      variable lat_n, lat_errors : natural := 0;
+      variable prev_mode, prev_step : integer := -1;
+      variable fresh    : natural := 0;
+      variable hist_l   : integer_vector(1 to 2) := (others => 0);
+      variable hist_r   : integer_vector(1 to 2) := (others => 0);
+   begin
+      file_open(status, f, G_VECTORS, read_mode);
+      assert status = open_ok report "TB_ERROR cannot open " & G_VECTORS severity failure;
+      wait until falling_edge(clk_main_i);
+      while not endfile(f) loop
+         readline(f, ln);
+         read(ln, mode);
+         read(ln, step);
+         read(ln, l);
+         read(ln, r);
+         read(ln, el);
+         read(ln, er);
+         audio_stereo_mix_i <= std_logic_vector(to_unsigned(mode, 2));
+         audio_volume_i     <= step;
+         alo                <= std_logic_vector(to_signed(l, 16));
+         aro                <= std_logic_vector(to_signed(r, 16));
+         wait until falling_edge(clk_main_i);
+         wait until falling_edge(clk_main_i);
+         n := n + 1;
+         per_mode(mode) := per_mode(mode) + 1;
+         if to_integer(audio_left_o) /= el or to_integer(audio_right_o) /= er then
+            errors := errors + 1;
+            if errors <= 10 then
+               report "TB_ERROR mode=" & integer'image(mode) & " vol=" & integer'image(step) &
+                      " in=(" & integer'image(l) & "," & integer'image(r) & ")" &
+                      " got=(" & integer'image(to_integer(audio_left_o)) & "," &
+                      integer'image(to_integer(audio_right_o)) & ")" &
+                      " expected=(" & integer'image(el) & "," & integer'image(er) & ")";
+            end if;
+         end if;
+      end loop;
+      file_close(f);
+      report "TB: " & integer'image(n) & " vectors (Full " & integer'image(per_mode(0)) &
+             ", Wide " & integer'image(per_mode(1)) & ", Narrow " & integer'image(per_mode(2)) &
+             ", Mono " & integer'image(per_mode(3)) & "), " & integer'image(errors) & " mismatches";
+
+      -- phase 2: latency. hist(k) holds the expectation of the sample applied k cycles ago; the
+      -- first two checks of a block are skipped (mode and volume of the block before are still
+      -- in the pipeline)
+      file_open(status, f, G_STREAM, read_mode);
+      assert status = open_ok report "TB_ERROR cannot open " & G_STREAM severity failure;
+      lat_n := 0;
+      lat_errors := 0;
+      prev_mode := -1;
+      prev_step := -1;
+      fresh := 0;
+      while not endfile(f) loop
+         readline(f, ln);
+         read(ln, mode);
+         read(ln, step);
+         read(ln, l);
+         read(ln, r);
+         read(ln, el);
+         read(ln, er);
+         if mode /= prev_mode or step /= prev_step then
+            fresh := 0;
+         end if;
+         prev_mode := mode;
+         prev_step := step;
+         audio_stereo_mix_i <= std_logic_vector(to_unsigned(mode, 2));
+         audio_volume_i     <= step;
+         alo                <= std_logic_vector(to_signed(l, 16));
+         aro                <= std_logic_vector(to_signed(r, 16));
+         hist_l(2) := hist_l(1);  hist_r(2) := hist_r(1);
+         hist_l(1) := el;         hist_r(1) := er;
+         wait until falling_edge(clk_main_i);
+         fresh := fresh + 1;
+         if fresh >= 3 then                      -- the sample of two cycles ago is of this block
+            lat_n := lat_n + 1;
+            if to_integer(audio_left_o) /= hist_l(2) or to_integer(audio_right_o) /= hist_r(2) then
+               lat_errors := lat_errors + 1;
+               if lat_errors <= 5 then
+                  report "TB_ERROR latency: mode=" & integer'image(mode) & " vol=" & integer'image(step) &
+                         " got=(" & integer'image(to_integer(audio_left_o)) & "," &
+                         integer'image(to_integer(audio_right_o)) & ")" &
+                         " expected (two cycles ago)=(" & integer'image(hist_l(2)) & "," &
+                         integer'image(hist_r(2)) & ")";
+               end if;
+            end if;
+         end if;
+      end loop;
+      file_close(f);
+      report "TB: latency " & integer'image(lat_n) & " streamed samples checked two cycles after " &
+             "input, " & integer'image(lat_errors) & " mismatches";
+      errors := errors + lat_errors;
+      if lat_n = 0 then
+         errors := errors + 1;
+      end if;
+      if errors = 0 and n > 0 then
+         report "TB: RESULT PASS";
+      else
+         report "TB: RESULT FAIL";
+      end if;
+      done <= true;
+      wait;
+   end process stimulus;
+
+end architecture sim;

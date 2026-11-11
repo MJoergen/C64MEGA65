@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A22X2";
+constant CORE_VERSION : string := "WIP-V6-A22X3";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -180,12 +180,11 @@ constant HELP_3 : string :=
    "   for newer productions choose 8580.\n" &
    " * Stick to Mono SID unless you know what\n" &
    "   you are doing.\n" &
-   " * ""Pseudo-stereo"" is an exception to\n" &
-   "   this. Enable it by choosing ""Same as\n" &
-   "   left SID port"" in the configuration for\n" &
-   "   the right SID port and by choosing\n" &
-   "   different SID models for the left and\n" &
-   "   right speaker.\n\n" &
+   " * ""Pseudo-stereo"": choose ""Same as left\n" &
+   "   SID port"" as the right SID port and\n" &
+   "   different SID models left and right.\n" &
+   " * Stereo SID on headphones: try Volume >\n" &
+   "   Stereo: Wide or Narrow Stereo.\n\n" &
 
    " IEC:\n\n" &
 
@@ -394,7 +393,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 189; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 199; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -582,6 +581,18 @@ constant OPTM_ITEMS        : string :=
    " 5%\n"                      &
    " 0%\n"                      &
    "\n"                         &
+
+   " Stereo: %s\n"              &  -- Stereo Mix submenu (issue #247), nested inside the Volume submenu
+   " Stereo Mix\n"              &
+   "\n"                         &
+   " Full Stereo\n"             &  -- authentic hard-panned SID output; default
+   " Wide Stereo\n"             &  -- gentle crossfeed: 87.5% own side, 12.5% opposite side
+   " Narrow Stereo\n"           &  -- strong crossfeed: 75% / 25%
+   " Mono\n"                    &  -- both channels merged
+   "\n"                         &
+   " Back\n"                    &  -- returns to the Volume submenu
+
+   "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
    " Advanced Settings\n"       &  -- Advanced Settings submenu
@@ -649,7 +660,7 @@ constant OPTM_G_TURBO_SPEED   : integer := 24;  -- 2x / 3x / 4x (#87); hidden wh
 constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes (59.94 Hz), see #181/#105
 constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF
 constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
-constant OPTM_G_VOLUME        : integer := 28;  -- not yet wired, see #85
+constant OPTM_G_VOLUME        : integer := 28;  -- master volume, 5% steps (#85); decoded in mega65.vhd, applied in main.vhd
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
 -- 30 is unused: it belonged to the VIC-II model submenu, which was removed again because we stick
 -- to the hardcoded old-HMOS variant. See issue #120 and doc/vic_ii_variants.md
@@ -658,6 +669,7 @@ constant OPTM_G_DRV8_UNMOUNT  : integer := 32;  -- drive 8: unmount the disk ima
 constant OPTM_G_DRV9_MODE     : integer := 33;  -- drive 9 mode; "Off" is the factory default here (issue #93)
 constant OPTM_G_DRV9_UNMOUNT  : integer := 34;  -- drive 9: unmount the disk image on a soft core reset
 constant OPTM_G_SIM_RRNET     : integer := 35;  -- simulated RR-Net: only Off vs. On is wired, the MK2/MK3 variants are not, yet
+constant OPTM_G_STEREO_MIX    : integer := 36;  -- stereo crossfeed (#247): MiSTer's "Stereo Mix" blends; decoded in mega65.vhd, applied in main.vhd
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
 -- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
@@ -851,6 +863,18 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_VOLUME,                           -- 10%
                                              OPTM_G_VOLUME,                           -- 5%
                                              OPTM_G_VOLUME,                           -- 0%
+                                             OPTM_G_LINE,
+
+                                             OPTM_G_SUBMENU,                          -- open "Stereo: %s", nested
+                                             OPTM_G_HEADLINE,                         -- Stereo Mix
+                                             OPTM_G_LINE,
+                                             OPTM_G_STEREO_MIX    + OPTM_G_STDSEL,    -- Full Stereo (default)
+                                             OPTM_G_STEREO_MIX,                       -- Wide Stereo
+                                             OPTM_G_STEREO_MIX,                       -- Narrow Stereo
+                                             OPTM_G_STEREO_MIX,                       -- Mono
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Stereo: %s"
+
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Volume: %s"
 

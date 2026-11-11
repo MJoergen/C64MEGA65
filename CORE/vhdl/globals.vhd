@@ -268,6 +268,9 @@ constant audio_cy1      : std_logic_vector(23 downto 0) := std_logic_vector(to_s
 constant audio_cy2      : std_logic_vector(23 downto 0) := std_logic_vector(to_signed(-2023767, 24));
 constant audio_att      : std_logic_vector( 4 downto 0) := "00000";
 constant audio_mix      : std_logic_vector( 1 downto 0) := "00"; -- 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
+-- Keep audio_mix at "00": the C64's Stereo Mix (OSM "Stereo: %s", issue #247) is applied in main.vhd
+-- (audio_stereo_mix_proc), because the AV pipeline uses the output of this mixer only while "Audio
+-- improvements" is on. Setting audio_mix as well would mix the channels twice.
 
 -- Ethernet reception FIFO size.
 -- The total number of bytes in the FIFO is 2**ETH_FIFO_ADDR_BITS.

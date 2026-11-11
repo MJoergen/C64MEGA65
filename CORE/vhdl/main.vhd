@@ -84,6 +84,11 @@ entity main is
     -- mix below, so it affects the HDMI and the analog audio output equally.
     audio_volume_i         : in    natural range 0 to 20;
 
+    -- Stereo Mix from the OSM "Stereo: %s" submenu inside the Volume submenu (issue #247), in
+    -- MiSTer's AUDIO_MIX encoding: "00" = Full Stereo (no mix), "01" = Wide Stereo (25%),
+    -- "10" = Narrow Stereo (50%), "11" = Mono (100%). Applied in front of the master volume.
+    audio_stereo_mix_i     : in    std_logic_vector(1 downto 0);
+
     -- Mode selection for Expansion Port (aka Cartridge Port):
     -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port
     -- bit 1: Simulate REU
@@ -411,6 +416,8 @@ architecture synthesis of main is
   signal   c64_sid_r : std_logic_vector(17 downto 0);
   signal   alo       : std_logic_vector(15 downto 0);
   signal   aro       : std_logic_vector(15 downto 0);
+  signal   mix_l     : signed(15 downto 0);             -- after the Stereo Mix crossfeed (#247)
+  signal   mix_r     : signed(15 downto 0);
 
   -- Master-volume LUT (used by audio_volume_proc): perceptual, loudness-linear
   -- attenuation for the OSM "Volume" slider. Each 5% step is a 5 percentage-point
@@ -2127,12 +2134,69 @@ begin
     end if;
   end process audio_processing_proc;
 
+  -- Stereo Mix (issue #247): crossfeed for the hard-panned stereo SID setups, which
+  -- can be tiring on headphones. The arithmetic is that of aud_mix_top in MiSTer's
+  -- sys/audio_out.sv, i.e. what MiSTer's C64 core offers as "Stereo Mix" (there,
+  -- pre_in is the halved opposite channel, so the shift amounts below already
+  -- include that halving):
+  --   "00" Full Stereo   (MiSTer "None"): no mix
+  --   "01" Wide Stereo   (MiSTer "25%"):  87.5% own side + 12.5% opposite side
+  --   "10" Narrow Stereo (MiSTer "50%"):  75% / 25%
+  --   "11" Mono          (MiSTer "100%"): 50% / 50%
+  -- Every blend is a weighted average whose weights sum to one, so it cannot clip:
+  -- even with the rounding of the shifts the result stays within the signed 16-bit
+  -- range, and the 17-bit intermediate plus clamp16 (MiSTer's output clamp) are a
+  -- guard only. A mono SID setup
+  -- drives both channels with the same signal, which Full, Wide and Narrow pass
+  -- through unchanged and Mono changes by one LSB at most, so the setting is only
+  -- audible with a stereo SID. Registered on the main clock in front of the
+  -- master volume; the extra cycle of latency is inaudible.
+  audio_stereo_mix_proc : process (clk_main_i)
+    variable l, r   : signed(16 downto 0);
+    variable lm, rm : signed(16 downto 0);
+
+    -- 17-bit intermediate back to 16 bits, saturating (MiSTer's output clamp)
+    function clamp16(v : signed(16 downto 0)) return signed is
+    begin
+      if v(16) /= v(15) then
+        if v(16) = '0' then
+          return to_signed(32767, 16);
+        else
+          return to_signed(-32768, 16);
+        end if;
+      end if;
+      return v(15 downto 0);
+    end function clamp16;
+  begin
+    if rising_edge(clk_main_i) then
+      l := resize(signed(alo), 17);
+      r := resize(signed(aro), 17);
+      case audio_stereo_mix_i is
+        when "01" =>                                            -- Wide Stereo
+          lm := l - shift_right(l, 3) + shift_right(r, 3);
+          rm := r - shift_right(r, 3) + shift_right(l, 3);
+        when "10" =>                                            -- Narrow Stereo
+          lm := l - shift_right(l, 2) + shift_right(r, 2);
+          rm := r - shift_right(r, 2) + shift_right(l, 2);
+        when "11" =>                                            -- Mono
+          lm := shift_right(l, 1) + shift_right(r, 1);
+          rm := lm;
+        when others =>                                          -- Full Stereo
+          lm := l;
+          rm := r;
+      end case;
+      mix_l <= clamp16(lm);
+      mix_r <= clamp16(rm);
+    end if;
+  end process audio_stereo_mix_proc;
+
   -- Apply the OSM master-volume attenuation to the final mix. Registered on the
   -- main clock so Vivado maps the two 16x17 products to pipelined DSP48 slices;
   -- the one-cycle latency (~32 ns) is inaudible. At 100% (Q15 gain 0x8000) the
   -- multiply is bit-transparent, and the gain is always <= 1.0 so the result can
   -- never clip. This is the single point that feeds both the HDMI and the analog
-  -- audio path, so the slider works identically on both outputs.
+  -- audio path, so the slider (and the Stereo Mix in front of it) works
+  -- identically on both outputs.
   audio_volume_proc : process (clk_main_i)
     variable gain   : signed(16 downto 0);
     variable prod_l : signed(32 downto 0);
@@ -2140,8 +2204,8 @@ begin
   begin
     if rising_edge(clk_main_i) then
       gain          := signed('0' & std_logic_vector(C_VOL_LUT(audio_volume_i)));
-      prod_l        := signed(alo) * gain;    -- signed(16) * signed(17) = signed(33)
-      prod_r        := signed(aro) * gain;
+      prod_l        := mix_l * gain;          -- signed(16) * signed(17) = signed(33)
+      prod_r        := mix_r * gain;
       audio_left_o  <= prod_l(30 downto 15);  -- arithmetic >>15: back to signed(16)
       audio_right_o <= prod_r(30 downto 15);
     end if;

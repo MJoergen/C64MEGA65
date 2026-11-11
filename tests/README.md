@@ -5,6 +5,19 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X3 - TBD
+--------------------------
+
+@TODO: Test the Stereo Mix (issue #247) on R3 and R6 at least (R4/R5 when available), on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
+
+* @TODO Menu: the `Volume` submenu shows `Stereo: Full Stereo` below `0%`, framed by separator lines, and still fits the screen on HDMI and on VGA (also 15 kHz). `Stereo: %s` opens a nested submenu with `Full Stereo` (default), `Wide Stereo`, `Narrow Stereo` and `Mono`; its `Back` returns to the `Volume` submenu.
+* @TODO Main menu line: with `Mono SID` (6581 or 8580) it reads `Volume: 100%` whatever the Stereo setting; with any `Stereo SID` setup it reads `Volume: 100% Stereo` / `Wide` / `Narrow` / `Mono`. Changing the SID setup and returning to the main menu updates the line at once.
+* @TODO Sound, stereo SID (for example `L: 6581 R: 8580` with the right SID at `D420`, and a stereo SID tune): `Full Stereo` sounds exactly like A22X2; `Wide Stereo` and `Narrow Stereo` move each voice audibly towards the center, `Narrow` more than `Wide`; `Mono` sounds the same on both ears. No clicks, no distortion when switching between the four settings while music plays.
+* @TODO Pseudo-stereo (`Same as left SID port` with two different SID models): the four settings behave as above.
+* @TODO Mono SID: the four settings sound the same.
+* @TODO Interplay: the Stereo setting together with every volume step (incl. `0%` = mute), with `Audio improvements` on and off, with `HDMI: DVI (no sound)` (the 3.5 mm jack keeps working), in PAL and NTSC.
+* @TODO The Stereo setting is saved in the config file and restored after a power cycle.
+
 Version WIP-V6-A22X2 - TBD
 --------------------------
 
