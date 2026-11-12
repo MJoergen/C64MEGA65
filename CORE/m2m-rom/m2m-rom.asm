@@ -1402,7 +1402,7 @@ WRN_WRONG_IMG   .ASCII_P "\n\nA D64 disk image must be exactly 174848\n"
 
 ; Warning: the .crt file is larger than the SIMCRT HyperRAM pool
 WRN_CRT_TOO_BIG .ASCII_P "\n\nThis .crt file is too large: it does not\n"
-                .ASCII_W "fit into the simulated-cartridge memory pool.\n"
+                .ASCII_W "fit into the simulated cartridge memory.\n"
 
 ; Warning: Nothing to browse
 WRN_NO_D64      .ASCII_P "This core uses D64 and D81 disk images.\n\n"
