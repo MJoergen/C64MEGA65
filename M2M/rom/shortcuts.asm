@@ -373,7 +373,7 @@ _SCMS_1         MOVE    R3, R6                  ; R6: width = length + 4
                 MOVE    SCR$SYS_DX, R4          ; R4: x = centered
                 MOVE    @R4, R4
                 SUB     R6, R4
-                AND     0xFFFD, SR              ; clear X (shifted in)
+                AND     0xFFFB, SR              ; clear C (shifted in)
                 SHR     1, R4
                 MOVE    SCR$SYS_DY, R5          ; R5: y = bottom, one line free
                 MOVE    @R5, R5
