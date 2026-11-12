@@ -327,8 +327,9 @@ on `main_clk`). M2M splits it:
   HyperRAM contention.
 - `.crt` files: **NOT** executed in place from HyperRAM (latency up to ~1500
   ns vs. 500 ns budget). Instead a BRAM bank cache (`crt_cacher.vhd`) holds
-  the last 8 banks; on a bank switch (`$DExx/$DFxx` write) the CPU is paused
-  via DMA while the new bank is fetched (~82 cycles avg).
+  32 ROML and 32 ROMH banks; on a switch (`$DExx/$DFxx` write) to a bank that
+  is not in the cache the CPU is paused via DMA while the bank is fetched
+  (about 90 PHI2 cycles for both 8 kB halves).
 
 ### 3.7 OSM / On-Screen Menu
 
@@ -715,8 +716,9 @@ Key files:
   (i.e. a 16 KB bank), the HI half is offset by `+$2000` so a single
   16K bank populates both windows (`crt_cacher.vhd:111-124`). FSM:
   `IDLE → READ_HI → READ_LO`, asserting `bank_wait_o` while a fill is in
-  progress. The BRAM cache itself holds **2^G_CACHE_SIZE = 8** entries
-  (`G_CACHE_SIZE = 3`, set in `sw_cartridge_wrapper.vhd:71`).
+  progress. The BRAM cache itself holds **2^G_CACHE_SIZE = 32** entries per
+  half (`G_CACHE_SIZE = 5`, set by `C_CACHE_SIZE` in
+  `sw_cartridge_wrapper.vhd`); a miss replaces them round-robin.
 - **`cartridge.vhd`** — *replaces* MiSTer's `cartridge.v`. This is the
   per-cart-id state machine that watches CPU writes to `$DExx` / `$DFxx`
   and updates `bank_lo_o`, `bank_hi_o`, `exrom_o`, `game_o`,
@@ -748,11 +750,22 @@ core_dma_v := cartridge_loading_i or crt_bank_wait_i;
 ```
 
 `core_dma` then asserts the MiSTer C64 core's `dma` input — which puts the
-6510 into a tri-state hold (BA=0). The CPU resumes once the burst
-completes. Average cost is on the order of an 8 KB HyperRAM burst (~82
-PHI2 cycles in the comment block elsewhere), which is invisible to most
-games but **can be felt on bank-switch-heavy carts** that hit the cache
-hard. This is the headline reason the BRAM cache exists at all (see §4.5).
+6510 into a hold: the core gates the CPU's clock enable completely, so the
+CPU does not sample interrupts either, while the VIC-II and the CIAs keep
+running. The CPU resumes once the bank is loaded. Measured in simulation
+with the real cacher and HyperRAM controller state machine
+(`CORE/vhdl/test/tb_crt_cacher/`): about 9000 HyperRAM clocks = 90 µs = 88 to
+91 PHI2 cycles (1.4 raster lines) for the two 8 kB halves of an EasyFlash
+bank, half of that for one half; on R3, where ascal shares the HyperRAM, a
+miss takes about 100 to 115 PHI2 cycles. A miss is invisible to most games,
+but a raster interrupt that falls into it is served late by up to the length
+of the miss: **bank-switch-heavy carts with tight raster splits flicker when
+they work with more banks than the cache holds.** That was issue #255: "Eye of the
+Beholder" (EasyFlash) does 95 to 180 bank switches per frame through a
+far-call trampoline, also from inside its interrupt handlers, chains 11
+raster interrupts per frame and uses up to 24 banks while the player moves;
+with the former 8 slots it took about one miss per frame. This is the
+headline reason the BRAM cache exists at all (see §4.5).
 
 ### 4.5 Why HyperRAM (not SDRAM) — and why a BRAM cache is required
 
@@ -772,9 +785,9 @@ on the DE10-Nano. We **cannot** do that on the MEGA65 because:
 Solution: **stage the entire `.crt` file in HyperRAM, then keep only the
 two currently-active 8 KB banks in BRAM**, where the C64 can read them at
 single-cycle latency. The price is a brief CPU stall on bank-switch (the
-DMA pause described above). The BRAM cache size is `2**3 = 8` slots, so
-the most-recently-used 8 LO/HI banks stay warm — bank flips between those
-are zero-cost.
+DMA pause described above). The BRAM cache size is `2**5 = 32` slots per
+half (2 x 64 RAMB36), so 32 LO/HI banks stay warm — bank flips between those
+are zero-cost. The slots are replaced round-robin, not least-recently-used.
 
 #### HyperRAM memory map
 
@@ -1120,6 +1133,7 @@ hardware saw the code.
 | `.crt` cart-id unsupported| `cartridge.vhd` `case to_integer(unsigned(cart_id_i))` at line 109 |
 | `.crt` bank-switch broken | `cartridge.vhd` per-id branch + `crt_cacher.vhd` (BRAM cache fill, bank tables) |
 | `.crt` exec stalls / glitch| `crt_cacher.vhd` (bank_wait_o), `main.vhd:957` (DMA pause), HyperRAM contention |
+| `.crt` game flickers at its raster splits | more banks in use than the bank cache holds: `C_CACHE_SIZE` in `sw_cartridge_wrapper.vhd`, bench `CORE/vhdl/test/tb_crt_cacher/` (issue #255) |
 | Hardware cart port        | `main.vhd` `handle_hardware_expansion_proc` (lines 884–940), `cart_output_pipeline_proc` |
 | EF3 / KFF doesn't reset C64 (R3/R3A/R4) | `cartridge_heuristics.vhd`, `main.vhd:1004-1054`         |
 | Cart won't autostart / can't be exited  | `main.vhd` `cpu_data_in_proc` ($8xxx mask), `cold_start_done` flag |

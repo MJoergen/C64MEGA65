@@ -8,7 +8,7 @@ effort, it might be that we are not always doing it.
 Version WIP-V6-A22X3 - TBD
 --------------------------
 
-@TODO: Test the Stereo Mix (issue #247) and the string ROM on R3 and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
+@TODO: Test the Stereo Mix (issue #247), the larger bank cache for simulated cartridges (issue #255) and the string ROM on R3/R3A and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
 
 Stereo Mix for stereo SIDs in the Volume submenu (issue #247):
 
@@ -19,6 +19,15 @@ Stereo Mix for stereo SIDs in the Volume submenu (issue #247):
 * @TODO Mono SID: the four settings sound the same.
 * @TODO Interplay: the Stereo setting together with every volume step (incl. `0%` = mute), with `Audio improvements` on and off, with `HDMI: DVI (no sound)` (the 3.5 mm jack keeps working), in PAL and NTSC.
 * @TODO The Stereo setting is saved in the config file and restored after a power cycle.
+
+Bank cache for simulated cartridges (32 instead of 8 ROML and ROMH banks):
+
+* @TODO "Eye of the Beholder" V1.00 (EasyFlash `.crt`, https://csdb.dk/release/?id=226060) as simulated cartridge: choose `Quickstart game` in its main menu, then walk and turn continuously for several minutes (`W`, `S`, `Q`, `E`), bumping into walls included. Expected: no flickering line directly below the bitmap area, the three message lines and the `CAMP` button never vanish for a frame, the sprite overlay of the 3D view does not flicker. WIP-V6-A22X2 shows one of these glitches every few seconds while moving. A single glitch is still possible when something is drawn for the first time (its bank is fetched from the HyperRAM once); note how often that happens.
+* @TODO The same on VGA and on HDMI, in PAL; on R3/R3A the HDMI scaler shares the HyperRAM, so run it there with `HDMI: Flicker-free` on, too.
+* @TODO The same with the simulated REU switched on (it shares the HyperRAM with the bank cache).
+* @TODO Stand still in "Eye of the Beholder" for five minutes: no flicker.
+* @TODO Regression: the other simulated cartridges of the usual set start and run as before, in particular the bank-switch-heavy ones (EasyFlash, GMod2, Magic Desk, Ocean) and the freezers (Action Replay, Final Cartridge III, Super Snapshot); mount a second `.crt` while one is running, soft reset and hard reset with a `.crt` mounted.
+* @TODO A 1 MB EasyFlash `.crt` and a small 8 kB `.crt` load and start on R3 and R6.
 
 String ROM: the message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
 
