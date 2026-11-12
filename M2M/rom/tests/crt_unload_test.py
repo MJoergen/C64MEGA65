@@ -293,6 +293,7 @@ S_CSRR          .ASCII_W "UNEXPECTED CSR_R"
 S_CSRRDEV       .ASCII_W "CSR_R OF ANOTHER DEVICE"
 S_VDRD_OK       .ASCII_W "VDRD"
 S_FOPEN         .ASCII_W "FOPEN"
+S_SCRATCH       .ASCII_W " SCRATCH"
 S_PREP          .ASCII_W "PREP"
 S_COPY          .ASCII_W "COPY"
 S_REJECT        .ASCII_W "REJECT"
@@ -528,7 +529,11 @@ _HM_STUB2       SYSCALL(crlf, 1)
 f32_fopen       MOVE    R8, @--SP
                 MOVE    S_FOPEN, R8
                 SYSCALL(puts, 1)
-                SYSCALL(crlf, 1)
+                CMP     _DIRBR_FH, R9           ; the scratch file handle?
+                RBRA    _FOPEN_1, !Z
+                MOVE    S_SCRATCH, R8
+                SYSCALL(puts, 1)
+_FOPEN_1        SYSCALL(crlf, 1)
                 MOVE    @SP++, R8
                 XOR     R10, R10                ; no error
                 RET
@@ -584,6 +589,7 @@ VDRIVES_BUFS    .DW     0x0101, 0x0102
 HNDL_VD_FILES   .DW     TB_FH, TB_FH
 HNDL_RM_FILES   .DW     TB_FH, TB_FH
 TB_FH           .BLOCK  1
+_DIRBR_FH       .BLOCK  1
 HANDLE_DEV      .BLOCK  1
 SF_CONTEXT      .BLOCK  1
 SF_CONTEXT_DATA .BLOCK  1
@@ -691,8 +697,12 @@ def model(rows):
             regs[0], regs[1] = 0, 0
         elif kind == 6:
             cid, mode = r8, r10
-            out.append("FOPEN")
-            out.append("PREP")
+            if mode == 0:                        # a disk image is checked with the scratch
+                out.append("FOPEN SCRATCH")      # file handle before the handle of the
+                out.append("PREP")               # drive is opened
+            if mode == 1 or not prep:
+                out.append("FOPEN")
+                out.append("PREP")
             if prep:
                 out.append("REJECT")             # the device is not touched
             else:

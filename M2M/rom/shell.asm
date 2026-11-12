@@ -466,64 +466,7 @@ _HM_SDMOUNTED3  MOVE    R8, R0                  ; R8: selected file name
                 MOVE    R0, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
-
-                ; remember the file name for displaying it in the OSM in R2
-                ;
-                ; the convention for the position in the @OPTM_HEAP is:
-                ; a) for vdrives: vdrive number times @SCR$OSM_O_DX
-                ; b) for CRTs/ROMs: (#vdrives+#submenus+crt/rom id)
-                ;    times @SCR$OSM_O_DX
                 MOVE    R8, R2                  ; R2: file name
-                MOVE    OPTM_HEAP, R0
-                MOVE    @R0, R0
-                RBRA    _HM_SDMOUNTED3A, !Z     ; OPTM_HEAP is ready
-                MOVE    ERR_FATAL_INST, R8
-                MOVE    ERR_FATAL_INST7, R9
-                RBRA    FATAL, 1
-
-_HM_SDMOUNTED3A XOR     R8, R8
-                CMP     1, R5                   ; case (b)?
-                RBRA    _HM_SDMOUNTED3B, !Z     ; no, case (a)
-                MOVE    VDRIVES_NUM, R9
-                ADD     @R9, R8
-                MOVE    OPTM_SCOUNT, R9
-                ADD     @R9, R8
-
-_HM_SDMOUNTED3B ADD     R7, R8
-                MOVE    SCR$OSM_O_DX, R9
-                MOVE    @R9, R9
-                SYSCALL(mulu, 1)
-                ADD     R10, R0                 ; R0: string ptr for file name
-                MOVE    R9, R1                  ; R1: maximum string length
-                SUB     2, R1                   ; minus 2 because of frame
-
-                ; if the length of the name is <= the maximum size then just
-                ; copy as is; otherwise copy maximum size + 1 so that the
-                ; ellipsis is triggered (see _OPTM_CBS_REPL in options.asm)
-                MOVE    R2, R8
-                SYSCALL(strlen, 1)
-                CMP     R9, R1                  ; strlen(name) > maximum?
-                RBRA    _HM_SDMOUNTED4, N       ; yes
-                MOVE    R2, R8
-                MOVE    R0, R9
-                SYSCALL(strcpy, 1)
-                RBRA    _HM_SDMOUNTED5, 1
-
-                ; strlen(name) > maximum: copy maximum + 1 to trigger ellipsis
-_HM_SDMOUNTED4  MOVE    R2, R8
-                MOVE    R0, R9
-                MOVE    R1, R10
-                ADD     1, R10
-                SYSCALL(memcpy, 1)
-                ADD     R10, R9                 ; add zero terminator
-                MOVE    0, @R9
-
-                ; set "%s is replaced" flag for filename string to zero                
-_HM_SDMOUNTED5  MOVE    SCR$OSM_O_DX, R8        ; set "%s is replaced" flag
-                MOVE    @R8, R8
-                SUB     1, R8
-                ADD     R0, R8
-                MOVE    0, @R8
 
                 ; load the disk image to the mount buffer
                 MOVE    SP, R6                  ; remember stack pointer
@@ -604,6 +547,71 @@ _HM_SDMOUNTED5A RSUB    HANDLE_IO, 1            ; wait for Space to be pressed
                 RBRA    _HM_SDMOUNTED2, 1
 
 _HM_SDMOUNTED6A MOVE    R9, R6                  ; R6: disk image type
+
+                ; remember the file name (R2) for displaying it in the OSM
+                ;
+                ; This happens only now that LOAD_IMAGE has accepted and
+                ; loaded the file: a rejected file leaves the drive or the
+                ; CRT/ROM as it was, and the menu line must keep showing what
+                ; is really mounted or loaded. R2 still points to the name:
+                ; LOAD_IMAGE does not browse, so the heap of the file browser
+                ; is unchanged.
+                ;
+                ; the convention for the position in the @OPTM_HEAP is:
+                ; a) for vdrives: vdrive number times @SCR$OSM_O_DX
+                ; b) for CRTs/ROMs: (#vdrives+#submenus+crt/rom id)
+                ;    times @SCR$OSM_O_DX
+                MOVE    OPTM_HEAP, R0
+                MOVE    @R0, R0
+                RBRA    _HM_SDMOUNTED3A, !Z     ; OPTM_HEAP is ready
+                MOVE    ERR_FATAL_INST, R8
+                MOVE    ERR_FATAL_INST7, R9
+                RBRA    FATAL, 1
+
+_HM_SDMOUNTED3A XOR     R8, R8
+                CMP     1, R5                   ; case (b)?
+                RBRA    _HM_SDMOUNTED3B, !Z     ; no, case (a)
+                MOVE    VDRIVES_NUM, R9
+                ADD     @R9, R8
+                MOVE    OPTM_SCOUNT, R9
+                ADD     @R9, R8
+
+_HM_SDMOUNTED3B ADD     R7, R8
+                MOVE    SCR$OSM_O_DX, R9
+                MOVE    @R9, R9
+                SYSCALL(mulu, 1)
+                ADD     R10, R0                 ; R0: string ptr for file name
+                MOVE    R9, R1                  ; R1: maximum string length
+                SUB     2, R1                   ; minus 2 because of frame
+
+                ; if the length of the name is <= the maximum size then just
+                ; copy as is; otherwise copy maximum size + 1 so that the
+                ; ellipsis is triggered (see _OPTM_CBS_REPL in options.asm)
+                MOVE    R2, R8
+                SYSCALL(strlen, 1)
+                CMP     R9, R1                  ; strlen(name) > maximum?
+                RBRA    _HM_SDMOUNTED4, N       ; yes
+                MOVE    R2, R8
+                MOVE    R0, R9
+                SYSCALL(strcpy, 1)
+                RBRA    _HM_SDMOUNTED5, 1
+
+                ; strlen(name) > maximum: copy maximum + 1 to trigger ellipsis
+_HM_SDMOUNTED4  MOVE    R2, R8
+                MOVE    R0, R9
+                MOVE    R1, R10
+                ADD     1, R10
+                SYSCALL(memcpy, 1)
+                ADD     R10, R9                 ; add zero terminator
+                MOVE    0, @R9
+
+                ; set "%s is replaced" flag for filename string to zero                
+_HM_SDMOUNTED5  MOVE    SCR$OSM_O_DX, R8        ; set "%s is replaced" flag
+                MOVE    @R8, R8
+                SUB     1, R8
+                ADD     R0, R8
+                MOVE    0, @R8
+
                 RSUB    SCR$OSM_OFF, 1          ; hide the big window
 
                 ; Step #5: Notify MiSTer using the "SD" protocol, if we
@@ -769,6 +777,33 @@ LOAD_IMAGE      SYSCALL(enter, 1)
                 MOVE    VDRIVES_BUFS, R0
                 ADD     R1, R0
                 MOVE    @R0, R0                 ; R0: device number            
+
+                ; Check the file with PREP_LOAD_IMAGE before it is opened with
+                ; the file handle of the drive: FLUSH_CACHE writes the drive
+                ; back through this file handle. A rejected file leaves the
+                ; drive with its old image, so the handle must keep pointing
+                ; to that image; otherwise the next save of the core would
+                ; overwrite the rejected file instead of the mounted image.
+                ; The check uses the scratch file handle of the directory
+                ; browser, which is free while LOAD_IMAGE runs.
+                MOVE    HANDLE_DEV, R8          ; R8: sd card device handle
+                MOVE    _DIRBR_FH, R9           ; R9: scratch file handle
+                MOVE    R2, R10
+                XOR     R11, R11
+                SYSCALL(f32_fopen, 1)
+                CMP     0, R10                  ; R10=error code; 0=OK
+                RBRA    _LI_OPENFATAL, !Z
+                MOVE    R9, R8                  ; R8: scratch file handle
+                MOVE    SF_CONTEXT, R9
+                MOVE    @R9, R9
+                MOVE    SF_CONTEXT_DATA, R10
+                MOVE    @R10, R10
+                RSUB    PREP_LOAD_IMAGE, 1
+                MOVE    R8, R6                  ; R6: error code=0 (means OK)
+                MOVE    R9, R7                  ; R7: img type or error msg
+                CMP     0, R6                   ; rejected?
+                RBRA    _LI_FREAD_RET, !Z       ; yes: drive stays untouched
+
                 MOVE    HNDL_VD_FILES, R9
                 RBRA    _LI_OPENFILE, 1
 

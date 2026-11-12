@@ -692,10 +692,9 @@ _VDNX_TRY       MOVE    R10, R2                 ; R2: candidate
                 MOVE    R10, R1
                 ADD     SLL$DATA, R1            ; R1: file name
 
-                ; Check the candidate with PREP_LOAD_IMAGE before mounting it:
-                ; LOAD_IMAGE reopens the file handle of the drive, so if it
-                ; rejected the image, then the drive would keep the old image
-                ; while its handle would point to the new file.
+                ; Check the candidate with PREP_LOAD_IMAGE before mounting it,
+                ; so that a rejected image is skipped: HANDLE_MOUNTING would
+                ; show the error message and then open the file browser.
                 MOVE    HANDLE_DEV, R8
                 MOVE    _DIRBR_FH, R9           ; scratch file handle
                 MOVE    R1, R10

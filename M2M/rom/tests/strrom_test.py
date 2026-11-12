@@ -221,13 +221,33 @@ PINS = {
         "MOVE C64_OSM_KERNAL_JIFFY, R8",
     ]),
     # PREP_LOAD_IMAGE returns its message in R9. Its only caller LOAD_IMAGE
-    # keeps it in R7 and returns it in R9 (via the stack, over the "leave
+    # calls it twice for a disk image, first with a scratch file handle
+    # (load_image_check), then with the file handle of the drive
+    # (load_image), and once for a CRT/ROM (load_image). Both calls keep the
+    # message in R7 and return it in R9 (via the stack, over the "leave
     # hump").
     "prep_li_ret": ("CORE/m2m-rom/m2m-rom.asm", [
         "_PREP_LI_RET DECRB",
         "MOVE @R13++, R15",
     ]),
+    "load_image_check": ("M2M/rom/shell.asm", [
+        "MOVE R9, R8",
+        "MOVE SF_CONTEXT, R9",
+        "MOVE @R9, R9",
+        "MOVE SF_CONTEXT_DATA, R10",
+        "MOVE @R10, R10",
+        "RSUB PREP_LOAD_IMAGE, 1",
+        "MOVE R8, R6",
+        "MOVE R9, R7",
+        "CMP 0, R6",
+        "RBRA _LI_FREAD_RET, !Z",
+    ]),
     "load_image": ("M2M/rom/shell.asm", [
+        "_LI_FOPEN_OK MOVE R5, R8",
+        "MOVE SF_CONTEXT, R9",
+        "MOVE @R9, R9",
+        "MOVE SF_CONTEXT_DATA, R10",
+        "MOVE @R10, R10",
         "RSUB PREP_LOAD_IMAGE, 1",
         "MOVE R8, R6",
         "MOVE R9, R7",
@@ -397,14 +417,14 @@ ALLOWLIST = [
     # PREP_LOAD_IMAGE returns its message in R9 to LOAD_IMAGE, which returns
     # it to HANDLE_MOUNTING
     dict(file="CORE/m2m-rom/m2m-rom.asm", label="WRN_CRT_TOO_BIG",
-         via=["prep_li_ret", "load_image", "load_image_ret",
-              "handle_mounting", "handle_mounting_print"],
+         via=["prep_li_ret", "load_image_check", "load_image",
+              "load_image_ret", "handle_mounting", "handle_mounting_print"],
          context=["_PREP_LI_CRT_BIG MOVE 1, R8",
                   "MOVE WRN_CRT_TOO_BIG, R9",
                   "RBRA _PREP_LI_RET, 1"]),
     dict(file="CORE/m2m-rom/m2m-rom.asm", label="WRN_WRONG_IMG",
-         via=["prep_li_ret", "load_image", "load_image_ret",
-              "handle_mounting", "handle_mounting_print"],
+         via=["prep_li_ret", "load_image_check", "load_image",
+              "load_image_ret", "handle_mounting", "handle_mounting_print"],
          context=["_PREP_LI_WRONG MOVE 1, R8",
                   "MOVE WRN_WRONG_IMG, R9",
                   "RBRA _PREP_LI_RET, 1"]),
