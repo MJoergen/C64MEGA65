@@ -253,8 +253,8 @@ these steps **in this order** (the order matters — see below):
    the ROM overflows that budget (the assembler itself does not check this).
 
 The last two lines of the output tell you how full both ROMs are, for example
-`String ROM: 9076/16384 characters in 196 strings.` and
-`Shell ROM: 18488/28672 words.`
+`String ROM: 9071/16384 characters in 198 strings.` and
+`Shell ROM: 20198/28672 words.`
 
 **Why steps 2–5 come before step 6:** the four generated `.asm` files are
 `#include`d into the assembly (directly or through the framework, see below), so
@@ -277,8 +277,8 @@ QNICE constants with two `awk` one-liners:
 * Every `constant C_MENU_<name>` in `CORE/vhdl/mega65.vhd` becomes
   `C64_OSM_<name>` — the **flat item index** of a menu line (its position,
   counting from zero, in the `OPTM_ITEMS` list; this is also its bit in the
-  256-bit OSM selection state). Example: `C_MENU_KERNAL_JIFFY := 107` becomes
-  `C64_OSM_KERNAL_JIFFY .EQU 107`.
+  512-bit OSM selection state). Example: `C_MENU_KERNAL_JIFFY := 128` becomes
+  `C64_OSM_KERNAL_JIFFY .EQU 128`.
 * Every *decimal* `constant OPTM_G_<name>` in `CORE/vhdl/config.vhd` becomes
   `C64_OPTM_G_<name>` — a **menu group id**. The `awk` deliberately skips the
   `16#...#` hex constants (`OPTM_G_HEADLINE`, `OPTM_G_SUBMENU`,
@@ -376,7 +376,13 @@ labelled subroutine in `m2m-rom.asm` with a register contract in the comment
 above it; the framework calls it at a specific moment. Two conventions recur:
 
 * Callbacks run inside their own QNICE register bank (`INCRB`/`DECRB`), so
-  `R0`–`R7` are private scratch and `R8`–`R12` carry the contract.
+  `R0`–`R7` are private scratch and `R8`–`R12` carry the contract. Register
+  banks are a limited resource: the CPU of this core has 64 of them
+  (`SHADOW_REGFILE_SIZE` in `M2M/vhdl/QNICE/qnice_globals.vhd`), `INCRB` uses
+  one and `SYSCALL(enter, 1)` two, and the deepest call chain of the Shell
+  already reaches level 41. Too deep a chain does not fail visibly; it
+  overwrites the registers of the outermost routines. After adding call levels,
+  run `python3 M2M/rom/tests/bankdepth_test.py`.
 * Two of them — `SUBMENU_SUMMARY` and `CUSTOM_MSG` — use "return `0` in `R8`"
   to mean "no custom value, use the framework default." The core only supplies
   a value when it wants to override the generic behavior.

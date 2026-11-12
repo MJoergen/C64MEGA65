@@ -281,6 +281,14 @@ the SD card.
   separate block RAM, the string ROM (device `M2M$STRROM` = `0x0007`), and the
   firmware addresses them through handles: see "Message strings live in the
   string ROM" in section 7.
+- The QNICE of this core has 64 register banks (`SHADOW_REGFILE_SIZE` in
+  `M2M/vhdl/QNICE/qnice_globals.vhd`; a standard QNICE and the emulator have
+  256). `SYSCALL(enter, 1)` costs two bank levels, `INCRB` one, and the deepest
+  call chain of the Shell reaches level 41: a keyboard shortcut that opens the
+  file browser while the SD card is read (the on-screen menu alone reaches
+  27). A level beyond the last bank does not stop anything on the hardware:
+  the bank number wraps around and the registers of the outermost routines
+  are overwritten. See "Register bank depth" in section 7.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
   as kind of the "operating system". Here is an overview of the
@@ -1052,6 +1060,15 @@ A string costs one word per character and the firmware ROM has only 28672 words 
 - A new string that is only printed belongs between the markers; a string that is processed belongs outside. `python3 M2M/rom/tests/strrom_test.py` checks the generated string ROM and every use of every handle: a use that it does not know fails the test. `python3 M2M/rom/tests/strrom_sim_test.py` simulates the hardware path with GHDL.
 - The string ROM is used in release builds only. When `RELEASE` is not defined (firmware in RAM, the Monitor of QNICE in ROM) and in the emulator testbeds, the markers are plain comments and all strings are ordinary strings.
 
+### Register bank depth
+
+`INCRB` selects the next register bank (fresh `R0` to `R7`), `DECRB` the previous one; `SYSCALL(enter, 1)` and `SYSCALL(leave, 1)` do it twice. Every routine on a call chain that uses one of these frames therefore costs one or two bank levels, and the CPU of this core has 64 banks (`SHADOW_REGFILE_SIZE` in `M2M/vhdl/QNICE/qnice_globals.vhd`). The deepest chain of the Shell reaches level 41: `MAIN_LOOP`, the keyboard shortcut code that runs the menu invisibly (`SC$MAIN`, `SC_KEY`, `SC$SESSION`, `HELP_MENU`, `SC$IN_SESSION`, `SC$PRESS_IN`), `OPTM_RUN`, `OPTM_CB_SEL`, `HANDLE_MOUNTING`, `SELECT_FILE`, `DIRBROWSE_READ` and then eight routines of the FAT32 and math libraries of the Monitor.
+
+- A level beyond the last bank is not an error on the hardware: the bank number wraps around, and the registers of the outermost routines are silently overwritten. The symptoms show up later and elsewhere.
+- No emulator testbed can notice it (256 banks), and the GHDL simulations of the firmware tests do not run the deep chains.
+- `python3 M2M/rom/tests/bankdepth_test.py` computes the deepest chain from the sources (static analysis of the call graph, a few seconds) and fails when fewer than 8 banks are left, when a routine returns at another level than it was entered, or when it finds an indirect call that its table `INDIRECT` does not know. Run it after every change that adds a routine to a call chain of the Shell or changes a frame; `--report` prints the chains hop by hop.
+- When you add a routine to a deep chain, prefer a plain `INCRB` / `DECRB` frame (or no frame at all) over `SYSCALL(enter, 1)` / `SYSCALL(leave, 1)` if the routine does not need `R8` to `R12` saved.
+
 ### QNICE assembler is multi-pass — include order does not matter
 
 `qasm` (the QNICE assembler used by `M2M/QNICE/assembler/asm` and invoked
@@ -1110,6 +1127,8 @@ CTRL-C, or stdin EOF — exit codes 0 / 1 / 130. Programs that use
 
 - If `qnice -h` does not mention `-b`, the emulator binary is stale —
   rebuild it from the current sources (see above).
+- The emulator has 256 register banks, the hardware 64: a testbed cannot
+  notice that the firmware nests too deep (see "Register bank depth" below).
 - A runaway program that never reads stdin spins forever: wrap emulator
   calls in a timeout (macOS has no `timeout(1)`; use a python
   `subprocess(..., timeout=...)` wrapper).
@@ -1167,6 +1186,7 @@ hardware saw the code.
 | Keyboard                  | `keyboard.vhd`, `M2M/vhdl/m2m_keyb.vhd`                   |
 | Reset / data corruption   | `main.vhd` RESET SEMANTICS block, `vdrives.vhd` (cache_dirty / prevent_reset) |
 | QNICE Shell behavior      | `M2M/rom/shell.asm` + neighbors; callbacks in `CORE/m2m-rom/m2m-rom.asm` |
+| Shell misbehaves on hardware only, after a deep call chain (wrong values after a file browser or mount action, menu stays invisible) | register bank overflow: `python3 M2M/rom/tests/bankdepth_test.py --report`, `SHADOW_REGFILE_SIZE` in `M2M/vhdl/QNICE/qnice_globals.vhd` |
 | Firmware message garbled or missing (serial log, OSM) | `M2M/rom/strrom.asm` (handles, `STRROM$OPEN`, `STRROM$CLOSE`), `M2M/tools/asm_strrom.sh`, `i_strrom` in `M2M/vhdl/qnice_wrapper.vhd`, `CORE/m2m-rom/m2m-strings.rom` and `m2m-strings.lis`; tests `M2M/rom/tests/strrom_test.py` and `strrom_sim_test.py`. A handle that reaches code which needs a pointer prints garbage |
 | ROM autoload (JiffyDOS)   | `globals.vhd` C_CRTROMS_AUTO, `M2M/rom/crts-and-roms.asm` |
 | HyperRAM contention       | `globals.vhd` C_HMAP_*, `qnice2hyperram.vhd`, ascal       |
