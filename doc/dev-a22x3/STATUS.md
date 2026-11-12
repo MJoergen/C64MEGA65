@@ -5,9 +5,8 @@ Entry point for anyone, human or coding agent, who picks up this work. It record
 ## 0. State
 
 * **Done:** `mh_implement_247` (Stereo Mix), `mh_fix_issue_255` (bank cache with 32 banks), `mh_implement_153` (unload a cartridge) and `mh_implement_142` (keyboard shortcuts) are merged into `develop` in this order, each with `--no-ff`, on top of the string ROM (`622a0f4`). `CORE_VERSION` is `WIP-V6-A22X3`.
-* **Follow-up commits on top of the merges:** 64 register banks for QNICE, the shorter text of the message for a too large `.crt`, `bankdepth_test.py`, the documentation, and one flag correction in the shortcut code (section 2).
-* **In progress:** the fix of two defects in the mount code (section 5.2).
-* **Then:** final run of all suites, push, Vivado build of R3 and R6, hardware test (section 7).
+* **Follow-up commits on top of the merges:** 64 register banks for QNICE, the shorter text of the message for a too large `.crt`, `bankdepth_test.py`, the documentation, one flag correction in the shortcut code, and the fix of two defects in the mount code (section 2).
+* **Next:** Vivado build of R3 and R6, hardware test (section 7).
 * **Not yet built with Vivado and not yet tested on hardware.**
 
 ## 1. Decisions
@@ -40,6 +39,8 @@ On `develop`, on top of `622a0f4` (string ROM):
 | `403bbff` | `M2M/rom/tests/bankdepth_test.py` with its documentation |
 | `7e42af0` | Documentation of the merged state; the playbook of the merge is removed |
 | `2836cb0` | `SC$MSG_SHOW` clears the Carry flag before `SHR` (no change at run time) |
+| `3c1ba8f` | This record and the audit tools |
+| `06cda88` | A rejected file no longer changes the mounted image or its menu line, with `mount_reject_test.py` |
 
 No submodule pointer, no Vivado project file (`CORE/CORE-R?.xpr`) and no constraint file changed.
 
@@ -53,6 +54,7 @@ No submodule pointer, no Vivado project file (`CORE/CORE-R?.xpr`) and no constra
 | merge of #153 | 18,827 | 9,076 in 198 strings |
 | merge of #142 | 20,198 | 9,076 in 198 strings |
 | shorter `WRN_CRT_TOO_BIG` | 20,198 | 9,071 in 198 strings |
+| fix of the mount code | 20,225 | 9,071 in 198 strings |
 
 Menu: 301 lines, 18 submenus, `OPTM_ITEMS` has 3,192 characters, `OPTM_DY` is 29. Menu heap: 4,418 + 621 = 5,039 of 5,248 words by the formula in `m2m-rom.asm`. `HEAP` is at `0x82A0`, which leaves 1,600 words for the stack. Register banks: deepest level 41 of 64. Block RAM: the bank cache adds 96 RAMB36 and the string ROM about 4 tiles; the last builds before the merge used 178 of 365 tiles.
 
@@ -71,14 +73,14 @@ Menu: 301 lines, 18 submenus, `OPTM_ITEMS` has 3,192 characters, `OPTM_DY` is 29
 
 The keyboard shortcuts of #142 run the menu engine invisibly from the main loop, 11 register bank levels deeper than the on-screen menu. A shortcut that opens the file browser reaches level 38 or 39 while the SD card is read, 41 in the worst case of the call graph; the on-screen menu alone reaches 27. The QNICE of this core had 32 banks. On the hardware the bank number wraps around and the registers of the outermost routines are overwritten: mostly without a visible effect, in the worst case (Next disk that falls back to the file browser while another disk image is written back) `SC$SESSION` loses its pointer to `OPTM_DIRECT` and the on-screen menu stays invisible until a reset. The emulator has 256 banks, so no testbed could see it. `M2M/rom/tests/bankdepth_test.py` computes the deepest chain from the sources and is the permanent guard; AGENTS.md, section 7 "Register bank depth", has the rules.
 
-### 5.2 Two defects in the mount code (fix in progress, D8)
+### 5.2 Two defects in the mount code (fixed, D8)
 
 `HANDLE_MOUNTING` and `LOAD_IMAGE` (`M2M/rom/shell.asm`) change state before the core has accepted the selected file:
 
 1. **Since #153, cosmetic.** A `.crt` is loaded, the user picks another `.crt` that `PREP_LOAD_IMAGE` rejects (too large) and leaves the file browser with Run/Stop: the old cartridge keeps running, as intended, but the `CRT:` line shows the name of the rejected file. Cause: `HANDLE_MOUNTING` writes the name into the menu line before it calls `LOAD_IMAGE`.
 2. **Old, also in the released V5, data loss.** A disk image A is mounted, the user presses Return on the line of the drive, picks an image that is rejected (wrong size) and leaves with Run/Stop: the drive keeps A, but `LOAD_IMAGE` has already reopened the file handle of the drive (`HNDL_VD_FILES`) with the rejected file B. `FLUSH_CACHE` then writes the next save of the C64 into B, in the size of B; A does not get the save, and the menu shows the name of B.
 
-Fix: `LOAD_IMAGE` checks a new disk image with a scratch file handle first and reopens the file with the file handle of the drive only when `PREP_LOAD_IMAGE` accepts it (the pattern of `VD_NEXT_DISK`), and `HANDLE_MOUNTING` writes the menu line only after `LOAD_IMAGE` succeeded. With a regression test in `M2M/rom/tests/`.
+Fix: `LOAD_IMAGE` checks a new disk image with a scratch file handle first (`_DIRBR_FH`, the pattern of `VD_NEXT_DISK`) and reopens the file with the file handle of the drive only when `PREP_LOAD_IMAGE` accepts it, and `HANDLE_MOUNTING` writes the menu line only after `LOAD_IMAGE` succeeded. `M2M/rom/tests/mount_reject_test.py` runs the real routines against recording stubs in 15 cases and fails on the code before the fix; 11 mutants, among them the reversal of each half of the fix, are caught. The price: a disk image is opened twice when it is mounted. Tested in the emulator only.
 
 ### 5.3 Small things (fixed)
 
@@ -100,13 +102,14 @@ Fix: `LOAD_IMAGE` checks a new disk image with a scratch file handle first and r
 * **Independent review of the merged RTL:** no defect. The 512-bit path of the menu state was elaborated and simulated from `qnice.vhd` to `MEGA65_Core` (all 512 bits arrive unshifted); the bank cache is invalidated on every new cartridge also after an eject; no generate block reads a signal before its declaration; the four `.xpr` list every file.
 * **Independent review of the merged firmware:** the two defects of section 5.2 and the flag of section 5.3; no handle of a string ROM string reaches code that needs characters; the unload exit of `HANDLE_MOUNTING` cannot be reached in an invisible shortcut session; no code is left that assumes 256 menu bits; the init order and the consecutive variable blocks are right.
 * **Register bank depth:** static analysis, hop by hop by hand for the deepest chain; `bankdepth_test.py --selftest` detects 4 of 4 planted defects.
+* **Mount fix:** `mount_reject_test.py` (15 cases, 11 mutants) fails on the code before the fix and passes after it; `crt_unload_test.py` and the handle lint of `strrom_test.py` were extended for the second path of `LOAD_IMAGE`; the register bank depth is unchanged (41).
 * **Markdown** (`tools/mdlint.py`): the lines that the merges add contain no bare dollar pair and no bare `==` outside of code.
 
 ## 7. What the Vivado build and the hardware test need to show
 
 Vivado (R3 and R6 at least):
 
-* The log shows `String ROM: 9071/16384 characters in 198 strings.` and `Shell ROM: 20198/28672 words.` (the firmware number changes with the fix of section 5.2).
+* The log shows `String ROM: 9071/16384 characters in 198 strings.` and `Shell ROM: 20225/28672 words.`
 * `synth_design` finishes; if it is killed, look for `Killed` or `tcmalloc` in the log: the suspect is then the initial value of the two 128k x 16 cache RAMs (section 5.4).
 * Timing is met in every clock domain. `qnice_clk` had 0.415 ns (R3) and 0.458 ns (R6) of slack in the last builds, on the half-cycle read paths of the devices; the register file is twice as large now. `hr_clk` had 1.1 ns: the bank cache looks up 32 instead of 8 banks per half in one clock cycle.
 * Block RAM: about 278 of 365 tiles.

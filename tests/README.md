@@ -8,7 +8,7 @@ effort, it might be that we are not always doing it.
 Version WIP-V6-A22X3 - TBD
 --------------------------
 
-@TODO: Test the Stereo Mix (issue #247), the larger bank cache for simulated cartridges (issue #255), unloading simulated cartridges (issue #153), the keyboard shortcuts (issue #142) and the string ROM on R3/R3A and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
+@TODO: Test the Stereo Mix (issue #247), the larger bank cache for simulated cartridges (issue #255), unloading simulated cartridges (issue #153), the keyboard shortcuts (issue #142), rejected files in the file browser and the string ROM on R3/R3A and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
 
 Stereo Mix for stereo SIDs in the Volume submenu (issue #247):
 
@@ -57,17 +57,23 @@ Keyboard shortcuts F9 to F14 (issue #142):
 * @TODO The shortcuts do nothing while the on-screen menu is open; `Help` still opens the menu, also while a message is visible.
 * @TODO Deep call chains (the shortcuts run the menu invisibly and nest deeper than the menu itself, which is why QNICE has 64 instead of 32 register banks now): switch drive 9 on, mount a disk image on it and save a file to it from BASIC. While drive 9 still saves (yellow LED), press the key for `Mount drive 8`, change into a sub-folder in the file browser and mount an image. Repeat it with `Next disk drive 8` on a key while nothing is mounted on drive 8 (the file browser opens). Afterwards `Help` opens the menu, which looks and works as usual, and the file that was saved on drive 9 is intact.
 
+A file that the core rejects leaves the mounted disk image alone:
+
+* @TODO Mount a D64 on drive 8, save a small file to it from BASIC and wait until the saving is done. Press `Return` on the line of drive 8 and pick a `.d64` with a wrong size (for example a 40-track image, or a text file renamed to `wrong.d64`): the message about the file size appears. `Space`, then `Run/Stop`: the line of drive 8 still shows the name of the mounted disk image. Save another file from BASIC and wait for the saving: on a PC the mounted image contains both files, and `wrong.d64` is unchanged (same size, same content). Before WIP-V6-A22X3 the second save went into `wrong.d64`.
+* @TODO The same, but pick a valid disk image after the rejected one instead of `Run/Stop`: it is mounted, the line shows its name, and saving works on it.
+* @TODO An empty drive and a rejected file, then `Run/Stop`: the line still shows `<Mount>`.
+
 String ROM: the message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
 
 String ROM, build:
 
 * @TODO On the build machine (Linux), run `python3 M2M/rom/tests/strrom_test.py` once: it rebuilds the firmware with the local tools and checks the generated string ROM.
 * @TODO On the build machine (Linux), run `python3 M2M/rom/tests/bankdepth_test.py` once: it ends with `BANKDEPTH TEST OK: deepest register bank level 41 (static), 64 banks, margin 22`.
-* @TODO The Vivado log shows `String ROM: 9071/16384 characters in 198 strings.` and `Shell ROM: 20198/28672 words.`, and timing is met in every clock domain. Look at `qnice_clk` in particular: the register file of QNICE has 64 instead of 32 banks (see the keyboard shortcuts above), and the builds before had about 0.4 ns of slack in this domain. Compare the block RAM count with the WIP-V6-A22X2 build; expect about 100 tiles more: the bank cache for simulated cartridges adds 96 RAMB36 (issue #255), the string ROM about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
+* @TODO The Vivado log shows `String ROM: 9071/16384 characters in 198 strings.` and `Shell ROM: 20225/28672 words.`, and timing is met in every clock domain. Look at `qnice_clk` in particular: the register file of QNICE has 64 instead of 32 banks (see the keyboard shortcuts above), and the builds before had about 0.4 ns of slack in this domain. Compare the block RAM count with the WIP-V6-A22X2 build; expect about 100 tiles more: the bank cache for simulated cartridges adds 96 RAMB36 (issue #255), the string ROM about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
 
 String ROM, serial log:
 
-* @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 8,500 words.
+* @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 8,400 words.
 * @TODO With JiffyDOS selected as Kernal: the `JiffyDOS status:` block is printed, once with all three ROM files on the SD card and once with `jd-c1581.bin` missing.
 * @TODO Debug console: hold Run/Stop and Cursor Up, press Help. The text `Entering MiSTer2MEGA65 debug mode.` appears with two addresses. Press `H`: the help text of the QNICE Monitor is complete. `M`, `D`, `7000`, `7010` dumps memory. `C`, `R` and the first of the two addresses returns to the core: the menu still opens and works.
 

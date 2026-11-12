@@ -1174,6 +1174,7 @@ hardware saw the code.
 | Menu items / labels       | `CORE/vhdl/config.vhd` (OPTM_ITEMS, OPTM_GROUPS, WHS)     |
 | Menu wiring → core        | `mega65.vhd` `C_MENU_*` constants → `main_osm_control_i`  |
 | Disk mount / vdrive       | `vdrives.vhd`, `M2M/rom/vdrives.asm`, `iec_drive/`        |
+| A save lands in the wrong file, or a menu line shows a file that is not mounted or loaded | `HANDLE_MOUNTING` and `LOAD_IMAGE` (`M2M/rom/shell.asm`): the file handle of a drive (`HNDL_VD_FILES`, used by `FLUSH_CACHE` for the write-back) and the menu line may only change after `PREP_LOAD_IMAGE` accepted the file; test `M2M/rom/tests/mount_reject_test.py` |
 | `.crt` won't load / parse | `crt_parser.vhd` (state machine + error codes), `sw_cartridge_wrapper.vhd` (QNICE side) |
 | `.crt` cart-id unsupported| `cartridge.vhd` `case to_integer(unsigned(cart_id_i))` at line 109 |
 | `.crt` bank-switch broken | `cartridge.vhd` per-id branch + `crt_cacher.vhd` (BRAM cache fill, bank tables) |

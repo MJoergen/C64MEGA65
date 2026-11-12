@@ -245,6 +245,13 @@ Version 6 - MONTH DAY, 2026
   did not start until the MEGA65 was switched off, because Super Snapshot's
   RAM stayed mapped where the next cartridge's ROM belongs.
 
+* Fixed a silent loss of saved data: when you replaced a mounted disk image
+  via the file browser, picked a file that the core rejects (for example a
+  D64 with a wrong size) and then left the file browser with `Run/Stop`, the
+  drive kept the old disk image, but the next save was written into the
+  rejected file. The on-screen menu also showed the name of the rejected
+  file instead of the mounted disk image.
+
 * Fixed a silent disk image corruption that could occur when the file browser
   was opened or an image was mounted while a drive was still saving its cache
   to the SD card ("yellow drive led"): the affected drive lost the bytes it
