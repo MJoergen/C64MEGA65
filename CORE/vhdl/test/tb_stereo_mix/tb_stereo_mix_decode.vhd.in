@@ -1,0 +1,83 @@
+----------------------------------------------------------------------------------------------------
+-- Stereo Mix bench (GitHub issue #247), part 2: the Stereo Mix decode of CORE/vhdl/mega65.vhd
+--
+-- Template: run.sh copies the C_MENU_STEREO_MIX_* constants and the main_stereo_mix assignment
+-- verbatim out of the current CORE/vhdl/mega65.vhd into the two marker lines below and fails if
+-- it cannot find them. The bench selects each of the four radio items alone (MiSTer's AUDIO_MIX
+-- encoding: Full Stereo "00", Wide Stereo "01", Narrow Stereo "10", Mono "11") and the empty
+-- selection (must decode to Full Stereo), each with all other menu bits at '0' and at '1'.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity tb_stereo_mix_decode is
+end entity tb_stereo_mix_decode;
+
+architecture sim of tb_stereo_mix_decode is
+
+-- @MEGA65_CONSTANTS@
+
+   signal main_osm_control_i : std_logic_vector(255 downto 0) := (others => '0');
+   signal main_stereo_mix    : std_logic_vector(1 downto 0);
+
+begin
+
+-- @MEGA65_DECODE@
+
+   stimulus : process
+      type nat4_t is array (0 to 3) of natural;
+      type slv4_t is array (0 to 3) of std_logic_vector(1 downto 0);
+      constant C_BIT  : nat4_t := (C_MENU_STEREO_MIX_FULL, C_MENU_STEREO_MIX_WIDE,
+                                   C_MENU_STEREO_MIX_NARROW, C_MENU_STEREO_MIX_MONO);
+      constant C_EXP  : slv4_t := ("00", "01", "10", "11");
+      variable osm    : std_logic_vector(255 downto 0);
+      variable errors : natural := 0;
+      variable n      : natural := 0;
+
+      procedure check(sel : integer; others_v : std_logic) is
+         variable exp : std_logic_vector(1 downto 0);
+      begin
+         osm := (others => others_v);
+         for i in 0 to 3 loop
+            osm(C_BIT(i)) := '0';
+         end loop;
+         if sel >= 0 then
+            osm(C_BIT(sel)) := '1';
+            exp := C_EXP(sel);
+         else
+            exp := "00";                                 -- nothing selected: Full Stereo
+         end if;
+         main_osm_control_i <= osm;
+         wait for 10 ns;
+         n := n + 1;
+         if main_stereo_mix /= exp then
+            errors := errors + 1;
+            report "TB_ERROR selection " & integer'image(sel) & " other bits '" &
+                   std_logic'image(others_v) & "': got " & to_string(main_stereo_mix) &
+                   ", expected " & to_string(exp);
+         end if;
+      end procedure check;
+   begin
+      for o in 0 to 1 loop
+         for sel in -1 to 3 loop
+            if o = 0 then
+               check(sel, '0');
+            else
+               check(sel, '1');
+            end if;
+         end loop;
+      end loop;
+      report "TB: " & integer'image(n) & " cases, " & integer'image(errors) & " wrong";
+      if errors = 0 then
+         report "TB: RESULT PASS";
+      else
+         report "TB: RESULT FAIL";
+      end if;
+      wait;
+   end process stimulus;
+
+end architecture sim;

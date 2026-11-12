@@ -65,8 +65,12 @@ Version 6 - MONTH DAY, 2026
    https://github.com/MJoergen/C64MEGA65/issues/198)
 
 * You can adjust the audio volume via the OSM. Implemented as a perceptual,
-  loudness-linear attenuation: 50% means half as loud as 100%.
-  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/85)
+  loudness-linear attenuation: 50% means half as loud as 100%. The "Stereo"
+  setting in the same submenu blends the two channels of a stereo SID, which
+  is easier on headphones: Full Stereo (default), Wide Stereo, Narrow Stereo
+  or Mono.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/85 and
+   https://github.com/MJoergen/C64MEGA65/issues/247)
 
 * The C64MEGA65 config file now carries the core version and a `.cfg`
   filename extension (for example `c64mega65-V6.cfg` instead of just

@@ -8,20 +8,32 @@ effort, it might be that we are not always doing it.
 Version WIP-V6-A22X3 - TBD
 --------------------------
 
-@TODO: Test the string ROM on R3 and R6 at least (R4/R5 when available). The message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Everything of WIP-V6-A22X2 below still applies. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
+@TODO: Test the Stereo Mix (issue #247) and the string ROM on R3 and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
 
-Build:
+Stereo Mix for stereo SIDs in the Volume submenu (issue #247):
+
+* @TODO Menu: the `Volume` submenu shows `Stereo: Full Stereo` below `0%`, framed by separator lines, and still fits the screen on HDMI and on VGA (also 15 kHz). `Stereo: %s` opens a nested submenu with `Full Stereo` (default), `Wide Stereo`, `Narrow Stereo` and `Mono`; its `Back` returns to the `Volume` submenu.
+* @TODO Main menu line: with `Mono SID` (6581 or 8580) it reads `Volume: 100%` whatever the Stereo setting; with any `Stereo SID` setup it reads `Volume: 100% Stereo` / `Wide` / `Narrow` / `Mono`. Changing the SID setup and returning to the main menu updates the line at once.
+* @TODO Sound, stereo SID (for example `L: 6581 R: 8580` with the right SID at `D420`, and a stereo SID tune): `Full Stereo` sounds exactly like A22X2; `Wide Stereo` and `Narrow Stereo` move each voice audibly towards the center, `Narrow` more than `Wide`; `Mono` sounds the same on both ears. No clicks, no distortion when switching between the four settings while music plays.
+* @TODO Pseudo-stereo (`Same as left SID port` with two different SID models): the four settings behave as above.
+* @TODO Mono SID: the four settings sound the same.
+* @TODO Interplay: the Stereo setting together with every volume step (incl. `0%` = mute), with `Audio improvements` on and off, with `HDMI: DVI (no sound)` (the 3.5 mm jack keeps working), in PAL and NTSC.
+* @TODO The Stereo setting is saved in the config file and restored after a power cycle.
+
+String ROM: the message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
+
+String ROM, build:
 
 * @TODO On the build machine (Linux), run `python3 M2M/rom/tests/strrom_test.py` once: it rebuilds the firmware with the local tools and checks the generated string ROM.
 * @TODO The Vivado log shows `String ROM: 9076/16384 characters in 196 strings.` and `Shell ROM: 18488/28672 words.` (or larger numbers after more features were merged), timing is met. Compare the block RAM count with the WIP-V6-A22X2 build: the string ROM adds about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
 
-Serial log:
+String ROM, serial log:
 
 * @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 10,000 words.
 * @TODO With JiffyDOS selected as Kernal: the `JiffyDOS status:` block is printed, once with all three ROM files on the SD card and once with `jd-c1581.bin` missing.
 * @TODO Debug console: hold Run/Stop and Cursor Up, press Help. The text `Entering MiSTer2MEGA65 debug mode.` appears with two addresses. Press `H`: the help text of the QNICE Monitor is complete. `M`, `D`, `7000`, `7010` dumps memory. `C`, `R` and the first of the two addresses returns to the core: the menu still opens and works.
 
-On-screen menu and messages:
+String ROM, on-screen menu and messages:
 
 * @TODO The menu, all submenus, the help pages and the file browser look and work as before.
 * @TODO Mount a file with a wrong size as disk image (for example a text file renamed to `test.d64`): the message `A D64 disk image must be exactly 174848 bytes ...` appears, followed by `Press SPACE to continue.`; Space returns to the file browser.

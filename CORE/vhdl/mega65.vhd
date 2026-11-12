@@ -279,6 +279,7 @@ signal c64_drive_unmount          : std_logic_vector(C_VDNUM - 1 downto 0);  -- 
 signal sid_setup                  : std_logic_vector(1 downto 0);
 signal sid_port                   : natural range 0 to 4;
 signal main_volume                : natural range 0 to 20;   -- OSM "Volume" slider step: 0 = 0%/mute .. 20 = 100% (5% each)
+signal main_stereo_mix            : std_logic_vector(1 downto 0);  -- OSM "Stereo Mix": 00 = Full Stereo .. 11 = Mono (#247)
 
 -- C64 RAM
 signal main_ram_addr              : unsigned(15 downto 0);         -- C64 address bus
@@ -492,16 +493,23 @@ constant C_MENU_KERNAL_JAPAN  : natural := 127;
 constant C_MENU_KERNAL_JIFFY  : natural := 128;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
+constant C_MENU_VOLUME_OPENER : natural := 131; -- flat index of the " Volume: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
 subtype C_MENU_VOLUME is natural range 154 downto 134;
+-- Stereo Mix submenu (issue #247), nested inside the Volume submenu: MiSTer's
+-- "Stereo Mix" crossfeed, decoded into main_stereo_mix below and applied in main.vhd
+constant C_MENU_STEREO_MIX_FULL   : natural := 159;  -- Full Stereo (default): MiSTer "None"
+constant C_MENU_STEREO_MIX_WIDE   : natural := 160;  -- Wide Stereo:   MiSTer "25%"
+constant C_MENU_STEREO_MIX_NARROW : natural := 161;  -- Narrow Stereo: MiSTer "50%"
+constant C_MENU_STEREO_MIX_MONO   : natural := 162;  -- Mono:          MiSTer "100%"
 -- Advanced Settings submenu
-constant C_MENU_RTC_GEOS      : natural := 160;         -- GEOS Real-Time-Clock, see #133, #164 and #187
-subtype C_MENU_OSM_SCALING is natural range 172 downto 164;
-constant C_MENU_8521          : natural := 175;
+constant C_MENU_RTC_GEOS      : natural := 170;         -- GEOS Real-Time-Clock, see #133, #164 and #187
+subtype C_MENU_OSM_SCALING is natural range 182 downto 174;
+constant C_MENU_8521          : natural := 185;
 -- There is deliberately no VIC-II model selection: we stick to the hardcoded old-HMOS variant
 -- of fpga64_sid_iec.vhd. See issue #120 and doc/vic_ii_variants.md
--- Simulated RR-Net (issue #234): the RR-Net radio group runs 179 .. 182, with "Off" first at
--- 179. Only the three "On" items are sliced here; "Off" is encoded as "none of them selected"
-subtype R_MENU_RRNET is natural range 182 downto 180;
+-- Simulated RR-Net (issue #234): the RR-Net radio group runs 189 .. 192, with "Off" first at
+-- 189. Only the three "On" items are sliced here; "Off" is encoded as "none of them selected"
+subtype R_MENU_RRNET is natural range 192 downto 190;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -774,10 +782,20 @@ begin
       main_volume <= 20;                                        -- default 100%
       for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
          if main_osm_control_i(b) = '1' then
-            main_volume <= C_MENU_VOLUME'high - b;              -- bit 114 -> 20 (100%) .. bit 134 -> 0 (0%)
+            main_volume <= C_MENU_VOLUME'high - b;              -- 'low (100%) -> 20 .. 'high (0%) -> 0
          end if;
       end loop;
    end process volume_decode_proc;
+
+   -- Stereo Mix (issue #247): the four-way "Stereo: %s" radio group in MiSTer's
+   -- AUDIO_MIX encoding (00 = Full Stereo/no mix, 01 = Wide Stereo/25%,
+   -- 10 = Narrow Stereo/50%, 11 = Mono/100%). Full Stereo is the group default
+   -- and also what an empty selection decodes to. The crossfeed itself is
+   -- applied in main.vhd (audio_stereo_mix_proc), in front of the volume.
+   main_stereo_mix <= "01" when main_osm_control_i(C_MENU_STEREO_MIX_WIDE)   = '1' else
+                      "10" when main_osm_control_i(C_MENU_STEREO_MIX_NARROW) = '1' else
+                      "11" when main_osm_control_i(C_MENU_STEREO_MIX_MONO)   = '1' else
+                      "00";
 
    -- MEGA65's power led: By default, it is on and glows green when the MEGA65 is powered on.
    -- We switch it to blue when a long reset is detected and as long as the user keeps pressing the preset button
@@ -839,6 +857,10 @@ begin
 
          -- Master volume (OSM "Volume" slider): 0..20 step index = 0%..100%
          audio_volume_i         => main_volume,
+
+         -- Stereo Mix (OSM "Stereo: %s" inside the Volume submenu, #247): "00" = Full Stereo,
+         -- "01" = Wide Stereo, "10" = Narrow Stereo, "11" = Mono
+         audio_stereo_mix_i     => main_stereo_mix,
 
          -- Mode selection for Expansion Port (aka Cartridge Port):
          -- bit 0: 1 = Simulate cartridge (.CRT file), 0 = use Physical port

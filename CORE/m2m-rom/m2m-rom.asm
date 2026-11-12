@@ -54,6 +54,9 @@ START_FIRMWARE  RSUB    P1581_OSM_INIT, 1
 ;   R8: pointer to the string that includes the "%s"
 ;   R9: pointer to the menu item within the M2M$CFG_OPTM_GROUPS structure
 ;  R10: end-of-menu-marker: if R9 == R10: we reached end of the menu structure
+;   The M2M$RAMROM window must show M2M$CFG_OPTM_GROUPS of M2M$CONFIG (the
+;   caller OPTM_CB_SHOW in options.asm selects it right before the call): the
+;   Volume branch walks the groups array through it via OPTM_SUMM_SCAN.
 ; Output:
 ;   R8: 0, if no custom SUBMENU_SUMMARY, else:
 ;       string pointer to completely new headline (do not modify/re-use R8)
@@ -80,6 +83,14 @@ START_FIRMWARE  RSUB    P1581_OSM_INIT, 1
 ; Custom semantics for the "Kernal: %s submenu": Show "JiffyDOS <drive>", if
 ; either the 1541 or the 1581 JiffyDOS ROM is available and show
 ; "Jiffy 1541+1581" if both are available.
+;
+; Custom semantics for the "Volume: %s" submenu (issue #247): while one of the
+; four stereo SID setups is selected, append a short tag of the Stereo Mix
+; that is nested in the Volume submenu: "Volume: 80% Wide". The tags are
+; Stereo (for Full Stereo), Wide, Narrow and Mono, because the full labels do
+; not fit the 25-column OSM. A mono SID drives both channels with the same
+; signal, so the Stereo Mix is inaudible then and the line keeps the standard
+; semantics: "Volume: 80%".
 
 SUBMENU_SUMMARY MOVE    R9, @--SP               ; save the contract registers
                 MOVE    R10, @--SP              ; R9 / R10 across the helper and
@@ -195,7 +206,7 @@ _SS_RPL         RSUB    M2M$RPL_S, 1            ; clobbers R0..R7, keeps R8..R12
                 ; (CRTROM_AUT_LDF), not the live engine (only the 1541 or the
                 ; 1581 runs at a time) and not real external IEC drives.
 _SS_TRY_KERNAL  CMP     C64_OSM_KERNAL, R9      ; the " Kernal: %s" opener?
-                RBRA    _SS_DEFAULT, !Z         ; no: another submenu -> default
+                RBRA    _SS_TRY_VOLUME, !Z      ; no: try the Volume opener
 
                 MOVE    HEAP, R1                ; R1: live selected-state array
                 ADD     OPTM_IR_STDSEL, R1
@@ -250,6 +261,66 @@ _SS_K_TAG       MOVE    R6, R10
 
 _SS_K_DONE      MOVE    0, @R8                  ; zero-terminate (R8 <= the limit)
                 RBRA    _SS_SPLICE, 1           ; share the Model width-clamp tail
+
+                ; "Volume: %s" opener (issue #247). R0 still holds the opener
+                ; string, R9 the flat index and R10 the end-of-menu marker
+                ; (both untouched so far)
+_SS_TRY_VOLUME  CMP     C64_OSM_VOLUME_OPENER, R9
+                RBRA    _SS_DEFAULT, !Z         ; no: another submenu -> default
+
+                MOVE    HEAP, R1                ; R1: live selected-state array
+                ADD     OPTM_IR_STDSEL, R1
+                MOVE    @R1, R1
+
+                ; is one of the four stereo SID setups selected?
+                MOVE    SS_V_SID, R2            ; R2: zero-terminated list of
+_SS_V_SID       MOVE    @R2++, R3               ; their flat indices
+                RBRA    _SS_DEFAULT, Z          ; none: mono SID -> standard
+                ADD     R1, R3
+                CMP     0, @R3                  ; this one selected?
+                RBRA    _SS_V_SID, Z            ; no: next
+
+                ; R4 := tag of the selected Stereo Mix
+                MOVE    SS_V_MIX, R2            ; R2: pairs (flat index, tag),
+_SS_V_MIX       MOVE    @R2++, R3               ; zero-terminated
+                RBRA    _SS_DEFAULT, Z          ; none (cannot happen): guard
+                MOVE    @R2++, R4
+                ADD     R1, R3
+                CMP     0, @R3                  ; this one selected?
+                RBRA    _SS_V_MIX, Z            ; no: next
+
+                ; the selected volume line, found exactly like the standard
+                ; semantics do it (OPTM_CB_SHOW in options.asm), so that both
+                ; forms of the line always show the same percentage; the
+                ; M2M$RAMROM window still shows the groups array
+                MOVE    M2M$RAMROM_DATA, R8     ; R8: group word of the opener
+                ADD     R9, R8
+                MOVE    R10, R9                 ; R9: end-of-menu sentinel
+                MOVE    R1, R10                 ; R10: selected-state array
+                MOVE    M2M$RAMROM_DATA, R11    ; R11: groups array base
+                RSUB    OPTM_SUMM_SCAN, 1       ; destroys R10..R12
+                RBRA    _SS_DEFAULT, !C         ; not found: let the standard
+                                                ; semantics report it
+                MOVE    R8, R5                  ; R5: flat index of the volume
+                SUB     M2M$RAMROM_DATA, R5     ; line
+
+                ; build "<volume> <tag>" into SS_VALUE, bounded like above
+                MOVE    SS_VALUE, R8            ; R8: destination cursor
+                MOVE    SS_VALUE, R6            ; R6: write limit; the last word
+                ADD     SS_VALUE_LEN, R6        ; is reserved for the terminator
+                SUB     1, R6
+                MOVE    R5, R9                  ; e.g. "80%"
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_LABEL, 1
+                CMP     R6, R8                  ; one space, if room is left
+                RBRA    _SS_V_TAG, Z
+                MOVE    0x0020, @R8
+                ADD     1, R8
+_SS_V_TAG       MOVE    R4, R9                  ; e.g. "Wide"
+                MOVE    R6, R10
+                RSUB    _SS_APPEND_STR, 1
+                MOVE    0, @R8                  ; zero-terminate (R8 <= the limit)
+                RBRA    _SS_SPLICE, 1           ; share the width-clamp tail
 
 _SS_DEFAULT     XOR     R8, R8                  ; R8 = 0: use standard semantics
 
@@ -1267,6 +1338,21 @@ SS_K_BOTH       .ASCII_W "Jiffy 1541+1581"
 SS_KT_1541      .ASCII_W " 1541"
 SS_KT_1581      .ASCII_W " 1581"
 
+; On-screen "Volume: %s" summary of SUBMENU_SUMMARY (_SS_TRY_VOLUME, issue
+; #247): the four stereo SID setups (zero-terminated; flat index 0 is the
+; menu headline, so it cannot be one of them) and the Stereo Mix tags. The
+; longest line, " Volume: 100% Narrow" (20), fits the 25-column OSM width.
+SS_V_SID        .DW     C64_OSM_STEREO_L6R6, C64_OSM_STEREO_L6R8
+                .DW     C64_OSM_STEREO_L8R6, C64_OSM_STEREO_L8R8, 0
+SS_V_MIX        .DW     C64_OSM_STEREO_MIX_FULL, SS_V_T_FULL
+                .DW     C64_OSM_STEREO_MIX_WIDE, SS_V_T_WIDE
+                .DW     C64_OSM_STEREO_MIX_NARROW, SS_V_T_NARROW
+                .DW     C64_OSM_STEREO_MIX_MONO, SS_V_T_MONO, 0
+SS_V_T_FULL     .ASCII_W "Stereo"
+SS_V_T_WIDE     .ASCII_W "Wide"
+SS_V_T_NARROW   .ASCII_W "Narrow"
+SS_V_T_MONO     .ASCII_W "Mono"
+
 ; C64 specific file extensions (need to be upper case)
 C64_IMGFILE_D64 .ASCII_W ".D64"
 C64_IMGFILE_G64 .ASCII_W ".G64"
@@ -1498,7 +1584,8 @@ END_OF_ROM      .DW 0
 ; M2M shell variables
 #include "../../M2M/rom/shell_vars.asm"
 
-; Scratch buffers for the custom SUBMENU_SUMMARY ("Model: %s") callback above.
+; Scratch buffers for the custom SUBMENU_SUMMARY callback above (Model, Kernal
+; and Volume).
 ; They are written and consumed within a single OPTM_SHOW pass (the line is
 ; drawn immediately after the callback returns), so a single static set is safe.
 SS_VALUE_LEN    .EQU 24                         ; capacity of SS_VALUE (words)
@@ -1525,14 +1612,14 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; Example: If your HEAP_SIZE would be 30208, then you write 30208-3456=26752
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 3456 words comfortably fit the current menu: 189 items, 10 submenus and a
-; 1915-character OPTM_ITEMS string give budget 1 = 22 + 1915 + 4*189 = 2693
+; 3456 words comfortably fit the current menu: 199 items, 11 submenus and a
+; 2005-character OPTM_ITEMS string give budget 1 = 22 + 2005 + 4*199 = 2823
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (VDRIVES_NUM + submenus +
-; CRTROM_MAN_NUM + 1) * OSM width = 15 x 27 = 405 words for the "%s" replacement
+; CRTROM_MAN_NUM + 1) * OSM width = 16 x 27 = 432 words for the "%s" replacement
 ; strings; it depends only on those counts, NOT on the item count, so only
-; budget 1 grows when menu lines are added. Peak use is 2693 + 405 = 3098,
-; leaving about 358 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
+; budget 1 grows when menu lines are added. Peak use is 2823 + 432 = 3255,
+; leaving about 201 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
 ; console for the live numbers). Keep this as small as it safely can be: every
 ; word reserved here is one word less for the (sorted) file browser heap.
 MENU_HEAP_SIZE  .EQU 3456

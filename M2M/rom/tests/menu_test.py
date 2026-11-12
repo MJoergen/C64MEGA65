@@ -77,7 +77,7 @@ G = dict(
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
-    DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35,
+    DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
 )
 
 OPEN = ("SUBMENU",)
@@ -242,12 +242,22 @@ V6_MENU = [
     (" 5%",                      "VOLUME", []),
     (" 0%",                      "VOLUME", []),
     ("",                         None, ["LINE"]),
+    (" Stereo: %s",              None, OPEN),            # region 9 (in 8, #247)
+    (" Stereo Mix",              None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Full Stereo",             "STEREO_MIX", ["STDSEL"]),
+    (" Wide Stereo",             "STEREO_MIX", []),
+    (" Narrow Stereo",           "STEREO_MIX", []),
+    (" Mono",                    "STEREO_MIX", []),
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 9
+    ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 8
-    (" Advanced Settings",       None, OPEN),            # region 9
+    (" Advanced Settings",       None, OPEN),            # region 10
     (" Advanced Settings",       None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" GEOS Real-Time-Clock",    "RTC_GEOS", ["SINGLESEL"]),
-    (" OSM: %s",                 None, OPEN),            # region 10 (in 9)
+    (" OSM: %s",                 None, OPEN),            # region 11 (in 10)
     (" OSM Scaling",             None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" 100%",                    "OSM_MODE", ["STDSEL"]),
@@ -260,7 +270,7 @@ V6_MENU = [
     (" 53%",                     "OSM_MODE", []),
     (" 50%",                     "OSM_MODE", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 10
+    (" Back",                    None, CLOSE),           # close region 11
     (" CIA: Use 8521 (C64C)",    "CIA_8521", ["SINGLESEL"]),
     ("",                         None, ["LINE"]),
     (" RR-Net",                  None, ["HEADLINE"]),
@@ -270,7 +280,7 @@ V6_MENU = [
     (" On: MK3 & Std ROM",       "SIM_RRNET", []),
     (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
-    (" Back",                    None, CLOSE),           # close region 9
+    (" Back",                    None, CLOSE),           # close region 10
     ("",                         None, ["LINE"]),
     (" About & Help",            "ABOUT_HELP", ["HELP"]),
     ("",                         None, ["LINE"]),
@@ -1307,8 +1317,9 @@ def summ_fixtures():
         return s
 
     hdmi = flat_index(" HDMI: %s")               # 54: the HDMI submenu opener
-    adv = flat_index(" Advanced Settings")       # 157: the Advanced opener
-    osm = flat_index(" OSM: %s")                 # 161: the OSM scaling opener
+    vol = flat_index(" Volume: %s")              # 131: the Volume opener
+    adv = flat_index(" Advanced Settings")       # 167: the Advanced opener
+    osm = flat_index(" OSM: %s")                 # 171: the OSM scaling opener
     fx = []
     # HDMI heading: nothing selected of its own; child skipped; the selected
     # Scanlines line inside the child must NOT leak: ends at own closer
@@ -1318,8 +1329,24 @@ def summ_fixtures():
     fx.append(("HDMI region finds 4:3 PAL", hdmi, v6g, sel(i57=0, i59=1)))
     # Advanced Settings: no radio group of its own at all
     fx.append(("Advanced has no own radio group", adv, v6g, base))
-    # OSM scaling: default -> 164
+    # OSM scaling: default -> 174
     fx.append(("OSM scaling default", osm, v6g, base))
+    # Volume (#247): default -> " 100%" (134), found before the nested Stereo
+    # region; with no volume item selected the scan must skip the nested
+    # Stereo region (whose " Full Stereo" stays selected) and end at its own
+    # closer instead of leaking the stereo selection into "Volume: %s"
+    fx.append(("Volume default", vol, v6g, base))
+    novol = list(base)
+    for i in group_members(V6_MENU, "VOLUME"):
+        novol[i] = 0
+    fx.append(("Volume empty, nested Stereo must not leak", vol, v6g, novol))
+    # the nested Stereo opener itself: default " Full Stereo", and " Mono"
+    smix = group_members(V6_MENU, "STEREO_MIX")
+    stereo = flat_index(" Stereo: %s")           # 156: the nested opener
+    fx.append(("Stereo default", stereo, v6g, base))
+    mono = list(base)
+    mono[smix[0]], mono[smix[3]] = 0, 1
+    fx.append(("Stereo Mono", stereo, v6g, mono))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1489,13 +1516,13 @@ def nav_script():
     s.run_start()                   # the testbed draws before OPTM_RUN
     assert s.cursor == 2            # start line: visible and selectable
     s.feed(KEY_LAST)                # Cursor right: last item (#258)
-    assert s.cursor == 188          # "Close Menu"
+    assert s.cursor == 198          # "Close Menu"
     s.feed(KEY_FIRST)               # Cursor left: first item (#258)
     assert s.cursor == 2            # the first mount line
     s.feed(KEY_FIRST)               # already there: stays
     assert s.cursor == 2
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (188)
-    assert s.cursor == 188
+    s.feed(KEY_UP)                  # wrap to "Close Menu" (198)
+    assert s.cursor == 198
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 7)            # to "Drive Settings" (issue #93)
@@ -1536,31 +1563,41 @@ def nav_script():
     assert s.level == 8 and last_vol > 134 and s.g[last_vol] == 0xC0FF
     s.feed(KEY_FIRST)               # first item: " 100%"
     assert (s.level, s.cursor) == (8, 134)
+    s.until(KEY_DOWN, 156)          # to the nested "Stereo: %s" (#247)
+    s.feed(KEY_SELECT)              # enter region 9 (depth 2)
+    assert (s.level, s.cursor) == (9, 159)   # " Full Stereo"
+    s.feed(KEY_DOWN)                # " Wide Stereo"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert s.sel[160] == 1 and s.sel[159] == 0
+    s.feed(KEY_LAST)                # last item of the nested view: " Back"
+    assert (s.level, s.cursor) == (9, 164)
+    s.feed(KEY_SELECT)              # leave via the closer: back in Volume,
+    assert (s.level, s.cursor) == (8, 156)   # cursor on the nested opener
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
     assert (s.level, s.cursor) == (0, 131)
-    s.until(KEY_DOWN, 157)          # to "Advanced Settings"
-    s.feed(KEY_SELECT)              # enter region 9
-    assert (s.level, s.cursor) == (9, 160)
+    s.until(KEY_DOWN, 167)          # to "Advanced Settings"
+    s.feed(KEY_SELECT)              # enter region 10
+    assert (s.level, s.cursor) == (10, 170)
     s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 161)          # to "OSM: %s"
-    s.feed(KEY_SELECT)              # enter region 10 (depth 2)
-    assert (s.level, s.cursor) == (10, 164)
+    s.until(KEY_DOWN, 171)          # to "OSM: %s"
+    s.feed(KEY_SELECT)              # enter region 11 (depth 2)
+    assert (s.level, s.cursor) == (11, 174)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 174          # lands on the closer line
+    assert s.cursor == 184          # lands on the closer line
     s.feed(KEY_FIRST)               # first item of the depth-2 OSM view
-    assert (s.level, s.cursor) == (10, 164)
+    assert (s.level, s.cursor) == (11, 174)
     s.feed(0x8000 | KEY_LAST)       # background redraw + last item
-    assert (s.level, s.cursor) == (10, 174)
+    assert (s.level, s.cursor) == (11, 184)
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (10, 174)
+    assert (s.level, s.cursor) == (11, 184)
     s.run_start()                   # the testbed draws before OPTM_RUN
-    s.feed(KEY_MENUUP)              # pop to region 9
-    assert (s.level, s.cursor) == (9, 161)
+    s.feed(KEY_MENUUP)              # pop to region 10
+    assert (s.level, s.cursor) == (10, 171)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 157)
+    assert (s.level, s.cursor) == (0, 167)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -2098,6 +2135,10 @@ C_MENU = [
     ("C_MENU_TURBO_3X",     "TURBO_SPEED", 1),
     ("C_MENU_TURBO_4X",     "TURBO_SPEED", 2),
     ("C_MENU_RTC_GEOS",     "RTC_GEOS", 0),
+    ("C_MENU_STEREO_MIX_FULL",   "STEREO_MIX", 0),
+    ("C_MENU_STEREO_MIX_WIDE",   "STEREO_MIX", 1),
+    ("C_MENU_STEREO_MIX_NARROW", "STEREO_MIX", 2),
+    ("C_MENU_STEREO_MIX_MONO",   "STEREO_MIX", 3),
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
     # decodes its three "On" items as one slice, see rrnet_range() below
 ]
@@ -2497,6 +2538,15 @@ def verify():
     elif mconsts.get("C_MENU_KERNAL") != kernal_idx[0]:
         errors.append("C_MENU_KERNAL = %s, model says %d"
                       % (mconsts.get("C_MENU_KERNAL"), kernal_idx[0]))
+    # C_MENU_VOLUME_OPENER is the flat index of the " Volume: %s" submenu opener
+    # (used by the custom SUBMENU_SUMMARY callback to append the Stereo Mix
+    # setting while a stereo SID is selected, #247); an opener, not a member
+    vol_idx = [i for i, (lbl, _, _) in enumerate(V6_MENU) if lbl == " Volume: %s"]
+    if not vol_idx:
+        errors.append("no \" Volume: %s\" opener found in the golden model")
+    elif mconsts.get("C_MENU_VOLUME_OPENER") != vol_idx[0]:
+        errors.append("C_MENU_VOLUME_OPENER = %s, model says %d"
+                      % (mconsts.get("C_MENU_VOLUME_OPENER"), vol_idx[0]))
     # C_MENU_DRV8_1581_LN / C_MENU_DRV9_1581_LN are the flat indices of the
     # two "Internal 1581" live-status TEXT lines (issue #93). They carry no
     # group, so resolve them from the golden model by label and check that
