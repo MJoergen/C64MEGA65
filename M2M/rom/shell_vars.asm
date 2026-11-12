@@ -73,7 +73,7 @@ HANDLE_DEV      .BLOCK  FAT32$DEV_STRUCT_SIZE
 ;   specified by CFG_FILE (config.vhd) exists and has exactly the size of
 ;   OPTM_SIZE (config.vhd). The convention "checking CONFIG_FILE for not null"
 ;   can be used as a trigger for various actions in the shell.
-; * OLD_SETTINGS is used to determine changes in the 256-bit (16-word)
+; * OLD_SETTINGS is used to determine changes in the 512-bit (32-word)
 ;   M2M$CFM_DATA register so that we can implement a smart saving mechanism:
 ;   When pressing "Help" to close the on-screen-menu, we only save the
 ;   settings to the SD card when the settings changed.
@@ -81,7 +81,7 @@ HANDLE_DEV      .BLOCK  FAT32$DEV_STRUCT_SIZE
 ;   data integrity: see comment for ROSM_INTEGRITY in options.asm
 CONFIG_DEVH     .BLOCK  FAT32$DEV_STRUCT_SIZE
 CONFIG_FILE     .BLOCK  FAT32$FDH_STRUCT_SIZE
-OLD_SETTINGS    .BLOCK  16
+OLD_SETTINGS    .BLOCK  M2M$CFM_BANKS
 INITIAL_SD      .BLOCK  1
 
 SD_ACTIVE       .BLOCK 1                        ; currently active SD card
@@ -164,6 +164,39 @@ VDRIVES_FLUSH_L .BLOCK  VDRIVES_MAX
 VDRIVES_ITERSIZ .BLOCK  VDRIVES_MAX
 VDRIVES_FL_4K   .BLOCK  VDRIVES_MAX
 VDRIVES_FL_OFS  .BLOCK  VDRIVES_MAX
+
+; Mount handling, see HANDLE_MOUNTING in shell.asm and VD_NEXT_DISK:
+;
+; OPTM_DIRECT:      Direct mode of HANDLE_MOUNTING: When non-zero, then
+;                   HANDLE_MOUNTING leaves the OSM hidden on every exit path
+;                   instead of redrawing and showing the options menu. Meant
+;                   for actions that open the file browser without showing
+;                   the menu (for example keyboard shortcuts).
+; HM_PRESELECT:     When non-zero: file name that HANDLE_MOUNTING uses once
+;                   instead of running the file browser
+;
+; Next disk (VD_NEXT_DISK in vdrives.asm): HANDLE_MOUNTING remembers for each
+; virtual drive where its disk image lives. The mounted image itself is
+; identified by the start cluster in its file handle.
+;
+; VD_SDGEN:         Incremented each time HANDLE_DEV is (re)mounted, so that
+;                   a remembered folder of an older SD card mount is ignored
+; VD_NXT_INFO:      Four words per virtual drive (drive 0 first):
+;                   0: VD_SDGEN at mount time; 0 means nothing remembered
+;                   1: First cluster of the folder of the image: low word
+;                   2: First cluster of the folder of the image: high word
+;                   3: File browser stack pointer at mount time: it encodes
+;                      the depth of the folder (one cursor position per level)
+;
+; All of these variables need to stay consecutive and in this order: VD_INIT
+; zeroes them in one go.
+OPTM_DIRECT     .BLOCK  1
+HM_PRESELECT    .BLOCK  1
+VD_SDGEN        .BLOCK  1
+VD_NXT_INFO     .BLOCK  VDRIVES_MAX             ; 4 x VDRIVES_MAX words
+                .BLOCK  VDRIVES_MAX
+                .BLOCK  VDRIVES_MAX
+                .BLOCK  VDRIVES_MAX
 
 ; System to handle manually and automatically loaded cartridges and ROMs
 ; See also globals.vhd: There are multiple types of "byte streaming devices"

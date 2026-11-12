@@ -65,11 +65,11 @@ port (
    -- Keyboard input for the firmware and Shell (see sysdef.asm)
    keys_n_i             : in std_logic_vector(15 downto 0);
 
-   -- 256-bit general purpose control (output) flags
-   -- "d" = directly controled by the firmware
-   -- "m" = indirectly controled by the menu system
+   -- General purpose control (output) flags
+   -- "d" = directly controled by the firmware: 256-bit, 16 banks of 16 bits
+   -- "m" = indirectly controled by the menu system: 512-bit, 32 banks of 16 bits (one bit per menu item)
    control_d_o          : out std_logic_vector(255 downto 0);
-   control_m_o          : out std_logic_vector(255 downto 0);
+   control_m_o          : out std_logic_vector(511 downto 0);
 
    -- 16-bit special-purpose and 16-bit general purpose input flags: Read-only
    -- Special-purpose is meant to be used by the Shell, but currently it is reserved and not used, yet
@@ -221,7 +221,7 @@ signal ramrom_4kwin_data_out     : std_logic_vector(15 downto 0);
 -- Internal registers
 signal reg_csr                   : std_logic_vector(15 downto 0) := CSR_DEFAULT;
 signal reg_cfd_addr              : natural range 0 to 15;
-signal reg_cfm_addr              : natural range 0 to 15;
+signal reg_cfm_addr              : natural range 0 to 31;
 signal reg_ramrom_4kwin          : natural range 0 to 65535;
 
 signal ascal_mode                : std_logic_vector(4 downto 0);
@@ -630,7 +630,7 @@ begin
                control_d_o(((reg_cfd_addr + 1) * 16) - 1 downto (reg_cfd_addr * 16)) <= cpu_data_out;
             end if;
             if cfm_addr_we then
-               reg_cfm_addr <= to_integer(unsigned(cpu_data_out(3 downto 0)));
+               reg_cfm_addr <= to_integer(unsigned(cpu_data_out(4 downto 0)));
             end if;
             if cfm_data_we then
                control_m_o(((reg_cfm_addr + 1) * 16) - 1 downto (reg_cfm_addr * 16)) <= cpu_data_out;

@@ -296,5 +296,5 @@ EQ_LASTLVL      .BLOCK 1
 EQ_CNT_OLD      .BLOCK 1
 EQ_CNT_NEW      .BLOCK 1
 EQ_REC          .BLOCK 20
-EQ_BUF_OLD      .BLOCK 256
-EQ_BUF_NEW      .BLOCK 256
+EQ_BUF_OLD      .BLOCK 513                      ; N + 1 words for N <= 512
+EQ_BUF_NEW      .BLOCK 513

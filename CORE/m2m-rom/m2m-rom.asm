@@ -1372,6 +1372,14 @@ _CUSTOM_MSG_RET DECRB
                 RET
 
 ; ----------------------------------------------------------------------------
+; Core specific callback functions: Keyboard shortcuts (issue #142)
+; ----------------------------------------------------------------------------
+
+; The SC_KEY callback and its helpers live in their own file so that the
+; testbed M2M/rom/tests/shortcuts_test.asm can include them
+#include "shortcuts_c64.asm"
+
+; ----------------------------------------------------------------------------
 ; Core specific constants and strings
 ; ----------------------------------------------------------------------------
 
@@ -1686,6 +1694,7 @@ END_OF_ROM      .DW 0
 
 ; M2M shell variables
 #include "../../M2M/rom/shell_vars.asm"
+#include "../../M2M/rom/shortcuts_vars.asm"
 
 ; Scratch buffers for the custom SUBMENU_SUMMARY callback above (Model, Kernal
 ; and Volume).
@@ -1712,20 +1721,24 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; The On-Screen-Menu uses the heap for several data structures. This heap
 ; is located before the main system heap in memory.
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
-; Example: If your HEAP_SIZE would be 30208, then you write 30208-3456=26752
+; Example: If your HEAP_SIZE would be 30208, then you write 30208-5248=24960
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 3456 words comfortably fit the current menu: 199 items, 11 submenus and a
-; 2005-character OPTM_ITEMS string give budget 1 = 22 + 2005 + 4*199 = 2823
+; 5248 words comfortably fit the current menu: 301 items, 18 submenus and a
+; 3192-character OPTM_ITEMS string give budget 1 = 22 + 3192 + 4*301 = 4418
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (VDRIVES_NUM + submenus +
-; CRTROM_MAN_NUM + 1) * OSM width = 16 x 27 = 432 words for the "%s" replacement
-; strings; it depends only on those counts, NOT on the item count, so only
-; budget 1 grows when menu lines are added. Peak use is 2823 + 432 = 3255,
-; leaving about 201 words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial
-; console for the live numbers). Keep this as small as it safely can be: every
-; word reserved here is one word less for the (sorted) file browser heap.
-MENU_HEAP_SIZE  .EQU 3456
+; CRTROM_MAN_NUM + 1) * OSM width = 23 x 27 = 621 words for the "%s" replacement
+; strings; it depends on those counts, NOT on the item count, so it only grows
+; when submenus are added. Peak use is 4418 + 621 = 5039, leaving about 209
+; words of headroom (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live
+; numbers). The Keyboard Shortcuts submenu (#142) added 102 items and 7
+; submenus. Keep this as small as it safely can be: every word reserved here
+; is one word less for the (sorted) file browser heap.
+;
+; The OPTM_ITEMS string is read through a 4K window of config.vhd, so it must
+; stay below 4096 characters (3192 now).
+MENU_HEAP_SIZE  .EQU 5248
 
 #ifndef RELEASE
 
@@ -1733,14 +1746,14 @@ MENU_HEAP_SIZE  .EQU 3456
 ; this needs to be the last variable before the monitor variables as it is
 ; only defined as "BLOCK 1" to avoid a large amount of null-values in
 ; the ROM file
-HEAP_SIZE       .EQU 3712                       ; 7168 - 3456 = 3712
+HEAP_SIZE       .EQU 1920                       ; 7168 - 5248 = 1920
 HEAP            .BLOCK 1
 
-; in RELEASE mode: 26.5k of heap which leads to a better user experience
+; in RELEASE mode: 24.4k of heap which leads to a better user experience
 ; when it comes to folders with a lot of files
 #else
 
-HEAP_SIZE       .EQU 26752                      ; 30208 - 3456 = 26752
+HEAP_SIZE       .EQU 24960                      ; 30208 - 5248 = 24960
 HEAP            .BLOCK 1
  
 ; The monitor variables use 22 words, round to 32 for being safe and subtract
@@ -1749,9 +1762,11 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x823C (the core-specific buffers and status words above sit
+; is currently 0x82A0 (the core-specific buffers and status words above sit
 ; just before it) and subtract the result from 0xFEE0. This yields currently a
-; stack size of 1700, which is more than 1.5k words and therefore sufficient.
+; stack size of 1600, which is more than 1.5k words and therefore sufficient.
+; Mind the menu: OPTM_RUN and OPTM_SHOW each reserve one stack word per menu
+; line (301 lines today), so a much larger menu needs a larger stack.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation
 #endif

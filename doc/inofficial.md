@@ -43,7 +43,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A22    | 10/23/26 | d5494f7 | Added NTSC support (issue #181)
 | WIP-V6-A22X1  | 11/05/26 | b21f164 | Turbo modes C128 and Smart at 2x, 3x or 4x; hardware cartridges keep running at 1 MHz (issue #87)
 | WIP-V6-A22X2  | 11/10/26 | ecb4561 | Caps Lock toggles Smart 4x turbo (issue #261); cursor left/right jump to the first/last menu item (issue #258)
-| WIP-V6-A22X3  | TBD      | TBD     | Stereo Mix for stereo SIDs in the Volume submenu: Full Stereo, Wide Stereo, Narrow Stereo, Mono (issue #247); bank cache for simulated cartridges holds 32 instead of 8 banks: fixes the flickering of "Eye of the Beholder" and other bank-heavy `.crt` games (issue #255); Space on the `CRT:` line of the on-screen menu unloads a simulated cartridge (issue #153); a `.crt` after Super Snapshot V5 starts again; message strings of the QNICE firmware moved from the firmware ROM into a string ROM, which frees about 8700 of the 28672 firmware ROM words
+| WIP-V6-A22X3  | TBD      | TBD     | Stereo Mix for stereo SIDs in the Volume submenu: Full Stereo, Wide Stereo, Narrow Stereo, Mono (issue #247); bank cache for simulated cartridges holds 32 instead of 8 banks: fixes the flickering of "Eye of the Beholder" and other bank-heavy `.crt` games (issue #255); Space on the `CRT:` line of the on-screen menu unloads a simulated cartridge (issue #153); a `.crt` after Super Snapshot V5 starts again; keyboard shortcuts F9 to F14 (issue #142); message strings of the QNICE firmware moved from the firmware ROM into a string ROM, which frees about 8700 of the 28672 firmware ROM words
 
 ## Version 5.2
 

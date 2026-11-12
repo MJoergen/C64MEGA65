@@ -375,4 +375,4 @@ DT_S_DONE       .ASCII_W "DONE"
 
 DT_FXIDX        .BLOCK 1
 DT_REC          .BLOCK 20
-DT_BUF          .BLOCK 256                      ; fits the V6 menu fixtures
+DT_BUF          .BLOCK 513                      ; N + 1 words for N <= 512

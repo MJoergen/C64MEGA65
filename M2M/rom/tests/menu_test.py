@@ -78,6 +78,7 @@ G = dict(
     HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
+    SC_F9=37, SC_F10=38, SC_F11=39, SC_F12=40, SC_F13=41, SC_F14=42,
 )
 
 OPEN = ("SUBMENU",)
@@ -280,6 +281,108 @@ V6_MENU = [
     (" On: MK3 & Std ROM",       "SIM_RRNET", []),
     (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
+    (" Keyboard Shortcuts",     None, OPEN),            # region 12 (in 10), #142
+    (" Keyboard Shortcuts",     None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" F9:  %s",                None, OPEN),            # region 13 (in 12)
+    (" F9 Key",                 None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F9", []),
+    (" Freeze",                 "SC_F9", ["STDSEL"]),
+    (" Mount drive 8",          "SC_F9", []),
+    (" Mount drive 9",          "SC_F9", []),
+    (" Next disk drive 8",      "SC_F9", []),
+    (" Next disk drive 9",      "SC_F9", []),
+    (" Load PRG",               "SC_F9", []),
+    (" Load CRT",               "SC_F9", []),
+    (" Flip joysticks",         "SC_F9", []),
+    (" Volume down",            "SC_F9", []),
+    (" Volume up",              "SC_F9", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 13
+    (" F10: %s",                None, OPEN),            # region 14 (in 12)
+    (" F10 Key (Shift+F9)",     None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F10", []),
+    (" Freeze",                 "SC_F10", []),
+    (" Mount drive 8",          "SC_F10", []),
+    (" Mount drive 9",          "SC_F10", []),
+    (" Next disk drive 8",      "SC_F10", []),
+    (" Next disk drive 9",      "SC_F10", []),
+    (" Load PRG",               "SC_F10", []),
+    (" Load CRT",               "SC_F10", ["STDSEL"]),
+    (" Flip joysticks",         "SC_F10", []),
+    (" Volume down",            "SC_F10", []),
+    (" Volume up",              "SC_F10", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 14
+    (" F11: %s",                None, OPEN),            # region 15 (in 12)
+    (" F11 Key",                None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F11", []),
+    (" Freeze",                 "SC_F11", []),
+    (" Mount drive 8",          "SC_F11", ["STDSEL"]),
+    (" Mount drive 9",          "SC_F11", []),
+    (" Next disk drive 8",      "SC_F11", []),
+    (" Next disk drive 9",      "SC_F11", []),
+    (" Load PRG",               "SC_F11", []),
+    (" Load CRT",               "SC_F11", []),
+    (" Flip joysticks",         "SC_F11", []),
+    (" Volume down",            "SC_F11", []),
+    (" Volume up",              "SC_F11", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 15
+    (" F12: %s",                None, OPEN),            # region 16 (in 12)
+    (" F12 Key (Shift+F11)",    None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F12", []),
+    (" Freeze",                 "SC_F12", []),
+    (" Mount drive 8",          "SC_F12", []),
+    (" Mount drive 9",          "SC_F12", []),
+    (" Next disk drive 8",      "SC_F12", []),
+    (" Next disk drive 9",      "SC_F12", []),
+    (" Load PRG",               "SC_F12", ["STDSEL"]),
+    (" Load CRT",               "SC_F12", []),
+    (" Flip joysticks",         "SC_F12", []),
+    (" Volume down",            "SC_F12", []),
+    (" Volume up",              "SC_F12", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 16
+    (" F13: %s",                None, OPEN),            # region 17 (in 12)
+    (" F13 Key",                None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F13", []),
+    (" Freeze",                 "SC_F13", []),
+    (" Mount drive 8",          "SC_F13", []),
+    (" Mount drive 9",          "SC_F13", []),
+    (" Next disk drive 8",      "SC_F13", []),
+    (" Next disk drive 9",      "SC_F13", []),
+    (" Load PRG",               "SC_F13", []),
+    (" Load CRT",               "SC_F13", []),
+    (" Flip joysticks",         "SC_F13", []),
+    (" Volume down",            "SC_F13", ["STDSEL"]),
+    (" Volume up",              "SC_F13", []),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 17
+    (" F14: %s",                None, OPEN),            # region 18 (in 12)
+    (" F14 Key (Shift+F13)",    None, ["HEADLINE"]),
+    ("",                        None, ["LINE"]),
+    (" Off",                    "SC_F14", []),
+    (" Freeze",                 "SC_F14", []),
+    (" Mount drive 8",          "SC_F14", []),
+    (" Mount drive 9",          "SC_F14", []),
+    (" Next disk drive 8",      "SC_F14", []),
+    (" Next disk drive 9",      "SC_F14", []),
+    (" Load PRG",               "SC_F14", []),
+    (" Load CRT",               "SC_F14", []),
+    (" Flip joysticks",         "SC_F14", []),
+    (" Volume down",            "SC_F14", []),
+    (" Volume up",              "SC_F14", ["STDSEL"]),
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 18
+    ("",                        None, ["LINE"]),
+    (" Back",                   None, CLOSE),           # close region 12
+    ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 10
     ("",                         None, ["LINE"]),
     (" About & Help",            "ABOUT_HELP", ["HELP"]),
@@ -356,16 +459,17 @@ def menu_deps_raw(menu, deps):
 
 def resolve_deps(masked_groups, raw_deps):
     """Port of OPTM_DEPS_RESOLVE: raw dependency words -> resolved words
-    (bit 15 = valid, bits 11..8 = item mask copied through, bits 7..0 =
-    flat index of the FIRST member of the mother group, for BOTH mother
-    types; OPTM_DEP_OK branches on the mother type at runtime)."""
+    (bit 15 = valid, bits 12..9 = item mask moved up from bits 11..8,
+    bits 8..0 = flat index (0..511) of the FIRST member of the mother group,
+    for BOTH mother types; OPTM_DEP_OK branches on the mother type at
+    runtime)."""
     out = []
     for w in raw_deps:
         if not (w & 0x1000):                    # not dependent
             out.append(0)
             continue
         mother = w & 0xFF
-        mask = w & 0x0F00                        # kept in place (bits 11-8)
+        mask = (w & 0x0F00) << 1                 # bits 11-8 -> bits 12-9
         members = [j for j, g in enumerate(masked_groups) if (g & 0xFF) == mother]
         if not members:                          # defensive (boot-validated)
             out.append(0)
@@ -383,8 +487,8 @@ def dep_ok(i, resolved, stdsel, groups):
     w = resolved[i]
     if not (w & 0x8000):                          # not dependent
         return True
-    first = w & 0xFF                              # first member of the mother
-    mask = (w >> 8) & 0xF
+    first = w & 0x1FF                             # first member of the mother
+    mask = (w >> 9) & 0xF
     if groups[first] & 0x8000:                    # single-select mother:
         k = 1 if stdsel[first] else 0             # k = live state (0/1)
         return bool((mask >> k) & 1)
@@ -842,6 +946,102 @@ def dep_raw_array(rawmap, n):
     return raw
 
 
+# A synthetic menu at the maximum menu size of 512 items (one bit per item in
+# the 512-bit M2M$CFM_DATA register). The mothers sit at the flat indices that
+# stress the 9-bit controlling-line field (bits 8-0) of the resolved
+# dependency word: a radio mother whose first member is 255 (the largest
+# 8-bit index, members 255/258/300), a radio mother that starts exactly at 256
+# (members 256/257), a single-select mother at 400 and one on the very last
+# line 511. Dependent lines (TEXT lines and a dependent radio group) sit below
+# 256, above it at the main level and inside a submenu (region 1, 470..479).
+WIDE_N = 512
+WIDE_R255, WIDE_R256, WIDE_S400, WIDE_S511 = 70, 71, 72, 73
+WIDE_RAW_MAP = {
+    10: (WIDE_R256, 0b01), 11: (WIDE_R256, 0b10),
+    12: (WIDE_R255, 0b100), 13: (WIDE_R255, 0b011),
+    20: (WIDE_S511, 0b01),
+    450: (WIDE_S400, 0b10), 451: (WIDE_S400, 0b01), 452: (WIDE_S511, 0b10),
+    472: (WIDE_R256, 0b10), 473: (WIDE_S400, 0b10),
+    474: (WIDE_R256, 0b01), 475: (WIDE_R256, 0b01),
+}
+
+
+def wide_groups():
+    g = [0] * WIDE_N                    # TEXT lines (group id 0) as filler
+    g[0] = 0x1000                       # headline
+    for i in range(100, 200):           # ten plain radio groups as filler
+        g[i] = 1 + (i % 10)
+    g[255] = g[258] = g[300] = WIDE_R255
+    g[256] = g[257] = WIDE_R256
+    g[400] = 0x8000 | WIDE_S400
+    g[470] = 0xC000                     # open region 1
+    g[471] = 0x1000                     # headline inside region 1
+    g[474] = g[475] = 74                # dependent radio group
+    g[476] = g[477] = 75
+    g[479] = 0xC0FF                     # close region 1
+    g[510] = 0x00FF                     # Close Menu
+    g[511] = 0x8000 | WIDE_S511
+    return g
+
+
+def wide_raw():
+    return dep_raw_array(WIDE_RAW_MAP, WIDE_N)
+
+
+def wide_stdsel(state):
+    """State "A": first member of the 256 mother, third member (300) of the
+    255 mother, 400 off, 511 on. State "B": the opposite choices. State "C":
+    like A, but no member of the 256 mother is selected."""
+    s = [0] * WIDE_N
+    for i in range(100, 110):           # one member per filler group
+        s[i] = 1
+    s[475] = s[476] = 1
+    if state == "B":
+        s[257] = s[255] = s[400] = 1
+    else:
+        s[300] = s[511] = 1
+        if state == "A":
+            s[256] = 1
+    return s
+
+
+# Intended visibility of the dependent lines of the wide menu, derived by hand
+# from WIDE_RAW_MAP and wide_stdsel(), independent of the resolved word format
+# (the asm-vs-model comparison alone cannot catch a format limit that the
+# golden model shares, which is exactly what the old 8-bit field was):
+#   A: 256 mother = member 0, 255 mother = member 2 (flat 300), 400 off, 511 on
+#   B: 256 mother = member 1, 255 mother = member 0, 400 on, 511 off
+#   C: as A, but no member of the 256 mother selected
+WIDE_VISIBLE = {
+    ("A", 0): [10, 12, 451, 452], ("A", 1): [474, 475],
+    ("B", 0): [11, 13, 20, 450],  ("B", 1): [472, 473],
+    ("C", 0): [12, 451, 452],     ("C", 1): [],
+}
+WIDE_SUMMARY = {"A": 475, "B": 476}     # %s walk from the opener at 470
+
+
+def wide_menu_errors():
+    """Check the golden model against WIDE_VISIBLE / WIDE_SUMMARY."""
+    errors = []
+    g = wide_groups()
+    raw = wide_raw()
+    if validate_deps(g, raw, [0] * WIDE_N) != ("ok",):
+        errors.append("wide menu does not validate")
+    res = resolve_deps(g, raw)
+    for (state, level), want in sorted(WIDE_VISIBLE.items()):
+        b = build_new(g, level, res, wide_stdsel(state))
+        got = [i for i in sorted(WIDE_RAW_MAP) if b["arr"][i] & 0x8000]
+        if got != want:
+            errors.append("state %s level %d: visible dependents %r, "
+                          "expected %r" % (state, level, got, want))
+    for state, want in sorted(WIDE_SUMMARY.items()):
+        r = summ_scan(g, 470, wide_stdsel(state), res)
+        if r != ("found", want):
+            errors.append("state %s: summary walk %r, expected %r"
+                          % (state, r, ("found", want)))
+    return errors
+
+
 def deps_resolve_fixtures():
     """(name, groups, raw) -> expected resolved array via resolve_deps."""
     fx = []
@@ -857,6 +1057,9 @@ def deps_resolve_fixtures():
     # and 0b0110 (Turbo speed block)
     fx.append(("v6 real menu", menu_masked(V6_MENU),
                menu_deps_raw(V6_MENU, V6_DEPS)))
+    # 512 items: first-member indices 255, 256, 400 and 511 must survive the
+    # resolved word intact (the field was 8 bits wide before)
+    fx.append(("wide 512-item menu", wide_groups(), wide_raw()))
     return fx
 
 
@@ -908,6 +1111,12 @@ def deps_val_fixtures():
     # dependent mount/START/TEXT lines of issue #93 must validate cleanly
     fx.append(("v6 real menu", menu_masked(V6_MENU),
                menu_deps_raw(V6_MENU, V6_DEPS), menu_special(V6_MENU)))
+    # 512 items: valid, and a missing mother reported at flat index 460
+    fx.append(("wide 512-item menu", wide_groups(), wide_raw(),
+               [0] * WIDE_N))
+    r = wide_raw(); r[460] = 0x1000 | (0b01 << 8) | 99
+    fx.append(("wide: mother missing at 460", wide_groups(), r,
+               [0] * WIDE_N))
     return fx
 
 
@@ -964,6 +1173,16 @@ def deps_build_fixtures():
         s = menu_stdsel(V6_MENU)
         s[43], s[idx] = 0, 1
         fx.append(("v6 Model level turbo " + name, v6g, v6res, s, 2))
+    # 512 items: OPTM_DEP_OK with mothers at flat 255/256/400/511 (state A
+    # and its opposite B, both at the main level and inside region 1) and
+    # with no member of the 256 mother selected (C)
+    wg = wide_groups()
+    wres = resolve_deps(wg, wide_raw())
+    fx.append(("wide main level A", wg, wres, wide_stdsel("A"), 0))
+    fx.append(("wide main level B", wg, wres, wide_stdsel("B"), 0))
+    fx.append(("wide region 1 A", wg, wres, wide_stdsel("A"), 1))
+    fx.append(("wide region 1 B", wg, wres, wide_stdsel("B"), 1))
+    fx.append(("wide main level C", wg, wres, wide_stdsel("C"), 0))
     return fx
 
 
@@ -986,6 +1205,12 @@ def deps_summ_fixtures():
     # NTSC selected + only the two-bit-mask line selected: the walk skips the
     # dep-hidden 7, the unselected 8/10, the hidden 11 and finds idx 12
     fx.append(("two-bit mask member", DEP_GROUPS, res, sd(i3=1, i12=1), 6))
+    # 512 items: the walk from the opener at 470 finds the selected member 475
+    # while the 256 mother allows it (A) and skips it to 476 otherwise (B)
+    wg = wide_groups()
+    wres = resolve_deps(wg, wide_raw())
+    fx.append(("wide region visible", wg, wres, wide_stdsel("A"), 470))
+    fx.append(("wide region hidden", wg, wres, wide_stdsel("B"), 470))
     return fx
 
 
@@ -1045,6 +1270,8 @@ def deps_minhid_fixtures():
     fx.append(("state cap + single-select", MH_CAP_GROUPS, MH_CAP_RAW))
     # minima in different (non-zero) states per mother
     fx.append(("different minimum states", MH_MIN_GROUPS, MH_MIN_RAW))
+    # 512 items: mothers at flat 255/256/400/511
+    fx.append(("wide 512-item menu", wide_groups(), wide_raw()))
     return fx
 
 
@@ -1076,7 +1303,7 @@ class NavSim:
         if self.resolved is None:
             return False
         for rw in self.resolved:
-            if (rw & 0x8000) and self.g[rw & 0xFF] == w:
+            if (rw & 0x8000) and self.g[rw & 0x1FF] == w:
                 return True
         return False
 
@@ -1347,6 +1574,23 @@ def summ_fixtures():
     mono = list(base)
     mono[smix[0]], mono[smix[3]] = 0, 1
     fx.append(("Stereo Mono", stereo, v6g, mono))
+    # Keyboard Shortcuts (#142): the region of pickers has no radio group
+    # of its own; each picker summarizes its own selected action
+    f9 = flat_index(" F9:  %s")
+    f11 = flat_index(" F11: %s")
+    f12 = flat_index(" F12: %s")
+    # the items of the F12 picker (f12 + 3 .. f12 + 13) straddle OSM control
+    # bit 255/256: its default " Load PRG" (f12 + 9) is below the boundary,
+    # " Volume up" (f12 + 13) above it
+    assert f12 + 3 <= 255 and f12 + 13 >= 256
+    fx.append(("Keyboard Shortcuts has no own radio group",
+               flat_index(" Keyboard Shortcuts"), v6g, base))
+    fx.append(("F9 picker default Freeze", f9, v6g, base))
+    fx.append(("F11 picker Next disk drive 8", f11, v6g,
+               sel(**{"i%d" % (f11 + 5): 0, "i%d" % (f11 + 7): 1})))
+    fx.append(("F12 picker across bit 255/256", f12, v6g, base))
+    fx.append(("F12 picker Volume up above bit 255", f12, v6g,
+               sel(**{"i%d" % (f12 + 9): 0, "i%d" % (f12 + 13): 1})))
     # walk that runs off the end of the whole menu (heading = a closer)
     fx.append(("end of menu reached", 2, [O, 1, C], [0, 0, 0]))
     return fx
@@ -1516,13 +1760,13 @@ def nav_script():
     s.run_start()                   # the testbed draws before OPTM_RUN
     assert s.cursor == 2            # start line: visible and selectable
     s.feed(KEY_LAST)                # Cursor right: last item (#258)
-    assert s.cursor == 198          # "Close Menu"
+    assert s.cursor == flat_index(" Close Menu")
     s.feed(KEY_FIRST)               # Cursor left: first item (#258)
     assert s.cursor == 2            # the first mount line
     s.feed(KEY_FIRST)               # already there: stays
     assert s.cursor == 2
-    s.feed(KEY_UP)                  # wrap to "Close Menu" (198)
-    assert s.cursor == 198
+    s.feed(KEY_UP)                  # wrap to "Close Menu"
+    assert s.cursor == flat_index(" Close Menu")
     s.feed(KEY_DOWN)                # wrap back to mount line (2)
     assert s.cursor == 2
     s.until(KEY_DOWN, 7)            # to "Drive Settings" (issue #93)
@@ -1596,6 +1840,36 @@ def nav_script():
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 10
     assert (s.level, s.cursor) == (10, 171)
+    s.feed(KEY_MENUUP)              # pop to main
+    assert (s.level, s.cursor) == (0, 167)
+    # Keyboard Shortcuts (#142): pickers two submenu levels below Advanced
+    # Settings; the F12 picker straddles OSM control bit 255/256
+    ks = flat_index(" Keyboard Shortcuts")       # opener of region 12
+    f11 = flat_index(" F11: %s")                 # opener of region 15
+    f12 = flat_index(" F12: %s")                 # opener of region 16
+    s.feed(KEY_SELECT)              # enter region 10 again
+    assert (s.level, s.cursor) == (10, 170)
+    s.until(KEY_DOWN, ks)           # to "Keyboard Shortcuts"
+    s.feed(KEY_SELECT)              # enter region 12 (depth 2)
+    assert s.level == 12 and ks < s.cursor < f11
+    s.until(KEY_DOWN, f11)          # to " F11: %s"
+    s.feed(KEY_SELECT)              # enter region 15 (depth 3)
+    assert s.level == 15 and f11 + 3 <= s.cursor <= f11 + 13
+    s.until(KEY_DOWN, f11 + 7)      # to " Next disk drive 8"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    s.feed(KEY_LAST)                # last item of the picker: " Back"
+    assert (s.level, s.cursor) == (15, f11 + 15)
+    s.feed(KEY_SELECT)              # leave via the closer
+    assert (s.level, s.cursor) == (12, f11)
+    s.until(KEY_DOWN, f12)          # to " F12: %s"
+    s.feed(KEY_SELECT)              # enter region 16 (depth 3)
+    assert s.level == 16
+    s.until(KEY_DOWN, f12 + 3 + 10) # to " Volume up" (above bit 255)
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    s.feed(KEY_MENUUP)              # pop to region 12, cursor on the opener
+    assert (s.level, s.cursor) == (12, f12)
+    s.feed(KEY_MENUUP)              # pop to region 10
+    assert (s.level, s.cursor) == (10, ks)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 167)
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
@@ -2139,6 +2413,13 @@ C_MENU = [
     ("C_MENU_STEREO_MIX_WIDE",   "STEREO_MIX", 1),
     ("C_MENU_STEREO_MIX_NARROW", "STEREO_MIX", 2),
     ("C_MENU_STEREO_MIX_MONO",   "STEREO_MIX", 3),
+    ("C_MENU_SC_F9",      "SC_F9", 0),   # first item ("Off") of the F9 picker (#142)
+    ("C_MENU_SC_F10",     "SC_F10", 0),   # first item ("Off") of the F10 picker (#142)
+    ("C_MENU_SC_F11",     "SC_F11", 0),   # first item ("Off") of the F11 picker (#142)
+    ("C_MENU_SC_F12",     "SC_F12", 0),   # first item ("Off") of the F12 picker (#142)
+    ("C_MENU_SC_F13",     "SC_F13", 0),   # first item ("Off") of the F13 picker (#142)
+    ("C_MENU_SC_F14",     "SC_F14", 0),   # first item ("Off") of the F14 picker (#142)
+    ("C_MENU_VOLUME_100",   "VOLUME", 0),   # 100%: first item of the volume radio group
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
     # decodes its three "On" items as one slice, see rrnet_range() below
 ]
@@ -2202,6 +2483,7 @@ def vhdl_tb_vectors():
     for idx in range(len(V6_MENU)):               # every line: dependent or 0
         vecs.append((SEL << 12 | idx, raw[idx]))
     vecs.append((SEL << 12 | 0xFFF, 0x2DEF))      # feature probe: dep format 2
+    vecs.append((0x0305 << 12 | 0, len(V6_MENU))) # SEL_OPTM_ICOUNT: full 16 bits
     vecs.append((0x0999 << 12 | 0, 0xEEEE))       # unknown selector -> default
     return vecs
 
@@ -2640,6 +2922,15 @@ def run():
         print("PASS: menu layout (Model submenu %s visible lines, no double "
               "separators, turbo toggle walk)"
               % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
+    wide = wide_menu_errors()           # golden model at 512 items
+    if wide:
+        print("FAIL: wide menu")
+        for e in wide:
+            print("  -", e)
+        fails += 1
+    else:
+        print("PASS: wide menu (%d items, dependency mothers at flat "
+              "255/256/400/511)" % WIDE_N)
     for tb in ("menu_struct_test", "menu_equiv_test", "menu_nav_test",
                "optm_deps_test", "optm_live_test"):
         r = subprocess.run([asm, tb + ".asm"], cwd=HERE,

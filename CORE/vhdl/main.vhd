@@ -107,6 +107,11 @@ entity main is
     kb_key_num_i           : in    integer range 0 to 79;        -- cycles through all MEGA65 keys
     kb_key_pressed_n_i     : in    std_logic;                    -- low active: debounced feedback: is kb_key_num_i pressed right now?
 
+    -- Configurable keyboard shortcuts (GitHub issue #142): bit n = '1' means that the function key F(9+n)
+    -- is configured as the freezer key: bit 0 = F9, 1 = F10, 2 = F11, 3 = F12, 4 = F13, 5 = F14 (F10, F12
+    -- and F14 are Shift+F9, Shift+F11 and Shift+F13). The default configuration is F9 = Freeze.
+    kb_sc_freeze_i         : in    std_logic_vector(5 downto 0);
+
     -- MEGA65 joysticks and paddles
     joy_1_up_n_i           : in    std_logic;
     joy_1_down_n_i         : in    std_logic;
@@ -434,7 +439,8 @@ architecture synthesis of main is
 
   -- Special keys
   signal   restore_key_n : std_logic;   -- the Restore key is special: it creates a non maskable interrupt (NMI)
-  signal   freeze_key_n  : std_logic;   -- F9 key = freezer key for simulated cartridges
+  signal   freeze_key_n  : std_logic;   -- low while the configured freezer key (default F9) is held, see kb_sc_freeze_i
+  signal   crt_is_freezer : std_logic;  -- the simulated cartridge (.crt) has a freeze button, see cartridge_inst
 
   -- C64's IEC signals
   signal   c64_iec_clk_out  : std_logic;
@@ -1938,6 +1944,17 @@ begin
   -- Simulated Cartridge
   --------------------------------------------------------------------------------------------------
 
+  -- The freezer key (configurable via kb_sc_freeze_i, default F9, GitHub issue #142) only reaches
+  -- cartridge_inst if the simulated cartridge has a freeze button, i.e. for the cartridge types that
+  -- cartridge.vhd implements freezing for: 1 = Action Replay, 3 = Final Cartridge III and
+  -- 20 = Super Snapshot V5. For every other type cartridge.vhd would answer the freezer key with a
+  -- plain NMI, which is the job of the Restore key. The Restore key path is unchanged: it always
+  -- creates an NMI without entering the freezer (suppress_freeze_i).
+  crt_is_freezer <= '1' when to_integer(unsigned(cartridge_id_i)) = 1 or
+                             to_integer(unsigned(cartridge_id_i)) = 3 or
+                             to_integer(unsigned(cartridge_id_i)) = 20 else
+                    '0';
+
   -- This component handles the CPU writes to $DExx and $DFxx for the bank switching and contains
   -- the simulated banking, EXROM/GAME, etc. behavior of all known cartridge types.
   --
@@ -1979,7 +1996,7 @@ begin
       exrom_o        => crt_exrom,
       game_o         => crt_game,
       roml_we_o      => crt_roml_we,
-      freeze_key_i      => (not restore_key_n) or (not freeze_key_n),
+      freeze_key_i      => (not restore_key_n) or ((not freeze_key_n) and crt_is_freezer),
       suppress_freeze_i => not restore_key_n,
       nmi_o          => crt_nmi,
       nmi_ack_i      => core_nmi_ack
@@ -2060,6 +2077,9 @@ begin
       key_num_i       => kb_key_num_i,
       key_pressed_n_i => kb_key_pressed_n_i,
 
+      -- Configurable keyboard shortcuts: which of the keys F9 to F14 is the freezer key
+      sc_freeze_i     => kb_sc_freeze_i,
+
       -- Interface to the MEGA65 joysticks
       joy_1_up_n_i    => joy_1_up_n_i,
       joy_1_down_n_i  => joy_1_down_n_i,
@@ -2099,7 +2119,7 @@ begin
 
       -- Special keys
       restore_n       => restore_key_n,   -- Restore key = NMI
-      freeze_n        => freeze_key_n     -- F9 key = freezer key for simulated cartridges
+      freeze_n        => freeze_key_n     -- configurable freezer key (default F9) for simulated cartridges
     ); -- keyboard_inst
 
   --------------------------------------------------------------------------------------------------

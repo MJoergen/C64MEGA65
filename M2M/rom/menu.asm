@@ -1274,8 +1274,14 @@ _OPTM_SET_1D    ADD     1, R5                   ; next menu group item
                 RBRA    _OPTM_CALL, 1
 
                 ; Transform the menu index from flat coordinates to
-                ; screen coordinates
-_OPTM_SET_S     MOVE    R0, R8
+                ; screen coordinates. If OPTM_RUN is not running (e.g. in the
+                ; invisible menu session of a keyboard shortcut, see
+                ; shortcuts.asm), then there is no menu on the screen: the
+                ; data update above is all there is to do.
+_OPTM_SET_S     MOVE    OPTM_STRUCT, R8
+                CMP     0, @R8
+                RBRA    _OPTM_SET_R, Z
+                MOVE    R0, R8
                 MOVE    OPTM_F_MS_SET1, R9
                 RSUB    _OPTM_R_F2M_O, 1
                 RBRA    _OPTM_SET_R, C          ; idx outside curr. (sub)menu

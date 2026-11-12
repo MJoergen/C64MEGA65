@@ -53,8 +53,22 @@ Version 6 - MONTH DAY, 2026
   and CRT (Composite).
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/223)
 
-* For simulated freezer cartridges (`*.crt`), the `F9` key is now the new
-  freezer button (before V6, it was the `Restore`key).
+* Keyboard shortcuts: `F9` to `F14` (`F10`, `F12` and `F14` are `Shift` plus
+  `F9`, `F11` and `F13`) trigger actions while the on-screen menu is closed.
+  Assign them in the new `Keyboard Shortcuts` submenu of
+  `Advanced Settings`: Freeze, mount a disk image on drive 8 or 9, mount the
+  next disk image of the same folder on drive 8 or 9 (handy for multi-disk
+  games), load a PRG, load a CRT, flip the joystick ports, volume down and
+  volume up. The file browser opens right away and after you select a file
+  you are back in the running program. A short on-screen message confirms
+  actions such as the new volume. Defaults: `F9` Freeze, `F10` Load CRT,
+  `F11` Mount drive 8, `F12` Load PRG, `F13` Volume down, `F14` Volume up.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/142)
+
+* For simulated freezer cartridges (`*.crt`), the freezer button is now a
+  keyboard shortcut, by default `F9` (before V6, it was the `Restore` key).
+  The key only freezes with freezer cartridges (Action Replay, Final
+  Cartridge III, Super Snapshot V5) and does nothing otherwise.
 
 * The simulated REU can now be used in parallel to hardware cartridges and in
   parallel to simulated cartridges (`*.crt`). Example uses for this feature
@@ -129,9 +143,10 @@ Version 6 - MONTH DAY, 2026
   on a real C64. This makes IEC devices that use SRQ to interrupt the C64
   work, such as the modem emulation of the Meatloaf device.
 
-* The freeze function has been moved away from the Restore key to the F9 
-  key. The Restore key now only issues an NMI like on a C64. This enhances
-  compatibility with all known simulated Freezers (`*.crt`).
+* The freeze function has been moved away from the Restore key to the F9
+  key (configurable, see keyboard shortcuts). The Restore key now only issues
+  an NMI like on a C64. This enhances compatibility with all known simulated
+  Freezers (`*.crt`).
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/217)
 
 * Implemented proper RAM cold-start pattern, which raises compatibility with

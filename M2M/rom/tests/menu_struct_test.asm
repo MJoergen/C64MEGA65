@@ -259,4 +259,4 @@ ST_N            .BLOCK 1
 ST_GROUPS       .BLOCK 1
 ST_LVL          .BLOCK 1
 ST_LASTLVL      .BLOCK 1
-ST_BUF          .BLOCK 256
+ST_BUF          .BLOCK 513                      ; N + 1 words for N <= 512
