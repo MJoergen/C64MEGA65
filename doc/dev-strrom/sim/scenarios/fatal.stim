@@ -1,0 +1,18 @@
+# Scenario "fatal": config.vhd with a deliberate defect (configurations fatal_size
+# and fatal_sub of sim.py). The firmware stops with the fatal error screen and
+# enters the QNICE Monitor, which is then used via UART.
+reset
+wait_uart 800 Core stopped. Please reset the machine.
+wait_uart 300 QMON>\x20
+wait_quiet 3000 100
+dump fatal
+mark monitor: help, illegal command, examine
+send H
+wait_uart 600 QMON>\x20
+send CX
+wait_uart 300 QMON>\x20
+send ME0000
+wait_uart 300 QMON>\x20
+wait_quiet 2000 100
+dump fatal_monitor
+end

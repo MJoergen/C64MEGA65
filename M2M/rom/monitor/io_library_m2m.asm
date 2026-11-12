@@ -2,7 +2,8 @@
 ; MiSTer2MEGA65 (M2M) QNICE ROM
 ;
 ; Modified version of io_library.asm:
-; Jumps to QMON$SOFTSTART on CTRL+E instead of QMON$COLDSTART
+; a) Jumps to QMON$SOFTSTART on CTRL+E instead of QMON$COLDSTART
+; b) IO$PUTS accepts the handle of a string ROM string (see ../strrom.asm)
 ;
 ; This solution is not (Q)NICE - so with QNICE V1.7 we should find a more
 ; elegant solution that works without QNICE Monitor code hacking.
@@ -450,19 +451,22 @@ _IO$GETS_NOCRS  MOVE    VGA$MAX_Y, @R3              ; cursor to bottom
 ;*
 ;* R8: Pointer to the string to be printed. Of each word only the lower eight bits
 ;*     will be printed. The terminating word has to be zero.
+;*     M2M: R8 can also be the handle of a string ROM string (see ../strrom.asm).
 ;*
 ;* The contents of R8 are being preserved during the run of this function.
 ;***************************************************************************************
 ;
 IO$PUTS         INCRB                   ; Get a new register page
                 MOVE R8, R1             ; Save contents of R8
+                RSUB STRROM$OPEN, 1     ; M2M: R8 becomes a pointer to the string
                 MOVE R8, R0             ; Local copy of the string pointer
 _IO$PUTS_LOOP   MOVE @R0++, R8          ; Get a character from the string
                 AND 0x00FF, R8          ; Only the lower eight bits are relevant
                 RBRA _IO$PUTS_END, Z    ; Return when the string end has been reached
                 RSUB IO$PUTCHAR, 1      ; Print this character
                 RBRA _IO$PUTS_LOOP, 1   ; Continue with the next character
-_IO$PUTS_END    MOVE R1, R8             ; Restore contents of R8
+_IO$PUTS_END    RSUB STRROM$CLOSE, 1    ; M2M: back to the device of the caller
+                MOVE R1, R8             ; Restore contents of R8
                 DECRB                   ; Restore correct register page
         		RET
 ;

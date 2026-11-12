@@ -35,6 +35,10 @@
 #include "../../M2M/QNICE/monitor/sd_library.asm"
 #include "../../M2M/QNICE/monitor/fat32_library.asm"
 
+; strings that are stored in the string ROM instead of in the firmware ROM;
+; IO$PUTS in monitor/io_library_m2m.asm depends on it
+#include "strrom.asm"
+
 QMON$LAST_ADDR  HALT
 
 INIT_FIRMWARE   AND     0x00FF, SR              ; activate register bank 0
@@ -55,4 +59,8 @@ INIT_FIRMWARE   AND     0x00FF, SR              ; activate register bank 0
 
                 .ORG    0x8000                  ; start in RAM
                 RBRA    START_FIRMWARE, 1
+
+; the routines of the Shell that output strings depend on it
+#include "strrom.asm"
+
 #endif

@@ -34,7 +34,7 @@ Monitor.
 
 * New label `QMON$SOFTSTART`: Called by the modified io_library_m2m.asm on
   CTRL+E and instead of resetting the status register (including the register
-  bank counter) and the stack, the QMON$SOFTSTART uses variables in
+  bank counter) and the stack, the `QMON$SOFTSTART` uses variables in
   `qmon_vars.asm` to restore these values
 
 * To use the soft start, one can enter the monitor via `QMON$SOFTMON`.
@@ -56,7 +56,15 @@ Therefore the solution we chose is to introduce a "Soft Start" that is in
 contrast to the warm start restoring the old values of the stack pointer and
 register bank pointer by using initialization values that have been stored
 earlier: Either during a "Cold Start" a "Warm Start" or during the call to
-the label QMON$SOFTMON.
+the label `QMON$SOFTMON`.
+
+#### String ROM
+
+The strings of the monitor are located between the markers `;STRROM_BEGIN` and
+`;STRROM_END` at the end of the file. In a release build they are stored in
+the string ROM instead of in the firmware ROM (see `M2M/rom/strrom.asm`), and
+their labels are handles. The monitor passes its strings to `IO$PUTS` only,
+which accepts handles (see `io_library_m2m.asm` below).
 
 ### qmon_vars.asm
 
@@ -68,6 +76,11 @@ the label QMON$SOFTMON.
 
 ### io_library_m2m.asm
 
-Jumps to QMON$SOFTSTART on CTRL+E instead of QMON$COLDSTART. This is used to
+Jumps to `QMON$SOFTSTART` on CTRL+E instead of `QMON$COLDSTART`. This is used to
 implement the above-mentioned "Soft Start" logic.
+
+`IO$PUTS` accepts the handle of a string ROM string in addition to a pointer
+to a string: It calls `STRROM$OPEN` before and `STRROM$CLOSE` after its output
+loop (see `M2M/rom/strrom.asm`). This makes `SYSCALL(puts, 1)` work with
+handles in a release build, where the monitor is part of the firmware ROM.
 

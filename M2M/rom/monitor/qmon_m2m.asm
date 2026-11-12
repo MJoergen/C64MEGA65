@@ -13,6 +13,10 @@
 ; c) To use the soft start, one can enter the monitor via QMON$SOFTMON.
 ;    This is for example done by the Shell when entering the debug mode.
 ;
+; d) The strings of the monitor are stored in the string ROM instead of in the
+;    firmware ROM (see ../strrom.asm and the markers STRROM_BEGIN and
+;    STRROM_END at the end of this file). They are only passed to IO$PUTS.
+;
 ; This solution is not (Q)NICE - so with QNICE V1.7 we should find a more
 ; elegant solution that works without QNICE Monitor code hacking.
 ;
@@ -642,6 +646,7 @@ QMON$LOAD_E1C   SUB     IO$HEX_NIBBLES, R10     ; get numeric representation of 
 ;* Strings
 ;***************************************************************************************
                 
+;STRROM_BEGIN
 QMON$WELCOME    .ASCII_P    "\n\nSimple QNICE-monitor - Version 1.6 (Bernd Ulmann, sy2002, August 2020)\n"
 #ifdef RAM_MONITOR
                 .ASCII_P    "Running in RAM!\n"
@@ -704,3 +709,4 @@ QMON$CG_F_S2    .ASCII_W    " from "
 QMON$CG_F_S3    .ASCII_W    " to "
 QMON$CG_F_R     .ASCII_W    "RUN: "
 QMON$CG_F_R_MSG .ASCII_W    "Running...\n"
+;STRROM_END

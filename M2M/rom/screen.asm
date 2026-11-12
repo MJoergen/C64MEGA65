@@ -278,7 +278,7 @@ SCR$CALC_VRAM   SYSCALL(enter, 1)
 ; Print a string at the current cursor position (screen only)
 ; Respects the left side of the frame by starting at 1 at a new line
 ;
-; Input:  R8: String
+; Input:  R8: String: pointer or handle of a string ROM string (strrom.asm)
 ; Output: R8 stays unmodified
 ;
 ; Special characters inside R8:
@@ -290,6 +290,7 @@ SCR$CALC_VRAM   SYSCALL(enter, 1)
 
 SCR$PRINTSTR    SYSCALL(enter, 1)
 
+                RSUB    STRROM$OPEN, 1          ; R8: pointer to the string
                 MOVE    R8, R0                  ; R0: string to be printed
                 MOVE    SCR$CUR_X, R1           ; R1: running x-cursor
                 MOVE    SCR$CUR_Y, R2           ; R2: running y-cursor
@@ -335,11 +336,13 @@ _PS_L3          MOVE    SCR$ILX, R12
                 RSUB    SCR$CALC_VRAM, 1
                 RBRA    _PS_L1, 1
 
-_PS_RET         SYSCALL(leave, 1)
+_PS_RET         RSUB    STRROM$CLOSE, 1
+                SYSCALL(leave, 1)
                 RET
 
 ; remember any device and selector setting and change it to VRAM; this is
-; necessary, because the input string might come from a device
+; necessary, because the input string might come from a device, for example
+; from the string ROM
 _PS_PRE         INCRB
                 MOVE    R8, @--SP
                 MOVE    TEMP_2W, R8

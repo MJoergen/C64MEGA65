@@ -1,0 +1,10 @@
+# exploratory run: boot without SD card, then open the menu
+reset
+wait_uart 1200 MHz
+wait_quiet 3000 300
+dump boot
+press_until 0080 100
+wait_uart 500 Free OPTM heap space
+wait_quiet 3000 300
+dump menu
+end

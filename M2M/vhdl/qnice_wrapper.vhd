@@ -144,7 +144,15 @@ constant C_DEV_ASCAL_PPHASE   : std_logic_vector(15 downto 0) := x"0003";
 constant C_DEV_HYPERRAM       : std_logic_vector(15 downto 0) := x"0004";
 constant C_DEV_I2C            : std_logic_vector(15 downto 0) := x"0005";
 constant C_DEV_RTC            : std_logic_vector(15 downto 0) := x"0006";
+constant C_DEV_STRROM         : std_logic_vector(15 downto 0) := x"0007";
 constant C_DEV_SYS_INFO       : std_logic_vector(15 downto 0) := x"00FF";
+
+-- String ROM: message strings of the QNICE firmware that are stored in a block RAM instead of in the
+-- firmware ROM (see M2M/rom/strrom.asm). It holds 2**C_STRROM_ADDR_WIDTH characters of 8 bits.
+-- CORE/m2m-rom/make_rom.sh reads C_STRROM_ADDR_WIDTH from this file and generates C_STRROM_FILE in exactly
+-- this size, so keep the constant on a single line. The file name is relative to M2M/vhdl/tdp_ram.vhd.
+constant C_STRROM_ADDR_WIDTH  : natural := 14;
+constant C_STRROM_FILE        : string  := "../../CORE/m2m-rom/m2m-strings.rom";
 
 -- SysInfo record numbers
 constant C_SYS_DRIVES         : std_logic_vector(15 downto 0) := x"0000";
@@ -165,6 +173,11 @@ signal qnice_ramrom_address          : std_logic_vector(31 downto 0);
 
 -- Shell configuration (config.vhd)
 signal qnice_config_data             : std_logic_vector(15 downto 0);
+
+-- String ROM
+signal qnice_strrom_data             : std_logic_vector(7 downto 0);
+signal qnice_strrom_zero_addr        : std_logic_vector(C_STRROM_ADDR_WIDTH - 1 downto 0) := (others => '0');
+signal qnice_strrom_zero_data        : std_logic_vector(7 downto 0) := (others => '0');
 
 -- Paddles in 50 MHz clock domain which happens to be QNICE's
 signal qnice_pot1_x                  : unsigned(7 downto 0);
@@ -338,6 +351,10 @@ begin
                qnice_ramrom_data_in       <= qnice_rtc_rd_data_i;
                qnice_ramrom_wait          <= qnice_rtc_wait_i;
 
+            -- String ROM: read-only, one character per word
+            when C_DEV_STRROM =>
+               qnice_ramrom_data_in       <= x"00" & qnice_strrom_data;
+
             -- Read-only System Info (constants are defined in sysdef.asm)
             when C_DEV_SYS_INFO =>
                case qnice_ramrom_addr_o(27 downto 12) is
@@ -474,6 +491,35 @@ begin
          qnice_ramrom_wait    <= qnice_ramrom_wait_i;
       end if;
    end process qnice_ramrom_devices;
+
+   -- String ROM: Same primitive and the same QNICE-side timing as the other block RAMs that QNICE reads
+   -- (FALLING_B: QNICE expects the read to happen at the falling clock edge), so that no wait state is needed.
+   -- Port A is not used. The 4k window selector continues the address: window n starts at character n * 4096.
+   i_strrom : entity work.dualport_2clk_ram
+      generic map (
+         ROM_PRELOAD       => true,
+         ROM_FILE          => C_STRROM_FILE,
+         ROM_FILE_HEX      => true,      -- two hexadecimal digits per line
+         ADDR_WIDTH        => C_STRROM_ADDR_WIDTH,
+         DATA_WIDTH        => 8,
+         FALLING_A         => false,
+         FALLING_B         => true
+      )
+      port map (
+         -- unused port
+         clock_a           => clk_i,
+         address_a         => qnice_strrom_zero_addr,
+         data_a            => qnice_strrom_zero_data,
+         wren_a            => '0',
+         q_a               => open,
+
+         -- QNICE
+         clock_b           => clk_i,
+         address_b         => qnice_ramrom_addr_o(C_STRROM_ADDR_WIDTH - 1 downto 0),
+         data_b            => qnice_strrom_zero_data,
+         wren_b            => '0',
+         q_b               => qnice_strrom_data
+      ); -- i_strrom
 
    qnice_ramrom_address <= "10000" & qnice_ramrom_addr_o(26 downto 0) when qnice_ramrom_addr_o(27) = '1'
                       else "000000000" & qnice_ramrom_addr_o(22 downto 0);

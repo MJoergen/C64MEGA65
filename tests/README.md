@@ -5,6 +5,31 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A22X3 - TBD
+--------------------------
+
+@TODO: Test the string ROM on R3 and R6 at least (R4/R5 when available). The message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Everything of WIP-V6-A22X2 below still applies. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
+
+Build:
+
+* @TODO On the build machine (Linux), run `python3 M2M/rom/tests/strrom_test.py` once: it rebuilds the firmware with the local tools and checks the generated string ROM.
+* @TODO The Vivado log shows `String ROM: 9076/16384 characters in 196 strings.` and `Shell ROM: 18488/28672 words.` (or larger numbers after more features were merged), timing is met. Compare the block RAM count with the WIP-V6-A22X2 build: the string ROM adds about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
+
+Serial log:
+
+* @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 10,000 words.
+* @TODO With JiffyDOS selected as Kernal: the `JiffyDOS status:` block is printed, once with all three ROM files on the SD card and once with `jd-c1581.bin` missing.
+* @TODO Debug console: hold Run/Stop and Cursor Up, press Help. The text `Entering MiSTer2MEGA65 debug mode.` appears with two addresses. Press `H`: the help text of the QNICE Monitor is complete. `M`, `D`, `7000`, `7010` dumps memory. `C`, `R` and the first of the two addresses returns to the core: the menu still opens and works.
+
+On-screen menu and messages:
+
+* @TODO The menu, all submenus, the help pages and the file browser look and work as before.
+* @TODO Mount a file with a wrong size as disk image (for example a text file renamed to `test.d64`): the message `A D64 disk image must be exactly 174848 bytes ...` appears, followed by `Press SPACE to continue.`; Space returns to the file browser.
+* @TODO Load a `.crt` file that is larger than the cartridge memory (for example a 4 MB file of zeros named `big.crt`): the message `This .crt file is too large: ...` appears, followed by `Press SPACE to continue.`
+* @TODO Load a broken `.crt` file (for example a text file renamed to `broken.crt`): the error message of the cartridge parser appears as before.
+* @TODO Browse an SD card (or a folder structure) without any `.d64` or `.d81` file: the text `This core uses D64 and D81 disk images. ...` appears.
+* @TODO Mount and unmount disk images on drive 8 and 9, load a `.prg` and a `.crt`, save something to a disk image: the serial log shows the usual messages (`Selected file:`, `Mounted disk image for drive #`, ...).
+
 Version WIP-V6-A22X2 - TBD
 --------------------------
 

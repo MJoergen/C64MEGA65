@@ -5,6 +5,9 @@
 ;
 ; Hint: There are more hardcoded strings in menu.asm.
 ;
+; Most of the strings in this file are stored in the string ROM and not in the
+; firmware ROM: see the markers STRROM_BEGIN and STRROM_END below.
+;
 ; done by sy2002 in 2023 and licensed under GPL v3
 ; ****************************************************************************
 
@@ -21,6 +24,28 @@ SPACE           .ASCII_W " "
 FN_ROOT_DIR     .ASCII_W "/"
 FN_UPDIR        .ASCII_W ".."
 FN_ELLIPSIS     .ASCII_W "..." ; caution: hardcoded to a len. of 3
+
+; ----------------------------------------------------------------------------
+; Messages that are processed by string functions
+; ----------------------------------------------------------------------------
+
+; CRTROM_AUTOLOAD appends this message to a file name using strlen and strcpy
+ERR_F_ATRMLOAD  .ASCII_P "\n\nFile not found or file read error.\n"
+                .ASCII_W "The core needs this ROM to start.\n\n"
+
+; ----------------------------------------------------------------------------
+; String ROM
+;
+; make_rom.sh stores all strings between the markers STRROM_BEGIN and
+; STRROM_END in the string ROM instead of in the firmware ROM (see strrom.asm).
+; Their labels are handles and not pointers: Pass them only to
+; SYSCALL(puts, 1), LOG_STR, SCR$PRINTSTR, SCR$PRINTSTRXY, FATAL or FATAL_IDX.
+;
+; A string that is read by other code, for example by strlen, strcpy, strcmp
+; or M2M$RPL_S, belongs above this comment.
+; ----------------------------------------------------------------------------
+
+;STRROM_BEGIN
 
 ; ----------------------------------------------------------------------------
 ; Debug Mode and log messages for the serial terminal
@@ -214,8 +239,6 @@ ERR_F_CR_A_TYPE .ASCII_P "globals.vhd: C_CRTROMS_AUT: Illegal type\n"
 ERR_F_ATRMNMNT  .ASCII_P "This core needs to load one or more\n"
                 .ASCII_P "mandatory ROMs from SD card. But no SD\n"
                 .ASCII_W "card can be mounted.\n"
-ERR_F_ATRMLOAD  .ASCII_P "\n\nFile not found or file read error.\n"
-                .ASCII_W "The core needs this ROM to start.\n\n"
 ERR_MOUNT       .ASCII_W "Error: Cannot mount SD card!\nError code: "
 ERR_MOUNT_RET   .ASCII_W "\n\nPress Return to retry"
 ERR_BROWSE_UNKN .ASCII_W "SD Card:\nUnknown error while trying to browse.\n"
@@ -241,6 +264,8 @@ ERR_FATAL_TG    .ASCII_W "tools.asm: M2M$GET_SETTING: Illegal index.\n"
 ERR_FATAL_TS    .ASCII_W "tools.asm: M2M$SET_SETTING: Illegal index.\n"
 
 ERR_FATAL_INST  .ASCII_W "Instable system state.\n"
+
+;STRROM_END
 
 ; Error codes for ERR_FATAL_INST: They will help to debug the situation,
 ; because we will at least know, where the instable system state occured

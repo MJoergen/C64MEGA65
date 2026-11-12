@@ -102,7 +102,8 @@ guide are the authority; upstream wiki text is background at best.
 │   │   ├── m2m-rom.asm    entry; pulls in M2M/rom/main.asm + shell.asm + callbacks
 │   │   │                  (FILTER_FILES, SUBMENU_SUMMARY, etc.)
 │   │   ├── globals.asm, osm_const.asm, shell_fhandles.asm, shell_fh_ptrs.asm
-│   │   ├── make_rom.sh    builds m2m-rom.rom (consumed by qnice.vhd)
+│   │   ├── make_rom.sh    builds m2m-rom.rom (consumed by qnice.vhd) and
+│   │   │                  m2m-strings.rom (string ROM, see section 7)
 │   │   └── synth_pre.tcl  Vivado pre-synthesis hook
 │   └── C64_MiSTerMEGA65/  ← UNMODIFIED-ish MiSTer C64 core (git submodule-ish drop)
 │       ├── c64.sv         original MiSTer top (we don't use it as top here)
@@ -148,8 +149,10 @@ guide are the authority; upstream wiki text is background at best.
 │   │                      selectfile.asm, dirbrowse.asm, vdrives.asm,
 │   │                      keyboard.asm, screen.asm, whs.asm,
 │   │                      filters.asm, gencfg.asm, llist.asm, tools.asm,
-│   │                      coreinfo.asm, crts-and-roms.asm, sysdef.asm, strings.asm
-│   ├── tools/             make_config.sh, optm_heap.py, bin2qnice.py, mover.sh
+│   │                      coreinfo.asm, crts-and-roms.asm, sysdef.asm, strings.asm,
+│   │                      strrom.asm (string ROM, see section 7)
+│   ├── tools/             make_config.sh, optm_heap.py, bin2qnice.py, mover.sh,
+│   │                      asm_strrom.sh (assembles the firmware and the string ROM)
 │   ├── font/, video_filters/
 ├── doc/                   ← Internal developer notes (NOT the user's guide)
 │   ├── developer.md       BUILD INSTRUCTIONS — start here for build flow
@@ -272,6 +275,11 @@ the SD card.
   device ID + 28-bit address (see `C_DEV_*` in `globals.vhd`).
 - QNICE is also the bridge to FAT32 SD cards (it has the SDMux + filesystem),
   to HyperRAM (`qnice2hyperram.vhd`), and to the keyboard at OSM time.
+- The firmware ROM ends at `0x7000`, where the 4k device window starts, so only
+  28672 words are usable. Most message strings are therefore stored in a
+  separate block RAM, the string ROM (device `M2M$STRROM` = `0x0007`), and the
+  firmware addresses them through handles: see "Message strings live in the
+  string ROM" in section 7.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
   as kind of the "operating system". Here is an overview of the
@@ -858,7 +866,10 @@ cd M2M/QNICE/tools && ./make-toolchain.sh && cd ../../..
 
 # 2) Build the Shell ROM whenever you change CORE/m2m-rom/*.asm or M2M/rom/*.asm
 cd CORE/m2m-rom && ./make_rom.sh && cd ../..
-# Output: CORE/m2m-rom/m2m-rom.rom (read by qnice.vhd at synthesis)
+# Output: CORE/m2m-rom/m2m-rom.rom (firmware, read by qnice.vhd at synthesis)
+#     and CORE/m2m-rom/m2m-strings.rom (string ROM, read by qnice_wrapper.vhd).
+#     The last two lines report how full both are:
+#     "String ROM: N/16384 characters in M strings." and "Shell ROM: N/28672 words."
 
 # 3) Build the bitstream. The per-revision CORE-R{3,4,5,6}.xpr Vivado projects
 #    are the SINGLE SOURCE OF TRUTH: file list, target part, synthesis +
@@ -992,6 +1003,16 @@ Consequences for agents:
 The same append-only-newest-on-top convention is used by
 `M2M/video_filters/README.md` (V2.1.0 above V1.0.0).
 
+### Message strings live in the string ROM
+
+A string costs one word per character and the firmware ROM has only 28672 words (`0x0000` to `0x6FFF`), so message strings are stored in a separate block RAM, the **string ROM**: QNICE device `M2M$STRROM` = `0x0007`, instance `i_strrom` in `M2M/vhdl/qnice_wrapper.vhd`, 16384 characters. `M2M/rom/strrom.asm` describes the concept. `M2M/tools/asm_strrom.sh`, called by `make_rom.sh`, moves the strings at build time and prints `String ROM: N/16384 characters in M strings.`
+
+- Everything between the comment lines `;STRROM_BEGIN` and `;STRROM_END` goes into the string ROM. Such sections exist in `M2M/rom/strings.asm`, `M2M/rom/menu.asm`, `M2M/rom/monitor/qmon_m2m.asm` and `CORE/m2m-rom/m2m-rom.asm`. Only labels, `.ASCII_W` and `.ASCII_P` lines and comments are allowed there, and the last line needs to be an `.ASCII_W`. The build stops with an error otherwise.
+- The label of such a string is a **handle** and not a pointer: it is the address of a table word that holds the position of the string in the string ROM. A handle can be passed to `SYSCALL(puts, 1)`, `LOG_STR`, `SCR$PRINTSTR`, `SCR$PRINTSTRXY`, `FATAL` and `FATAL_IDX`, and a callback can return one as its message (`PREP_LOAD_IMAGE`, `CUSTOM_MSG`, `PREP_START`), because the Shell prints these messages with the routines above.
+- Everything else needs a pointer to characters: the string functions of the QNICE Monitor (`strlen`, `strcpy`, `strcmp`, `strstr`, ...), `M2M$CHK_EXT`, `M2M$RPL_S`, `OPTM_LIVE_TEXT`, and all code that reads a string with `@Rx` or calculates with its address. Such a string stays outside of the markers and therefore in the firmware ROM. Code that needs to read a string ROM string itself brackets the access with `STRROM$OPEN` and `STRROM$CLOSE`.
+- A new string that is only printed belongs between the markers; a string that is processed belongs outside. `python3 M2M/rom/tests/strrom_test.py` checks the generated string ROM and every use of every handle: a use that it does not know fails the test. `python3 M2M/rom/tests/strrom_sim_test.py` simulates the hardware path with GHDL.
+- The string ROM is used in release builds only. When `RELEASE` is not defined (firmware in RAM, the Monitor of QNICE in ROM) and in the emulator testbeds, the markers are plain comments and all strings are ordinary strings.
+
 ### QNICE assembler is multi-pass — include order does not matter
 
 `qasm` (the QNICE assembler used by `M2M/QNICE/assembler/asm` and invoked
@@ -1104,6 +1125,7 @@ hardware saw the code.
 | Keyboard                  | `keyboard.vhd`, `M2M/vhdl/m2m_keyb.vhd`                   |
 | Reset / data corruption   | `main.vhd` RESET SEMANTICS block, `vdrives.vhd` (cache_dirty / prevent_reset) |
 | QNICE Shell behavior      | `M2M/rom/shell.asm` + neighbors; callbacks in `CORE/m2m-rom/m2m-rom.asm` |
+| Firmware message garbled or missing (serial log, OSM) | `M2M/rom/strrom.asm` (handles, `STRROM$OPEN`, `STRROM$CLOSE`), `M2M/tools/asm_strrom.sh`, `i_strrom` in `M2M/vhdl/qnice_wrapper.vhd`, `CORE/m2m-rom/m2m-strings.rom` and `m2m-strings.lis`; tests `M2M/rom/tests/strrom_test.py` and `strrom_sim_test.py`. A handle that reaches code which needs a pointer prints garbage |
 | ROM autoload (JiffyDOS)   | `globals.vhd` C_CRTROMS_AUTO, `M2M/rom/crts-and-roms.asm` |
 | HyperRAM contention       | `globals.vhd` C_HMAP_*, `qnice2hyperram.vhd`, ascal       |
 | REU                       | `reu_mapper.vhd`, MiSTer `reu.v`, `globals.vhd` C_HMAP_REU |

@@ -499,6 +499,13 @@ _HM_SDMOUNTED5  MOVE    SCR$OSM_O_DX, R8        ; set "%s is replaced" flag
                 CMP     1, R5                   ; CRT/ROM: switch device..
                 RBRA    _HM_SDMOUNTED5S, !Z     ; ..to make string visible
 
+                ; Only an error string of the CRT/ROM device is located in
+                ; the 4k window. A message from PREP_LOAD_IMAGE is located
+                ; below the window, also if it is the handle of a string ROM
+                ; string, and it is printed directly.
+                CMP     M2M$RAMROM_DATA, R1
+                RBRA    _HM_SDMOUNTED5S, N      ; R1 < M2M$RAMROM_DATA
+
                 MOVE    SCRATCH_HEX, R8         ; save screen device
                 RSUB    SAVE_DEVSEL, 1
                 MOVE    M2M$RAMROM_DEV, R12     ; switch to CRT/ROM device

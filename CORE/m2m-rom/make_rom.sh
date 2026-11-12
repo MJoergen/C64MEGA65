@@ -17,7 +17,7 @@ if [ ! -f ../../M2M/QNICE/assembler/qasm ]; then
     echo "       cd ../../M2M/QNICE/tools"
     echo "       ./make-toolchain.sh"
     echo ""
-    exit
+    exit 1
 fi;
 
 ##############################################################################
@@ -228,14 +228,50 @@ echo "Video filter ROM: ${VFILTER_WORDS} words in ${VFILTER_SLOT} slots."
 
 ##############################################################################
 # M2M framework: Assemble and generate various output files:
-#   m2m-rom.def: QNICE Monitor operating system calls
-#   m2m-rom.lis: List file containing the complete listing & assembled code
-#   m2m-rom.out: File that can be loaded in the QNICE Monitor using M/L
-#   m2m-rom.rom: Vivado ROM compatible 16-bit binary
+#   m2m-rom.def:     QNICE Monitor operating system calls
+#   m2m-rom.lis:     List file containing the complete listing & assembled code
+#   m2m-rom.out:     File that can be loaded in the QNICE Monitor using M/L
+#   m2m-rom.rom:     Vivado ROM compatible 16-bit binary
+#   m2m-strings.rom: Content of the string ROM, one character per line as two
+#                    hexadecimal digits
+#   m2m-strings.lis: Listing of the string ROM strings as written in the
+#                    sources, i.e. before they are placed in the string ROM
+#
+# The strings between the marker comments ";STRROM_BEGIN" and ";STRROM_END" in
+# the firmware sources are not assembled into the firmware ROM: they are stored
+# in the string ROM, a block RAM that QNICE reads as the device M2M$STRROM. The
+# concept is described in ../../M2M/rom/strrom.asm and the build steps in
+# ../../M2M/tools/asm_strrom.sh, which is used here instead of the "asm"
+# wrapper of QNICE.
+#
+# The string ROM holds 2 ** C_STRROM_ADDR_WIDTH characters. The constant is
+# defined next to the block RAM in ../../M2M/vhdl/qnice_wrapper.vhd and is
+# read from there, so that m2m-strings.rom always has the size of the block
+# RAM.
 ##############################################################################
 
-../../M2M/QNICE/assembler/asm m2m-rom.asm
+STRROM_VHDL=../../M2M/vhdl/qnice_wrapper.vhd
+STRROM_AW=$(awk '/^[ \t]*constant[ \t]+C_STRROM_ADDR_WIDTH[ \t]*:/ {
+    sub(/\r$/, ""); sub(/^.*:=[ \t]*/, ""); sub(/[ \t]*;.*$/, ""); print; exit }' "$STRROM_VHDL")
+case "$STRROM_AW" in
+    ''|*[!0-9]*)
+        echo "ERROR: cannot read the constant C_STRROM_ADDR_WIDTH from ${STRROM_VHDL}."
+        rm -f m2m-rom.out m2m-rom.rom m2m-strings.rom
+        exit 1 ;;
+esac
+
+# Called through bash, so that it also runs when the file mode got lost
+bash ../../M2M/tools/asm_strrom.sh m2m-rom.asm m2m-strings "$STRROM_AW"
 ASM_RC=$?
+
+# Like the "asm" wrapper of QNICE: offer the result for pasting it into the
+# QNICE Monitor (M/L)
+if [ "$ASM_RC" -eq 0 ] && [ -f m2m-rom.out ]; then
+    case "$OSTYPE" in
+        linux*)  if command -v xclip > /dev/null 2>&1; then xclip -selection clipboard < m2m-rom.out > /dev/null 2>&1; fi ;;
+        darwin*) if command -v pbcopy > /dev/null 2>&1; then pbcopy < m2m-rom.out; fi ;;
+    esac
+fi
 
 ##############################################################################
 # Trim the variables off the ROM image and guard the Shell-ROM budget.
@@ -266,11 +302,12 @@ ASM_RC=$?
 ##############################################################################
 ROM_MAX_WORDS=28672
 
-# The asm wrapper deletes m2m-rom.rom up front and only regenerates it on success,
+# asm_strrom.sh deletes m2m-rom.rom up front and only regenerates it on success,
 # so a missing .rom (or a non-zero exit) means assembly failed -- fail the build
 # loudly instead of silently skipping the size guard and exiting 0.
-if [ "$ASM_RC" -ne 0 ] || [ ! -f m2m-rom.rom ]; then
-    echo "ERROR: assembling m2m-rom.asm failed (asm exit ${ASM_RC}); m2m-rom.rom was not produced."
+if [ "$ASM_RC" -ne 0 ] || [ ! -f m2m-rom.rom ] || [ ! -f m2m-strings.rom ]; then
+    echo "ERROR: assembling m2m-rom.asm failed (exit code ${ASM_RC}); m2m-rom.rom was not produced."
+    rm -f m2m-rom.rom m2m-strings.rom
     exit 1
 fi
 
@@ -278,6 +315,15 @@ if [ ! -f m2m-rom.lis ]; then
     echo "ERROR: m2m-rom.lis was not produced; cannot verify the ROM image."
     exit 1
 fi
+
+# A firmware that is built to run in RAM (RELEASE is not defined in
+# m2m-rom.asm) starts at 0x8000. It is loaded via the QNICE Monitor and there
+# is no ROM image to trim or to guard.
+case "$(head -n 1 m2m-rom.out)" in
+    0x[89A-Fa-f]*)
+        echo "Firmware for RAM: $(wc -l < m2m-rom.out | tr -d ' ') words including the variables; load m2m-rom.out via the QNICE Monitor."
+        exit 0 ;;
+esac
 
 # The ROM image size, derived from the addresses that qasm2rom serialized.
 # Portability: no strtonum() and no 0x literals -- both are gawk extensions and

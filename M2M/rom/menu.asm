@@ -48,6 +48,10 @@ OPTM_SEL_TLLSEL .EQU 3
 
 OPTM_STR_SPACE  .ASCII_W " "
 
+; The messages between the markers STRROM_BEGIN and STRROM_END are stored in
+; the string ROM when make_rom.sh builds the firmware (see strrom.asm). Their
+; labels are handles then: Pass them only to OPTM_CLBK_FATAL.
+;STRROM_BEGIN
 OPTM_F_MENUSUB  .ASCII_P "menu.asm: One or more submenu is not\n"
                 .ASCII_P "specified correctly: Unbalanced submenu\n"
                 .ASCII_P "start/end flags in OPTM_GROUPS.\n"
@@ -75,6 +79,7 @@ OPTM_F_MENUGRP3 .ASCII_P "menu.asm: OPTM_SET\n"
 
 OPTM_F_MSTRUCT  .ASCII_P "menu.asm: OPTM_RUN is not running.\n"
                 .ASCII_W "OPTM_STRUCT is invalid.\n"
+;STRROM_END
 OPTM_F_MS_SELF  .EQU 0x0001 ; _OPTM_R_F2M_O
 OPTM_F_MS_SLCT  .EQU 0x0002 ; OPTM_SELECT
 OPTM_F_MS_SET1  .EQU 0x0003 ; OPTM_SET

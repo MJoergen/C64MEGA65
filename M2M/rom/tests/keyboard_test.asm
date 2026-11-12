@@ -130,6 +130,7 @@ CLEAR_CHR       .ASCII_W " "
 #include "../keyboard.asm"
 #include "../screen.asm"
 #include "../strings.asm"
+#include "../strrom.asm"
 #include "../sysdef.asm"
 #include "../tools.asm"
 

@@ -417,13 +417,14 @@ RESTORE_DEVSEL  INCRB
 ; ----------------------------------------------------------------------------
 ; Print to serial terminal while processing "\n" sequences
 ;
-; Input:  R8: Pointer to a string
+; Input:  R8: Pointer to a string or handle of a string ROM string
 ; Output: R8 is unchanged
 ; ----------------------------------------------------------------------------
 
 LOG_STR         INCRB
-                MOVE    R8, R0
                 MOVE    R8, R7
+                RSUB    STRROM$OPEN, 1          ; R8: pointer to the string
+                MOVE    R8, R0
 
 _PRINTSLF_1     CMP     0, @R0
                 RBRA    _PRINTSLF_RET, Z
@@ -442,7 +443,8 @@ _PRINTSLF_3     ADD     1, R1
                 ADD     R1, R0
                 RBRA    _PRINTSLF_1, 1
 
-_PRINTSLF_RET   MOVE    R7, R8
+_PRINTSLF_RET   RSUB    STRROM$CLOSE, 1
+                MOVE    R7, R8
                 DECRB
                 RET
 

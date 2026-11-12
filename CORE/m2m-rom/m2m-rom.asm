@@ -1204,6 +1204,14 @@ _CUSTOM_MSG_RET DECRB
 ; auto-generated file that constains the menu indexes from mega65.vhd
 #include "osm_const.asm"
 
+; make_rom.sh stores the strings between the markers STRROM_BEGIN and
+; STRROM_END in the string ROM instead of in the firmware ROM (see
+; M2M/rom/strrom.asm). Their labels are handles and not pointers: Pass them
+; only to SYSCALL(puts, 1), LOG_STR, SCR$PRINTSTR, SCR$PRINTSTRXY or FATAL, or
+; return them to the Shell as the message of a callback function. Strings that
+; are read by other code are located below the STRROM_END marker.
+;STRROM_BEGIN
+
 ; Warning: We only support exact-size standard D64 and D81 images
 WRN_WRONG_IMG   .ASCII_P "\n\nA D64 disk image must be exactly 174848\n"
                 .ASCII_P "bytes (35 tracks) or 196608 bytes (40\n"
@@ -1246,6 +1254,8 @@ JDS_V_DIS_PRE   .ASCII_W "  -> JiffyDOS disabled ("
 JDS_R_NOC64     .ASCII_W "no JiffyDOS C64 Kernal"
 JDS_R_NODRV     .ASCII_W "no drive ROM"
 JDS_V_DIS_SUF   .ASCII_W "), using standard Kernal\n"
+
+;STRROM_END
 
 ; On-screen "Kernal: %s" summary tags built by SUBMENU_SUMMARY (_SS_TRY_KERNAL).
 ; The single-drive cases reuse the " JiffyDOS" menu label for the word itself,

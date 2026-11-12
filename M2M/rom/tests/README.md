@@ -1,7 +1,7 @@
 MiSTer2MEGA65 firmware testbeds
 ===============================
 
-This folder contains headless tests for the M2M QNICE firmware. Everything here runs in the QNICE **emulator** on your development machine — no MEGA65 hardware, no JTAG cable and no Vivado synthesis needed. The flagship is the **menu test suite** (`menu_test.py` plus five assembly testbeds), which verifies the on-screen-menu structure algorithms, dependency handling, submenu state machine and fast live-text updates of `../menu.asm`, including the multi-level (nested) submenus introduced with M2M V2.1.0.
+This folder contains headless tests for the M2M QNICE firmware. Almost everything here runs in the QNICE **emulator** on your development machine — no MEGA65 hardware, no JTAG cable and no Vivado synthesis needed. The one exception is the string ROM test on simulated hardware, which needs devices that the emulator does not have and therefore simulates the real hardware with ghdl. The flagship is the **menu test suite** (`menu_test.py` plus five assembly testbeds), which verifies the on-screen-menu structure algorithms, dependency handling, submenu state machine and fast live-text updates of `../menu.asm`, including the multi-level (nested) submenus introduced with M2M V2.1.0.
 
 Quick start
 -----------
@@ -19,6 +19,8 @@ Then, from anywhere in the repository:
 ```bash
 python3 M2M/rom/tests/menu_test.py run      # the full menu test suite
 python3 M2M/rom/tests/menu_test.py verify   # cross-check config.vhd/mega65.vhd
+python3 M2M/rom/tests/strrom_test.py        # string ROM: build and static checks
+python3 M2M/rom/tests/strrom_sim_test.py    # string ROM on simulated hardware (needs ghdl)
 ```
 
 Both commands must pass before you synthesize a bitstream after touching `menu.asm`, `menu_struct.asm`, the menu-related parts of `options.asm`, or the menu definition in `CORE/vhdl/config.vhd`.
@@ -55,6 +57,67 @@ The other testbeds
 * **`llist_test.asm`** — testbed for the sorted doubly-linked list (`../llist.asm`) used by the file browser: inserts 500 fixed test strings, prints them unsorted, ascending and descending. Runs headlessly.
 * **`dirbrowse_test.asm`** — development testbed for the directory browser (`../dirbrowse.asm`). Needs SD-card/FAT32 hardware devices, so it is meant for the MEGA65 hardware or a full-system simulation, not for the plain emulator.
 * **`keyboard_test.asm`** — development testbed for the MEGA65 keyboard driver (`../keyboard.asm`). Hardware-bound like `dirbrowse_test.asm`.
+
+String ROM tests
+----------------
+
+In a release build, `CORE/m2m-rom/make_rom.sh` assembles the firmware with `M2M/tools/asm_strrom.sh`: the strings between the marker comments `;STRROM_BEGIN` and `;STRROM_END` go into the string ROM (`CORE/m2m-rom/m2m-strings.rom`), and their labels become handles (see `../strrom.asm`). Two tests guard this build:
+
+```bash
+python3 M2M/rom/tests/strrom_test.py               # build + verify (about 10 s)
+python3 M2M/rom/tests/strrom_test.py --no-build    # verify the last build only
+python3 M2M/rom/tests/strrom_test.py --report      # also list the strings that are still in the firmware ROM
+python3 M2M/rom/tests/strrom_tool_test.py          # fixtures for asm_strrom.sh itself (about 6 s)
+```
+
+**`strrom_test.py`** runs `make_rom.sh` and then verifies the artifacts without reusing anything of `asm_strrom.sh`, so it also proves on the Linux build machine (with another awk and another C preprocessor) that the build produced the right files. It assembles a reference firmware itself, with all strings in place, and runs four checks:
+
+* **strings** — every table entry between `STRROM$TAB` and `STRROM$TAB_END` leads to the same zero-terminated string in `m2m-strings.rom` as its label in the reference firmware; every label and every word of every marked section is covered.
+* **transform** — the listings of both builds contain the same source lines, except for the lines between the markers (removed) and the table lines behind `;STRROM_TABLE` (added). This proves that no other line was dropped or changed.
+* **layout** — `m2m-strings.rom` has `2**C_STRROM_ADDR_WIDTH` lines of two hexadecimal digits (`M2M/vhdl/qnice_wrapper.vhd`), no string crosses a 4k window, everything outside of the strings is zero, and strings only overlap where labels point into the same string in the sources.
+* **handles** — a lint over the firmware source as the assembler sees it: every use of a handle must reach a handle-aware routine (`SYSCALL(puts, 1)`, `LOG_STR`, `SCR$PRINTSTR`, `SCR$PRINTSTRXY`, `FATAL`, `FATAL_IDX`). The simple pattern (`MOVE <label>, R8`, then only instructions that leave R8 alone, then an unconditional call of a handle-aware routine) is accepted automatically. Every other use needs an entry in `ALLOWLIST` inside the test, which records the code around the use and the code it flows through (`PINS`); both were proven safe by hand. The lint also checks that the handle-aware routines still call `STRROM$OPEN` and `STRROM$CLOSE` and that the fatal callback of the menu is still `FATAL`.
+
+If the handle lint fails after you changed the firmware, read the message: either you passed a handle to code that needs a pointer (for example `strlen`, `strcpy`, `M2M$RPL_S`, `OPTM_LIVE_TEXT` or a direct `@Rx` read) — then move the string above the `;STRROM_BEGIN` marker — or you wrote a new, safe use that the lint cannot prove by itself — then check every consumer and add an `ALLOWLIST` entry. A failing pin means that code which carries handles changed; check the entries that name the pin in `via` again and update the pin.
+
+`--report` lists the strings that are still part of the firmware ROM, largest first, together with the reason why they stay there. Strings marked `CANDIDATE` only reach handle-aware routines and could move into the string ROM (a move saves the size of the string minus one table word).
+
+**`strrom_tool_test.py`** feeds `asm_strrom.sh` with about 50 small fixture programs: correct and broken marker structures, every kind of line between the markers, strings that fill, overflow and pad the 4k windows, CRLF line endings, special characters, wrong arguments, and a directory with a space in its name. Every broken fixture must end with exit code 1, an error that names the problem, and neither `<firmware>.rom` nor `<strings>.rom`; for every correct fixture the string ROM must match what the assembler produces with the strings in place. Run it after every change of `asm_strrom.sh`.
+
+Both tests write their temporary files into the system temporary directory; `strrom_test.py` regenerates the usual build artifacts in `CORE/m2m-rom`.
+
+The string ROM test (simulated hardware)
+----------------------------------------
+
+**`strrom_sim_test.py`** is the regression gate for the string ROM: the firmware side in `../strrom.asm`, the build tool `M2M/tools/asm_strrom.sh` and the QNICE device `M2M$STRROM` in `M2M/vhdl/qnice_wrapper.vhd`. The QNICE emulator has no M2M devices, so this is the one test of this folder that does not run in the emulator. It runs on **simulated hardware** instead: [ghdl](https://github.com/ghdl/ghdl) simulates the real QNICE CPU inside the real `qnice_wrapper.vhd`, with the real device decoding and the real string ROM block RAM, preloaded from the very file that `asm_strrom.sh` has written. Still no MEGA65, no JTAG cable and no Vivado; if ghdl is not installed, the test says so and skips.
+
+```bash
+python3 M2M/rom/tests/strrom_sim_test.py            # four simulations in parallel: one to two minutes
+python3 M2M/rom/tests/strrom_sim_test.py --jobs 1   # one simulation: about 2.5 minutes on an idle computer
+python3 M2M/rom/tests/strrom_sim_test.py --full     # every string through every output routine: 2.5 times the work
+```
+
+Run it before you synthesize a bitstream after touching `strrom.asm`, `asm_strrom.sh`, the string ROM in `qnice_wrapper.vhd` or one of the routines that accept the handle of a string ROM string: `IO$PUTS` in `../monitor/io_library_m2m.asm`, `LOG_STR` in `../tools.asm` and `SCR$PRINTSTR` in `../screen.asm`.
+
+The test consists of three files:
+
+* **`strrom_sim_test.asm`** — the firmware of the test. It is built exactly like the real firmware: as a release-style ROM with the QNICE Monitor at 0x0000, by `asm_strrom.sh` and with the address width that `qnice_wrapper.vhd` defines. It contains the real `../tools.asm` and `../screen.asm` and it does not check anything by itself: it reports what it reads from the string ROM and what the routines under test do, and the runner compares that with its own expectations.
+* **`strrom_sim_tb.vhd`** — the testbench around `qnice_wrapper`, with the video RAM of the on-screen menu instantiated and wired like in `av_pipeline.vhd` and `framework.vhd` and with a RAM as an example of a device of the core. It also contains a second architecture of the UART of QNICE that wraps the real one: this is how the firmware reports to the testbench (three write-only ports in the address range of the UART that the real UART ignores) and how the test gets around the 115,200 baud of the real UART, which costs 4,752 simulated clock cycles per character. A few strings are transmitted by the real UART and decoded from its pin; after that the firmware switches the wrapper to a turbo mode that takes the characters from the transmit register.
+* **`strrom_sim_test.py`** — the runner. It contains the **model**: a parser of its own for the string ROM sections of the preprocessed sources, a placement of its own (no string crosses a 4k window) and instruction-level models of `STRROM$OPEN`, `IO$PUTS`, `LOG_STR` and `SCR$PRINTSTR`. Every expected value is derived from the sources and compared twice: with the outputs of `asm_strrom.sh` before the simulation starts, and line by line with the output of the simulation while it runs.
+
+The string ROM of the test contains **every string ROM string of the Shell** — the runner collects the marked sections of all Shell sources, including the ones of the core in `CORE/m2m-rom/` — plus strings for the edge cases: the empty string, a single character, CR/LF, the special characters of `SCR$PRINTSTR`, labels in the middle of a string, characters above 0x7F, a string that ends at the last address of a 4k window, a string that is one character too long for the rest of its window and a string of 4095 characters that fills a whole window. The edge cases that depend on positions are created by filler strings whose lengths are computed on every run from the current lengths of the real strings (`strrom_sim_fixtures.asm`), so the test does not break when messages are added or changed. The runner prints the resulting layout and fails if an edge case got lost.
+
+What is checked:
+
+* **Build** — the string ROM image and the table of handles that `asm_strrom.sh` produces are equal to what the model derives from the sources, and the file names that the hardware opens are the outputs of `make_rom.sh`.
+* **Device** — every word of all 4k windows of the string ROM as QNICE reads it, the windows behind the end of the string ROM, and that write accesses are ignored.
+* **`STRROM$OPEN` and `STRROM$CLOSE`** — for every handle and for values at and around the limits of the table that are no handles: R8, the selected device and window, the stack pointer, the registers of the caller and the Carry and the Overflow flag, which neither routine may change (every value is tested with both flags set and with both flags clear), with twelve different devices and windows selected before the call, one of them a device that never answers in the testbench, so that an access to the 4k window at the wrong time gets stuck and is reported; nested calls; and every handle is read through `STRROM$OPEN` up to its terminator.
+* **`IO$PUTS`, `LOG_STR` and `SCR$PRINTSTR`** — the characters at the UART and in the video RAM (each write access and the content as the video output would read it), R8, the selected device and window and the stack pointer after the call; for `IO$PUTS` also the Carry and the Overflow flag, which it preserves (`LOG_STR` and `SCR$PRINTSTR` never did, so nothing is pinned there). Every handle runs through one of the three routines, the strings for the edge cases and the ordinary strings (in ROM, in RAM, in the window of a device of the core and in the window of `config.vhd`) through all of them. `--full` runs every handle through all three.
+
+The simulation is slow: about 20,000 clock cycles per second on an idle computer and a third of that when all cores are busy, and the test needs 2.9 million of them. Therefore the runner splits the work into simulations that run in parallel (`--jobs`, 1 to 5; the default is four on a computer with at least eight logical processors); the split is balanced by measured costs and each simulation gets its share of the test via a table in the firmware.
+
+When the test fails, it names the string, the routine and the first line that differs. For a closer look, `strrom_sim_job<N>.exp` and `strrom_sim_job<N>.got` contain the expected and the actual output of each simulation and can be compared with `diff`; `--keep` keeps the work directory of ghdl. All these files, the assembler outputs and `strrom_sim_fixtures.asm` are generated on every run.
+
+The strings of the test contain characters above 0x7F on purpose, so that all eight data bits of the string ROM are exercised. That only works because the build processes the sources byte by byte in the C locale (`LC_ALL=C`); the runner sets it for everything it starts.
 
 Running a testbed manually
 --------------------------

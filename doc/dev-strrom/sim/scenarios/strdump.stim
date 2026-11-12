@@ -1,0 +1,47 @@
+# Scenario "strdump" (new firmware only, configuration fatal_size): the QNICE
+# Monitor dumps parts of the string ROM (device 0007) through the 4k window,
+# in all four windows and in window 4, which shows window 0 again because the
+# block RAM has 14 address bits. "strrom_tools.py dumpcheck" compares the dump
+# with m2m-strings.rom.
+reset
+wait_uart 800 Core stopped. Please reset the machine.
+wait_uart 300 QMON>\x20
+send MCFFF40007
+wait_uart 300 QMON>\x20
+mark window 0
+send MCFFF50000
+wait_uart 300 QMON>\x20
+send MD7000701F
+wait_uart 400 QMON>\x20
+send MD7FE07FFF
+wait_uart 400 QMON>\x20
+mark window 1
+send MCFFF50001
+wait_uart 300 QMON>\x20
+send MD7000701F
+wait_uart 400 QMON>\x20
+send MD7FE07FFF
+wait_uart 400 QMON>\x20
+mark window 2
+send MCFFF50002
+wait_uart 300 QMON>\x20
+send MD7000701F
+wait_uart 400 QMON>\x20
+send MD7360737F
+wait_uart 400 QMON>\x20
+mark window 3
+send MCFFF50003
+wait_uart 300 QMON>\x20
+send MD7000700F
+wait_uart 400 QMON>\x20
+mark window 4
+send MCFFF50004
+wait_uart 300 QMON>\x20
+send MD7000701F
+wait_uart 400 QMON>\x20
+mark device and window as the monitor shows them
+send MEFFF4
+wait_uart 300 QMON>\x20
+send MEFFF5
+wait_uart 300 QMON>\x20
+end

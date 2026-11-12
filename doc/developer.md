@@ -243,12 +243,18 @@ these steps **in this order** (the order matters — see below):
 3. **Generate `globals.asm`** from `CORE/vhdl/globals.vhd`.
 4. **Generate `shell_fhandles.asm`** (FAT32 file-handle storage).
 5. **Generate `shell_fh_ptrs.asm`** (pointer tables into that storage).
-6. **Assemble `m2m-rom.asm`** with the `asm` wrapper, producing `m2m-rom.def`,
-   `m2m-rom.lis`, `m2m-rom.out` and `m2m-rom.rom`.
+6. **Assemble `m2m-rom.asm`** with `M2M/tools/asm_strrom.sh`, producing
+   `m2m-rom.def`, `m2m-rom.lis`, `m2m-rom.out` and `m2m-rom.rom`, plus the
+   string ROM `m2m-strings.rom` (see "Message strings and the string ROM"
+   below).
 7. **Guard the ROM budget.** QNICE reserves `0x7000`–`0x7FFF` for memory-mapped
    I/O, so the usable Shell ROM is `0x0000`–`0x6FFF` = 28,672 words. The script
    counts the words in `m2m-rom.rom` and fails the build if assembly failed or
    the ROM overflows that budget (the assembler itself does not check this).
+
+The last two lines of the output tell you how full both ROMs are, for example
+`String ROM: 9076/16384 characters in 196 strings.` and
+`Shell ROM: 18488/28672 words.`
 
 **Why steps 2–5 come before step 6:** the four generated `.asm` files are
 `#include`d into the assembly (directly or through the framework, see below), so
@@ -318,7 +324,7 @@ and `M2M/rom/shell.asm` pulls in `shell_fh_ptrs.asm`. Only `osm_const.asm` is
 `#include`d directly by `m2m-rom.asm`. This is the framework reaching back into
 the core for core-sized tables it cannot know when it is authored.
 
-The assembly step (step 6) also produces three non-`.asm` outputs:
+The assembly step (step 6) also produces these non-`.asm` outputs:
 
 | File | What it is |
 |------|------------|
@@ -326,6 +332,42 @@ The assembly step (step 6) also produces three non-`.asm` outputs:
 | `m2m-rom.out` | Loadable image for the QNICE Monitor (`M/L`) and the emulator — used for the debug console and headless tests. |
 | `m2m-rom.lis` | Full assembler listing (source alongside addresses and assembled words). |
 | `m2m-rom.def` | Monitor operating-system call definitions. |
+| `m2m-strings.rom` | Content of the string ROM, one character per line as two hexadecimal digits; this is what `i_strrom` in `M2M/vhdl/qnice_wrapper.vhd` loads. |
+| `m2m-strings.lis` | Listing of the string ROM strings as they are written in the sources, before they are placed in the string ROM. |
+
+### Message strings and the string ROM
+
+QNICE stores one character per 16-bit word, so message strings are the most expensive content of the Shell ROM: before the string ROM existed, they filled more than a third of its 28,672 words. Most of them are therefore stored in a block RAM of their own, the **string ROM**. QNICE reads it as the device `M2M$STRROM` (`0x0007`) through the 4k window at `0x7000`, like any other device. It holds 16,384 characters (`C_STRROM_ADDR_WIDTH` in `M2M/vhdl/qnice_wrapper.vhd`).
+
+**In the sources** a string ROM section is everything between two comment lines:
+
+```
+;STRROM_BEGIN
+ERR_MOUNT       .ASCII_W "Error: Cannot mount SD card!\nError code: "
+ERR_MOUNT_RET   .ASCII_W "\n\nPress Return to retry"
+;STRROM_END
+```
+
+Such sections exist in `M2M/rom/strings.asm` (the messages of the Shell), `M2M/rom/menu.asm` (the fatal errors of the menu), `M2M/rom/monitor/qmon_m2m.asm` (the texts of the debug console) and `CORE/m2m-rom/m2m-rom.asm` (the messages of the core). A section contains only labels, `.ASCII_W` and `.ASCII_P` lines and comments, and its last line is an `.ASCII_W`. A line has at most 200 characters (split longer strings with `.ASCII_P`), and a backslash must not be followed by a backslash or a double quote, because the assembler has no encoding for these two sequences. The build stops with an error message when a section breaks one of these rules.
+
+**At build time** `M2M/tools/asm_strrom.sh` runs the C preprocessor over `m2m-rom.asm`, copies the lines between the markers into a source of their own and assembles it, so that the strings are encoded exactly like any other string. It then places the strings in the string ROM in such a way that no string crosses a 4k boundary (a string is read through one 4k window), writes `m2m-strings.rom`, removes the sections from the firmware source and inserts one word per label instead: the position of the string in the string ROM. These words form a table behind the marker `;STRROM_TABLE` in `M2M/rom/strrom.asm`. The header of the script describes the steps and the error checks.
+
+**At run time** the label of a string ROM string is therefore a **handle**: the address of its table word, not a pointer to characters. `STRROM$OPEN` in `M2M/rom/strrom.asm` turns a handle into a pointer by selecting the string ROM in the 4k window (it leaves a pointer to an ordinary string untouched), and `STRROM$CLOSE` selects the device and window again that were active before. The routines that output strings do this by themselves:
+
+| Routine | Where |
+|---------|-------|
+| `SYSCALL(puts, 1)` | `IO$PUTS` in `M2M/rom/monitor/io_library_m2m.asm` |
+| `LOG_STR` | `M2M/rom/tools.asm` |
+| `SCR$PRINTSTR`, `SCR$PRINTSTRXY` | `M2M/rom/screen.asm` |
+| `FATAL`, `FATAL_IDX` | `M2M/rom/shell.asm` (they use the routines above) |
+
+A handle can be passed to these routines exactly like a pointer, and a callback function can return a handle as its message (`PREP_LOAD_IMAGE`, `CUSTOM_MSG`, `PREP_START`), because the Shell prints these messages with the routines above.
+
+**Everything else needs a pointer.** The string functions of the QNICE Monitor (`strlen`, `strcpy`, `strcmp`, `strstr`, ...), `M2M$CHK_EXT`, `M2M$RPL_S`, `OPTM_LIVE_TEXT` and any code that reads characters with `@Rx` or calculates with the address of a string do not know handles. A string that is used like this stays outside of the markers and therefore in the Shell ROM: the file extensions, `FN_ELLIPSIS`, the status texts of the built-in floppy (`P1581_OSM*`) and `ERR_F_ATRMLOAD` are examples. If code needs to read a string ROM string itself, it brackets the access with `STRROM$OPEN` and `STRROM$CLOSE`.
+
+**Rules of thumb for a new string:** if it is only printed, put it between the markers; if it is compared, copied, measured or patched, put it outside. Two tests guard this: `python3 M2M/rom/tests/strrom_test.py` rebuilds the firmware, compares every string in the string ROM with a build that keeps all strings in place, and checks every use of every handle (an unknown use fails the test); `python3 M2M/rom/tests/strrom_sim_test.py` simulates the real QNICE hardware including the string ROM with GHDL.
+
+**Release builds only.** The string ROM is used when `RELEASE` is defined in `m2m-rom.asm`. If the firmware is built to run in RAM for debugging, the QNICE Monitor in ROM is the stock one, whose `puts` does not know handles: the table marker is then not part of the source, `asm_strrom.sh` leaves all strings where they stand, and the same sources work unchanged. `make_rom.sh` then reports `String ROM: not used, all strings are part of the firmware.` and `Firmware for RAM: ...`, and `m2m-strings.rom` is filled with zeros. The emulator testbeds in `M2M/rom/tests/` assemble the Shell modules without `asm_strrom.sh`, so the markers are plain comments there as well.
 
 ### Implementing features through callbacks
 
