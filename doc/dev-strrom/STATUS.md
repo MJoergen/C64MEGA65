@@ -1,14 +1,14 @@
 # String ROM: status and running memory
 
-Entry point for anyone, human or coding agent, who picks up this work. The design is described in `doc/developer.md` (section "Message strings and the string ROM") and in the header of `M2M/rom/strrom.asm`; the rules for daily work are in `AGENTS.md`, section 7. This file records the decisions, the numbers, what was verified and how, what is still open, and what was found along the way. `MERGE-PLAYBOOK.md` in this folder describes the merge of the four feature branches that wait for this change.
+Entry point for anyone, human or coding agent, who picks up this work. The design is described in `doc/developer.md` (section "Message strings and the string ROM") and in the header of `M2M/rom/strrom.asm`; the rules for daily work are in `AGENTS.md`, section 7. This file records the decisions, the numbers, what was verified and how, what is still open, and what was found along the way.
 
 ## 0. TL;DR
 
 * **What:** the message strings of the QNICE firmware are stored in a block RAM of their own, the string ROM (QNICE device `M2M$STRROM` = `0x0007`), instead of in the firmware ROM.
 * **Why:** the firmware ROM has 28,672 words and was 27,214 words full; a string costs one word per character. The branches `mh_implement_247`, `mh_fix_issue_255`, `mh_implement_153` and `mh_implement_142` need 29,028 words together, 356 more than there are.
-* **Result:** firmware ROM 18,490 of 28,672 words (10,182 free); string ROM 9,076 of 16,384 characters in 196 strings. With all four branches merged: 20,196 words.
-* **Phase:** implemented, simulated, reviewed and pushed to `develop` as part of `WIP-V6-A22X3`. **Not yet built with Vivado and not yet tested on hardware.**
-* **Next:** merge the four branches (`MERGE-PLAYBOOK.md`), build R3 and R6, run the `WIP-V6-A22X3` section of `tests/README.md`.
+* **Result:** firmware ROM 18,490 of 28,672 words (10,182 free); string ROM 9,076 of 16,384 characters in 196 strings. With the four branches merged (`WIP-V6-A22X3`): 20,198 words (8,474 free) and 9,071 characters in 198 strings.
+* **Phase:** implemented, simulated, reviewed and on `develop` as part of `WIP-V6-A22X3`, together with the four feature branches (section 6). **Not yet built with Vivado and not yet tested on hardware.**
+* **Next:** build R3 and R6, run the `WIP-V6-A22X3` section of `tests/README.md`.
 
 ## 1. Decisions
 
@@ -30,14 +30,15 @@ Entry point for anyone, human or coding agent, who picks up this work. The desig
 |---|---|---|
 | `WIP-V6-A22X2` | 27,214 | does not exist |
 | `WIP-V6-A22X3`, this change | 18,490 | 9,076 in 196 strings |
-| plus `mh_implement_247` | 18,597 | 9,076 |
-| plus `mh_fix_issue_255` | 18,597 | 9,076 |
-| plus `mh_implement_153` | 18,825 | 9,076 in 198 strings |
-| plus `mh_implement_142` | 20,196 | 9,076 in 198 strings |
+| plus `mh_implement_247` | 18,599 | 9,076 in 196 strings |
+| plus `mh_fix_issue_255` | 18,599 | 9,076 in 196 strings |
+| plus `mh_implement_153` | 18,827 | 9,076 in 198 strings |
+| plus `mh_implement_142` | 20,198 | 9,076 in 198 strings |
+| shorter text of `WRN_CRT_TOO_BIG` | 20,198 | 9,071 in 198 strings |
 
-The rows of the branches are the result of a trial merge (section 6) and were measured two words before the final state of this change, so expect each of them to be two words higher.
+The number of string ROM characters is the end position behind the last string and includes the gaps at the 4k boundaries, so it does not grow with every string that is added.
 
-Strings that are still part of the firmware ROM: 851 words (`python3 M2M/rom/tests/strrom_test.py --report` lists them). The largest blocks are the `P1581_OSM*` status texts (336 words; a handle-aware `OPTM_LIVE_TEXT` would save about 322), the mnemonic tables of the Monitor debug library (264 words, in the QNICE submodule) and `ERR_F_ATRMLOAD` (78 words).
+Strings that are still part of the firmware ROM: 851 words after this change and 1,016 words with the four branches merged (`python3 M2M/rom/tests/strrom_test.py --report` lists them). The largest blocks are the `P1581_OSM*` status texts (336 words; a handle-aware `OPTM_LIVE_TEXT` would save about 322), the mnemonic tables of the Monitor debug library (264 words, in the QNICE submodule), the messages of the keyboard shortcuts (`SC_S_*`, 141 words, see section 6) and `ERR_F_ATRMLOAD` (78 words).
 
 RAM: no variable was added; all labels at or above `0x7000` and all `.EQU` values are unchanged. `STRROM$OPEN` uses two stack words more while a string is printed.
 
@@ -79,7 +80,7 @@ An adversarial review of the complete change found no blocker and no major probl
 * `puts` did not preserve Carry and Overflow anymore. No code depended on it (control flow scan over the firmware and over the four feature branches), fixed anyway (D7).
 * A handle that reaches code which needs a pointer builds without an error. `strrom_test.py` is the guard; it has to run after every firmware change.
 * `make_rom.sh` ended with an error for a firmware that is built for RAM, which stopped the Vivado pre-synthesis hook. Fixed: it reports `Firmware for RAM: ...` and returns 0.
-* The QNICE of this core has 32 register banks. `STRROM$OPEN` and `STRROM$CLOSE` need one level while they run; the highest level measured during a complete boot was 9.
+* The QNICE of this core had 32 register banks at that time. `STRROM$OPEN` and `STRROM$CLOSE` need one level while they run; the highest level measured during a complete boot was 9. The string output routines do not get deeper through it: each of them already nests further for every character it prints. Since the merge of the keyboard shortcuts the CPU has 64 banks (section 6).
 
 ### 3.6 Existing suites
 
@@ -109,7 +110,6 @@ Same method as in 3.4, with nvc and the final firmware; the main scenario of 3.4
 * `SCR$PRINTSTR` prints a CR or a backslash that is not followed by LF or `n` together with the next character without advancing the cursor, reads past the terminator if a string ends that way, and does not clip at the end of the 4k window.
 * QNICE assembler: an undefined word for a backslash followed by a backslash or a double quote; after a backslash followed by another character the escape state stays active until the next `n` or `t`; a buffer overflow in the listing writer for source lines of 243 characters or more (macOS aborts, Linux continues).
 * Without an SD card the boot log shows `LOADING ROM #...: FAILED` for each auto-load ROM instead of `LOG_STR_RNOMNT`, because `CONFIG_DEVH` is not zero after the failed mount (`crts-and-roms.asm`, seen in simulation only).
-* The second line of `WRN_CRT_TOO_BIG` (`CORE/m2m-rom/m2m-rom.asm`) has 45 characters, but the window has 43 columns inside of its frame: the end of the line overwrites the frame.
 * `crts-and-roms.asm` uses `ERR_F_CR_M_CNT` for the check of the auto-load count; `ERR_F_CR_A_CNT` is never used. `LOG_GEN_ROM_NA`, `C64_IMGFILE_G64` and `SPACE` are unused in a release build.
 * `M2M/vhdl/QNICE/sdmux.vhd`: the state `s_reset_controller` goes to `s_idle` in both branches, its 100 ms counter is never used.
 * Simulation only: `register_file.vhd` has no initial values (the firmware clears registers with `XOR Rx, Rx`, which stays undefined in a simulator), and `qnice_wrapper.vhd` and `config.vhd` index constant arrays with address bits that are out of range while the window is not addressed (the index in the auto-load file name branch of `qnice_wrapper.vhd` is negative for every address). Hardware is not affected; a simulation of the Shell needs guards in copies of these files (`sim/sim.py` has them).
@@ -128,9 +128,9 @@ Run the first one after every change of the firmware: it is the only thing that 
 
 ## 6. Merge of the feature branches
 
-A trial merge of the four branches on top of this change (order: 247, 255, 153, 142) built and passed all firmware suites and all VHDL benches of the branches after every step; the numbers are in section 2. `MERGE-PLAYBOOK.md` has every conflict with its resolution, and `merge/` the resolutions as diffs. The most important points:
+`mh_implement_247` (Stereo Mix), `mh_fix_issue_255` (bank cache with 32 banks), `mh_implement_153` (unload a cartridge) and `mh_implement_142` (keyboard shortcuts) were merged into `develop` in this order on top of this change. After every merge all firmware suites and the benches of the merged branches passed; the numbers are in section 2. What matters for later work:
 
-* `mh_implement_247` and `mh_implement_142` both use menu group id 36, and the menu indices of the shortcuts move up by 10. `menu_test.py verify` does not notice a group id that is used twice; `menu_test.py run` does. Run both.
-* The strings that `mh_implement_153` adds to `strings.asm` land between the markers and are only printed: correct. The strings of `mh_implement_247` (`SS_V_T_*`) and `mh_implement_142` (`SC_S_*`) are copied character by character and need to stay outside of the markers, where the branches put them.
-* `merge/0001-...patch` is an optional step that makes `SC$MSG_ADD` of `mh_implement_142` handle-aware and moves its twelve messages into the string ROM (123 words).
-* The trial was made before the documentation of this change was complete, so expect additional, simple conflicts in `AGENTS.md`, `tests/README.md`, `M2M/rom/tests/README.md` and `doc/inofficial.md`.
+* **Strings.** `LOG_STR_ROMUNL` and `LOG_STR_ROMUNLT` of `mh_implement_153` (`strings.asm`) are string ROM strings: they are only printed with `puts`. The strings of `mh_implement_247` (`SS_V_T_*` in `m2m-rom.asm`) and of `mh_implement_142` (`SC_S_*` in `shortcuts_c64.asm`) are copied character by character and are located outside of the markers. `SC$MSG_ADD` of the keyboard shortcuts could learn handles the way `LOG_STR` did; that would move the twelve `SC_S_*` messages (141 words) into the string ROM and save about 123 words.
+* **Menu.** `mh_implement_247` and `mh_implement_142` both used menu group id 36: Stereo Mix kept it, the shortcut groups are 37 to 42. The Stereo submenu sits in front of the Keyboard Shortcuts submenu, so the menu indices of the shortcuts are 10 higher than on their branch (`C_MENU_SC_F9` to `C_MENU_SC_F14`: 200, 216, 232, 248, 264, 280). `OPTM_SIZE` is 301 and `MENU_HEAP_SIZE` is 5248 (peak use 5039). `menu_test.py verify` does not notice a group id that is used twice; `menu_test.py run` does. Always run both.
+* **Register banks.** The keyboard shortcuts run the menu engine invisibly from the main loop, 11 register bank levels deeper than the on-screen menu. A shortcut that opens the file browser reaches level 38 or 39 while the SD card is read (41 in the worst case of the call graph), which is more than the 32 banks that the QNICE of this core had; the on-screen menu alone reaches 27. On the hardware the bank number wraps around and the registers of the outermost routines are overwritten, and the emulator testbeds cannot see it because the emulator has 256 banks. `SHADOW_REGFILE_SIZE` in `M2M/vhdl/QNICE/qnice_globals.vhd` is 64 now, and `M2M/rom/tests/bankdepth_test.py` computes the deepest call chain from the sources and fails when it comes too close to that limit.
+* **Block RAM.** The bank cache of `mh_fix_issue_255` adds 96 RAMB36 on top of the tiles of the string ROM (section 3.7).

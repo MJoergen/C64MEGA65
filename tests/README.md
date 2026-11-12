@@ -55,17 +55,19 @@ Keyboard shortcuts F9 to F14 (issue #142):
 * @TODO Volume down/up (`F13`/`F14`): 5% steps with the message `Volume: 75%`; holding the key repeats; stops at 0% and 100%; the `Volume` submenu shows the same value; saved about three seconds after the last change; no clicks while stepping.
 * @TODO `F10`, `F12` and `F14` (with `Shift`): while `F9`, `F11` or `F13` is held, the C64 does not see `Shift` (in BASIC: hold `F11`, then press `C=` and `Shift` together: the character set must not switch). Pressing `Shift` only after the F-key does not change the action of that key press.
 * @TODO The shortcuts do nothing while the on-screen menu is open; `Help` still opens the menu, also while a message is visible.
+* @TODO Deep call chains (the shortcuts run the menu invisibly and nest deeper than the menu itself, which is why QNICE has 64 instead of 32 register banks now): switch drive 9 on, mount a disk image on it and save a file to it from BASIC. While drive 9 still saves (yellow LED), press the key for `Mount drive 8`, change into a sub-folder in the file browser and mount an image. Repeat it with `Next disk drive 8` on a key while nothing is mounted on drive 8 (the file browser opens). Afterwards `Help` opens the menu, which looks and works as usual, and the file that was saved on drive 9 is intact.
 
 String ROM: the message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
 
 String ROM, build:
 
 * @TODO On the build machine (Linux), run `python3 M2M/rom/tests/strrom_test.py` once: it rebuilds the firmware with the local tools and checks the generated string ROM.
-* @TODO The Vivado log shows `String ROM: 9076/16384 characters in 196 strings.` and `Shell ROM: 18488/28672 words.` (or larger numbers after more features were merged), timing is met. Compare the block RAM count with the WIP-V6-A22X2 build: the string ROM adds about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
+* @TODO On the build machine (Linux), run `python3 M2M/rom/tests/bankdepth_test.py` once: it ends with `BANKDEPTH TEST OK: deepest register bank level 41 (static), 64 banks, margin 22`.
+* @TODO The Vivado log shows `String ROM: 9071/16384 characters in 198 strings.` and `Shell ROM: 20198/28672 words.`, and timing is met in every clock domain. Look at `qnice_clk` in particular: the register file of QNICE has 64 instead of 32 banks (see the keyboard shortcuts above), and the builds before had about 0.4 ns of slack in this domain. Compare the block RAM count with the WIP-V6-A22X2 build; expect about 100 tiles more: the bank cache for simulated cartridges adds 96 RAMB36 (issue #255), the string ROM about 4 tiles, and the firmware ROM, which is sized by its content, may need fewer tiles than before.
 
 String ROM, serial log:
 
-* @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 10,000 words.
+* @TODO Power on: the banner (`MiSTer2MEGA65 Firmware and Shell, ...`), the core name with the version, the configuration messages, the auto-load ROM lines, the video timing block and the memory statistics are complete and free of stray characters. `Free space in QNICE ROM` is about 8,500 words.
 * @TODO With JiffyDOS selected as Kernal: the `JiffyDOS status:` block is printed, once with all three ROM files on the SD card and once with `jd-c1581.bin` missing.
 * @TODO Debug console: hold Run/Stop and Cursor Up, press Help. The text `Entering MiSTer2MEGA65 debug mode.` appears with two addresses. Press `H`: the help text of the QNICE Monitor is complete. `M`, `D`, `7000`, `7010` dumps memory. `C`, `R` and the first of the two addresses returns to the core: the menu still opens and works.
 
@@ -73,7 +75,7 @@ String ROM, on-screen menu and messages:
 
 * @TODO The menu, all submenus, the help pages and the file browser look and work as before.
 * @TODO Mount a file with a wrong size as disk image (for example a text file renamed to `test.d64`): the message `A D64 disk image must be exactly 174848 bytes ...` appears, followed by `Press SPACE to continue.`; Space returns to the file browser.
-* @TODO Load a `.crt` file that is larger than the cartridge memory (for example a 4 MB file of zeros named `big.crt`): the message `This .crt file is too large: ...` appears, followed by `Press SPACE to continue.`
+* @TODO Load a `.crt` file that is larger than the cartridge memory (for example a 4 MB file of zeros named `big.crt`): the message `This .crt file is too large: it does not fit into the simulated cartridge memory.` appears in two lines inside of the frame of the window, followed by `Press SPACE to continue.`
 * @TODO Load a broken `.crt` file (for example a text file renamed to `broken.crt`): the error message of the cartridge parser appears as before.
 * @TODO Browse an SD card (or a folder structure) without any `.d64` or `.d81` file: the text `This core uses D64 and D81 disk images. ...` appears.
 * @TODO Mount and unmount disk images on drive 8 and 9, load a `.prg` and a `.crt`, save something to a disk image: the serial log shows the usual messages (`Selected file:`, `Mounted disk image for drive #`, ...).
