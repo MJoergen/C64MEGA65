@@ -204,13 +204,17 @@ MAIN_LOOP       RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
 ;
 ; Input:
 ;   R8 contains the drive or CRT/ROM number
-;   R9 is for virtual drives only:
+;   R9 is the key that selected the menu item:
 ;   R9=OPTM_KEY_SELECT:
-;      Just replace the disk image, if it has been mounted
+;      Virtual drives: Just replace the disk image, if it has been mounted
 ;      before without unmounting the drive (aka without
 ;      resetting the drive/"switching the drive on/off")
+;      CRTs/ROMs: Load a CRT/ROM
 ;   R9=OPTM_KEY_SELALT:
-;      Unmount the drive (aka "switch the drive off")
+;      Virtual drives: Unmount the drive (aka "switch the drive off")
+;      CRTs/ROMs: If the CRT/ROM is loaded, then the core decides via the
+;      UNLOAD_CRTROM callback (m2m-rom.asm) if Space unloads it; otherwise
+;      (and if nothing is loaded) Space loads a CRT/ROM just like Return
 ;  R10=Mode selector:
 ;      0: Virtual drives
 ;      1: Manually loadable CRTs/ROMs
@@ -221,10 +225,44 @@ HANDLE_MOUNTING SYSCALL(enter, 1)
                 MOVE    R10, R5                 ; R5: mount mode
 
                 CMP     1, R5                   ; CRT/ROM mode?
-                RBRA    _HM_START_MOUNT, Z      ; yes
+                RBRA    _HM_VDRIVE, !Z          ; no: virtual drive
+
+                ; CRT/ROM mode: Space on a loaded CRT/ROM may unload it
+                CMP     OPTM_KEY_SELALT, R6     ; Space?
+                RBRA    _HM_START_MOUNT, !Z     ; no: browse and load
+                MOVE    CRTROM_MAN_LDF, R8      ; is the CRT/ROM loaded?
+                ADD     R7, R8
+                CMP     1, @R8
+                RBRA    _HM_START_MOUNT, !Z     ; no: browse and load
+                MOVE    R7, R8                  ; the core decides whether..
+                RSUB    UNLOAD_CRTROM, 1        ; ..Space unloads it
+                RBRA    _HM_START_MOUNT, !C     ; no: browse and load
+
+                ; Space was handled by UNLOAD_CRTROM: menu.asm has already
+                ; flipped the item, so show the real load status and redraw.
+                ; Leave without _HM_RET: the reset that may come with an
+                ; unload can unmount virtual drives ("Unmount on reset"), and
+                ; VD_MNT_ST_GET in OPT_MENU_GETKEY must still see this change
+                ; to update the drive items, so do not remember the mount
+                ; status here (VD_MNT_ST_SET).
+                MOVE    R7, R8                  ; R8: CRT/ROM number
+                RSUB    CRTROM_M_GI, 1          ; R9: menu index
+                RBRA    _HM_UNLOADED, C
+                MOVE    ERR_FATAL_INST, R8
+                MOVE    ERR_FATAL_INSTD, R9
+                RBRA    FATAL, 1
+_HM_UNLOADED    MOVE    R9, R8                  ; R8: menu index
+                MOVE    CRTROM_MAN_LDF, R9      ; R9: load status
+                ADD     R7, R9
+                MOVE    @R9, R9
+                RSUB    OPTM_SET, 1
+                RSUB    OPTM_SHOW, 1            ; redraw the menu
+                RSUB    SCR$OSM_O_ON, 1
+                SYSCALL(leave, 1)
+                RET
 
                 ; we treat already mounted drives differently
-                RSUB    VD_MOUNTED, 1           ; C=1: the given drive in R8..
+_HM_VDRIVE      RSUB    VD_MOUNTED, 1           ; C=1: the given drive in R8..
                 RBRA    _HM_MOUNTED, C          ; ..is already mounted
 
                 ; Drive in R8 is not yet mounted:
@@ -693,10 +731,6 @@ LOAD_IMAGE      SYSCALL(enter, 1)
 _LI_CRTROM      MOVE    CRTROM_MAN_DEV, R0
                 ADD     R1, R0
                 MOVE    @R0, R0                 ; R0: device number
-                MOVE    R0, R8
-                MOVE    CRTROM_CSR_STATUS, R9   ; set CSR to "loading"
-                MOVE    CRTROM_CSR_ST_LDNG, R10
-                RSUB    CRTROM_CSR_W, 1
                 MOVE    HNDL_RM_FILES, R9
 
                 ; Open file
@@ -734,12 +768,25 @@ _LI_FOPEN_OK    MOVE    R5, R8
                 MOVE    LOAD_IMAGE_TYPE, R8
                 MOVE    R9, @R8                 ; keep type across progress regs
 
+                ; CRT/ROM: set the CSR to "loading" only now that the file is
+                ; accepted and right before it overwrites the device memory.
+                ; A rejected file (e.g. a .crt that is too large) must not
+                ; touch the device: the loaded cartridge keeps running and
+                ; keeps the status "loaded", so the menu still shows it and
+                ; Space can still unload it.
+                CMP     1, R4                   ; CRT/ROM mode?
+                RBRA    _LI_PROGRESS, !Z        ; no
+                MOVE    R0, R8
+                MOVE    CRTROM_CSR_STATUS, R9   ; set CSR to "loading"
+                MOVE    CRTROM_CSR_ST_LDNG, R10
+                RSUB    CRTROM_CSR_W, 1
+
                 ; For showing a progress bar: Take the remaining size of the
                 ; file, which is filesize minus current read position after
                 ; PREP_LOAD_IMAGE and divide it by the amount of printable
                 ; "progress bar characters" to obtain the target of a counter
                 ; that equals one progress step in the progress bar
-                MOVE    SCRATCH_HEX, R8
+_LI_PROGRESS    MOVE    SCRATCH_HEX, R8
                 MOVE    R5, R1
                 ADD     FAT32$FDH_ACCESS_LO, R1
                 MOVE    @R1, @R8++

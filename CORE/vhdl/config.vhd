@@ -158,7 +158,8 @@ constant HELP_2 : string :=
    " F3:                 Back SD card\n" &
    " Enter:              Mount drive\n" &
    "                     Load CRT or PRG\n" &
-   " Space:              Unmount drive\n\n" &
+   " Space:              Unmount drive\n" &
+   "                     Unload CRT\n\n" &
 
    " System reset:\n\n" &
 
@@ -445,7 +446,7 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Use hardware slot\n"       &
    " Simulate cartridge:\n"     &
-   " CRT:%s\n"                  &  -- %s will be replaced by OPTM_S_CRTROM when no cartridge is loaded, otherwise by the filename of the cartridge
+   " CRT:%s\n"                  &  -- %s will be replaced by OPTM_S_CRTROM when no cartridge is loaded, otherwise by the filename of the cartridge; Space unloads it (UNLOAD_CRTROM in m2m-rom.asm)
    " Simulate 1750 REU 512KB\n" &
    "\n"                         &
    " C64 Configuration\n"       &

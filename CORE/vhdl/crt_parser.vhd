@@ -16,6 +16,10 @@
 -- req_start_i   : Asserted when the entire CRT file has been loaded verbatim into HyperRAM.
 -- req_address_i : The start address in HyperRAM (in units of 16-bit words).
 -- req_length_i  : The length of the CRT file (in units of bytes).
+-- req_eject_i   : Asserted while QNICE requests "no cartridge" (CSR status IDLE, see sw_cartridge_csr).
+--                 Whenever the parser is idle, it then reports the neutral cartridge of the power-on
+--                 state: id 0, EXROM and GAME high, size 0. This unloads ("ejects") the cartridge.
+--                 The C64 must be reset around the eject, see UNLOAD_CRTROM in m2m-rom.asm.
 --
 -- done by MJoergen in 2023 and licensed under GPL v3
 ----------------------------------------------------------------------------------
@@ -34,6 +38,7 @@ entity crt_parser is
 
       -- Control interface (QNICE)
       req_start_i         : in  std_logic;
+      req_eject_i         : in  std_logic;
       req_address_i       : in  std_logic_vector(21 downto 0);     -- Address in HyperRAM of start of CRT file
       req_length_i        : in  std_logic_vector(22 downto 0);     -- Length of CRT file in HyperRAM
       resp_status_o       : out std_logic_vector( 3 downto 0);
@@ -283,6 +288,17 @@ begin
             when others =>
                null;
          end case;
+
+         -- Unload the cartridge: the values of the power-on state (those of rst_i, and size 0). Also in
+         -- the clock cycle that leaves READY_ST or ERROR_ST, so that the parse status never reads "idle"
+         -- while the old cartridge is still reported.
+         if req_eject_i = '1' and req_start_i = '0' and
+            (state = IDLE_ST or state = READY_ST or state = ERROR_ST) then
+            cart_id_o    <= (others => '0');
+            cart_exrom_o <= (others => '1');
+            cart_game_o  <= (others => '1');
+            cart_size_o  <= (others => '0');
+         end if;
 
          if rst_i = '1' then
             avm_write_o       <= '0';

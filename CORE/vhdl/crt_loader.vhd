@@ -36,6 +36,7 @@ entity crt_loader is
 
       -- Control interface (QNICE)
       req_start_i         : in  std_logic;
+      req_eject_i         : in  std_logic;                         -- Unload the cartridge (see crt_parser)
       req_address_i       : in  std_logic_vector(21 downto 0);     -- Address in HyperRAM of start of CRT file
       req_length_i        : in  std_logic_vector(22 downto 0);     -- Length of CRT file in HyperRAM
       resp_status_o       : out std_logic_vector( 3 downto 0);
@@ -120,6 +121,7 @@ begin
          clk_i               => clk_i,
          rst_i               => rst_i,
          req_start_i         => req_start_i,
+         req_eject_i         => req_eject_i,
          req_address_i       => req_address_i,
          req_length_i        => req_length_i,
          resp_status_o       => resp_status_o,

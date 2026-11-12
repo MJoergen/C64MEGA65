@@ -29,6 +29,7 @@ port (
 
    qnice_req_length_o        : out std_logic_vector(22 downto 0);
    qnice_req_valid_o         : out std_logic;
+   qnice_req_eject_o         : out std_logic;   -- CSR status IDLE: unload the cartridge
    qnice_resp_status_i       : in  std_logic_vector( 3 downto 0);
    qnice_resp_error_i        : in  std_logic_vector( 3 downto 0);
    qnice_resp_address_i      : in  std_logic_vector(22 downto 0);
@@ -101,6 +102,11 @@ begin
       ); -- i_qnice_csr
 
    qnice_req_valid_o <= '1' when qnice_req_status = C_CSR_REQ_OK else '0';
+
+   -- CSR status IDLE means "no cartridge": the Shell writes it at startup (nothing is loaded yet) and to
+   -- unload a cartridge (Space on the CRT line of the OSM). LDNG (a new file is being copied) and ERR
+   -- leave the current cartridge untouched, as before.
+   qnice_req_eject_o <= '1' when qnice_req_status = C_CSR_REQ_IDLE else '0';
 
    p_read : process (all)
    begin

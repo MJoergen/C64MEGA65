@@ -572,6 +572,95 @@ _PREP_LI_OK     XOR     R8, R8                  ; no errors
 _PREP_LI_RET    DECRB
                 RET
 
+; UNLOAD_CRTROM callback function:
+;
+; Called by the Shell when the user presses Space on the menu line of a
+; manually loadable CRT/ROM that is loaded (HANDLE_MOUNTING in shell.asm).
+; The core decides what Space means there, and if it unloads, it does so
+; itself with CRTROM_M_UNLD (crts-and-roms.asm), because only the core knows
+; the side effects, such as a reset.
+;
+; C64 (GitHub issue #153): Space on "CRT:" unloads the .crt, the equivalent
+; of pulling a cartridge out of the expansion port, and the menu line shows
+; "<Load>" again. While "Simulate cartridge" is active, the C64 is held in
+; reset during the unload and then restarts without the cartridge. While
+; "Use hardware slot" is active, the C64 does not see the .crt: it is just
+; unloaded and the C64 keeps running. Space on "PRG:" still opens the file
+; browser like Return. OSM_SEL_PRE makes sure that Space on a loaded .crt
+; does not switch the expansion port to "Simulate cartridge".
+;
+; Input:  R8: CRT/ROM id (the first OPTM_G_LOAD_ROM line in config.vhd is 0)
+; Output: Carry=1: Space is handled; the Shell then shows the load status on
+;                  the menu line and redraws the menu
+;         Carry=0: Space works like Return (file browser)
+;         R8, R9: unchanged
+UNLOAD_CRTROM   INCRB
+
+                MOVE    R8, R0                  ; R0: CRT/ROM id
+                MOVE    R9, R1                  ; R1: save R9
+                XOR     R4, R4                  ; R4: 1 = Space is handled
+
+                ; only the .crt can be unloaded
+                MOVE    C64_OPTM_G_MOUNT_CRT, R8
+                RSUB    CRTROM_G_ID, 1          ; R8: CRT/ROM id of the .crt
+                RBRA    _UNLD_RET, !C
+                CMP     R0, R8
+                RBRA    _UNLD_RET, !Z
+                MOVE    1, R4
+
+                ; "Use hardware slot": just unload, no reset
+                MOVE    C64_OSM_SIM_CRT, R8
+                RSUB    M2M$GET_SETTING, 1      ; R9=1: simulate cartridge
+                CMP     1, R9
+                RBRA    _UNLD_SIM, Z
+                MOVE    R0, R8
+                RSUB    CRTROM_M_UNLD, 1
+                RBRA    _UNLD_RET, 1
+
+                ; "Simulate cartridge": hold the C64 in reset, unload, then
+                ; RESET_CORE keeps the reset active for its minimum length and
+                ; releases it. So the C64 never runs while the cartridge
+                ; disappears, and the soft reset puts cartridge.vhd into its
+                ; neutral state.
+                ;
+                ; main.vhd drops the reset while a virtual drive still has
+                ; unsaved data (prevent_reset). So if a drive is dirty, release
+                ; the reset again and ignore Space: the drive shows "<Saving>"
+                ; and Space works again as soon as the data is saved. The check
+                ; comes after the reset is asserted: once the reset is active,
+                ; the simulated drives are in reset, too, and cannot start a
+                ; new write, so a clean result here stays clean.
+_UNLD_SIM       MOVE    M2M$CSR, R2
+                OR      M2M$CSR_RESET, @R2      ; assert soft reset
+                RSUB    VD_ACTIVE, 1            ; R8: amount of vdrives
+                RBRA    _UNLD_RESET, !C
+                MOVE    R8, R5                  ; R5: amount of vdrives
+                XOR     R3, R3                  ; R3: vdrive (not R8, it is
+_UNLD_DIRTY     MOVE    R3, R8                  ; overwritten by VD_DRV_READ)
+                MOVE    VD_CACHE_DIRTY, R9
+                RSUB    VD_DRV_READ, 1          ; R8=1: unsaved data
+                CMP     0, R8
+                RBRA    _UNLD_KEEP, !Z          ; dirty: ignore Space
+                ADD     1, R3
+                CMP     R5, R3
+                RBRA    _UNLD_DIRTY, !Z
+
+_UNLD_RESET     MOVE    R0, R8
+                RSUB    CRTROM_M_UNLD, 1        ; waits for the idle parser
+                RSUB    RESET_CORE, 1           ; keep and release the reset
+                RBRA    _UNLD_RET, 1
+
+_UNLD_KEEP      AND     M2M$CSR_UN_RESET, @R2   ; release the reset
+
+_UNLD_RET       MOVE    R0, R8                  ; restore R8, R9
+                MOVE    R1, R9
+                AND     0xFFFB, SR              ; Carry := R4
+                CMP     0, R4
+                RBRA    _UNLD_RET_C0, Z
+                OR      0x0004, SR
+_UNLD_RET_C0    DECRB
+                RET
+
 ; ----------------------------------------------------------------------------
 ; Core specific callback functions: Custom tasks
 ; ----------------------------------------------------------------------------
@@ -730,7 +819,8 @@ _JD_RPT_RET     DECRB
 ;
 ; Semantics: M2M$CSR_RESET is a strict subset of a short MEGA65 reset-button
 ; press: soft-reset the C64 only, no AV-pipeline / HyperRAM touch, no cart
-; eject. To exit a cart, hold the MEGA65 reset button for at least 1.5 s.
+; eject. To exit a cart, hold the MEGA65 reset button for at least 1.5 s or
+; unload it with Space on the CRT line of the OSM (UNLOAD_CRTROM).
 ;
 ; Input:  none
 ; Output: none (callers do their own R8/R9 = 0/0 if needed)
@@ -936,7 +1026,8 @@ OSM_SEL_POST    INCRB
                 ; This is a soft reset (M2M$CSR_RESET is a strict subset of
                 ; a short MEGA65 reset-button press), so a loaded cartridge
                 ; persists and re-autostarts after the reset. To exit a
-                ; cart, hold the MEGA65 reset button for at least 1.5 s.
+                ; cart, hold the MEGA65 reset button for at least 1.5 s or
+                ; unload it with Space on the CRT line (UNLOAD_CRTROM).
                 CMP     C64_OPTM_G_KERNAL_MODES, R8
                 RBRA    _OSM_SP_RESET, Z
                 CMP     C64_OPTM_G_EXP_PORT, R8
@@ -1107,7 +1198,19 @@ OSM_SEL_PRE     INCRB
                 ; will issue its own reset once the .crt has been loaded.
                 CMP     C64_OPTM_G_MOUNT_CRT, R8
                 RBRA    _OSM_SEL_PRE_R, !Z
-                MOVE    C64_OSM_SIM_CRT, R8
+
+                ; Space on a loaded .crt does not load but unload it (see
+                ; UNLOAD_CRTROM), so the expansion port mode stays as it is
+                CMP     OPTM_KEY_SELALT, R10    ; Space?
+                RBRA    _OSM_PRE_SIMCRT, !Z     ; no
+                RSUB    CRTROM_G_ID, 1          ; R8: CRT/ROM id of the .crt
+                RBRA    _OSM_PRE_SIMCRT, !C
+                MOVE    CRTROM_MAN_LDF, R0
+                ADD     R8, R0
+                CMP     1, @R0                  ; .crt loaded?
+                RBRA    _OSM_SEL_PRE_R, Z       ; yes: Space unloads it
+
+_OSM_PRE_SIMCRT MOVE    C64_OSM_SIM_CRT, R8
                 RSUB    M2M$GET_SETTING, 1
                 CMP     1, R9                   ; already in sim crt mode?
                 RBRA    _OSM_SEL_PRE_R, Z       ; yes, then nothing to do

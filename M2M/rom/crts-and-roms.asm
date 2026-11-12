@@ -602,6 +602,109 @@ _HNDLCRTROM_R   MOVE    R2, R10                 ; R10: unchanged
                 RET
 
 ; ----------------------------------------------------------------------------
+; Unload a manually loaded CRT/ROM
+;
+; Sets the CSR status of the CRT/ROM device to "idle" (nothing loaded),
+; waits until the device reports that its parser is idle and clears the load
+; flag, so that the menu shows OPTM_S_CRTROM ("<Load>") again. A device such
+; as the C64 cartridge (sw_cartridge_csr.vhd) treats the status "idle" as
+; "no cartridge" and ejects it. The wait has a time limit of a fraction of a
+; second because a device without a parser (e.g. a loader that hardwires its
+; parse status to "OK") never reports "idle". The menu is up to the caller.
+;
+; Called by the core via its UNLOAD_CRTROM callback (see shell.asm,
+; HANDLE_MOUNTING), because the core knows the side effects, e.g. a reset.
+;
+; Input:  R8: CRT/ROM id
+; Output: none, all registers remain unchanged
+; ----------------------------------------------------------------------------
+
+CRTROM_M_UNLD   INCRB
+
+                MOVE    R8, R0                  ; R0: CRT/ROM id
+                MOVE    R9, R1                  ; R1, R2: save R9, R10
+                MOVE    R10, R2
+
+                MOVE    ERR_FATAL_INSTC, R9     ; sanity check the id
+                RSUB    CRTROM_CHK_NO, 1
+
+                MOVE    CRTROM_MAN_DEV, R8      ; R8: CRT/ROM device id
+                ADD     R0, R8
+                MOVE    @R8, R8
+                MOVE    CRTROM_CSR_STATUS, R9   ; CSR status: nothing loaded
+                MOVE    CRTROM_CSR_ST_IDLE, R10
+                RSUB    CRTROM_CSR_W, 1
+
+                MOVE    CRTROM_CSR_PARSEST, R9  ; wait for the idle parser
+                XOR     R3, R3                  ; R3: time limit (65536 polls)
+                XOR     R4, R4                  ; R4=1: time limit reached
+_CRTRUNL_1      RSUB    CRTROM_CSR_R, 1
+                CMP     CRTROM_CSR_PT_IDLE, R10
+                RBRA    _CRTRUNL_2, Z
+                SUB     1, R3
+                RBRA    _CRTRUNL_1, !Z
+                MOVE    1, R4
+
+_CRTRUNL_2      MOVE    CRTROM_MAN_LDF, R8      ; clear the "loaded" flag
+                ADD     R0, R8
+                MOVE    0, @R8
+
+                MOVE    LOG_STR_ROMUNL, R8      ; log to serial terminal
+                SYSCALL(puts, 1)
+                MOVE    R0, R8
+                SYSCALL(puthex, 1)
+                CMP     0, R4                   ; time limit reached?
+                RBRA    _CRTRUNL_3, Z
+                MOVE    LOG_STR_ROMUNLT, R8
+                SYSCALL(puts, 1)
+_CRTRUNL_3      SYSCALL(crlf, 1)
+
+                MOVE    R0, R8                  ; restore R8, R9, R10
+                MOVE    R1, R9
+                MOVE    R2, R10
+                DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; Return the id of the manually loadable CRT/ROM that belongs to a menu group
+;
+; Input:   R8: menu group id (without flags, as in config.vhd)
+; Returns: Carry=1 if a manually loadable CRT/ROM belongs to it, else Carry=0
+;          R8: CRT/ROM id (only valid if Carry=1)
+;          R9: unchanged
+; ----------------------------------------------------------------------------
+
+CRTROM_G_ID     INCRB
+
+                MOVE    R8, R0                  ; R0: group we look for
+                MOVE    R9, R1                  ; R1: save R9
+                MOVE    CRTROM_MAN_NUM, R2      ; R2: amount of CRTs/ROMs
+                MOVE    @R2, R2
+                XOR     R3, R3                  ; R3: CRT/ROM id
+
+_CRTRGID_1      CMP     R3, R2                  ; all CRTs/ROMs checked?
+                RBRA    _CRTRGID_C0, Z          ; yes: not found
+                MOVE    R3, R8
+                RSUB    CRTROM_M_GI, 1          ; R8: group id incl. flags
+                RBRA    _CRTRGID_2, !C
+                AND     0x00FF, R8              ; remove flags
+                CMP     R0, R8
+                RBRA    _CRTRGID_C1, Z          ; found
+_CRTRGID_2      ADD     1, R3
+                RBRA    _CRTRGID_1, 1
+
+_CRTRGID_C0     MOVE    R0, R8                  ; not found: restore R8, R9
+                MOVE    R1, R9
+                RBRA    _CRMN_C0, 1             ; clear Carry and return
+
+_CRTRGID_C1     MOVE    R3, R8                  ; found: return the id
+                MOVE    R1, R9
+                RBRA    _CRMN_C1, 1             ; set Carry and return
+
+                ; DECRB and
+                ; RET done via _CRMN_C0 and _CRMN_C1
+
+; ----------------------------------------------------------------------------
 ; Perform the automatic loading of ROMs
 ;
 ; Goes fatal if a mandatory ROM is missing.

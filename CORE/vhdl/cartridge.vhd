@@ -109,6 +109,7 @@ begin
         saved_d6     <= '0';
         ioe_wr_ena_o <= '0';
         iof_wr_ena_o <= '0';
+        roml_we_o    <= '0'; -- only Action Replay and Super Snapshot V5 write to ROML
         freeze_armed <= '0';
       end if;
 
@@ -493,6 +494,7 @@ begin
         saved_d6     <= '0';
         ioe_wr_ena_o <= '0';
         iof_wr_ena_o <= '0';
+        roml_we_o    <= '0';
         freeze_armed <= '0';
       end if;
     end if;

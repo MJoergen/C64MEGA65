@@ -85,6 +85,7 @@ architecture synthesis of sw_cartridge_wrapper is
    signal qnice_req_status        : std_logic_vector(15 downto 0);
    signal qnice_req_length        : std_logic_vector(22 downto 0);
    signal qnice_req_valid         : std_logic;
+   signal qnice_req_eject         : std_logic;
    signal qnice_resp_status       : std_logic_vector( 3 downto 0);
    signal qnice_resp_error        : std_logic_vector( 3 downto 0);
    signal qnice_resp_address      : std_logic_vector(22 downto 0);
@@ -102,6 +103,7 @@ architecture synthesis of sw_cartridge_wrapper is
    -- Request and response
    signal hr_req_length           : std_logic_vector(22 downto 0);
    signal hr_req_valid            : std_logic;
+   signal hr_req_eject            : std_logic;
    signal hr_resp_status          : std_logic_vector( 3 downto 0);
    signal hr_resp_error           : std_logic_vector( 3 downto 0);
    signal hr_resp_address         : std_logic_vector(22 downto 0);
@@ -177,6 +179,7 @@ begin
          qnice_wait_o              => qnice_wait_o,
          qnice_req_length_o        => qnice_req_length,
          qnice_req_valid_o         => qnice_req_valid,
+         qnice_req_eject_o         => qnice_req_eject,
          qnice_resp_status_i       => qnice_resp_status,
          qnice_resp_error_i        => qnice_resp_error,
          qnice_resp_address_i      => qnice_resp_address,
@@ -199,15 +202,17 @@ begin
    i_cdc_qnice2hr : entity work.cdc_stable
       generic map (
          G_REGISTER_SRC => true,
-         G_DATA_SIZE    => 24
+         G_DATA_SIZE    => 25
       )
       port map (
          src_clk_i                => qnice_clk_i,
          src_data_i(22 downto  0) => qnice_req_length,
          src_data_i(23)           => qnice_req_valid,
+         src_data_i(24)           => qnice_req_eject,
          dst_clk_i                => hr_clk_i,
          dst_data_o(22 downto  0) => hr_req_length,
-         dst_data_o(23)           => hr_req_valid
+         dst_data_o(23)           => hr_req_valid,
+         dst_data_o(24)           => hr_req_eject
       ); -- i_cdc_qnice2hr
 
    avm_fifo_qnice : entity work.avm_fifo
@@ -278,6 +283,7 @@ begin
          req_address_i       => G_BASE_ADDRESS,
          req_length_i        => hr_req_length,
          req_start_i         => hr_req_valid,
+         req_eject_i         => hr_req_eject,
          resp_status_o       => hr_resp_status,
          resp_error_o        => hr_resp_error,
          resp_address_o      => hr_resp_address,

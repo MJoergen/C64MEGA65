@@ -8,7 +8,7 @@ effort, it might be that we are not always doing it.
 Version WIP-V6-A22X3 - TBD
 --------------------------
 
-@TODO: Test the Stereo Mix (issue #247), the larger bank cache for simulated cartridges (issue #255) and the string ROM on R3/R3A and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
+@TODO: Test the Stereo Mix (issue #247), the larger bank cache for simulated cartridges (issue #255), unloading simulated cartridges (issue #153) and the string ROM on R3/R3A and R6 at least (R4/R5 when available), the Stereo Mix on HDMI and on the 3.5 mm audio jack, best with headphones. Everything of WIP-V6-A22X2 below still applies.
 
 Stereo Mix for stereo SIDs in the Volume submenu (issue #247):
 
@@ -28,6 +28,21 @@ Bank cache for simulated cartridges (32 instead of 8 ROML and ROMH banks):
 * @TODO Stand still in "Eye of the Beholder" for five minutes: no flicker.
 * @TODO Regression: the other simulated cartridges of the usual set start and run as before, in particular the bank-switch-heavy ones (EasyFlash, GMod2, Magic Desk, Ocean) and the freezers (Action Replay, Final Cartridge III, Super Snapshot); mount a second `.crt` while one is running, soft reset and hard reset with a `.crt` mounted.
 * @TODO A 1 MB EasyFlash `.crt` and a small 8 kB `.crt` load and start on R3 and R6.
+
+Unload a `.crt` with `Space` on the `CRT:` line of the on-screen menu:
+
+* @TODO Load a 16K game `.crt`, an EasyFlash `.crt` and a freezer (Action Replay or Final Cartridge III) one after the other. Each time: `Space` on `CRT:` restarts the C64 to the BASIC start screen at once, the line shows `CRT:<Load>`, "Expansion Port" stays at "Simulate cartridge". Afterwards a short and a long press of the reset button, `SYS 64738` and the freezer button (`F9`) do not bring the cartridge back.
+* @TODO After unloading, load another `.crt` (and the same one again): it starts and runs as before, incl. bank switching (EasyFlash).
+* @TODO `Space` on `CRT:<Load>` (nothing loaded) opens the file browser, `Return` on a loaded `CRT:` opens the file browser and loads another `.crt`: both as before.
+* @TODO `Space` on a loaded `PRG:` still opens the file browser (no unloading of PRGs).
+* @TODO "Use hardware slot": load a `.crt` (switches to "Simulate cartridge"), plug in or keep a hardware cartridge, switch back to "Use hardware slot" (the hardware cartridge runs). `Space` on `CRT:`: the line shows `<Load>`, the hardware cartridge keeps running (no reset), "Expansion Port" stays at "Use hardware slot". Switching to "Simulate cartridge" then starts BASIC without a cartridge.
+* @TODO Mount a `.d64` on drive 8 and save a file from BASIC; while the drive still saves (yellow LED, `<Saving>` in the menu) press `Space` on `CRT:`: nothing happens. When the saving is done, `Space` unloads. The saved file is intact.
+* @TODO "Unmount on reset" on for drive 8 and a mounted disk image: unloading the `.crt` unmounts drive 8 and the menu shows `8:<Mount>` right away. With "Unmount on reset" off, the disk image stays mounted.
+* @TODO Simulated REU on: after unloading the `.crt` the REU is still there (for example a REU test program or C64 OS).
+* @TODO A damaged `.crt` that ends with a parse error and then `Run/Stop` in the browser: if `CRT:` shows its name, `Space` unloads it and BASIC works normally.
+* @TODO Load a `.crt`, then pick a `.crt` that is too large (the core rejects it), `Run/Stop`: the first cartridge keeps running and `CRT:` still shows its name; `Space` unloads it.
+* @TODO Super Snapshot V5 `.crt`, then unload it (or load another `.crt` directly): the next `.crt` (for example a 16K game) starts. Before WIP-V6-A22X3 it did not start until the MEGA65 was switched off.
+* @TODO Unload, close the menu, power-cycle: the config file is fine and `CRT:` shows `<Load>`.
 
 String ROM: the message strings of the QNICE firmware moved from the firmware ROM into a block RAM of their own (see "Message strings and the string ROM" in `doc/developer.md`), so every text that the firmware prints on the serial terminal or on the screen takes a new path. Nothing changes for the user: all texts need to look exactly as in WIP-V6-A22X2. Connect a serial terminal (115200 baud, 8-N-1) for the items that mention the serial log.
 
