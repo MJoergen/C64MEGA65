@@ -26,11 +26,11 @@
 
                 ; The register file of the simulated CPU starts undefined, so
                 ; the idiom XOR Rx, Rx would yield X instead of 0 as on the
-                ; hardware: clear R0..R7 of all 32 register banks of the M2M
+                ; hardware: clear R0..R7 of all 64 register banks of the M2M
                 ; QNICE (SHADOW_REGFILE_SIZE in qnice_globals.vhd) from bank
-                ; 31 down to bank 0, and R8..R12
-START_FIRMWARE  MOVE    32, R8
-_CT_RB          SUB     1, R8                   ; R8: bank 31 .. 0
+                ; 63 down to bank 0, and R8..R12
+START_FIRMWARE  MOVE    64, R8
+_CT_RB          SUB     1, R8                   ; R8: bank 63 .. 0
                 MOVE    R8, R9
                 SWAP    R9, R9                  ; bank number to the high byte
                 AND     0x00FF, SR              ; select the bank

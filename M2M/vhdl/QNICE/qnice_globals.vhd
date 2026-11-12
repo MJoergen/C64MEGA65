@@ -16,9 +16,18 @@ package env1_globals is
 constant QNICE_CLK_SPEED      : natural   := 50_000_000;
 
 -- size of lower register bank: needs to be 256 for standard QNICE
--- depending on the ROM/firmware we ca reduce it to save FPGA resources
--- for MiSTer2MEGA65 we assume that 32 is enough
-constant SHADOW_REGFILE_SIZE  : natural   := 32;
+-- depending on the ROM/firmware we can reduce it to save FPGA resources
+--
+-- The Shell needs 64: SYSCALL(enter, 1) costs two banks and INCRB one, and the
+-- deepest call chain reaches bank level 41. That is a keyboard shortcut that
+-- opens the file browser while the SD card is read (C64MEGA65 issue #142); the
+-- on-screen menu alone reaches level 27. A level beyond the last bank is not
+-- an error on the hardware: the bank number wraps around, so the registers of
+-- the outermost routines are overwritten. The QNICE emulator has 256 banks,
+-- therefore the firmware testbeds cannot notice an overflow;
+-- M2M/rom/tests/bankdepth_test.py computes the deepest chain from the sources
+-- and compares it with this constant.
+constant SHADOW_REGFILE_SIZE  : natural   := 64;
 
 -- size of the block RAM in 16bit words:
 --   standard QNICE (development mode): 32768
