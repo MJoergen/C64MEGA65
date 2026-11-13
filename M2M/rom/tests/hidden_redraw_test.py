@@ -5,9 +5,11 @@ keyboard shortcut (_OPTM_GK_MNT and _OPTM_GK_CRTROM in M2M/rom/options.asm).
 
 _OPTM_GK_MNT brings the menu items and the bits in M2M$CFM_DATA of all virtual
 drives in line with their mount status, _OPTM_GK_CRTROM does the same for the
-CRT/ROM items whose load status changed. Both end at _OPTM_GK_MNT_S, which
-redraws the menu with OPTM_SHOW and shows the selection again with
-OPTM_SELECT. The key loop of the visible menu (OPT_MENU_GETKEY) calls both,
+CRT/ROM items whose load status changed. _OPTM_GK_CRTROM ends at
+_OPTM_GK_MNT_S, which redraws the menu with OPTM_SHOW and shows the selection
+again with OPTM_SELECT, and so does _OPTM_GK_MNT on a core with virtual
+drives; on a core without virtual drives _OPTM_GK_MNT returns at once (at
+_OPTM_GK_MNT_R), without updates and without a redraw. The key loop of the visible menu (OPT_MENU_GETKEY) calls both,
 and HANDLE_MOUNTING calls _OPTM_GK_MNT after it loaded a CRT/ROM, also in the
 invisible session of a keyboard shortcut (OPTM_DIRECT is not zero, see
 SC$SESSION in shortcuts.asm). There the on-screen menu is off, so the redraw
@@ -18,10 +20,13 @@ against stubs that print a trace line for every call (VD_ACTIVE,
 VD_MNT_ST_GET, VD_MENGRP, OPTM_SET, CRTROM_M_GI, M2M$SET_SETTING,
 CRTROM_MLST_GET, OPTM_SHOW, OPTM_SELECT, FATAL). M2M$CFM_ADDR and M2M$CFM_DATA
 become variables of the testbed that behave like the hardware (32 banks of 16
-bits, the data register shows the selected bank): the script inserts a call
+bits, the data register shows the selected bank). The script inserts a call
 of a trace routine behind every instruction of the extracted code that writes
-to memory through a register, so every access to the two registers is in
-the trace, and so would be any other write. The cases: OPTM_DIRECT 0, 1 and
+to memory through a register (@R0 to @R7), so every such write is in the
+trace, among them the three writes to M2M$CFM_ADDR and M2M$CFM_DATA; reads
+are not traced. If the extracted code writes through a register in a form
+that the trace routines do not know (@--Rn or @Rn++), the run stops with a
+failure that says so and names the line. The cases: OPTM_DIRECT 0, 1 and
 0x8000, entry through _OPTM_GK_MNT and through _OPTM_GK_CRTROM, no virtual
 drive at all, one and two drives in every combination of mounted and
 unmounted (on two different contents of the banks, so that every bit is once
@@ -161,14 +166,16 @@ def real_code():
 
 
 DEST = re.compile(r"^\S*\s+([A-Z]+)\s+[^;]*?,\s*(@\S+)")
+UNTRACED = ("the extracted code writes to memory through a register in a form that the "
+            "trace routines do not know (only @R0 to @R7 are traced), adapt instrument(): ")
 
 
 def instrument(code):
     """The registers M2M$CFM_ADDR and M2M$CFM_DATA become variables of the
     testbed, and every instruction that writes to memory through a register
     is followed by a call of the trace routine TB_W_<register>, which keeps
-    all registers and flags. Returns None for a destination that the trace
-    routines do not know (@--Rn, @Rn++)."""
+    all registers and flags. Returns (code, None), or (None, the line) for a
+    destination that the trace routines do not know (@--Rn, @Rn++)."""
     code = code.replace("M2M$CFM_ADDR", "TB_CFM_ADDR").replace("M2M$CFM_DATA", "TB_CFM_DATA")
     out = []
     for line in code.split("\n"):
@@ -178,9 +185,9 @@ def instrument(code):
             continue
         r = re.match(r"^@(R[0-7])$", m.group(2))
         if not r:
-            return None
+            return None, line.strip()
         out.append(" " * 16 + "RSUB    TB_W_%s, 1" % r.group(1))
-    return "\n".join(out)
+    return "\n".join(out), None
 
 
 TESTBED = r"""
@@ -667,9 +674,10 @@ def words(ws):
 
 
 def testbed(code):
-    gk = instrument(code)
+    """Returns (source of the testbed, None) or (None, the untraced line)"""
+    gk, bad = instrument(code)
     if gk is None:
-        return None
+        return None, bad
     scripts, cases = [], []
     for n, c in enumerate(CASES):
         pairs = [w for p in c["script"] for w in p] + [0xFFFF]
@@ -686,7 +694,7 @@ def testbed(code):
         hooks="\n\n".join(HOOK.format(n=n) for n in range(8)),
         patterns="\n".join("%-15s .DW     %s" % ("TB_PAT_%d" % i if k == 0 else "", words(p[k:k + 8]))
                            for i, p in enumerate(PATTERNS) for k in range(0, 32, 8)),
-        scripts="\n".join(scripts), cases="\n".join(cases), gk=gk, **regs)
+        scripts="\n".join(scripts), cases="\n".join(cases), gk=gk, **regs), None
 
 
 # ---------------------------------------------------------------------------
@@ -779,9 +787,9 @@ def model(skip):
 # Assemble, run, compare
 # ---------------------------------------------------------------------------
 def run(code, work, name="hidden_redraw_tb"):
-    tb = testbed(code)
+    tb, bad = testbed(code)
     if tb is None:
-        return None, "assembly failed: a write to memory that the trace routines do not know"
+        return None, UNTRACED + bad
     src = os.path.join(work, name + ".asm")
     open(src, "w").write(tb)
     r = subprocess.run([ASM, name + ".asm"], cwd=work, capture_output=True, text=True, timeout=120)
@@ -869,6 +877,14 @@ def replace(*pairs):
 
 never_skipped = replace((SKIP, NOSKIP))
 
+# Equivalent mutants, which no test can catch because the firmware behaves the
+# same with them (listed so that they are not reported as gaps):
+#   * R0 or R9 instead of R8 for the test of OPTM_DIRECT at _OPTM_GK_MNT_S:
+#     all three registers are dead there (R8 and R9 are set again before
+#     OPTM_SELECT and restored by SYSCALL(leave, 1), R0 is not read after the
+#     loops of both routines)
+#   * the branch target _OPTM_GK_CR_R instead of _OPTM_GK_MNT_R: the code at
+#     both labels is the same (SYSCALL(leave, 1) and RET)
 MUTANTS = [
     ("never_skipped", never_skipped),                       # the code before the change
     ("skipped_always", replace(("RBRA    _OPTM_GK_MNT_R, !Z      ; yes: no redraw",
@@ -903,9 +919,9 @@ def main():
         open(os.path.join(work, "model.exp"), "w").write("\n".join(exp) + "\n")
         open(os.path.join(work, "model_without_skip.exp"), "w").write("\n".join(exp_old) + "\n")
         got, err = run(code, work)
-        diff = compare(got, exp)
+        diff = err or compare(got, exp)
         if diff:
-            print("FAIL: real code: %s %s" % (diff, err))
+            print("FAIL: real code: %s" % diff)
             fails += 1
         else:
             print("PASS: real code, %d cases (_OPTM_GK_MNT and _OPTM_GK_CRTROM), %d lines of trace"
@@ -917,10 +933,10 @@ def main():
                   "the skip%s" % ("produces" if not diff else "does not produce",
                                   "" if not diff else ": " + diff))
         got_old, err = run(old, work, "hidden_redraw_old") if old else (None, "")
-        diff = compare(got_old, exp_old) if old else "the skip is not found: adapt SKIP"
+        diff = (err or compare(got_old, exp_old)) if old else "the skip is not found: adapt SKIP"
         if diff:
             print("FAIL: the code without the skip does not produce the trace of the model "
-                  "without the skip: %s %s" % (diff, err))
+                  "without the skip: %s" % diff)
             fails += 1
         else:
             print("PASS: the code without the skip (as before the change) produces the trace of "
@@ -940,7 +956,10 @@ def main():
                 continue
             got, err = run(mcode, work, "hidden_redraw_mut")
             diff = compare(got, exp)
-            if err.startswith("assembly failed"):
+            if err.startswith(UNTRACED):
+                print("FAIL: mutant %s: %s" % (name, err))
+                fails += 1
+            elif err.startswith("assembly failed"):
                 print("FAIL: mutant %s does not assemble: %s" % (name, err))
                 fails += 1
             elif diff:

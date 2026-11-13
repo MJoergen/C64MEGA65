@@ -30,9 +30,12 @@ the code against stubs that print every access to the file system (f32_fopen
 with the file handle it gets, f32_mnt_sd), to the core (PREP_LOAD_IMAGE with
 handle, context and menu group, UNLOAD_CRTROM), to the hardware (CSR of the
 CRT/ROM devices, VD_STROBE_IM) and to the menu (OPTM_SET, OPTM_SHOW, the error
-message on the screen); the two stubs that read a key of the user (the file
-browser and the wait for Space) print HM_KEYREAD. The keyboard register of
-the wait for Return is a variable of the testbed. The script runs one session
+message on the screen, and _OPTM_GK_MNT with the value of OPTM_DIRECT: after a
+CRT/ROM load it brings the lines and menu bits of the drives in line with
+their mount status, also in direct mode); the two stubs that read a key of
+the user (the file browser and the wait for Space) print HM_KEYREAD. The
+keyboard register of the wait for Return is a variable of the testbed. The
+script runs one session
 of cases in the QNICE emulator: a mounted, an empty and a preselected drive
 (VD_NEXT_DISK, direct mode), a loaded and an empty CRT/ROM line, rejected
 files with and without a message followed by Run/Stop or by an accepted file,
@@ -46,7 +49,8 @@ mount status, the CRT/ROM load flags, HM_KEYREAD, the folder of VD_NEXT_DISK
 (VD_NXT_INFO) and every menu line slot word by word. An independent model of
 the intended behavior computes the expected output. Then the script applies
 mutants to the extracted code, among them the reversal of each of the two
-halves of the fix and a missing or misplaced HM_KEYREAD; each mutant must make
+halves of the fix, a missing or misplaced HM_KEYREAD, and a call of
+_OPTM_GK_MNT that is missing or skipped in direct mode; each mutant must make
 the comparison fail.
 
 Usage:  python3 mount_reject_test.py        (ends with "RESULT: PASS")
@@ -783,8 +787,21 @@ HANDLE_IO
 KEYB$SCAN
 SAVE_DEVSEL
 RESTORE_DEVSEL
-_OPTM_GK_MNT
 VD_MNT_ST_SET   RET
+
+; _OPTM_GK_MNT: "GK_MNT <OPTM_DIRECT>", so that the mode of the call is visible;
+; changes nothing, like the real routine (enter and leave)
+_OPTM_GK_MNT    INCRB
+                MOVE    R8, R0
+                MOVE    S_GKMNT, R8
+                SYSCALL(puts, 1)
+                MOVE    OPTM_DIRECT, R8
+                MOVE    @R8, R8
+                RSUB    PRHEX, 1
+                SYSCALL(crlf, 1)
+                MOVE    R0, R8
+                DECRB
+                RET
 
 ; ----------------------------------------------------------------------------
 ; The real code
@@ -842,6 +859,7 @@ S_STROBE        .ASCII_W "STROBE"
 S_VDRD          .ASCII_W "UNEXPECTED VD_DRV_READ"
 S_OSET          .ASCII_W "OPTM_SET"
 S_SHOW          .ASCII_W "SHOW"
+S_GKMNT         .ASCII_W "GK_MNT"
 S_CSRW          .ASCII_W "CSRW"
 S_UNLD          .ASCII_W "UNLOAD"
 S_ERRCODE       .ASCII_W "ERRCODE"
@@ -1103,6 +1121,7 @@ def model():
                 out.append("LOG MOUNT " + h(cid))
             else:
                 out.append("OPTM_SET %s 0001" % h(menu))
+                out.append("GK_MNT %s" % h(direct))         # drives, also in direct mode
             break
         if fatal:
             out.append("REGS FATAL")
@@ -1244,6 +1263,13 @@ MUTANTS = [
     ("keyread_on_entry",
      replace("hm", ("MOVE    R10, R5                 ; R5: mount mode",
                     "MOVE    R10, R5" + I + "MOVE    HM_KEYREAD, R10" + I + "MOVE    1, @R10"))),
+    # _OPTM_GK_MNT after a CRT/ROM load: the call is missing, or skipped in
+    # direct mode together with the updates of the drives that it makes
+    ("gk_mnt_missing", replace("hm", (I + "RSUB    _OPTM_GK_MNT, 1", ""))),
+    ("gk_mnt_skipped_direct",
+     replace("hm", (I + "RSUB    _OPTM_GK_MNT, 1",
+                    I + "MOVE    OPTM_DIRECT, R8" + I + "CMP     0, @R8" + I + "RBRA    _HM_SDMOUNTED7, !Z"
+                    + I + "RSUB    _OPTM_GK_MNT, 1"))),
 ]
 
 
