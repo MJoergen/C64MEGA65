@@ -1359,7 +1359,17 @@ _OPTM_GK_MNT_5  ADD     1, R0
                 ; a core-reset unmounts some or all drives: redraw menu to
                 ; make sure that the drives are not shown as mounted any more
                 ; (this routine is also used by _OPTM_GK_CRTROM)
-_OPTM_GK_MNT_S  RSUB    OPTM_SHOW, 1
+                ;
+                ; Not in the invisible menu session of a keyboard shortcut
+                ; (OPTM_DIRECT, see shell_vars.asm), where HANDLE_MOUNTING
+                ; calls this routine after loading a CRT/ROM: the OSM is off
+                ; and OPTM_SHOW draws the menu anew, including the %s texts,
+                ; when the menu is opened the next time. The updates of the
+                ; menu items and of M2M$CFM_DATA above happen in both cases.
+_OPTM_GK_MNT_S  MOVE    OPTM_DIRECT, R8         ; invisible session of a
+                CMP     0, @R8                  ; keyboard shortcut?
+                RBRA    _OPTM_GK_MNT_R, !Z      ; yes: no redraw
+                RSUB    OPTM_SHOW, 1
 
                 ; re-show the currently selected item
                 MOVE    OPTM_CUR_SEL, R8
@@ -1395,7 +1405,8 @@ _OPTM_GK_CR_1   MOVE    R9, R8                  ; R8: menu index
                 RSUB    CRTROM_MLST_GET, 1
                 RBRA    _OPTM_GK_CR_0, C
 
-                ; redraw menu and then call SYSCALL(leave, 1) and RET
+                ; redraw menu (not in the invisible session of a keyboard
+                ; shortcut) and then call SYSCALL(leave, 1) and RET
                 RBRA    _OPTM_GK_MNT_S, 1
 
 _OPTM_GK_CR_R   SYSCALL(leave, 1)

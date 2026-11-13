@@ -32,6 +32,7 @@ SUITES = {
     "next_disk":   (".", ["python3", "M2M/rom/tests/next_disk_test.py"], r"PASS: \d+ cases", 600),
     "cfm":         (".", ["python3", "M2M/rom/tests/cfm_test.py"], r"CFM TEST OK", 1800),
     "saving_text": (".", ["python3", "M2M/rom/tests/saving_text_test.py"], r"RESULT: PASS", 600),
+    "hidden_redraw": (".", ["python3", "M2M/rom/tests/hidden_redraw_test.py"], r"RESULT: PASS", 600),
     "tb_capslock": (".", ["bash", "CORE/vhdl/test/tb_capslock/run.sh", "all"], r"^RESULT: PASS", 1800),
     "tb_turbo":    (".", ["bash", "CORE/vhdl/test/tb_turbo/run.sh", "all"], r"^RESULT: PASS", 3600),
     "tb_ntsc":     (".", ["bash", "CORE/vhdl/test/tb_ntsc/run.sh", "all"], r"^RESULT: PASS", 3600),

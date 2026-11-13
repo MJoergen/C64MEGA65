@@ -222,9 +222,10 @@ MAIN_LOOP       RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
 ;      1: Manually loadable CRTs/ROMs
 ;
 ; Direct mode: If OPTM_DIRECT (shell_vars.asm) is non-zero, then the options
-; menu is neither redrawn nor shown when HANDLE_MOUNTING returns: every exit
-; path hides the OSM, including the full-screen window of the file browser.
-; The menu state (OPTM_SET, %s replacement strings) is updated nevertheless.
+; menu is neither redrawn nor shown: _OPTM_GK_MNT does not redraw it after a
+; CRT/ROM load, and every exit path hides the OSM, including the full-screen
+; window of the file browser. The menu state (OPTM_SET, M2M$CFM_DATA, %s
+; replacement strings) is updated nevertheless.
 ; Before HANDLE_MOUNTING waits for a key of the user (file browser, error
 ; window after a failed SD card mount or after a failed LOAD_IMAGE), it sets
 ; HM_KEYREAD (shell_vars.asm), in both modes: at the end of an invisible
