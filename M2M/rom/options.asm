@@ -261,13 +261,19 @@ _HLP_RESETPOS   MOVE    OPTM_START, R0
                 ; Invisible menu session of a keyboard shortcut (C64MEGA65
                 ; issue #142): run the routine of the shortcut instead of the
                 ; interactive menu. The menu window is never shown. Saving the
-                ; settings, waiting until the keys are released and
-                ; reconnecting keyboard and joysticks work exactly as when the
-                ; user closes the menu. The last selected line (LRS) of the
-                ; user stays untouched.
+                ; settings and reconnecting keyboard and joysticks work
+                ; exactly as when the user closes the menu. The waiting time
+                ; before the reconnect is only needed if the session read a
+                ; key of the user (HM_KEYREAD: file browser or error window of
+                ; HANDLE_MOUNTING); the shortcut key itself is not part of
+                ; the C64 keyboard. The last selected line (LRS) of the user
+                ; stays untouched.
 _HLP_DIRECT     RSUB    SC$IN_SESSION, 1
                 RSUB    SCR$OSM_OFF, 1          ; hide a file browser, if any
                 RSUB    ROSM_SAVE, 1            ; save settings if appropriate
+                MOVE    HM_KEYREAD, R0          ; no key of the user read:
+                CMP     0, @R0                  ; no key to keep away from
+                RBRA    _HLP_RECONN, Z          ; the core, no waiting time
 
                 ; when the menu was exited via "Close" + Return or via
                 ; Run/Stop, make sure that the Return key press is not
@@ -277,7 +283,7 @@ _HLP_RET        RSUB    WAIT333MS, 1
                 ; Unpause (in case the core was at pause state due to
                 ; OPTM_PAUSE in config.vhd) and reactivate keyboard and
                 ; joysticks in case they were inactive
-                MOVE    M2M$CSR, R0
+_HLP_RECONN     MOVE    M2M$CSR, R0
                 AND     M2M$CSR_UN_PAUSE, @R0
                 OR      M2M$CSR_KBD_JOY, @R0
 

@@ -6,10 +6,14 @@
 ;
 ; The runner shortcuts_test.py generates rewired copies of both modules in
 ; which the hardware registers (cycle counter, keyboard, CSR and OSM window)
-; are RAM variables of this testbed, and it generates the menu constants. This
-; testbed stubs the menu engine, the settings, the screen and the drives;
-; every stub prints a trace line that the runner compares with independently
-; computed expectations.
+; are RAM variables of this testbed, and it generates the menu constants. It
+; also cuts the tail of HELP_MENU (options.asm, from _HLP_HEAP2_OK on: the
+; invisible session, the visible menu and the common exit with the waiting
+; time and the reconnect of keyboard and joysticks) out of the sources, which
+; runs behind a stub of the head of HELP_MENU. This testbed stubs the menu
+; engine, the settings, the screen, the mount code and the drives; every stub
+; prints a trace line that the runner compares with independently computed
+; expectations.
 ;
 ; Run it with:  python3 shortcuts_test.py
 ;
@@ -304,6 +308,71 @@ _T6_END
                 MOVE    @R8, R8
                 RSUB    TB_VAL, 1
 
+                ; --------------------------------------------------------
+                ; T13: a session waits only if the mount code read a key;
+                ; two sessions in a row in both orders
+                ; --------------------------------------------------------
+                MOVE    S_T13, R8
+                RSUB    TB_PUTS, 1
+                MOVE    C64_OSM_SC_F11, R8      ; F11: Next disk drive 8
+                MOVE    4, R9
+                RSUB    TB_PICK, 1
+                MOVE    TB_ND_STATUS, R0        ; next image mounted ...
+                MOVE    0, @R0
+                MOVE    TB_ND_KEYS, R0          ; ... after an error window
+                MOVE    1, @R0
+                MOVE    2, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    TB_ND_KEYS, R0          ; ... directly: no key read
+                MOVE    0, @R0
+                MOVE    2, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    C64_OSM_SC_F12, R8      ; F12: Mount drive 8: file
+                MOVE    2, R9                   ; browser
+                RSUB    TB_PICK, 1
+                MOVE    3, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    TB_CB_KEYS, R0          ; the mount code returns
+                MOVE    0, @R0                  ; without reading a key
+                MOVE    3, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    C64_OSM_SC_F12, R8      ; F12: Load PRG, no key read
+                MOVE    6, R9
+                RSUB    TB_PICK, 1
+                MOVE    3, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    C64_OSM_SC_F12, R8      ; F12: Load CRT, no key read
+                MOVE    7, R9
+                RSUB    TB_PICK, 1
+                MOVE    3, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    TB_CB_KEYS, R0
+                MOVE    1, @R0
+
+                ; --------------------------------------------------------
+                ; T14: the visible menu (Help key) always waits, whatever
+                ; HM_KEYREAD says; last selected line or start line
+                ; --------------------------------------------------------
+                MOVE    S_T14, R8
+                RSUB    TB_PUTS, 1
+                MOVE    OPTM_START, R0
+                MOVE    1, @R0
+                MOVE    TB_VISIBLE, R4
+_T14_NEXT       MOVE    @R4++, R5               ; R5: OPTM_SELECTED
+                CMP     0xFFFF, R5
+                RBRA    _T14_END, Z
+                MOVE    OPTM_SELECTED, R0
+                MOVE    R5, @R0
+                MOVE    HM_KEYREAD, R0
+                MOVE    @R4++, @R0
+                MOVE    M2M$KEY_HELP, R8
+                RSUB    HELP_MENU, 1
+                MOVE    OPTM_SELECTED, R8
+                MOVE    @R8, R8
+                RSUB    TB_VAL, 1
+                RBRA    _T14_NEXT, 1
+_T14_END
+
                 MOVE    S_DONE, R8
                 RSUB    TB_PUTS, 1
                 SYSCALL(exit, 1)
@@ -331,8 +400,8 @@ _TBR_3          MOVE    TB_KEYB, R0
                 MOVE    0xFFFF, @R0
                 MOVE    TB_CYC, R0
                 MOVE    0, @R0
-                MOVE    TB_CSR, R0
-                MOVE    0, @R0
+                MOVE    TB_CSR, R0              ; OSM closed: keyboard and
+                MOVE    M2M$CSR_KBD_JOY, @R0    ; joysticks are connected
                 MOVE    OPTM_DATA, R0           ; fake init record of the menu
                 MOVE    TB_REC, @R0
                 MOVE    TB_REC, R0
@@ -346,6 +415,12 @@ _TBR_3          MOVE    TB_KEYB, R0
                 MOVE    OPTM_DIRECT, R0
                 MOVE    0, @R0
                 MOVE    OPTM_MENULEVEL, R0
+                MOVE    0, @R0
+                MOVE    HM_KEYREAD, R0
+                MOVE    0, @R0
+                MOVE    TB_CB_KEYS, R0          ; a selected line opens the
+                MOVE    1, @R0                  ; file browser
+                MOVE    TB_ND_KEYS, R0          ; next disk: no error window
                 MOVE    0, @R0
                 RSUB    SC$INIT, 1
                 DECRB
@@ -646,7 +721,11 @@ _RS_RET         MOVE    R0, R8
                 DECRB
                 RET
 
-HELP_MENU       INCRB                           ; "HM <key> <direct>"
+; HELP_MENU: "HM <key> <direct>", then the stub of its head pauses the core
+; and disconnects keyboard and joysticks (like RP_OPTM_START with the C64
+; configuration) and the real tail of HELP_MENU runs; afterwards
+; "CSR <csr>" shows what the tail left in the CSR
+HELP_MENU       INCRB
                 MOVE    R8, R0
                 MOVE    S_HM, R8
                 RSUB    TB_TAG, 1
@@ -656,16 +735,60 @@ HELP_MENU       INCRB                           ; "HM <key> <direct>"
                 MOVE    @R8, R8
                 RSUB    TB_HEX, 1
                 RSUB    TB_NL, 1
-                MOVE    OPTM_DIRECT, R1
-                CMP     0, @R1
-                RBRA    _HM_RET, Z
-                RSUB    SC$IN_SESSION, 1
-_HM_RET         MOVE    R0, R8
+                MOVE    TB_CSR, R1
+                AND     M2M$CSR_UN_KBD_JOY, @R1
+                OR      M2M$CSR_PAUSE, @R1
+                MOVE    R0, R8
+                RSUB    TB_HLP, 1
+                MOVE    S_CSR, R8
+                RSUB    TB_TAG, 1
+                MOVE    @R1, R8
+                RSUB    TB_HEX, 1
+                RSUB    TB_NL, 1
+                MOVE    R0, R8
+                DECRB
+                RET
+
+; the head of HELP_MENU leaves the pointer to the menu groups in R12; the
+; tail (generated by the runner) ends with SYSCALL(leave, 1) and RET
+TB_HLP          SYSCALL(enter, 1)
+                MOVE    TB_GROUPS, R12
+#include "shortcuts_tbgen_hlp.asm"
+
+ROSM_REM_OLD    MOVE    R8, @--SP               ; "REM"
+                MOVE    S_REM, R8
+                RSUB    TB_PUTS, 1
+                MOVE    @SP++, R8
+                RET
+
+OPTM_SHOW       MOVE    R8, @--SP               ; "SHOW"
+                MOVE    S_SHOW, R8
+                RSUB    TB_PUTS, 1
+                MOVE    @SP++, R8
+                RET
+
+SCR$OSM_O_ON    MOVE    R8, @--SP               ; "ON"
+                MOVE    S_ON, R8
+                RSUB    TB_PUTS, 1
+                MOVE    @SP++, R8
+                RET
+
+WAIT333MS       INCRB                           ; "WAIT <csr>"
+                MOVE    R8, R0
+                MOVE    S_WAIT, R8
+                RSUB    TB_TAG, 1
+                MOVE    TB_CSR, R8
+                MOVE    @R8, R8
+                RSUB    TB_HEX, 1
+                RSUB    TB_NL, 1
+                MOVE    R0, R8
                 DECRB
                 RET
 
 ; the menu engine: "RUN <start> <level>", then up to 4 keys "K <key>"
-; (Return also prints "CB" for the selection callback)
+; (Return also prints "CB" for the selection callback; if TB_CB_KEYS is set,
+; the callback sets HM_KEYREAD, as the mount code does when it opens the file
+; browser)
 OPTM_RUN        INCRB
                 MOVE    R8, R0
                 MOVE    S_RUN, R8
@@ -699,6 +822,11 @@ _OR_KEY         MOVE    OPTM_DATA, R7
                 RBRA    _OR_NEXT, !Z
                 MOVE    S_CB, R8
                 RSUB    TB_PUTS, 1
+                MOVE    TB_CB_KEYS, R8
+                CMP     0, @R8
+                RBRA    _OR_NEXT, Z
+                MOVE    HM_KEYREAD, R8
+                MOVE    1, @R8
 _OR_NEXT        SUB     1, R3
                 RBRA    _OR_KEY, !Z
 _OR_RET         MOVE    R1, R8
@@ -715,14 +843,21 @@ VD_DRV_READ     INCRB                           ; R8: drive, R9: VD_CACHE_DIRTY
                 DECRB
                 RET
 
-VD_NEXT_DISK    INCRB                           ; "ND <drive>"
+; "ND <drive>"; if TB_ND_KEYS is set, the mount showed an error window and
+; sets HM_KEYREAD, as HANDLE_MOUNTING does
+VD_NEXT_DISK    INCRB
                 MOVE    R8, R0
                 MOVE    S_ND, R8
                 RSUB    TB_TAG, 1
                 MOVE    R0, R8
                 RSUB    TB_HEX, 1
                 RSUB    TB_NL, 1
-                MOVE    TB_ND_STATUS, R8
+                MOVE    TB_ND_KEYS, R8
+                CMP     0, @R8
+                RBRA    _VND_1, Z
+                MOVE    HM_KEYREAD, R8
+                MOVE    1, @R8
+_VND_1          MOVE    TB_ND_STATUS, R8
                 MOVE    @R8, R8
                 MOVE    TB_ND_NAME, R9
                 DECRB
@@ -749,10 +884,14 @@ TB_DEFAULTS     .DW     C64_OSM_DRV8_IMG_MNT, C64_OSM_DRV9_OFF
                 .DW     TB_DEF_F12, TB_DEF_F13, TB_DEF_F14 ; of each picker
                 .DW     0xFFFF
 
-                ; fake menu: headline, line, 8:%s, text, 9:%s, text, PRG, CRT
+                ; fake menu: headline, line, 8:%s, text, 9:%s, text, PRG, CRT,
+                ; Close
 TB_GROUPS       .DW     0x1000, 0x0200, 0x8801, 0x0000, 0x8802, 0x0000
-                .DW     0x8003, 0x8005
-TB_GROUPS_N     .EQU    8
+                .DW     0x8003, 0x8005, OPTM_CLOSE
+TB_GROUPS_N     .EQU    9
+
+                ; visible menu: OPTM_SELECTED and HM_KEYREAD before the call
+TB_VISIBLE      .DW     2, 0, 2, 1, 8, 0, 8, 1, 0xFFFF
 
 TB_ND_LIST      .DW     0, 2, 3, 1, 4, 5, 7, 0xFFFF
 TB_ND_NAME      .ASCII_W "GAME-SIDE-B.D64"
@@ -771,6 +910,13 @@ S_T9            .ASCII_W "== T9 message timeout"
 S_T10           .ASCII_W "== T10 deferred save"
 S_T11           .ASCII_W "== T11 key repeat"
 S_T12           .ASCII_W "== T12 shift layer and help"
+S_T13           .ASCII_W "== T13 sessions with and without key"
+S_T14           .ASCII_W "== T14 visible menu"
+S_REM           .ASCII_W "REM"
+S_SHOW          .ASCII_W "SHOW"
+S_ON            .ASCII_W "ON"
+S_WAIT          .ASCII_W "WAIT"
+S_CSR           .ASCII_W "CSR"
 S_FK            .ASCII_W "FK"
 S_KEY           .ASCII_W "KEY"
 S_CARRY         .ASCII_W "C"
@@ -813,7 +959,12 @@ TB_DIRTY        .BLOCK 2                        ; write caches of drive 8, 9
 TB_ND_STATUS    .BLOCK 1                        ; result of VD_NEXT_DISK
 TB_RUN_SHIFT    .BLOCK 1                        ; OPTM_RUN cursor offset
 TB_SAVE_BLOCK   .BLOCK 1                        ; ROSM_SAVE: dirty cache
+TB_CB_KEYS      .BLOCK 1                        ; selection reads keys
+TB_ND_KEYS      .BLOCK 1                        ; next disk reads keys
 OPTM_DIRECT     .BLOCK 1
+HM_KEYREAD      .BLOCK 1
+OPTM_SELECTED   .BLOCK 1
+OPTM_START      .BLOCK 1
 OPTM_MENULEVEL  .BLOCK 1
 OPTM_DATA       .BLOCK 1
 OPTM_CUR_SEL    .BLOCK 1

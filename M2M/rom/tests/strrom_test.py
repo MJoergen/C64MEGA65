@@ -274,6 +274,8 @@ PINS = {
         "RSUB SCR$CLRINNER, 1",
         "MOVE R8, R0",
         "MOVE R9, R1",
+        "MOVE HM_KEYREAD, R8",
+        "MOVE 1, @R8",
         "MOVE ERR_CODE, R8",
         "RSUB SCR$PRINTSTR, 1",
         "MOVE R0, R8",

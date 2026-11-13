@@ -3,10 +3,14 @@
 
 1. Generates rewired copies of M2M/rom/shortcuts.asm, its variables and
    CORE/m2m-rom/shortcuts_c64.asm (hardware registers -> testbed RAM) plus
-   the constants (menu.asm, sysdef.asm, mega65.vhd, config.vhd).
+   the constants (menu.asm, sysdef.asm, mega65.vhd, config.vhd), and cuts the
+   tail of HELP_MENU out of M2M/rom/options.asm (from _HLP_HEAP2_OK to its
+   RET: the invisible session, the visible menu, the waiting time and the
+   reconnect of keyboard and joysticks).
 2. Assembles and runs the testbed headlessly in the QNICE emulator.
 3. Compares its trace with the trace of an independent Python model of the
    shortcut logic.
+4. Applies mutants to the generated code; each must change the trace.
 
 done by sy2002 in 2026 and licensed under GPL v3
 """
@@ -34,9 +38,27 @@ def equs(path, pattern):
     return out
 
 
+GEN = {"mod": "shortcuts_tbgen_mod.asm", "c64": "shortcuts_tbgen_c64.asm",
+       "vars": "shortcuts_tbgen_vars.asm", "hlp": "shortcuts_tbgen_hlp.asm"}
+
+
+def cut(path, start, through):
+    """Lines from the one matching start up to (including) the first one
+    matching through."""
+    lines = open(path).read().split("\n")
+    s = next((i for i, l in enumerate(lines) if re.match(start, l)), None)
+    if s is None:
+        sys.exit("cannot find %r in %s" % (start, path))
+    e = next((i for i in range(s + 1, len(lines)) if re.match(through, lines[i])), None)
+    if e is None:
+        sys.exit("cannot find the end of %r in %s" % (start, path))
+    return "\n".join(lines[s:e + 1]) + "\n"
+
+
 def gen():
     sysdef = equs(P("M2M/rom/sysdef.asm"), r"^(M2M\$\S+)\s+\.EQU\s+(0x[0-9A-Fa-f]+|\d+)")
     menu = equs(P("M2M/rom/menu.asm"), r"^(OPTM_IR_GROUPS|OPTM_FP_GETKEY|OPTM_KEY_SELECT|OPTM_KEY_CLOSE)\s+\.EQU\s+(\d+)")
+    menu.update(equs(P("M2M/rom/menu.asm"), r"^(OPTM_CLOSE)\s+\.EQU\s+(0x[0-9A-Fa-f]+|\d+)"))
     cmenu = equs(P("CORE/vhdl/mega65.vhd"), r"^constant (C_MENU_\w+)\s*:\s*natural\s*:=\s*(\d+);")
     cgrp = equs(P("CORE/vhdl/config.vhd"), r"^constant (OPTM_G_\w+)\s*:\s*integer\s*:=\s*(\d+);")
     c = {"C64_OSM_" + k[7:]: v for k, v in cmenu.items()}
@@ -51,17 +73,24 @@ def gen():
         lines.append("%-27s .EQU %d" % ("TB_DEF_" + k, c["C64_OSM_SC_" + k] + v))
     open(os.path.join(HERE, "shortcuts_tbgen_const.asm"), "w").write("\n".join(lines) + "\n")
 
-    def rewire(src, dst, drop=None):
-        s = open(src).read()
+    def rewire(s, drop=None):
         for a, b in REWIRE:
             s = re.sub(a, b, s)
         if drop:
             s = "\n".join(l for l in s.split("\n") if not re.match(drop, l))
-        open(os.path.join(HERE, dst), "w").write(s)
-    rewire(P("M2M/rom/shortcuts.asm"), "shortcuts_tbgen_mod.asm")
-    rewire(P("CORE/m2m-rom/shortcuts_c64.asm"), "shortcuts_tbgen_c64.asm")
-    rewire(P("M2M/rom/shortcuts_vars.asm"), "shortcuts_tbgen_vars.asm", r"^OPTM_DIRECT\s")
-    return sysdef, menu, c, dflt
+        return s
+    texts = {
+        "mod": rewire(open(P("M2M/rom/shortcuts.asm")).read()),
+        "c64": rewire(open(P("CORE/m2m-rom/shortcuts_c64.asm")).read()),
+        "vars": rewire(open(P("M2M/rom/shortcuts_vars.asm")).read(), r"^OPTM_DIRECT\s"),
+        "hlp": rewire(cut(P("M2M/rom/options.asm"), r"^_HLP_HEAP2_OK\s", r"^\s+RET\b")),
+    }
+    return sysdef, menu, c, dflt, texts
+
+
+def write_gen(texts):
+    for k, name in GEN.items():
+        open(os.path.join(HERE, name), "w").write(texts[k])
 
 
 class Model:
@@ -76,13 +105,19 @@ class Model:
         self.pick = [c["C64_OSM_SC_F%d" % n] for n in range(9, 15)]
         for n, f in enumerate(range(9, 15)):
             self.cfm[self.pick[n] + dflt["F%d" % f]] = 1
-        self.keyb, self.time, self.csr, self.xy, self.dxdy = 0xFFFF, 0, 0, 0, 0
+        self.keyb, self.time, self.xy, self.dxdy = 0xFFFF, 0, 0, 0
+        self.csr = sysdef["M2M$CSR_KBD_JOY"]       # OSM closed: keyboard is on
         self.toast_on, self.toast_t = 0, 0
         self.pend, self.save_t, self.force, self.block = 0, 0, 0, 0
         self.rep_key, self.rep_fkey, self.rep_t, self.rep_dly = 0, 0, 0, 0
         self.dirty = [0, 0]
         self.level, self.p_done, self.run_shift, self.nd_status = 0, 0, 0, 0
-        self.groups = [0x1000, 0x0200, 0x8801, 0, 0x8802, 0, 0x8003, 0x8005]
+        self.groups = [0x1000, 0x0200, 0x8801, 0, 0x8802, 0, 0x8003, 0x8005, menu["OPTM_CLOSE"]]
+        # keyread: a key of the user was read in this session (HM_KEYREAD);
+        # cb_keys / nd_keys: the mount code behind a selected line / behind
+        # next disk reads a key (file browser, error window)
+        self.keyread, self.cb_keys, self.nd_keys = 0, 1, 0
+        self.selected, self.start = 0, 0
 
     def out(self, *a):
         self.t.append(" ".join(a))
@@ -114,10 +149,47 @@ class Model:
     def save_later(self):
         self.pend, self.save_t = 1, self.time
 
+    def help_head(self, direct):
+        """HELP_MENU up to its tail: core paused, keyboard and joysticks off"""
+        self.out("HM", self.h(self.k["M2M$KEY_HELP"]), self.h(direct))
+        self.csr = (self.csr & self.k["M2M$CSR_UN_KBD_JOY"]) | self.k["M2M$CSR_PAUSE"]
+        self.out("REM")
+
+    def help_close(self):
+        """overlay off, save the settings"""
+        self.out("OFF")
+        self.csr &= self.k["M2M$CSR_UN_OSM"]
+        self.out("SAVE", self.h(self.force))
+
+    def help_exit(self, wait):
+        """the waiting time (only if wait) and the reconnect"""
+        if wait:
+            self.out("WAIT", self.h(self.csr))
+        self.csr = (self.csr & self.k["M2M$CSR_UN_PAUSE"]) | self.k["M2M$CSR_KBD_JOY"]
+        self.out("CSR", self.h(self.csr))
+
     def session(self, fn, arg):
         self.toast_off()
-        self.out("HM", self.h(self.k["M2M$KEY_HELP"]), self.h(1))
-        return fn(arg)
+        self.keyread = 0
+        self.help_head(1)
+        r = fn(arg)
+        self.help_close()
+        self.help_exit(self.keyread)        # no key read: no waiting time
+        return r
+
+    def visible(self, sel, keyread):
+        """the user opens the menu with Help and closes it again"""
+        self.selected, self.keyread = sel, keyread
+        self.help_head(0)
+        self.out("SHOW")
+        self.out("ON")
+        self.out("RUN", self.h(sel), self.h(self.level))
+        self.out("K", self.h(self.m["OPTM_KEY_CLOSE"]))
+        cur = sel + self.run_shift
+        self.help_close()
+        self.selected = self.start if self.groups[cur] == self.m["OPTM_CLOSE"] else cur
+        self.help_exit(True)                # always, whatever keyread says
+        self.out("VAL", self.h(self.selected))
 
     def press_in(self, grp):
         idx = next((i for i, g in enumerate(self.groups) if g & 0xFF == grp), None)
@@ -128,6 +200,8 @@ class Model:
         if idx + self.run_shift == idx:
             self.out("K", self.h(self.m["OPTM_KEY_SELECT"]))
             self.out("CB")
+            if self.cb_keys:
+                self.keyread = 1
             self.p_done = 1
         self.out("K", self.h(self.m["OPTM_KEY_CLOSE"]))
         return self.p_done
@@ -159,6 +233,8 @@ class Model:
 
                 def next_in(dd):
                     self.out("ND", self.h(dd))
+                    if self.nd_keys:
+                        self.keyread = 1
                     st = self.nd_status
                     if st == 0:
                         msg.append("Drive %d: GAME-SIDE-B.D64" % (8 + dd))
@@ -324,50 +400,127 @@ def expected(sysdef, menu, c, dflt):
     M.time = 30000; M.keyb = 0xCFFF; M.main(K["M2M$KEY_F13"])
     M.keyb = 0xFFFF; M.main(K["M2M$KEY_HELP"])
     M.out("VAL", M.h(M.toast_on))
+    M.out("== T13 sessions with and without key")
+    M.pickset(c["C64_OSM_SC_F11"], 4)
+    M.nd_status = 0
+    M.nd_keys = 1; M.tb_sckey(2)                    # next disk, error window
+    M.nd_keys = 0; M.tb_sckey(2)                    # next disk, directly
+    M.pickset(c["C64_OSM_SC_F12"], 2); M.tb_sckey(3)    # mount: file browser
+    M.cb_keys = 0; M.tb_sckey(3)                    # mount: no key read
+    M.pickset(c["C64_OSM_SC_F12"], 6); M.tb_sckey(3)    # PRG: no key read
+    M.pickset(c["C64_OSM_SC_F12"], 7); M.tb_sckey(3)    # CRT: no key read
+    M.cb_keys = 1
+    M.out("== T14 visible menu")
+    M.start = 1
+    for sel, keyread in ((2, 0), (2, 1), (8, 0), (8, 1)):
+        M.visible(sel, keyread)
     M.out("DONE")
     return "\n".join(M.t) + "\n"
 
 
-def run():
-    sysdef, menu, c, dflt = gen()
+def mutant(part, pattern, repl):
+    """A mutant replaces the only match of pattern in one generated text."""
+    def mutate(texts):
+        s, n = re.subn(pattern, repl, texts[part], flags=re.M)
+        return dict(texts, **{part: s}) if n == 1 else None
+    return mutate
+
+
+I = "\n" + " " * 16      # a new line of code, indented like the sources
+
+MUTANTS = [
+    # the end of an invisible session (_HLP_DIRECT in options.asm)
+    ("direct_never_waits", mutant("hlp", r"RBRA    _HLP_RECONN, Z", "RBRA    _HLP_RECONN, 1")),
+    ("direct_always_waits", mutant("hlp", r"\n[ \t]+MOVE[ \t]+HM_KEYREAD, R0[^\n]*\n[ \t]+CMP[ \t]+0, @R0[^\n]*"
+                                          r"\n[ \t]+RBRA[ \t]+_HLP_RECONN, Z[^\n]*", "")),
+    ("reconnect_skipped", mutant("hlp", r"RBRA    _HLP_RECONN, Z", "RBRA    _HLP_RET_DIRECT, Z")),
+    # the exit of the visible menu
+    ("visible_exit_reads_flag", mutant("hlp", r"^_HLP_RET        RSUB    WAIT333MS, 1",
+                                       "_HLP_RET        MOVE    HM_KEYREAD, R0" + I + "CMP     0, @R0"
+                                       + I + "RBRA    _HLP_RECONN, Z" + I + "RSUB    WAIT333MS, 1")),
+    # SC$SESSION (shortcuts.asm)
+    ("session_keeps_flag", mutant("mod", r"\n[ \t]+MOVE[ \t]+HM_KEYREAD, R2[^\n]*\n[ \t]+MOVE[ \t]+0, @R2[^\n]*", "")),
+]
+
+
+def assemble_and_run():
+    """Returns (trace, error)."""
     asm = P("M2M/QNICE/assembler/asm")
     emu = P("M2M/QNICE/emulator/qnice")
     mon = P("M2M/QNICE/monitor/monitor.out")
+    out = os.path.join(HERE, "shortcuts_test.out")
+    if os.path.exists(out):
+        os.remove(out)
     r = subprocess.run([asm, "shortcuts_test.asm"], cwd=HERE, capture_output=True,
                        text=True, timeout=120)
-    out = os.path.join(HERE, "shortcuts_test.out")
     if r.returncode != 0 or not os.path.exists(out):
-        print("ASSEMBLE FAIL")
-        print((r.stdout + r.stderr)[-4000:])
-        return 1
+        return None, "ASSEMBLE FAIL\n" + (r.stdout + r.stderr)[-4000:]
     try:
         r = subprocess.run([emu, "-b", "0x8000", mon, out], stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
-        print("RUN TIMEOUT")
-        return 1
+        return None, "RUN TIMEOUT"
     g = [l for l in r.stdout.replace("\r", "").split("\n") if l]
     if "== BEGIN ==" in g:
         g = g[g.index("== BEGIN ==") + 1:]
     if "DONE" in g:
         g = g[:g.index("DONE") + 1]
-    got = "\n".join(g) + "\n"
-    exp = expected(sysdef, menu, c, dflt)
-    open(os.path.join(HERE, "shortcuts_test.got"), "w").write(got)
-    open(os.path.join(HERE, "shortcuts_test.exp"), "w").write(exp)
-    if got == exp:
-        print("PASS: shortcuts_test (%d trace lines)" % exp.count("\n"))
-        return 0
+    return "\n".join(g) + "\n", ""
+
+
+def first_diff(got, exp):
     ge, ee = got.split("\n"), exp.split("\n")
     for i in range(max(len(ge), len(ee))):
         a = ge[i] if i < len(ge) else "<missing>"
         b = ee[i] if i < len(ee) else "<missing>"
         if a != b:
-            print("FAIL: shortcuts_test, first difference at line %d:" % (i + 1))
-            print("  got:      %s" % a)
-            print("  expected: %s" % b)
-            break
-    return 1
+            return i + 1, a, b
+    return None
+
+
+def run():
+    sysdef, menu, c, dflt, texts = gen()
+    exp = expected(sysdef, menu, c, dflt)
+    open(os.path.join(HERE, "shortcuts_test.exp"), "w").write(exp)
+    write_gen(texts)
+    got, err = assemble_and_run()
+    if got is None:
+        print(err)
+        return 1
+    open(os.path.join(HERE, "shortcuts_test.got"), "w").write(got)
+    d = first_diff(got, exp)
+    if d:
+        print("FAIL: shortcuts_test, first difference at line %d:" % d[0])
+        print("  got:      %s" % d[1])
+        print("  expected: %s" % d[2])
+        return 1
+    print("real code: %d trace lines as expected" % exp.count("\n"))
+    fails = 0
+    try:
+        for name, mutate in MUTANTS:
+            mtexts = mutate(texts)
+            if mtexts is None:
+                print("FAIL: mutant %s: its pattern is not found exactly once: adapt the mutant" % name)
+                fails += 1
+                continue
+            write_gen(mtexts)
+            mgot, err = assemble_and_run()
+            if mgot is None:
+                print("FAIL: mutant %s: %s" % (name, err.split("\n")[0]))
+                fails += 1
+            elif mgot == exp:
+                print("FAIL: mutant %s not caught" % name)
+                fails += 1
+            else:
+                d = first_diff(mgot, exp)
+                print("mutant %-24s caught at line %d: got %r, expected %r" % (name, d[0], d[1], d[2]))
+    finally:
+        write_gen(texts)
+    if fails:
+        print("FAIL: shortcuts_test, %d mutant(s) not caught" % fails)
+        return 1
+    print("PASS: shortcuts_test (%d trace lines, %d mutants caught)" % (exp.count("\n"), len(MUTANTS)))
+    return 0
 
 
 if __name__ == "__main__":

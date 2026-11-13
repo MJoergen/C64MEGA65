@@ -201,6 +201,19 @@ VD_NXT_INFO     .BLOCK  VDRIVES_MAX             ; 4 x VDRIVES_MAX words
                 .BLOCK  VDRIVES_MAX
                 .BLOCK  VDRIVES_MAX
 
+; HM_KEYREAD:       Non-zero: HANDLE_MOUNTING waited for a key of the user
+;                   (file browser or error window). SC$SESSION clears it
+;                   before an invisible menu session of a keyboard shortcut,
+;                   HANDLE_MOUNTING sets it, and HELP_MENU reads it at the end
+;                   of such a session: only if it is set, HELP_MENU waits
+;                   before it reconnects the keyboard to the core, so that the
+;                   last key that the user pressed in the window does not
+;                   reach the core. The exit of the visible menu always waits
+;                   and ignores it. Not
+;                   initialized: its value only matters between SC$SESSION
+;                   and the end of HELP_MENU.
+HM_KEYREAD      .BLOCK  1
+
 ; System to handle manually and automatically loaded cartridges and ROMs
 ; See also globals.vhd: There are multiple types of "byte streaming devices"
 ; that are able to receive the CRT/ROM data. All need to obey to a certain

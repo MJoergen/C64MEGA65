@@ -225,6 +225,10 @@ MAIN_LOOP       RSUB    HANDLE_IO, 1            ; IO handling (e.g. vdrives)
 ; menu is neither redrawn nor shown when HANDLE_MOUNTING returns: every exit
 ; path hides the OSM, including the full-screen window of the file browser.
 ; The menu state (OPTM_SET, %s replacement strings) is updated nevertheless.
+; Before HANDLE_MOUNTING waits for a key of the user (file browser, error
+; window after a failed SD card mount or after a failed LOAD_IMAGE), it sets
+; HM_KEYREAD (shell_vars.asm), in both modes: at the end of an invisible
+; session HELP_MENU then waits before it reconnects the keyboard to the core.
 ;
 ; Preselected file: If HM_PRESELECT (shell_vars.asm) is non-zero, then the
 ; file browser is skipped once and the zero terminated file name it points to
@@ -320,6 +324,8 @@ _HM_SDUNMOUNTED MOVE    1, R9                   ; partition #1 hardcoded
                 MOVE    ERR_MOUNT_RET, R8
                 RSUB    SCR$PRINTSTR, 1
                 RSUB    WAIT333MS, 1
+                MOVE    HM_KEYREAD, R8          ; Return is read below (see
+                MOVE    1, @R8                  ; shell_vars.asm)
 _HM_KEYLOOP     MOVE    M2M$KEYBOARD, R8
                 AND     M2M$KEY_RETURN, @R8
                 RBRA    _HM_KEYLOOP, !Z         ; wait for return; low-active
@@ -381,6 +387,8 @@ _HM_SDMOUNTEDX1 MOVE    CTX_LOAD_ROM, @R8
 _HM_SDMOUNTEDX2 MOVE    HM_PRESELECT, R9        ; file preselected?
                 MOVE    @R9, R8                 ; R8: its name
                 RBRA    _HM_PRESEL, !Z          ; yes: skip the file browser
+                MOVE    HM_KEYREAD, R9          ; the file browser reads keys
+                MOVE    1, @R9                  ; (see shell_vars.asm)
                 RSUB    SELECT_FILE, 1
 
                 ; No error and no special status
@@ -484,6 +492,8 @@ _HM_SDMOUNTED3  MOVE    R8, R0                  ; R8: selected file name
                 RSUB    SCR$CLRINNER, 1         ; print error message
                 MOVE    R8, R0
                 MOVE    R9, R1
+                MOVE    HM_KEYREAD, R8          ; Space is read below (see
+                MOVE    1, @R8                  ; shell_vars.asm)
                 MOVE    ERR_CODE, R8
                 RSUB    SCR$PRINTSTR, 1
                 MOVE    R0, R8

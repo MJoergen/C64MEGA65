@@ -183,8 +183,12 @@ SC$PRESS        INCRB
 ; HELP_MENU builds all data structures of the menu as if the user had pressed
 ; Help, then calls the routine instead of running the interactive menu and
 ; finally saves the settings and reconnects keyboard and joysticks to the
-; core, exactly as when the user closes the menu. The menu window is never
-; shown, only a file browser that the routine might open.
+; core, as when the user closes the menu. The menu window is never shown, only
+; a file browser or an error window that the routine might open. The waiting
+; time of 333 ms before the reconnect, which keeps the last key that the user
+; pressed in the menu away from the core, is only spent if the session read a
+; key of the user (HM_KEYREAD in shell_vars.asm): the keys F9 to F14
+; themselves are not part of the C64 keyboard.
 ;
 ; Input:  R8: address of the routine; it gets R9 (below) in R8, returns its
 ;             result in R8 and may use SC$PRESS_IN
@@ -204,6 +208,8 @@ SC$SESSION      SYSCALL(enter, 1)
 
                 MOVE    OPTM_DIRECT, R1         ; tell HELP_MENU (and the
                 MOVE    1, @R1                  ; mount code) to stay invisible
+                MOVE    HM_KEYREAD, R2          ; no key of the user read yet
+                MOVE    0, @R2                  ; (HANDLE_MOUNTING sets it)
                 MOVE    M2M$KEY_HELP, R8        ; same entry as the Help key
                 RSUB    HELP_MENU, 1
                 MOVE    0, @R1

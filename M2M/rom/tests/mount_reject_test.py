@@ -18,24 +18,36 @@ has not accepted the file, nothing may change:
     "%s is replaced" flag) must keep the name of what is really mounted or
     loaded, so HANDLE_MOUNTING writes it only after LOAD_IMAGE succeeded.
 
+The test also checks HM_KEYREAD, the flag that tells HELP_MENU whether an
+invisible session of a keyboard shortcut read a key of the user: HANDLE_MOUNTING
+sets it before the file browser, before the error window of a failed SD card
+mount and before the error window of a failed LOAD_IMAGE, and nowhere else.
+
 The script cuts the real code out of the sources on every run: all of
 HANDLE_MOUNTING and LOAD_IMAGE without the progress bar and the copy loop
 (its head up to the progress bar and its end from _LI_FREAD_EOF on). It links
 the code against stubs that print every access to the file system (f32_fopen
-with the file handle it gets), to the core (PREP_LOAD_IMAGE with handle,
-context and menu group), to the hardware (CSR of the CRT/ROM devices,
-VD_STROBE_IM) and to the menu (OPTM_SET, OPTM_SHOW, the error message on the
-screen), and runs one session of cases in the QNICE emulator: a mounted, an
-empty and a preselected drive (VD_NEXT_DISK, direct mode), a loaded and an
-empty CRT/ROM line, rejected files with and without a message followed by
-Run/Stop or by an accepted file, names that fit into the menu line exactly or
-that are cut with an ellipsis, and files that cannot be opened. After every
-case the testbed prints the registers, the file size in every file handle
-(which file it holds), the mount status, the CRT/ROM load flags, the folder of
-VD_NEXT_DISK (VD_NXT_INFO) and every menu line slot word by word. An
-independent model of the intended behavior computes the expected output. Then
-the script applies mutants to the extracted code, among them the reversal of
-each of the two halves of the fix; each mutant must make the comparison fail.
+with the file handle it gets, f32_mnt_sd), to the core (PREP_LOAD_IMAGE with
+handle, context and menu group, UNLOAD_CRTROM), to the hardware (CSR of the
+CRT/ROM devices, VD_STROBE_IM) and to the menu (OPTM_SET, OPTM_SHOW, the error
+message on the screen); the two stubs that read a key of the user (the file
+browser and the wait for Space) print HM_KEYREAD. The keyboard register of
+the wait for Return is a variable of the testbed. The script runs one session
+of cases in the QNICE emulator: a mounted, an empty and a preselected drive
+(VD_NEXT_DISK, direct mode), a loaded and an empty CRT/ROM line, rejected
+files with and without a message followed by Run/Stop or by an accepted file,
+names that fit into the menu line exactly or that are cut with an ellipsis,
+files that cannot be opened, and the paths that read no key: a drive that is
+still saving, unmounting a drive and unloading a CRT/ROM with Space, each
+with HM_KEYREAD clear and set at the start, and a failed SD card mount
+followed by a preselected file. After every case the testbed prints the
+registers, the file size in every file handle (which file it holds), the
+mount status, the CRT/ROM load flags, HM_KEYREAD, the folder of VD_NEXT_DISK
+(VD_NXT_INFO) and every menu line slot word by word. An independent model of
+the intended behavior computes the expected output. Then the script applies
+mutants to the extracted code, among them the reversal of each of the two
+halves of the fix and a missing or misplaced HM_KEYREAD; each mutant must make
+the comparison fail.
 
 Usage:  python3 mount_reject_test.py        (ends with "RESULT: PASS")
 Needs:  the QNICE assembler, emulator and monitor.out, see README.md.
@@ -110,11 +122,17 @@ FILES = {
 MISSING = ["MISSING.D64", "MISSING.CRT"]
 NAMES = list(FILES) + MISSING
 RUNSTOP = None
+SDMNT_ERR = 0x00ED                       # error code of a failed f32_mnt_sd
+KEPT = 0x5A5A                            # HM_KEYREAD set by an earlier session
 
 # The session: (mode, id, key, preselected file, direct mode, what the file
-# browser returns one call after the other). Mode 0 = virtual drive, 1 =
-# CRT/ROM. At the start drive 0 is mounted with A.D64, drive 1 is empty,
-# CRT/ROM 1 (.crt) is loaded with OLD.CRT and CRT/ROM 0 (.prg) is not loaded.
+# browser returns one call after the other[, options]). Mode 0 = virtual
+# drive, 1 = CRT/ROM. At the start drive 0 is mounted with A.D64, drive 1 is
+# empty, CRT/ROM 1 (.crt) is loaded with OLD.CRT and CRT/ROM 0 (.prg) is not
+# loaded. Options (default 0): flag = HM_KEYREAD at the start of the case
+# (the real code only ever writes 1, so KEPT shows that it was not written),
+# dirty = the write cache of the drive is dirty, sdfail = the SD card is not
+# mounted and so many mount attempts fail before one succeeds.
 CASES = [
     (0, 0, KEY_SELECT, None, 0, ["BAD1.D64", RUNSTOP]),   # mounted, rejected, Run/Stop
     (0, 0, KEY_SELECT, None, 0, ["BAD2.D64", "B.D64"]),   # rejected (no message), accepted
@@ -131,7 +149,24 @@ CASES = [
     (0, 0, KEY_SELECT, None, 0, ["A.D64"]),               # mounted, accepted
     (0, 0, KEY_SELECT, None, 0, ["MISSING.D64"]),         # cannot be opened: fatal
     (1, 1, KEY_SELECT, None, 0, ["MISSING.CRT"]),         # cannot be opened: fatal
+    # paths that read no key leave HM_KEYREAD alone
+    (0, 1, 0, "C.D64", 1, [], dict(flag=KEPT)),           # Next disk: preselected, accepted
+    (0, 0, KEY_SELECT, None, 0, [], dict(dirty=1)),       # drive still saving
+    (0, 0, KEY_SELECT, None, 1, [], dict(dirty=1, flag=KEPT)),  # same, direct mode
+    (0, 0, KEY_SELALT, None, 0, []),                      # unmount drive 0 with Space
+    (0, 1, KEY_SELALT, None, 0, [], dict(flag=KEPT)),     # unmount drive 1 with Space
+    (1, 1, KEY_SELALT, None, 0, []),                      # unload CRT/ROM 1 with Space
+    (1, 0, KEY_SELALT, None, 0, [], dict(flag=KEPT)),     # unload CRT/ROM 0 with Space
+    # the error window of a failed SD card mount waits for Return
+    (0, 1, 0, "C.D64", 1, [], dict(sdfail=1)),            # then the preselected file
 ]
+
+
+def fields(case):
+    """(mode, id, key, pre, direct, script, flag, dirty, sdfail) of a case"""
+    opt = dict(flag=0, dirty=0, sdfail=0)
+    opt.update(case[6] if len(case) > 6 else {})
+    return tuple(case[:6]) + (opt["flag"], opt["dirty"], opt["sdfail"])
 
 
 # ---------------------------------------------------------------------------
@@ -153,8 +188,11 @@ def cut(path, start, end=None, through=None):
 
 
 def real_code():
+    # the wait for Return after a failed SD card mount reads the keyboard
+    # register directly: here it is a variable of the testbed
     return {
-        "hm": cut(SHELL, r"^HANDLE_MOUNTING\s+SYSCALL\(enter, 1\)", end=r"^; Load a disk or CRT/ROM image"),
+        "hm": cut(SHELL, r"^HANDLE_MOUNTING\s+SYSCALL\(enter, 1\)",
+                  end=r"^; Load a disk or CRT/ROM image").replace("M2M$KEYBOARD", "TB_KEYB"),
         "li": cut(SHELL, r"^LOAD_IMAGE\s+SYSCALL\(enter, 1\)", end=r"^\s+; For showing a progress bar"),
         "tail": cut(SHELL, r"^_LI_FREAD_EOF\s", through=r"^\s+RET\b"),
     }
@@ -171,7 +209,8 @@ OPTM_KEY_SELALT .EQU    {key_selalt}
 
 ; ----------------------------------------------------------------------------
 ; Driver: one row = mode, id, key, preselected file or 0, direct mode, script
-; of the file browser; 0xFFFF ends the list
+; of the file browser, HM_KEYREAD, dirty write cache, failing SD card mounts;
+; 0xFFFF ends the list
 ; ----------------------------------------------------------------------------
 START           MOVE    S_BEGIN, R8
                 SYSCALL(puts, 1)
@@ -188,6 +227,17 @@ _CASE           MOVE    @R6++, R0               ; R0: mode
                 MOVE    @R6++, @R4
                 MOVE    TB_SCRPOS, R4
                 MOVE    @R6++, @R4
+                MOVE    HM_KEYREAD, R4
+                MOVE    @R6++, @R4
+                MOVE    TB_DIRTY, R4
+                MOVE    @R6++, @R4
+                MOVE    TB_SDFAIL, R4
+                MOVE    @R6++, @R4
+                CMP     0, @R4                  ; failing mounts: the SD card
+                RBRA    _CASE_1, Z              ; is not mounted
+                MOVE    HANDLE_DEV, R4
+                MOVE    0, @R4
+_CASE_1
 
                 MOVE    S_CASE, R8
                 SYSCALL(puts, 1)
@@ -298,6 +348,11 @@ _DH             MOVE    @R0++, R2
                 MOVE    HM_PRESELECT, R0
                 MOVE    @R0, R8
                 RSUB    PRHEX, 1
+                MOVE    S_FLAG, R8
+                SYSCALL(puts, 1)
+                MOVE    HM_KEYREAD, R0
+                MOVE    @R0, R8
+                RSUB    PRHEX, 1
                 SYSCALL(crlf, 1)
 
                 MOVE    S_NXT, R8               ; folders of VD_NEXT_DISK
@@ -334,6 +389,17 @@ PRHEX           MOVE    R8, @--SP
                 SYSCALL(puts, 1)
                 MOVE    @SP++, R8
                 SYSCALL(puthex, 1)
+                RET
+
+; print "FLAG <HM_KEYREAD>" on a line of its own; keeps all registers
+PRFLAG          MOVE    R8, @--SP
+                MOVE    S_FLAGL, R8
+                SYSCALL(puts, 1)
+                MOVE    HM_KEYREAD, R8
+                MOVE    @R8, R8
+                RSUB    PRHEX, 1
+                SYSCALL(crlf, 1)
+                MOVE    @SP++, R8
                 RET
 
 ; print a blank and the name of the file handle in R8; keeps all registers
@@ -387,8 +453,10 @@ _FF_RET         MOVE    R3, R9
 ; Stubs
 ; ----------------------------------------------------------------------------
 
-; SELECT_FILE: the next entry of the script: a file name or 0xFFFF (Run/Stop)
+; SELECT_FILE: prints HM_KEYREAD (the file browser reads keys), then the
+; next entry of the script: a file name or 0xFFFF (Run/Stop)
 SELECT_FILE     INCRB
+                RSUB    PRFLAG, 1
                 MOVE    TB_SCRPOS, R0
                 MOVE    @R0, R1
                 MOVE    @R1++, R2               ; R2: entry
@@ -417,6 +485,27 @@ _SF_END         MOVE    S_SEND, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
                 SYSCALL(exit, 1)
+
+; f32_mnt_sd (monitor): "SDMOUNT <error code>"; fails while TB_SDFAIL is not
+; zero, otherwise the device handle is mounted again
+f32_mnt_sd      INCRB
+                MOVE    R8, R0                  ; R0: device handle
+                MOVE    TB_SDFAIL, R1
+                MOVE    {sdmnt_err}, R9
+                CMP     0, @R1
+                RBRA    _FM_FAIL, !Z
+                MOVE    1, @R0                  ; mounted
+                XOR     R9, R9
+                RBRA    _FM_PRINT, 1
+_FM_FAIL        SUB     1, @R1
+_FM_PRINT       MOVE    S_SDMOUNT, R8
+                SYSCALL(puts, 1)
+                MOVE    R9, R8
+                RSUB    PRHEX, 1
+                SYSCALL(crlf, 1)
+                MOVE    R0, R8
+                DECRB
+                RET
 
 ; f32_fopen (monitor): the size of the file goes into the file handle
 f32_fopen       INCRB
@@ -565,7 +654,8 @@ VD_DRV_READ     CMP     VD_CACHE_DIRTY, R9
                 MOVE    S_VDRD, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
-_VDR_OK         XOR     R8, R8                  ; the write cache is clean
+_VDR_OK         MOVE    TB_DIRTY, R8            ; the write cache of the drive
+                MOVE    @R8, R8
                 RET
 
 ; menu index of a drive: 10 + drive, of a CRT/ROM: 40 + id
@@ -614,13 +704,25 @@ CRTROM_CSR_W    INCRB
                 DECRB
                 RET
 
-UNLOAD_CRTROM   MOVE    S_UNLD, R8
+; UNLOAD_CRTROM (core): "UNLOAD <id>", unloads it and reports it (Carry = 1)
+UNLOAD_CRTROM   INCRB
+                MOVE    R8, R0
+                MOVE    S_UNLD, R8
                 SYSCALL(puts, 1)
+                MOVE    R0, R8
+                RSUB    PRHEX, 1
                 SYSCALL(crlf, 1)
-                AND     0xFFFB, SR
+                MOVE    CRTROM_MAN_LDF, R1
+                ADD     R0, R1
+                MOVE    0, @R1
+                MOVE    R0, R8
+                DECRB
+                OR      0x0004, SR
                 RET
 
-KEYB$GETKEY     MOVE    M2M$KEY_SPACE, R8
+; KEYB$GETKEY: prints HM_KEYREAD (a key of the user is read), returns Space
+KEYB$GETKEY     RSUB    PRFLAG, 1
+                MOVE    M2M$KEY_SPACE, R8
                 RET
 
 ; WORD2HEXSTR: prints the error code that HANDLE_MOUNTING shows
@@ -718,6 +820,9 @@ S_HNDL          .ASCII_W "HNDL"
 S_MNT           .ASCII_W "MNT"
 S_LDF           .ASCII_W " LDF"
 S_PRE           .ASCII_W " PRE"
+S_FLAG          .ASCII_W " FLAG"
+S_FLAGL         .ASCII_W "FLAG"
+S_SDMOUNT       .ASCII_W "SDMOUNT"
 S_NXT           .ASCII_W "NXT"
 S_SLOT          .ASCII_W "SLOT"
 S_BLANK         .ASCII_W " "
@@ -738,7 +843,7 @@ S_VDRD          .ASCII_W "UNEXPECTED VD_DRV_READ"
 S_OSET          .ASCII_W "OPTM_SET"
 S_SHOW          .ASCII_W "SHOW"
 S_CSRW          .ASCII_W "CSRW"
-S_UNLD          .ASCII_W "UNEXPECTED UNLOAD_CRTROM"
+S_UNLD          .ASCII_W "UNLOAD"
 S_ERRCODE       .ASCII_W "ERRCODE"
 S_SHOWMSG       .ASCII_W "SHOWMSG"
 S_FATAL         .ASCII_W "FATAL "
@@ -761,7 +866,7 @@ ERR_FATAL_INST2
 ERR_FATAL_INST3
 ERR_FATAL_INST7
 ERR_FATAL_INSTA .ASCII_W ""
-ERR_MOUNT       .ASCII_W "UNEXPECTED SD CARD MOUNT\n"
+ERR_MOUNT       .ASCII_W "ERR_MOUNT"
 ERR_BROWSE_UNKN .ASCII_W "ERR_BROWSE_UNKN"
 ERR_MOUNT_RET
 ERR_CODE
@@ -795,6 +900,10 @@ SF_CONTEXT      .DW     0
 SF_CONTEXT_DATA .DW     {ctx_data}
 HM_PRESELECT    .DW     0
 OPTM_DIRECT     .DW     0
+HM_KEYREAD      .DW     0
+TB_DIRTY        .DW     0
+TB_SDFAIL       .DW     0
+TB_KEYB         .DW     0                       ; M2M$KEYBOARD: Return pressed
 VD_NXT_INFO     .DW     {nxt}
 SCRATCH_HEX     .BLOCK  5
 LOAD_IMAGE_TYPE .BLOCK  1
@@ -840,10 +949,11 @@ def initial_state():
 
 
 def testbed(code, work):
-    # the monitor entry points, except f32_fopen, which is stubbed
+    # the monitor entry points, except f32_fopen and f32_mnt_sd, which are
+    # stubbed
     mondef = os.path.join(work, "monitor_tb.def")
     open(mondef, "w").write("".join(l for l in open(os.path.join(QNICE, "dist_kit", "monitor.def"))
-                                    if not re.match(r"^f32_fopen\s", l)))
+                                    if not re.match(r"^(f32_fopen|f32_mnt_sd)\s", l)))
     st = initial_state()
     handles = []
     for lbl, hid in zip(["FH_VD0", "FH_VD1", "FH_RM0", "FH_RM1", "_DIRBR_FH"], HANDLES):
@@ -854,17 +964,20 @@ def testbed(code, work):
     dev[0] = 1                                    # the SD card is mounted
     dev[DEV_CLUS[0]], dev[DEV_CLUS[1]] = CLUS     # active directory
     scripts, cases = [], []
-    for n, (mode, cid, key, pre, direct, script) in enumerate(CASES):
+    for n, case in enumerate(CASES):
+        mode, cid, key, pre, direct, script, flag, dirty, sdfail = fields(case)
         entries = [0xFFFF if s is RUNSTOP else label(s) for s in script] + [0]
         scripts.append("SCRIPT_%d%s .DW     %s" % (n, " " * (7 - len(str(n))),
                                                   ", ".join(e if isinstance(e, str) else "0x%04X" % e
                                                             for e in entries)))
-        cases.append("                .DW     0x%04X, 0x%04X, 0x%04X, %s, 0x%04X, SCRIPT_%d"
-                      % (mode, cid, key, label(pre) if pre else "0", direct, n))
+        cases.append("                .DW     0x%04X, 0x%04X, 0x%04X, %s, 0x%04X, SCRIPT_%d, "
+                     "0x%04X, 0x%04X, 0x%04X"
+                     % (mode, cid, key, label(pre) if pre else "0", direct, n, flag, dirty, sdfail))
     heap = ["%-15s .DW     %s" % ("TB_HEAP" if i == 0 else "", words(s)) for i, s in enumerate(st["slots"])]
     return TESTBED.format(
         sysdef=QSYSDEF, mondef=mondef, m2msysdef=M2MSYSDEF,
         key_select=KEY_SELECT, key_selalt=KEY_SELALT, dx=DX, nslots=NSLOTS, fopen_err=FOPEN_ERR,
+        sdmnt_err=SDMNT_ERR,
         names="\n".join('%-15s .ASCII_W "%s"' % (label(n), n) for n in NAMES),
         handles="\n".join(handles),
         vdrives_bufs=words(VDRIVES_BUFS), vdrives_num=VDRIVES_NUM,
@@ -905,21 +1018,43 @@ def write_slot(slot, name):
 def model():
     h = lambda v: "%04X" % (v & 0xFFFF)
     st = initial_state()
+    sdgen = SDGEN
     out = ["== BEGIN =="]
-    for n, (mode, cid, key, pre, direct, script) in enumerate(CASES):
+    for n, case in enumerate(CASES):
+        mode, cid, key, pre, direct, script, flag, dirty, sdfail = fields(case)
         out.append("CASE %s %s %s %s" % (h(n), h(mode), h(cid), h(key)))
         script = list(script)
         menu = (10 if mode == 0 else 40) + cid
         dev = (VDRIVES_BUFS if mode == 0 else CRTROM_MAN_DEV)[cid]
         own = ("VD%d" if mode == 0 else "RM%d") % cid      # file handle of the drive or CRT/ROM
         check = "SCR" if mode == 0 else own                # a disk image is checked first
-        fatal = False
-        if mode == 0 and st["mnt"][cid]:
+        fatal, mount, show = False, True, not direct        # the OSM is shown at the end
+        if mode == 1 and key == KEY_SELALT and st["ldf"][cid]:
+            out.append("UNLOAD %s" % h(cid))               # Space unloads the CRT/ROM
+            st["ldf"][cid] = 0
+            out.append("OPTM_SET %s 0000" % h(menu))
+            mount, show = False, True                       # redrawn and shown in any mode
+        elif mode == 0 and st["mnt"][cid] and not dirty and key == KEY_SELALT:
+            out.append("STROBE %s 0000 0000 0000 0000" % h(cid))   # Space unmounts the drive
+            st["mnt"][cid] = 0
+            mount = False
+        elif mode == 0 and st["mnt"][cid]:
             out.append("OPTM_SET %s 0001" % h(menu))       # the drive stays selected
-        while True:
+            mount = not dirty                               # still saving: nothing else
+        if mount and sdfail:                                # the SD card is not mounted
+            for _ in range(sdfail):                         # error window, wait for Return
+                out.append("SDMOUNT %s" % h(SDMNT_ERR))
+                out.append("ERRCODE %s" % h(SDMNT_ERR))
+                sdgen += 1
+                flag = 1
+            out.append("SDMOUNT 0000")
+            sdgen += 1
+        while mount:
             if pre:
                 name, pre = pre, None
             else:
+                flag = 1                                    # the file browser reads keys
+                out.append("FLAG %s" % h(flag))
                 name = script.pop(0)
                 if name is RUNSTOP:                         # the menu line shows the old state
                     out.append("SELECT RUNSTOP")
@@ -943,6 +1078,8 @@ def model():
                 out.append("ERRCODE " + h(err))
                 if val:
                     out.append("SHOWMSG")
+                flag = 1                                    # the wait for Space reads keys
+                out.append("FLAG %s" % h(flag))
                 continue
             if mode == 0:                                   # now with the handle of the drive
                 out.append("FOPEN %s %s" % (own, name))
@@ -962,7 +1099,7 @@ def model():
                 lo, hi = FILES[name]
                 out.append("STROBE %s %s %s 0000 %s" % (h(cid), h(lo), h(hi), h(val)))
                 st["mnt"][cid] = 1
-                st["nxt"][4 * cid:4 * cid + 4] = [SDGEN, CLUS[0], CLUS[1], FBSTACK]
+                st["nxt"][4 * cid:4 * cid + 4] = [sdgen, CLUS[0], CLUS[1], FBSTACK]
                 out.append("LOG MOUNT " + h(cid))
             else:
                 out.append("OPTM_SET %s 0001" % h(menu))
@@ -970,12 +1107,13 @@ def model():
         if fatal:
             out.append("REGS FATAL")
         else:
-            if not direct:
+            if show:
                 out.append("SHOW")
             out.append("REGS %s %s %s B11B C12C SP 0000 BANK 0000" % (h(cid), h(key), h(mode)))
         out.append("HNDL " + " ".join("%s %s" % (h(st["handles"][k][0]), h(st["handles"][k][1]))
                                       for k in HANDLES))
-        out.append("MNT %s %s LDF %s %s PRE 0000" % tuple(h(v) for v in st["mnt"] + st["ldf"]))
+        out.append("MNT %s %s LDF %s %s PRE 0000 FLAG %s"
+                   % tuple(h(v) for v in st["mnt"] + st["ldf"] + [flag]))
         out.append("NXT " + " ".join(h(v) for v in st["nxt"]))
         for i, s in enumerate(st["slots"]):
             out.append("SLOT %s %s" % (h(i), " ".join(h(v) for v in s)))
@@ -1090,6 +1228,22 @@ MUTANTS = [
     ("flag_not_cleared", replace("hm", ("ADD     R0, R8" + I + "MOVE    0, @R8", "ADD     R0, R8"))),
     ("no_ellipsis", replace("hm", ("MOVE    R1, R10" + I + "ADD     1, R10", "MOVE    R1, R10"))),
     ("crtrom_slot_of_drive", replace("hm", ("CMP     1, R5                   ; case (b)?", "CMP     0, R5"))),
+    # HM_KEYREAD: set before each of the three key reads, and nowhere else
+    ("keyread_unset_browser",
+     replace("hm", (I + "MOVE    HM_KEYREAD, R9          ; the file browser reads keys"
+                    + I + "MOVE    1, @R9                  ; (see shell_vars.asm)", ""))),
+    ("keyread_unset_sd_error",
+     replace("hm", (I + "MOVE    HM_KEYREAD, R8          ; Return is read below (see"
+                    + I + "MOVE    1, @R8                  ; shell_vars.asm)", ""))),
+    ("keyread_unset_load_err",
+     replace("hm", (I + "MOVE    HM_KEYREAD, R8          ; Space is read below (see"
+                    + I + "MOVE    1, @R8                  ; shell_vars.asm)", ""))),
+    ("keyread_on_preselect",
+     replace("hm", ("_HM_PRESEL      XOR     @R9, @R9",
+                    "_HM_PRESEL      XOR     @R9, @R9" + I + "MOVE    HM_KEYREAD, R10" + I + "MOVE    1, @R10"))),
+    ("keyread_on_entry",
+     replace("hm", ("MOVE    R10, R5                 ; R5: mount mode",
+                    "MOVE    R10, R5" + I + "MOVE    HM_KEYREAD, R10" + I + "MOVE    1, @R10"))),
 ]
 
 
