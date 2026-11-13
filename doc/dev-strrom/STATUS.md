@@ -6,7 +6,7 @@ Entry point for anyone, human or coding agent, who picks up this work. The desig
 
 * **What:** the message strings of the QNICE firmware are stored in a block RAM of their own, the string ROM (QNICE device `M2M$STRROM` = `0x0007`), instead of in the firmware ROM.
 * **Why:** the firmware ROM has 28,672 words and was 27,214 words full; a string costs one word per character. The branches `mh_implement_247`, `mh_fix_issue_255`, `mh_implement_153` and `mh_implement_142` need 29,028 words together, 356 more than there are.
-* **Result:** firmware ROM 18,490 of 28,672 words (10,182 free); string ROM 9,076 of 16,384 characters in 196 strings. With the four branches merged (`WIP-V6-A22X3`): 20,225 words (8,447 free) and 9,071 characters in 198 strings.
+* **Result:** firmware ROM 18,490 of 28,672 words (10,182 free); string ROM 9,076 of 16,384 characters in 196 strings. With the four branches and the follow-ups of `doc/dev-a22x3/STATUS.md` merged (`WIP-V6-A22X3`): 20,284 words (8,388 free) and 9,071 characters in 198 strings.
 * **Phase:** implemented, simulated, reviewed and on `develop` as part of `WIP-V6-A22X3`, together with the four feature branches (section 6). **Not yet built with Vivado and not yet tested on hardware.**
 * **Next:** build R3 and R6, run the `WIP-V6-A22X3` section of `tests/README.md`.
 
@@ -36,6 +36,7 @@ Entry point for anyone, human or coding agent, who picks up this work. The desig
 | plus `mh_implement_142` | 20,198 | 9,076 in 198 strings |
 | shorter text of `WRN_CRT_TOO_BIG` | 20,198 | 9,071 in 198 strings |
 | rejected files do not change the mounted image (`doc/dev-a22x3/STATUS.md`) | 20,225 | 9,071 in 198 strings |
+| follow-ups before the Vivado build (`doc/dev-a22x3/STATUS.md`, section 9) | 20,284 | 9,071 in 198 strings |
 
 The number of string ROM characters is the end position behind the last string and includes the gaps at the 4k boundaries, so it does not grow with every string that is added.
 

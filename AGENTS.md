@@ -289,6 +289,14 @@ the SD card.
   27). A level beyond the last bank does not stop anything on the hardware:
   the bank number wraps around and the registers of the outermost routines
   are overwritten. See "Register bank depth" in section 7.
+- The general stack of the Shell has 768 words (`STACK_SIZE` minus
+  `B_STACK_SIZE` in `CORE/m2m-rom/m2m-rom.asm`), and nothing checks its depth.
+  `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (301),
+  and the deepest call chains use about 655 words: a CRT or PRG load in the
+  visible menu (the menu is redrawn while `OPTM_RUN` is on the stack) and the
+  opening of a file in a keyboard shortcut session (FAT32 code of the Monitor
+  on top of `OPTM_RUN`). Every further menu line costs up to two words;
+  `doc/dev-a22x3/STATUS.md`, section 5.4, has the measured numbers.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
   as kind of the "operating system". Here is an overview of the
@@ -1169,12 +1177,15 @@ hardware saw the code.
 | NTSC / PAL switch         | `clk.vhd` (four MMCMs, mux tree), `mega65.vhd` (`hr_core_speed`, `qnice_video_mode_o`), `main.vhd` (`mode_change_reset_proc`), `video_modes_pkg.vhd`, `doc/ntsc.md` |
 | Turbo mode (C128 / Smart) | `fpga64_sid_iec.vhd` `cpu_cyc` (turbo slots, clean-cycle rule for hardware carts) and the turbo decision (`turbo_m`, `cs_io`, `dma_req`), `fpga64_buslogic.vhd` `cs_turbo_eligible_o`, `main.vhd` `turbo_smart_iec_detector_proc`, `mega65.vhd` (`c64_turbo_mode`, `c64_turbo_speed`; the Caps Lock override `main_kb_capslock_n_i`, issue #261), `M2M/vhdl/m2m_keyb.vhd` (`capslock_n_o`), `doc/dev-turbo/`, benches `CORE/vhdl/test/tb_turbo/` and `CORE/vhdl/test/tb_capslock/` |
 | VGA / scandoubler / CSYNC | `analog_pipeline.vhd`, `vga_controller.vhd`               |
-| Audio volume / Stereo Mix | `main.vhd` (`audio_processing_proc` → `audio_stereo_mix_proc` → `audio_volume_proc`, `C_VOL_LUT`), `mega65.vhd` (`volume_decode_proc`, `main_stereo_mix`, issue #247), `SUBMENU_SUMMARY` in `CORE/m2m-rom/m2m-rom.asm` (the `Volume: %s` line), bench `CORE/vhdl/test/tb_stereo_mix/`, `M2M/rom/tests/summary_test.py`. M2M's own MiSTer mixer (`av_pipeline.vhd` → `audio_out.v`, `audio_mix` in `globals.vhd`) is only heard while "Audio improvements" is on (`select_or_mute_audio` bypasses it otherwise): keep `audio_mix` at `"00"` |
+| Audio volume / Stereo Mix | `main.vhd` (`audio_processing_proc` → `audio_stereo_mix_proc` → `audio_volume_proc`, `C_VOL_LUT`), `mega65.vhd` (`volume_decode_proc` and `stereo_mix_decode_proc` for `main_stereo_mix`, issue #247: both are registers that hold their value while no bit of their radio group is set, because the Shell writes the menu bits one at a time), `SUBMENU_SUMMARY` in `CORE/m2m-rom/m2m-rom.asm` (the `Volume: %s` line), bench `CORE/vhdl/test/tb_stereo_mix/`, `M2M/rom/tests/summary_test.py`. M2M's own MiSTer mixer (`av_pipeline.vhd` → `audio_out.v`, `audio_mix` in `globals.vhd`) is only heard while "Audio improvements" is on (`select_or_mute_audio` bypasses it otherwise): keep `audio_mix` at `"00"` |
 | OSM rendering / scaling   | `vga_osm.vhd`, `video_overlay.vhd`, `vga_recover_counters.vhd` |
 | Menu items / labels       | `CORE/vhdl/config.vhd` (OPTM_ITEMS, OPTM_GROUPS, WHS)     |
 | Menu wiring → core        | `mega65.vhd` `C_MENU_*` constants → `main_osm_control_i`  |
 | Disk mount / vdrive       | `vdrives.vhd`, `M2M/rom/vdrives.asm`, `iec_drive/`        |
 | A save lands in the wrong file, or a menu line shows a file that is not mounted or loaded | `HANDLE_MOUNTING` and `LOAD_IMAGE` (`M2M/rom/shell.asm`): the file handle of a drive (`HNDL_VD_FILES`, used by `FLUSH_CACHE` for the write-back) and the menu line may only change after `PREP_LOAD_IMAGE` accepted the file; test `M2M/rom/tests/mount_reject_test.py` |
+| The menu line of a drive shows a wrong text after `<Saving>` | `OPTM_CB_SHOW` (`M2M/rom/options.asm`, cases #2a and #2b): every drive has a parking slot at `@OPTM_HEAP_LAST` + drive number x `@SCR$OSM_O_DX`, and the last word of the slot keeps the "%s is replaced" flag of the parked text; budget check in `HELP_MENU`; memory map at `OPTM_HEAP` in `M2M/rom/shell_vars.asm`; test `M2M/rom/tests/saving_text_test.py` |
+| The key that ended the file browser reaches the C64 after a keyboard shortcut, or a shortcut reacts a third of a second late | `HM_KEYREAD` (`M2M/rom/shell_vars.asm`): `HANDLE_MOUNTING` sets it before it reads a key, `SC$SESSION` clears it, and `_HLP_DIRECT` (`M2M/rom/options.asm`) waits 333 ms before it reconnects the keyboard only if it is set; tests `M2M/rom/tests/shortcuts_test.py` and `mount_reject_test.py` |
+| The menu shows an old state after a PRG or CRT was loaded by a keyboard shortcut | `_OPTM_GK_MNT` (`M2M/rom/options.asm`) updates the menu items and `M2M$CFM_DATA`, but its tail `_OPTM_GK_MNT_S` does not redraw the menu while `OPTM_DIRECT` is set; the next opening of the menu draws everything anew; tests `M2M/rom/tests/hidden_redraw_test.py` and `mount_reject_test.py` |
 | `.crt` won't load / parse | `crt_parser.vhd` (state machine + error codes), `sw_cartridge_wrapper.vhd` (QNICE side) |
 | `.crt` cart-id unsupported| `cartridge.vhd` `case to_integer(unsigned(cart_id_i))` at line 109 |
 | `.crt` bank-switch broken | `cartridge.vhd` per-id branch + `crt_cacher.vhd` (BRAM cache fill, bank tables) |

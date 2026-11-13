@@ -2,8 +2,9 @@
 # config file; Shift+F11 = F12 (Load PRG): Down, Return on TEST.PRG; Shift+F9 = F10 (Load CRT):
 # Down, Return on GOOD.CRT
 # Every key: hold it 3 ms, then wait for 20 ms without UART or video RAM activity.
-# Every invisible session ends in HELP_MENU with WAIT333MS (busy loop, keyboard disconnected);
-# a Next disk message appears only after it. A D64 mount takes about 1.6 s (9 us per byte).
+# An invisible session that read a key (file browser, error window) ends in HELP_MENU with
+# WAIT333MS (busy loop, keyboard disconnected); a session without a key read does not wait, so
+# a Next disk message appears right after the mount. A D64 mount takes about 1.6 s (9 us per byte).
 set sd_int 1
 reset
 wait_uart 1500 MHz

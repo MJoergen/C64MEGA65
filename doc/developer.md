@@ -254,7 +254,7 @@ these steps **in this order** (the order matters — see below):
 
 The last two lines of the output tell you how full both ROMs are, for example
 `String ROM: 9071/16384 characters in 198 strings.` and
-`Shell ROM: 20225/28672 words.`
+`Shell ROM: 20284/28672 words.`
 
 **Why steps 2–5 come before step 6:** the four generated `.asm` files are
 `#include`d into the assembly (directly or through the framework, see below), so

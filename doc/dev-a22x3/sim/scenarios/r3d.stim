@@ -1,0 +1,50 @@
+# Scenario r3d: Next disk without a waiting time. SD card sd/card_full.blk (config file:
+# F9 = Next disk drive 8, F13 = Volume down).
+#   F9 with nothing mounted: Next disk falls back to the file browser; Down, Return on DISK1.D64.
+#      This session showed a window, so it ends with WAIT333MS before the keyboard is connected
+#      to the core again.
+#   F9: Next disk mounts DISK2.D64. This session shows no window that takes a key press: the
+#      keyboard is connected to the core again right after the mount and the message
+#      "Drive 8: DISK2.D64" is on the screen 10 ms after it.
+#   F13 60 ms after that mount, held for 10 ms: honored, the message is "Volume: 95%".
+# A firmware that waits 333 ms after every invisible session shows no message 10 ms after the
+# mount, loses the F13 key press and shows the message of DISK2 where this script expects the
+# volume.
+# Timing in the simulation: a message stays for 31 ms (1 s of the cycle counter, compressed),
+# WAIT333MS is a busy loop and takes its 333 ms, a D64 mount takes about 1.6 s.
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump n_boot
+mark F9 = Next disk drive 8, nothing mounted: file browser
+press 0400 3
+wait_uart 1500 Items in current directory
+wait_quiet 20000 300
+dump n_browser
+mark Down (the cursor starts on <..>), Return on DISK1.D64
+press 0002 3
+wait_quiet 20000 500
+dump n_cursor
+press 0010 3
+wait_uart 3000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_ms 400
+dump n_mount1
+memdump optm_heap {OPTM_HEAP} 3
+mark F9 = Next disk drive 8: DISK2 expected
+press 0400 3
+wait_uart 3000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_ms 10
+dump n_next2_10ms
+wait_ms 50
+mark F13 = Volume down, 60 ms after the mount, for 10 ms
+press 1000 10
+wait_osm 1 800
+wait_quiet 2000 50
+dump n_second
+wait_osm 0 300
+wait_ms 400
+dump n_end
+end

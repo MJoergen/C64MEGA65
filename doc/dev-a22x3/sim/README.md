@@ -38,10 +38,13 @@ Scenarios (`scenarios/*.stim`):
 | `r1` | boot, Volume down and up, Mount drive 8 up to the file browser |
 | `r2` | walk through the menu into the Keyboard Shortcuts submenu, change an assignment, close; load a CRT and unload it with Space |
 | `r3a`, `r3b`, `r3c` | Next disk; Volume with the deferred save, Load PRG, Load CRT |
+| `r3d` | Next disk without a waiting time: the message is on the screen 10 ms after the mount, and a second shortcut key 60 ms after the mount is honored |
 | `r4` | Mount drive 8 with a shortcut, including the load of the disk image |
 | `rf`, `rf2` | the shortcut scenario for the runs with 32 register banks |
 | `m1` | like `r4`, for the comparison of the SD commands before and after the fix of the mount code |
 | `m2` | a rejected disk image over a mounted one, then Run/Stop; a rejected CRT over a loaded one |
 | `m3` | a rejected disk image, then an accepted one |
+
+To compare two versions of the firmware, set up one work folder per version, run the same scripts in both and call `python3 compare.py <run of the first> <run of the second>`: it compares the UART output, the video RAM dumps, the port registers, the accesses through the 4k window, the SD card commands and the peaks of the CPU spy, and it lists every difference. `spy.log` has the exact lowest stack pointer between two dumps; `spy_peaks.log` records a new peak only every few words. The script `r2` contains one `TIMEOUT wait_uart` that is an artifact: the text `Unloaded CRT/ROM #` is sent while the Space key is still held.
 
 Three things to know when writing a scenario: `press_until` releases the key at the first video RAM write of a redraw that may still be running, so keys get lost (use `press <key> 3` followed by `wait_quiet 20000`, and `wait_osm` after the first Help); `wait_uart` misses text that is sent while a key is held; and the cursor of the file browser starts on `<..>`, so a Down is needed before Return.
