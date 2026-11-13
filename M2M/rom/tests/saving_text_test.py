@@ -10,7 +10,11 @@ flag of the line to 2; when the cache is clean again, it copies the parked
 text back. Every virtual drive has a parking slot of its own (the slot of
 drive n is @OPTM_HEAP_LAST + n x @SCR$OSM_O_DX), so drives 8 and 9 can save at
 the same time, and HELP_MENU reserves VDRIVES_NUM parking slots in its check
-of the heap budget.
+of the heap budget. The last word of a parking slot keeps the flag of the
+parked text: a keyboard shortcut can mount a disk image while the menu is
+invisible, so the line can still hold the bare file name that
+HANDLE_MOUNTING stored (flag 0) when it is parked, and such a name must come
+back as the complete line with its label.
 
 The script cuts the real code out of the sources on every run:
 
@@ -41,7 +45,9 @@ sessions of mounts, dirty and clean write caches and redraws of the menu
 (every "%s" line through OPTM_CB_SHOW): two drives that save at the same
 time and finish in every order, one drive alone, redraws while dirty, names
 that fit, get an ellipsis or have the longest form that HANDLE_MOUNTING
-stores, unmounted drives, loaded and empty CRT/ROM lines and submenu lines.
+stores, unmounted drives, loaded and empty CRT/ROM lines and submenu lines,
+and bare file names that are parked (also on two drives at once and next to
+a parked complete line).
 After every step the testbed dumps all slots, the parking slots and a guard
 area before and behind them word by word. An independent model of the
 intended behavior computes the expected trace. Then the script applies
@@ -212,6 +218,20 @@ def sessions_two(dx):
             clean(1), clean(0), D]),
         ("a new image on a drive whose text is parked", [
             dirty(0), D, mount(0, "NEW.D64"), clean(0), D, dirty(0), D, clean(0), D]),
+        # a keyboard shortcut mounts while the menu is invisible: the slot
+        # still holds the bare file name (flag 0) when the drive is dirty at
+        # the next redraw
+        ("a name stored by a shortcut is parked", [
+            mount(0, "BY-SHORTCUT.D64"), dirty(0), D, clean(0), D]),
+        ("the same with the ellipsis name and with the longest form", [
+            mount(1, n_ell), dirty(1), D, D, clean(1), D, mount(0, n_long), dirty(0), D, clean(0), D]),
+        ("both drives park a name, finish together and one after the other", [
+            mount(0, "SHORTCUT-8.D64"), mount(1, "SHORTCUT-9.D64"), dirty(0), dirty(1), D,
+            clean(0), clean(1), D, mount(0, n_25), mount(1, n_long), dirty(1), dirty(0), D,
+            clean(1), D, clean(0), D]),
+        ("a parked name and a parked complete line at the same time", [
+            mount(1, "LINE-9.D64"), D, mount(0, "NAME-8.D64"), dirty(0), dirty(1), D,
+            clean(1), D, clean(0), D, dirty(0), D, clean(0), D]),
     ]
 
 
@@ -226,6 +246,9 @@ def sessions_three():
             clean(1), D, clean(2), D, clean(0), D]),
         ("loaded and empty CRT/ROM line in between", [
             load(0, "X.CRT"), dirty(1), D, unload(0), D, clean(1), D]),
+        ("names stored by shortcuts on 9 (longest form) and 10, a complete line on 8", [
+            mount(2, "TEN-BY-KEY.D64"), mount(1, "NINE-BY-A-SHORTCUT-KEY.D81"), dirty(2), dirty(0),
+            dirty(1), D, clean(0), D, clean(2), D, clean(1), D]),
     ]
 
 
@@ -944,13 +967,18 @@ def model(cfg):
         if not mnt[n]:
             mem.put(a, rpl_s(tpl, S_MOUNT, maxw))
         elif dty[n]:
-            if mem.w[flag(a)] != 2:       # park the text, show <Saving>
+            if mem.w[flag(a)] != 2:       # park the text and its flag, show <Saving>
+                f = mem.w[flag(a)]
                 mem.strcpy(a, park(n))
+                mem.w[flag(park(n))] = f
                 mem.put(a, rpl_s(tpl, S_SAVING, maxw))
                 mem.w[flag(a)] = 2
         elif mem.w[flag(a)] == 2:         # the parked text comes back
             mem.strcpy(park(n), a)
-            mem.w[flag(a)] = 1
+            if mem.w[flag(park(n))] == 0: # a bare file name: the complete line
+                complete(a, tpl)
+            else:
+                mem.w[flag(a)] = 1
         elif mem.w[flag(a)] != 1:
             complete(a, tpl)
         return a
@@ -1070,6 +1098,12 @@ UNPARK = ("MOVE    OPTM_HEAP_LAST, R8      ; restore the text from the" + I +
           "ADD     R0, R8" + I +
           "MOVE    OPTM_HEAP, R9" + I +
           "SUB     @R9, R8")
+PARKFLAG = (I + "MOVE    SCR$OSM_O_DX, R8" + I +
+            "MOVE    @R8, R8" + I +
+            "SUB     1, R8                   ; R8: offset of the flag" + I +
+            "ADD     R8, R9                  ; R9: flag in the parking slot" + I +
+            "ADD     R0, R8                  ; R8: flag of the line" + I +
+            "MOVE    @R8, @R9")
 BUDGET = ("MOVE    SCR$OSM_O_DX, R8        ; demand: R9 is still the" + I +
           "MOVE    @R8, R8                 ; amount of %s strings; add" + I +
           "MOVE    VDRIVES_NUM, R11        ; one parking slot per" + I +
@@ -1099,6 +1133,12 @@ MUTANTS = [
         "MOVE    VDRIVES_NUM, R11" + I + "ADD     @R11, R9" + I + "SYSCALL(mulu, 1)" + I +
         "MOVE    VDRIVES_NUM, R11" + I + "SUB     @R11, R9"))),
     ("budget_heap_check_off", replace("budget", ("RBRA    _HLP_HEAP2_OK, !N", "RBRA    _HLP_HEAP2_OK, 1"))),
+    # a parked bare file name comes back as the complete line
+    ("park_without_flag", replace("cb", (PARKFLAG, ""))),
+    ("restore_ignores_parked_flag", replace("cb", ("RBRA    _OPTM_CBS_3, Z\n", ""))),
+    ("restore_condition_inverted", replace("cb", ("RBRA    _OPTM_CBS_3, Z\n", "RBRA    _OPTM_CBS_3, !Z\n"))),
+    ("restore_reads_flag_of_line", replace("cb", ("ADD     R8, R9                  ; like the normal case #2b",
+                                                  "ADD     R0, R9"))),
 ]
 
 

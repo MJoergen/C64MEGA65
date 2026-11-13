@@ -1854,6 +1854,21 @@ _OPTM_CBS_1     MOVE    VD_CACHE_DIRTY, R9
                 MOVE    R0, R8
                 SYSCALL(strcpy, 1)
 
+                ; A keyboard shortcut can mount a disk image while the menu
+                ; is invisible, so the line can still hold the bare file name
+                ; from HANDLE_MOUNTING (flag 0) instead of the complete line
+                ; (flag 1). Park the flag, too, in the last word of the
+                ; parking slot, so that case #2b can complete a bare file name
+                ; when it restores it. This word is free: a complete line ends
+                ; before it, and the longest bare file name has its zero
+                ; terminator there, which equals the flag 0.
+                MOVE    SCR$OSM_O_DX, R8
+                MOVE    @R8, R8
+                SUB     1, R8                   ; R8: offset of the flag
+                ADD     R8, R9                  ; R9: flag in the parking slot
+                ADD     R0, R8                  ; R8: flag of the line
+                MOVE    @R8, @R9
+
                 MOVE    M2M$RAMROM_DEV, R3      ; replace %s w. OPTM_S_SAVING
                 MOVE    M2M$CONFIG, @R3
                 MOVE    M2M$RAMROM_4KWIN, R3
@@ -1906,6 +1921,12 @@ _OPTM_CBS_2     MOVE    SCR$OSM_O_DX, R8        ; read "%s is replaced" flag
                 SUB     @R9, R8
                 MOVE    R0, R9
                 SYSCALL(strcpy, 1)
+                MOVE    SCR$OSM_O_DX, R9        ; parked flag 0 (see case #2a):
+                MOVE    @R9, R9                 ; the text is the bare file
+                SUB     1, R9                   ; name, so replace %s by it
+                ADD     R8, R9                  ; like the normal case #2b
+                CMP     0, @R9
+                RBRA    _OPTM_CBS_3, Z
                 RBRA    _OPTM_CBS_4, 1          ; set replaced flag
 
                 ; Replace %s by filename
