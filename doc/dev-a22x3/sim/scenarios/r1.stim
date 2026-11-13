@@ -1,0 +1,53 @@
+# Scenario r1 (merged firmware e46bc75), SD card sd/card_full.blk in the bottom tray:
+#   A  boot; Help opens the menu (heap log), Help closes it
+#   C  F13 twice (volume down), F14 once (volume up): messages, menu bits,
+#      deferred saving of the config file
+#   C  F11 (mount drive 8): file browser while the menu stays invisible,
+#      Return on the first image: mounted, on-screen display off afterwards
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump a_boot
+mark A: menu: open with Help
+press_until 0080 300
+wait_uart 800 Free OPTM heap space
+wait_quiet 3000 300
+dump a_menu
+mark A: Help closes the menu
+press_until 0080 300
+wait_osm 0 300
+wait_quiet 3000 300
+dump a_closed
+mark C: F13 = volume down
+press_until 1000 300
+wait_quiet 2000 100
+dump c_f13_1
+wait_osm 0 300
+mark C: F13 = volume down
+press_until 1000 300
+wait_quiet 2000 100
+dump c_f13_2
+wait_osm 0 300
+mark C: Shift+F13 = F14 = volume up
+press_until 3000 300
+wait_quiet 2000 100
+dump c_f14
+wait_osm 0 300
+mark C: deferred saving about 3 s (compressed) after the last change
+wait_uart 1000 successfully stored
+wait_quiet 3000 300
+dump c_saved
+mark C: F11 = mount drive 8: file browser
+press_until 0800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump c_f11_browser
+mark C: Return on the first image
+press_until 0010 300
+wait_osm 0 8000
+wait_quiet 3000 300
+dump c_f11_mounted
+wait_ms 20
+dump c_end
+end

@@ -1,0 +1,118 @@
+# Scenario "sdcard": SD card sd/card_files.blk in the bottom tray from the start.
+#   boot with config file (Kernal = JiffyDOS) and auto-load ROM jd-c64.bin:
+#   JiffyDOS status report; the ASCAL and M2M measurements diverge (warning)
+#   file browser: sub-directory, disk image of a wrong size
+#   cartridges: file too large, broken file (error string of the device), good file
+#   a changed setting is saved to the config file when the menu closes
+set sd_int 1
+set hdmax 383
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump b_boot
+mark menu: open with Help
+press_until 0080 300
+wait_uart 800 Free OPTM heap space
+wait_quiet 3000 300
+dump b_menu
+mark mount drive 8: file browser
+press_until 0010 300
+wait_uart 800 Items in current directory
+wait_quiet 3000 300
+dump b_browser
+mark browser: down to the sub-directory, Return
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_uart 800 Items in current directory
+wait_quiet 3000 300
+dump b_browser_demos
+mark browser: Return on the parent directory
+press_until 0010 300
+wait_uart 800 Items in current directory
+wait_quiet 3000 300
+dump b_browser_back
+mark browser: down to WRONG.D64, Return: wrong image size
+press_until 0002 300
+wait_quiet 2000 300
+dump b_cursor_wrong
+press_until 0010 300
+wait_uart 800 Selected file:
+wait_quiet 5000 300
+dump b_wrong_img
+mark Space: back to the browser, Run/Stop: back to the menu
+press_until 0020 300
+wait_quiet 3000 300
+dump b_browser_again
+press_until 0040 300
+wait_osm 0 100
+wait_osm 1 300
+wait_quiet 3000 300
+dump b_menu2
+mark menu: five times down to the CRT line, Return: file browser for cartridges
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+dump b_cursor_crt
+press_until 0010 300
+wait_uart 800 Items in current directory
+wait_quiet 3000 300
+dump b_crt_browser
+mark browser: four times down to TOOBIG.CRT, Return: too large
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_uart 800 Selected file:
+wait_quiet 5000 300
+dump b_crt_toobig
+mark Space, twice up to BROKEN.CRT, Return: the device reports a parse error
+press_until 0020 300
+wait_quiet 3000 300
+press_until 0001 300
+wait_quiet 2000 300
+press_until 0001 300
+wait_quiet 2000 300
+dump b_cursor_broken
+press_until 0010 300
+wait_uart 300 ERROR #
+wait_quiet 5000 300
+dump b_crt_broken
+mark Space, down to GOOD.CRT, Return: loads and parses
+press_until 0020 300
+wait_quiet 3000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_uart 600 Parsing CRT/ROM image: OK
+wait_osm 0 100
+wait_osm 1 300
+wait_quiet 5000 500
+dump b_crt_good
+mark menu: three times down to Flip joystick ports, Return toggles it, Help closes the menu: settings are saved
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 2000 300
+dump b_flip_joy
+press_until 0080 300
+wait_uart 400 successfully stored to SD card.
+wait_quiet 2000 100
+dump b_closed
+end

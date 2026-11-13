@@ -1,0 +1,57 @@
+# Scenario "crtwatch": the cartridge part of scenario "sdcard" only, run with the
+# program counter watch of the spy (QSYS_WATCH="_HM_SDMOUNTED5S,_HM_SDMOUNTED5S-7"):
+#   w1 counts how often the program counter reaches _HM_SDMOUNTED5S (output of the message),
+#   w2 counts how often it reaches the strcpy call of the copy to the stack (7 words before).
+# SD card sd/card_files.blk; menu, CRT line, file browser, TOOBIG.CRT, BROKEN.CRT.
+set sd_int 1
+set hdmax 383
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump w_boot
+mark menu: open with Help, five times down to the CRT line, Return: file browser for cartridges
+press_until 0080 300
+wait_uart 800 Free OPTM heap space
+wait_quiet 3000 300
+dump w_menu
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+dump w_cursor_crt
+press_until 0010 300
+wait_uart 800 Items in current directory
+wait_quiet 3000 300
+dump w_crt_browser
+mark browser: four times down to TOOBIG.CRT, Return: too large
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_uart 800 Selected file:
+wait_quiet 5000 300
+dump w_crt_toobig
+mark Space, twice up to BROKEN.CRT, Return: the device reports a parse error
+press_until 0020 300
+wait_quiet 3000 300
+press_until 0001 300
+wait_quiet 2000 300
+press_until 0001 300
+wait_quiet 2000 300
+dump w_cursor_broken
+press_until 0010 300
+wait_uart 300 ERROR #
+wait_quiet 5000 300
+dump w_crt_broken
+end

@@ -1,0 +1,131 @@
+# Scenario r2 (merged firmware e46bc75), SD card sd/card_full.blk in the bottom tray.
+# Every key: hold it 3 ms, then wait until neither the UART nor the video RAM was active for
+# 20 ms (the submenus with %s summaries are drawn with pauses of several ms; press_until
+# released keys on the first video RAM write of a redraw that was still running).
+#   B  Help; Right (last item), Up, Up: Advanced Settings; Return; Right, Up:
+#      Keyboard Shortcuts; Return; Right, Up, Up: F13; Return: picker;
+#      Left (Off), 4 x Down: Next disk drive 8; Space; Run/Stop 3 x; Help
+#   D  Help; Left (first item), 5 x Down: CRT line; Return: browser; Down, Return on
+#      GOOD.CRT: loads and parses; Space on the CRT line: unload; Help closes
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump b_boot
+mark B: Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump b_menu
+mark B: Right, Up, Up
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump b_cursor_adv
+mark B: Return: Advanced Settings
+press 0010 3
+wait_quiet 20000 500
+dump b_adv
+mark B: Right, Up
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump b_cursor_ks
+mark B: Return: Keyboard Shortcuts
+press 0010 3
+wait_quiet 20000 500
+dump b_shortcuts
+mark B: Right, Up, Up: F13
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump b_cursor_f13
+mark B: Return: F13 picker
+press 0010 3
+wait_quiet 20000 500
+dump b_f13_picker
+mark B: Left, 4 x Down: Next disk drive 8
+press 0004 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump b_f13_cursor
+mark B: Space selects
+press 0020 3
+wait_quiet 20000 500
+dump b_f13_selected
+mark B: Run/Stop
+press 0040 3
+wait_quiet 20000 500
+dump b_rs1
+mark B: Run/Stop
+press 0040 3
+wait_quiet 20000 500
+dump b_rs2
+mark B: Run/Stop
+press 0040 3
+wait_quiet 20000 500
+dump b_rs3
+mark B: Help closes the menu
+press 0080 3
+wait_osm 0 300
+wait_quiet 20000 500
+dump b_closed
+# HELP_MENU ends with WAIT333MS (busy loop): the main loop reads keys again only after it
+wait_ms 400
+mark D: Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump d_menu
+mark D: Left, 5 x Down: CRT line
+press 0004 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump d_cursor_crt
+mark D: Return: file browser for cartridges
+press 0010 3
+wait_quiet 20000 500
+dump d_crt_browser
+mark D: Down (the cursor starts on <..>)
+press 0002 3
+wait_quiet 20000 500
+dump d_cursor_good
+mark D: Return on GOOD.CRT: load and parse
+press 0010 3
+wait_uart 1500 Parsing CRT/ROM image: OK
+wait_quiet 20000 500
+dump d_crt_loaded
+mark D: Space on the CRT line: unload
+press 0020 3
+wait_uart 1500 Unloaded CRT/ROM #
+wait_quiet 20000 1000
+dump d_crt_unloaded
+mark D: Help closes the menu
+press 0080 3
+wait_quiet 20000 500
+wait_ms 400
+dump d_closed
+end

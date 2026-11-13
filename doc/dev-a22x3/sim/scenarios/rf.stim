@@ -1,0 +1,18 @@
+# Scenario rf: proof run for the register banks (run it with --cfg bank32 or bank32mod)
+#   boot with sd/card_full.blk, F11 (mount drive 8): file browser, Return on the first image
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump f_boot
+mark F: F11 = mount drive 8
+press_until 0800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump f_browser
+mark F: Return on the first image
+press_until 0010 300
+wait_osm 0 8000
+wait_quiet 3000 300
+dump f_mounted
+end

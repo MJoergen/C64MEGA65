@@ -107,6 +107,7 @@ Fix: `LOAD_IMAGE` checks a new disk image with a scratch file handle first (`_DI
 * **Register bank depth:** static analysis, hop by hop by hand for the deepest chain; `bankdepth_test.py --selftest` detects 4 of 4 planted defects.
 * **Mount fix:** `mount_reject_test.py` (15 cases, 11 mutants) fails on the code before the fix and passes after it; `crt_unload_test.py` and the handle lint of `strrom_test.py` were extended for the second path of `LOAD_IMAGE`; the register bank depth is unchanged (41).
 * **Full-system simulation** (the real firmware on the simulated QNICE system: real CPU, firmware ROM, string ROM, `config.vhd`, `qnice_wrapper.vhd`, video RAM, `sw_cartridge_csr.vhd` and `crt_parser.vhd`; SD card, keyboard and the other devices as models; tools of `doc/dev-strrom/sim/` adapted to the 512-bit menu state and the eject signal), on the merged firmware with 64 banks: boot without a fatal error; a walk through the menu into the Keyboard Shortcuts submenu with a changed assignment, saved on close with exactly the two changed bytes; Volume down and up with their messages and one deferred save 3 s after the last change; Mount drive 8, Load PRG and Load CRT through the invisible file browser; Next disk including the fallback to the file browser; unloading a `.crt` with Space (reset asserted, status idle, parser reports cartridge id 0 with EXROM and GAME high, reset released, line shows `<Load>`). Register bank peaks: 23 for the menu with the file browser, 34 for a shortcut during the directory read, 35 for Next disk with the fallback; each is 4 below the static worst case because the small test card never takes one branch of the FAT32 library. The same shortcut scenario with 32 banks stops with an index error in `register_file.vhd` at the moment the level reaches 32.
+* **Mount fix in the full-system simulation** (real FAT32 library, final firmware): an accepted image mounts as before, with two more block reads of the SD card (538 instead of 536 commands) and 0.5 ms more time. A rejected image over a mounted one: the error message appears, and after Run/Stop the menu line and the file handle of the drive (size and start cluster, dumped from RAM) still belong to the mounted image; an accepted image after the rejected one is mounted normally. A rejected `.crt` over a loaded one: the line keeps the name of the loaded cartridge and the cartridge device is not written. The control run with the firmware before the fix shows the name, the size and the start cluster of the rejected file in the same places.
 * **Markdown** (`tools/mdlint.py`): the lines that the merges add contain no bare dollar pair and no bare `==` outside of code.
 
 ## 7. What the Vivado build and the hardware test need to show
@@ -122,6 +123,8 @@ Vivado (R3 and R6 at least):
 Hardware: the section `Version WIP-V6-A22X3` of `tests/README.md`.
 
 ## 8. Tools
+
+`doc/dev-a22x3/sim/` is the tool set of the full-system simulation (its `README.md` describes it).
 
 `doc/dev-a22x3/tools/` (all take git revisions, nothing is written into the repository):
 

@@ -1,0 +1,94 @@
+# Scenario m2 (06cda88 validation, M2 + M4), SD card sd/card_bad.blk:
+#   M2: mount DISK1.D64 through the menu; Return on 8:, BAD.D64 (1000 bytes): size error; Space; Run/Stop
+#   M4: load GOOD.CRT through the menu; Return on CRT:, TOOBIG.CRT: rejected; Space; Run/Stop
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump boot
+mark Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump menu
+mark Left (first item = 8:), Return: file browser of drive 8
+press 0004 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump browser1
+mark Down x 2 (BAD.D64, DISK1.D64), Return: mount DISK1.D64
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump cursor_disk1
+press 0010 3
+wait_uart 3000 Mounted disk image for drive #
+wait_quiet 20000 1000
+dump mounted1
+memdump h_before {HANDLE_VD_FILE1} 12
+mark Return on 8:DISK1.D64: file browser (cursor on DISK1.D64)
+press 0010 3
+wait_quiet 20000 500
+dump browser2
+mark Up: BAD.D64, Return: rejected (wrong size)
+press 0001 3
+wait_quiet 20000 500
+dump cursor_bad
+press 0010 3
+wait_quiet 20000 500
+dump error
+memdump h_error {HANDLE_VD_FILE1} 12
+memdump fh_scratch {_DIRBR_FH} 12
+mark Space: back to the file browser
+press 0020 3
+wait_quiet 20000 500
+dump browser3
+memdump h_space {HANDLE_VD_FILE1} 12
+mark Run/Stop: back to the menu
+press 0040 3
+wait_quiet 20000 500
+dump menu_after
+memdump h_after {HANDLE_VD_FILE1} 12
+mark M4: Left, 5 x Down: CRT line, Return: browser (new caller: cursor on <..>)
+press 0004 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump crt_browser1
+mark M4: Down: GOOD.CRT, Return: load
+press 0002 3
+wait_quiet 20000 500
+dump crt_cursor_good
+press 0010 3
+wait_uart 1500 Parsing CRT/ROM image: OK
+wait_quiet 20000 1000
+dump crt_loaded
+mark M4: Return on CRT:GOOD.CRT: browser (same caller: cursor on GOOD.CRT); Down: TOOBIG.CRT; Return: rejected
+press 0010 3
+wait_quiet 20000 500
+dump crt_browser2
+press 0002 3
+wait_quiet 20000 500
+dump crt_cursor_toobig
+press 0010 3
+wait_quiet 20000 500
+dump crt_error
+mark M4: Space, Run/Stop
+press 0020 3
+wait_quiet 20000 500
+press 0040 3
+wait_quiet 20000 500
+dump crt_menu_after
+end

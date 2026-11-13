@@ -1,0 +1,59 @@
+# Scenario m3 (06cda88 validation, M3), SD card sd/card_bad.blk: like m2 up to the size error of
+# BAD.D64 and Space; then Down x 2: DISK2.D64, Return: mounted
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump boot
+mark Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump menu
+mark Left (first item = 8:), Return: file browser of drive 8
+press 0004 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump browser1
+mark Down x 2 (BAD.D64, DISK1.D64), Return: mount DISK1.D64
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump cursor_disk1
+press 0010 3
+wait_uart 3000 Mounted disk image for drive #
+wait_quiet 20000 1000
+dump mounted1
+memdump h_before {HANDLE_VD_FILE1} 12
+mark Return on 8:DISK1.D64: file browser (cursor on DISK1.D64)
+press 0010 3
+wait_quiet 20000 500
+dump browser2
+mark Up: BAD.D64, Return: rejected (wrong size)
+press 0001 3
+wait_quiet 20000 500
+dump cursor_bad
+press 0010 3
+wait_quiet 20000 500
+dump error
+memdump h_error {HANDLE_VD_FILE1} 12
+memdump fh_scratch {_DIRBR_FH} 12
+mark Space: back to the file browser
+press 0020 3
+wait_quiet 20000 500
+dump browser3
+memdump h_space {HANDLE_VD_FILE1} 12
+mark Down x 2 (DISK1, DISK2), Return: mount DISK2.D64
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump cursor_disk2
+press 0010 3
+wait_uart 3000 Mounted disk image for drive #
+wait_quiet 20000 1000
+dump mounted2
+memdump h_disk2 {HANDLE_VD_FILE1} 12
+end

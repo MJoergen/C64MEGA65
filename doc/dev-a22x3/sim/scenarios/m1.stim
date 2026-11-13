@@ -1,0 +1,25 @@
+# Scenario m1: identical to r4.stim up to the mount of DISK1.D64 (for the comparison of the SD commands
+# before and after 06cda88), then a dump of the file handle of drive 0 (HANDLE_VD_FILE1, 12 words)
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump m_boot
+mark C: F11 = mount drive 8: file browser
+press_until 0800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump m_browser
+mark C: Down, Return on DISK1.D64
+press_until 0002 300
+wait_quiet 2000 300
+dump m_cursor
+press_until 0010 300
+wait_uart 15000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_quiet 3000 300
+dump m_mounted
+wait_ms 400
+dump m_after
+memdump h_mounted {HANDLE_VD_FILE1} 12
+end

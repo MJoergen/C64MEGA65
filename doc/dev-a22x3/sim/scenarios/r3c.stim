@@ -1,0 +1,38 @@
+# Scenario r3c: F11 (Mount drive 8): Down x 3, Return: DISK3.D64; then F9 (= Next disk drive 8 in
+# the config file): wrap-around to DISK1.D64 expected, with a message
+# Every key: hold it 3 ms, then wait for 20 ms without UART or video RAM activity.
+# Every invisible session ends in HELP_MENU with WAIT333MS (busy loop, keyboard disconnected);
+# a Next disk message appears only after it. A D64 mount takes about 1.6 s (9 us per byte).
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump n_boot
+mark C: F11 = Mount drive 8: file browser
+press 0800 3
+wait_uart 1500 Items in current directory
+wait_quiet 20000 300
+dump w_browser
+mark C: Down x 3, Return on DISK3.D64
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump w_cursor
+press 0010 3
+wait_uart 3000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_ms 400
+dump w_mount3
+mark C: F9 = Next disk drive 8: wrap-around to DISK1 expected
+press 0400 3
+wait_uart 3000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_osm 1 800
+wait_quiet 2000 50
+dump w_next1
+wait_osm 0 300
+wait_quiet 20000 300
+end

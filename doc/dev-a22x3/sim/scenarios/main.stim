@@ -1,0 +1,105 @@
+# Scenario "main": no SD card.
+#   S1  cold boot until the core info is logged
+#   S3  debug console: QNICE Monitor via UART, back into the Shell
+#   S2  on-screen menu: navigation, submenu, selection, help screens,
+#       mount drive -> error screen "Cannot mount SD card"
+# Keys: UP 0001 DOWN 0002 LEFT 0004 RIGHT 0008 RETURN 0010 SPACE 0020
+#       RUN/STOP 0040 HELP 0080
+
+# ---- S1 ----------------------------------------------------------------
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump s1_boot
+
+# ---- S3 ----------------------------------------------------------------
+# Run/Stop + Cursor Up held, then Help in addition
+keys 0041
+wait_ms 2
+keys 00C1
+wait_uart 400 QMON>\x20
+keys 0000
+wait_quiet 2000 100
+mark monitor: help
+send H
+wait_uart 600 QMON>\x20
+mark monitor: illegal command group, illegal command
+send Z
+wait_uart 300 QMON>\x20
+send CX
+wait_uart 300 QMON>\x20
+mark monitor: memory examine
+send ME0000
+wait_uart 300 QMON>\x20
+mark monitor: select device 0002 (config.vhd) and window 0200 (core name), dump 7000..7010
+send MCFFF40002
+wait_uart 300 QMON>\x20
+send MCFFF50200
+wait_uart 300 QMON>\x20
+send MD70007010
+wait_uart 400 QMON>\x20
+mark monitor: list directory without SD card
+send FD
+wait_uart 400 QMON>\x20
+mark monitor: back into the Shell
+send CR{_START_MON_GO}
+wait_quiet 3000 300
+dump s3_back_in_shell
+
+# ---- S2 ----------------------------------------------------------------
+mark menu: open with Help
+press_until 0080 300
+wait_uart 800 Free OPTM heap space
+wait_quiet 3000 300
+dump s2_menu
+mark menu: cursor down twice (PRG, Drive Settings)
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+dump s2_cursor
+mark menu: Return opens the submenu Drive Settings
+press_until 0010 300
+wait_quiet 2000 300
+dump s2_submenu
+mark menu: cursor down and Return selects another drive mode
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 2000 300
+dump s2_submenu_sel
+mark menu: cursor right = last item (Back), Return leaves the submenu
+press_until 0008 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 2000 300
+dump s2_main_again
+mark menu: cursor right = last item (Close Menu), up = About & Help, Return
+press_until 0008 300
+wait_quiet 2000 300
+press_until 0001 300
+wait_quiet 2000 300
+dump s2_cursor_help
+press_until 0010 300
+wait_quiet 3000 300
+dump s2_help1
+mark help: cursor right twice, left once, Space closes
+press_until 0008 300
+wait_quiet 3000 300
+dump s2_help2
+press_until 0008 300
+wait_quiet 3000 300
+dump s2_help3
+press_until 0004 300
+wait_quiet 3000 300
+dump s2_help2_again
+press_until 0020 300
+wait_quiet 3000 300
+dump s2_menu_after_help
+mark menu: cursor left = first item (mount drive 8), Return: the SD card cannot be mounted
+press_until 0004 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 5000 400
+dump s2_mount_error
+end

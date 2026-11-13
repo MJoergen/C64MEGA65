@@ -1,0 +1,64 @@
+# Scenario "emptycard": SD card sd/card_empty.blk (nothing that the core can use).
+#   boot: config file not found; pixel rate too high for the log (<n/a>)
+#   mount drive: "Nothing to browse" message of the core
+#   drive 8 = Internal 1581: live status line in the main menu
+#   load PRG:    "Nothing to browse" message of the Shell
+set sd_int 1
+set h_freq 31250
+set hdmax 1920
+set h_pixels 1920
+set h_pulse 44
+set h_bp 148
+set h_fp 88
+set vdmax 1080
+set v_pixels 1080
+set v_pulse 5
+set v_bp 36
+set v_fp 4
+reset
+wait_uart 1500 Pixel rate:
+wait_quiet 5000 300
+dump c_boot
+press_until 0080 300
+wait_uart 800 Free OPTM heap space
+wait_quiet 3000 300
+dump c_menu
+mark mount drive 8: nothing to browse (message of the core); the dialog waits for Space pressed and released, then the menu comes back (OSM off, on)
+press_until 0010 300
+wait_quiet 5000 400
+dump c_nothing_d64
+press 0020 2
+wait_osm 0 100
+wait_osm 1 300
+wait_quiet 3000 300
+dump c_menu2
+mark drive settings: drive 8 becomes the internal 1581 (live status line in the main menu)
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0002 300
+wait_quiet 2000 300
+press_until 0010 300
+wait_quiet 3000 300
+dump c_submenu_1581
+press_until 0040 300
+wait_quiet 5000 300
+dump c_menu_1581
+mark PRG: nothing to browse (message of the Shell)
+press_until 0001 300
+wait_quiet 2000 300
+dump c_cursor_prg
+press_until 0010 300
+wait_quiet 5000 400
+dump c_nothing_prg
+press 0020 2
+wait_osm 0 100
+wait_osm 1 300
+wait_quiet 3000 300
+dump c_menu3
+end

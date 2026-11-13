@@ -1,0 +1,5 @@
+# exploratory run: the first 115 ms of the boot without SD card
+reset
+wait_ms 115
+dump t115ms
+end

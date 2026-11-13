@@ -1,0 +1,66 @@
+# Scenario r3 (merged firmware e46bc75), SD card sd/card_full.blk (config file: F9 = Next disk drive 8):
+#   C  F9 with nothing mounted: Next disk falls back to the file browser; Return on DISK1.D64
+#   C  F9 three times: DISK2, DISK3, then wrap-around to DISK1, each with a message
+#   C  Shift+F11 = F12 (Load PRG): browser, Return on TEST.PRG
+#   C  Shift+F9 = F10 (Load CRT): browser, Return on GOOD.CRT
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump n_boot
+mark C: F9 = Next disk drive 8, nothing mounted: file browser
+press_until 0400 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump n_browser
+mark C: Return on the first image
+press_until 0010 300
+wait_uart 15000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_quiet 3000 300
+dump n_mount1
+mark C: F9 = Next disk drive 8
+press 0400 3
+wait_uart 15000 Mounted disk image for drive #
+wait_quiet 3000 500
+dump n_next2
+wait_osm 0 300
+wait_quiet 3000 300
+mark C: F9 = Next disk drive 8
+press 0400 3
+wait_uart 15000 Mounted disk image for drive #
+wait_quiet 3000 500
+dump n_next3
+wait_osm 0 300
+wait_quiet 3000 300
+mark C: F9 = Next disk drive 8 (wrap-around expected)
+press 0400 3
+wait_uart 15000 Mounted disk image for drive #
+wait_quiet 3000 500
+dump n_next4
+wait_osm 0 300
+wait_quiet 3000 300
+mark C: Shift+F11 = F12 = Load PRG: file browser
+press_until 2800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump p_browser
+mark C: Return on TEST.PRG
+press_until 0010 300
+wait_osm 0 3000
+wait_quiet 3000 300
+dump p_loaded
+mark C: Shift+F9 = F10 = Load CRT: file browser
+press_until 2400 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump r_browser
+mark C: Return on GOOD.CRT
+press_until 0010 300
+wait_uart 1500 Parsing CRT/ROM image: OK
+wait_osm 0 1000
+wait_quiet 3000 500
+dump r_loaded
+wait_ms 20
+dump r_end
+end

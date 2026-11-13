@@ -1,0 +1,5 @@
+# Negative control: the first 60 ms of the cold boot without SD card. The run is
+# compared with the first part of the run main/OLD (compare.py --prefix).
+reset
+wait_ms 60
+end

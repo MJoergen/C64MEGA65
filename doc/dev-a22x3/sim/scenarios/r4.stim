@@ -1,0 +1,36 @@
+# Scenario r4 (merged firmware e46bc75), SD card sd/card_full.blk:
+#   C  F11 (mount drive 8): file browser while the menu stays invisible; Down (the cursor
+#      starts on <..>), Return on DISK1.D64: mounted, on-screen display off afterwards
+#   C  F11 again: the browser opens in the folder of the mounted image; Run/Stop leaves it
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 3000 300
+dump m_boot
+mark C: F11 = mount drive 8: file browser
+press_until 0800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump m_browser
+mark C: Down, Return on DISK1.D64
+press_until 0002 300
+wait_quiet 2000 300
+dump m_cursor
+press_until 0010 300
+wait_uart 15000 Mounted disk image for drive #
+wait_osm 0 3000
+wait_quiet 3000 300
+dump m_mounted
+wait_ms 400
+dump m_after
+mark C: F11 again: file browser in the folder of the mounted image
+press_until 0800 300
+wait_uart 1500 Items in current directory
+wait_quiet 3000 300
+dump m_browser2
+mark C: Run/Stop leaves the browser
+press_until 0040 300
+wait_osm 0 300
+wait_ms 400
+dump m_end
+end

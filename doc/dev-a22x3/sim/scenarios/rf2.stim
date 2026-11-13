@@ -1,0 +1,35 @@
+# Scenario rf2: register bank wrap-around. Run it twice and compare the runs:
+#   --cfg bank32mod (32 banks, index modulo 32 like the hardware) and the default (64 banks).
+#   F11: the directory read of the file browser reaches bank level 34 (banks 32..34 wrap to 0..2);
+#   Run/Stop leaves the browser, the session returns through all outer routines; then F13 and
+#   F14 (volume messages) exercise the main loop again.
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump g_boot
+mark F: F11 = mount drive 8: file browser
+press 0800 3
+wait_uart 1500 Items in current directory
+wait_quiet 20000 300
+dump g_browser
+mark F: Run/Stop leaves the browser
+press 0040 3
+wait_osm 0 300
+wait_ms 400
+dump g_after
+mark F: F13 = volume down
+press 1000 3
+wait_quiet 2000 50
+dump g_f13
+wait_osm 0 300
+wait_quiet 20000 100
+mark F: Shift+F13 = F14 = volume up
+press 3000 3
+wait_quiet 2000 50
+dump g_f14
+wait_osm 0 300
+wait_uart 1000 successfully stored
+wait_quiet 20000 300
+dump g_end
+end

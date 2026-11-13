@@ -1,0 +1,60 @@
+# Scenario r3b: F13 twice and F14 once (volume 100 -> 95 -> 90 -> 95 %), deferred saving of the
+# config file; Shift+F11 = F12 (Load PRG): Down, Return on TEST.PRG; Shift+F9 = F10 (Load CRT):
+# Down, Return on GOOD.CRT
+# Every key: hold it 3 ms, then wait for 20 ms without UART or video RAM activity.
+# Every invisible session ends in HELP_MENU with WAIT333MS (busy loop, keyboard disconnected);
+# a Next disk message appears only after it. A D64 mount takes about 1.6 s (9 us per byte).
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump n_boot
+mark C: F13 = volume down
+press 1000 3
+wait_quiet 2000 50
+dump v_f13_1
+wait_osm 0 300
+wait_quiet 20000 100
+mark C: F13 = volume down
+press 1000 3
+wait_quiet 2000 50
+dump v_f13_2
+wait_osm 0 300
+wait_quiet 20000 100
+mark C: Shift+F13 = F14 = volume up
+press 3000 3
+wait_quiet 2000 50
+dump v_f14
+wait_osm 0 300
+mark C: deferred saving about 3 s (compressed) after the last change
+wait_uart 1000 successfully stored
+wait_quiet 20000 300
+dump v_saved
+mark C: Shift+F11 = F12 = Load PRG: file browser
+press 2800 3
+wait_uart 1500 Items in current directory
+wait_quiet 20000 300
+dump p_browser
+mark C: Down (the cursor starts on <..>), Return on TEST.PRG
+press 0002 3
+wait_quiet 20000 500
+dump p_cursor
+press 0010 3
+wait_osm 0 3000
+wait_ms 400
+dump p_loaded
+mark C: Shift+F9 = F10 = Load CRT: file browser
+press 2400 3
+wait_uart 1500 Items in current directory
+wait_quiet 20000 300
+dump r_browser
+mark C: Down (the cursor starts on <..>), Return on GOOD.CRT
+press 0002 3
+wait_quiet 20000 500
+dump r_cursor
+press 0010 3
+wait_uart 1500 Parsing CRT/ROM image: OK
+wait_osm 0 1000
+wait_ms 400
+dump r_loaded
+end
