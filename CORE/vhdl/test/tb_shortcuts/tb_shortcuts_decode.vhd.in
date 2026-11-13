@@ -21,6 +21,14 @@
 --      "both bits set" (the lower volume wins); a monitor checks in every clock cycle of a
 --      transition that main_volume is the old or the new value and nothing else
 --    * all of this with all other menu bits at '0' and at '1'
+--    * timing (exactly one register on the rising edge of main_clk_o): the selection changes 1 ns
+--      after a rising edge; sampled every 1 ns, main_volume keeps the old value up to 1 ns before
+--      the next rising edge (so also 1 ns after the change and 1 ns after the falling edge in
+--      between) and has the new value 1 ns after that rising edge. Checked for the step from the
+--      power-up state to the first item ever selected (step 10 = 50%) and for all 420 transitions,
+--      with all other menu bits at '0' and at '1'. The other checks change the selection on the
+--      falling edge and sample on the next falling edge, so they cannot tell a latch or a register
+--      on the falling edge from the register.
 -- Checks of the freezer key bits: for each key picker F9 .. F14 and each of its 11 items, with the
 -- other pickers at "Off", main_sc_freeze has exactly the bit of that key set if the item is Freeze;
 -- all pickers at Freeze give "111111".
@@ -131,6 +139,47 @@ begin
          main_osm_control_i <= osm;
       end procedure;
 
+      -- timing: the selection changes to step v 1 ns after a rising edge of main_clk_o; sampled every
+      -- 1 ns, main_volume must keep old_v up to 1 ns before the next rising edge (this includes 1 ns
+      -- after the change and 1 ns after the falling edge in between), and 1 ns after the next rising
+      -- edge it must be v: exactly one register on the rising edge
+      procedure timing(old_v : natural; v : natural; label_s : string) is
+         variable t_edge : time;
+         variable t_bad  : time;
+         variable got    : natural;
+      begin
+         wait until rising_edge(main_clk_o);
+         t_edge := now;
+         wait for 1 ns;
+         set_only(v);
+         t_bad := 0 ns;
+         for k in 2 to C_PERIOD / 1 ns - 1 loop
+            wait for 1 ns;
+            if t_bad = 0 ns and main_volume /= old_v then
+               t_bad := now - t_edge;
+               got   := main_volume;
+            end if;
+         end loop;
+         cases := cases + 1;
+         if t_bad /= 0 ns then
+            errors := errors + 1;
+            report "TB_ERROR: timing: background " & std_logic'image(bg) & ", " & label_s & ": main_volume = " &
+                   integer'image(got) & " already " & integer'image(t_bad / 1 ns) & " ns after the rising edge " &
+                   "(selection changed 1 ns after it), expected " & integer'image(old_v) &
+                   " until the next rising edge" severity error;
+         end if;
+         wait until rising_edge(main_clk_o);
+         wait for 1 ns;
+         cases := cases + 1;
+         if main_volume /= v then
+            errors := errors + 1;
+            report "TB_ERROR: timing: background " & std_logic'image(bg) & ", " & label_s & ": main_volume = " &
+                   integer'image(main_volume) & " 1 ns after the next rising edge, expected " & integer'image(v)
+                   severity error;
+         end if;
+         wait until falling_edge(main_clk_o);
+      end procedure;
+
       type t_pickers is array (0 to 5) of natural;
       constant C_PICKERS : t_pickers := (C_MENU_SC_F9, C_MENU_SC_F10, C_MENU_SC_F11,
                                          C_MENU_SC_F12, C_MENU_SC_F13, C_MENU_SC_F14);
@@ -149,6 +198,11 @@ begin
       else
          report "TB: power-up: main_volume = 20 (100%) while no bit is set OK";
       end if;
+
+      -- timing of the step from the power-up state to the first item ever selected (step 10 = 50%, so
+      -- that the first single item below still changes the value)
+      bg := '0';
+      timing(20, 10, "power-up -> 10");
 
       for background in 0 to 1 loop
          if background = 0 then
@@ -197,6 +251,28 @@ begin
                   clocks(2);
                   check_volume(b, "transition " & integer'image(a) & " -> " & integer'image(b) & ", done");
                   mon_on <= false;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+
+      ------------------------------------------------------------------------------------------------
+      -- timing of every transition a -> b: exactly one register on the rising edge of main_clk_o
+      ------------------------------------------------------------------------------------------------
+      for background in 0 to 1 loop
+         if background = 0 then
+            bg := '0';
+         else
+            bg := '1';
+         end if;
+         for a in 0 to 20 loop
+            for b in 0 to 20 loop
+               if a /= b then
+                  set_only(a);
+                  clocks(2);
+                  check_volume(a, "background " & std_logic'image(bg) & ", timing " & integer'image(a) & " -> " &
+                               integer'image(b) & ", start");
+                  timing(a, b, integer'image(a) & " -> " & integer'image(b));
                end if;
             end loop;
          end loop;

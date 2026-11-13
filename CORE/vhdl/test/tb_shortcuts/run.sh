@@ -10,7 +10,7 @@
 #           (tb_shortcuts_qnice.vhd); plus a mutant that must fail
 #   decode  the volume decoder and the freezer key bits of CORE/vhdl/mega65.vhd and the freezer
 #           cartridge gate of CORE/vhdl/main.vhd, copied verbatim into tb_shortcuts_decode.vhd;
-#           plus three mutants that must fail
+#           plus five mutants that must fail
 #   wiring  differential GHDL analysis (base commit versus working tree) of main.vhd, mega65.vhd,
 #           keyboard.vhd and m2m_keyb.vhd, once in identical libraries and once with the entity
 #           declarations of the instantiated sub-entities (so the port maps are checked); plus two
@@ -236,7 +236,7 @@ if want decode; then
       note_fail decode_build
    fi
 
-   for m in nohold freeze gate; do
+   for m in nohold freeze gate latch falling; do
       M="$BUILD/decode_mut_$m"
       mkdir -p "$M"
       cp "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd"
@@ -251,6 +251,12 @@ if want decode; then
                     "main_sc_freeze(3) <= main_osm_control_i(C_MENU_SC_F11 + C_SC_FREEZE);" ;;
          gate)   mutate "$REPO/CORE/vhdl/main.vhd" "$M/main.vhd" \
                     "((not freeze_key_n) and crt_is_freezer)" "(not freeze_key_n)" ;;
+         latch)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                    $'volume_decode_proc : process (main_clk_o)\n   begin\n      if rising_edge(main_clk_o) then' \
+                    $'volume_decode_proc : process (all)\n   begin\n      if true then' ;;
+         falling) mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                    $'      if rising_edge(main_clk_o) then\n         for b in C_MENU_VOLUME\'low' \
+                    $'      if falling_edge(main_clk_o) then\n         for b in C_MENU_VOLUME\'low' ;;
       esac || { note_fail "decode_mutant_${m}_pattern"; continue; }
       if gen_decode "$M/mega65.vhd" "$M/main.vhd" "$M/tb_shortcuts_decode.vhd" > /dev/null &&
          analyze "$M" "$M/tb_shortcuts_decode.vhd" &&

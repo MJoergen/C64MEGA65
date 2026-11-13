@@ -6,9 +6,11 @@
 --      C_MENU_STEREO_MIX_MONO,
 --    * the declaration of main_stereo_mix (including the power-up value),
 --    * stereo_mix_decode_proc
--- into the marker lines below and fails if it cannot find them or if main_stereo_mix is assigned
--- anywhere else in mega65.vhd. The menu vector of the bench has 512 bits like the one of
--- mega65.vhd.
+-- into the marker lines below and fails if it cannot find them. It also fails if the identifier
+-- main_stereo_mix occurs in mega65.vhd (outside of comments) anywhere else than in its declaration,
+-- inside stereo_mix_decode_proc and in exactly one port association
+-- "audio_stereo_mix_i => main_stereo_mix", so that the process is its only driver. The menu vector
+-- of the bench has 512 bits like the one of mega65.vhd.
 --
 -- MiSTer's AUDIO_MIX encoding: Full Stereo "00", Wide Stereo "01", Narrow Stereo "10", Mono "11".
 -- Checks of the decoder (a register that holds its value while no bit of the group is set):
@@ -23,6 +25,14 @@
 --      checks in every clock cycle of a transition that main_stereo_mix is the old or the new value
 --      and nothing else, and the final value must be the new one.
 --    * all of this with all other menu bits at '0' and at '1'
+--    * timing (exactly one register on the rising edge of main_clk_o): the selection changes 1 ns
+--      after a rising edge; sampled every 1 ns, the output keeps the old value up to 1 ns before
+--      the next rising edge (so also 1 ns after the change and 1 ns after the falling edge in
+--      between) and has the new value 1 ns after that rising edge. Checked for the step from the
+--      power-up state to the first item ever selected (Mono) and for all 12 transitions, with all
+--      other menu bits at '0' and at '1'. The other checks change the selection on the falling
+--      edge and sample on the next falling edge, so they cannot tell a latch, a register on the
+--      falling edge or a second register stage from the register.
 --
 -- done by sy2002 in 2026 and licensed under GPL v3
 ----------------------------------------------------------------------------------------------------
@@ -139,6 +149,47 @@ begin
          main_osm_control_i <= osm;
       end procedure;
 
+      -- timing: the selection changes to item to_i 1 ns after a rising edge of main_clk_o; sampled
+      -- every 1 ns, the output must keep old_v up to 1 ns before the next rising edge (this includes
+      -- 1 ns after the change and 1 ns after the falling edge in between), and 1 ns after the next
+      -- rising edge it must be the new value: exactly one register on the rising edge
+      procedure timing(old_v : std_logic_vector(1 downto 0); to_i : integer; label_s : string) is
+         variable t_edge : time;
+         variable t_bad  : time;
+         variable got    : std_logic_vector(1 downto 0);
+      begin
+         wait until rising_edge(main_clk_o);
+         t_edge := now;
+         wait for 1 ns;
+         set_only(to_i);
+         t_bad := 0 ns;
+         for k in 2 to C_PERIOD / 1 ns - 1 loop
+            wait for 1 ns;
+            if t_bad = 0 ns and main_stereo_mix /= old_v then
+               t_bad := now - t_edge;
+               got   := main_stereo_mix;
+            end if;
+         end loop;
+         cases := cases + 1;
+         if t_bad /= 0 ns then
+            errors := errors + 1;
+            report "TB_ERROR: timing: other bits '" & to_string(bg) & "', " & label_s & ": main_stereo_mix = " &
+                   to_string(got) & " already " & integer'image(t_bad / 1 ns) & " ns after the rising edge (selection " &
+                   "changed 1 ns after it), expected " & to_string(old_v) & " until the next rising edge"
+                   severity error;
+         end if;
+         wait until rising_edge(main_clk_o);
+         wait for 1 ns;
+         cases := cases + 1;
+         if main_stereo_mix /= C_EXP(to_i) then
+            errors := errors + 1;
+            report "TB_ERROR: timing: other bits '" & to_string(bg) & "', " & label_s & ": main_stereo_mix = " &
+                   to_string(main_stereo_mix) & " 1 ns after the next rising edge, expected " &
+                   to_string(C_EXP(to_i)) severity error;
+         end if;
+         wait until falling_edge(main_clk_o);
+      end procedure;
+
    begin
       ------------------------------------------------------------------------------------------------
       -- power-up: no bit of the group has ever been set -> "00" (Full Stereo) in every clock cycle
@@ -158,6 +209,10 @@ begin
          report "TB: power-up: main_stereo_mix = ""00"" (Full Stereo) in all " & integer'image(powerup_cycles) &
                 " clock cycles";
       end if;
+
+      -- timing of the step from the power-up state to the first item ever selected (Mono, so that both
+      -- bits change and the first single item below still changes the value)
+      timing("00", 3, "power-up -> Mono");
 
       for background in 0 to 1 loop
          if background = 0 then
@@ -220,6 +275,27 @@ begin
                   clocks(2);
                   check(C_EXP(b), name(a) & " -> " & name(b) & " through both bits set, done");
                   mon_on <= false;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+
+      ------------------------------------------------------------------------------------------------
+      -- timing of every transition a -> b: exactly one register on the rising edge of main_clk_o
+      ------------------------------------------------------------------------------------------------
+      for background in 0 to 1 loop
+         if background = 0 then
+            bg := '0';
+         else
+            bg := '1';
+         end if;
+         for a in 0 to 3 loop
+            for b in 0 to 3 loop
+               if a /= b then
+                  set_only(a);
+                  clocks(2);
+                  check(C_EXP(a), "timing " & name(a) & " -> " & name(b) & ", start");
+                  timing(C_EXP(a), b, name(a) & " -> " & name(b));
                end if;
             end loop;
          end loop;

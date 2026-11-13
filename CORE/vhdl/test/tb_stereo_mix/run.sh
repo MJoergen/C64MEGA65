@@ -8,7 +8,9 @@
 #           tb_stereo_mix.vhd, against golden.py (MiSTer's aud_mix_top), plus mutants that must fail
 #   decode  the Stereo Mix decoder of CORE/vhdl/mega65.vhd (a register that holds its value while
 #           no item is selected), copied verbatim into tb_stereo_mix_decode.vhd: power-up value,
-#           every item, hold, every transition torn both ways; plus mutants that must fail
+#           every item, hold, every transition torn both ways, timing (exactly one register on
+#           the rising clock edge); a lint that main_stereo_mix has no other driver; plus mutants
+#           that must fail
 #   wiring  differential GHDL analysis (base commit versus working tree) of main.vhd and of
 #           mega65.vhd (against the entity declaration of main of the same tree); mutants that
 #           must be caught
@@ -208,11 +210,20 @@ end = [i for i in range(start[0], len(src)) if re.match(r"\s*end process stereo_
 if not end:
     fail("end of stereo_mix_decode_proc not found")
 decode = src[start[0]:end[0] + 1]
-# the process must be the only driver of main_stereo_mix
-outside = [i + 1 for i, l in enumerate(src)
-           if re.search(r"\bmain_stereo_mix\s*<=", l.split("--")[0]) and not start[0] <= i <= end[0]]
-if outside:
-    fail(f"main_stereo_mix is also assigned outside of stereo_mix_decode_proc, line(s) {outside}")
+# lint, so that the process is the only driver: outside of comments, the identifier main_stereo_mix
+# may occur only in its declaration, inside stereo_mix_decode_proc and in exactly one port
+# association "audio_stereo_mix_i => main_stereo_mix"
+decl = [i for i, l in enumerate(src) if re.match(r"\s*signal main_stereo_mix\s*:", l)]
+assoc = [i for i, l in enumerate(src)
+         if re.fullmatch(r"\s*audio_stereo_mix_i\s*=>\s*main_stereo_mix\s*,?\s*", l.split("--")[0], re.I)]
+if len(assoc) != 1:
+    fail(f"found {len(assoc)} associations audio_stereo_mix_i => main_stereo_mix (expected 1)")
+other = [i + 1 for i, l in enumerate(src)
+         if re.search(r"\bmain_stereo_mix\b", l.split("--")[0], re.I)
+         and i not in decl + assoc and not start[0] <= i <= end[0]]
+if other:
+    fail(f"main_stereo_mix outside of its declaration, stereo_mix_decode_proc and the association "
+         f"audio_stereo_mix_i => main_stereo_mix, line(s) {other}")
 t = open(tmpl).read()
 t = t.replace("-- @MEGA65_CONSTANTS@", "\n".join(consts))
 t = t.replace("-- @MEGA65_SIGNALS@", "\n".join(sigs))
@@ -238,8 +249,12 @@ if want decode; then
    #       no power-up value); nohold: a register that falls back to Full Stereo when no bit is set;
    #       swap: Wide decoded from the Narrow bit; nomono: Mono missing; nofull: the Full Stereo bit
    #       ignored; noinit: no power-up value; badinit: Mono as the power-up value; third: Wide and
-   #       Narrow set together decode to Mono (only the "both bits set" phase can see it)
-   for m in comb nohold swap nomono nofull noinit badinit third; do
+   #       Narrow set together decode to Mono (only the "both bits set" phase can see it); latch: the
+   #       decoder without the clock (a transparent latch that holds on the empty selection);
+   #       falling: the register on the falling edge; twostage: two registers in a row (one clock
+   #       cycle more latency); the last three only the timing check can see. driver: one more
+   #       assignment to main_stereo_mix behind the process, which the lint of gen_decode must refuse
+   for m in comb nohold swap nomono nofull noinit badinit third latch falling twostage driver; do
       M="$BUILD/decode_mut_$m"
       mkdir -p "$M"
       case $m in
@@ -262,7 +277,33 @@ if want decode; then
                      'std_logic_vector(1 downto 0) := "00";  -- OSM "Stereo Mix"' 'std_logic_vector(1 downto 0) := "11";  -- OSM "Stereo Mix"' ;;
          third)   mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
                      'main_stereo_mix <= "01";' 'main_stereo_mix <= "01" or (main_osm_control_i(C_MENU_STEREO_MIX_NARROW) & '\''0'\'');' ;;
+         latch)   mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     "stereo_mix_decode_proc : process (main_clk_o)" "stereo_mix_decode_proc : process (all)" \
+                     $'      if rising_edge(main_clk_o) then\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE)' \
+                     $'      if true then\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE)' ;;
+         falling) mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     $'      if rising_edge(main_clk_o) then\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE)' \
+                     $'      if falling_edge(main_clk_o) then\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE)' ;;
+         twostage) mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     $'stereo_mix_decode_proc : process (main_clk_o)\n   begin\n      if rising_edge(main_clk_o) then\n' \
+                     $'stereo_mix_decode_proc : process (main_clk_o)\n      variable stage1 : std_logic_vector(1 downto 0) := "00";\n   begin\n      if rising_edge(main_clk_o) then\n         main_stereo_mix <= stage1;\n' \
+                     'main_stereo_mix <= "01";' 'stage1 := "01";' 'main_stereo_mix <= "10";' 'stage1 := "10";' \
+                     'main_stereo_mix <= "11";' 'stage1 := "11";' 'main_stereo_mix <= "00";' 'stage1 := "00";' ;;
+         driver)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     "   end process stereo_mix_decode_proc;" $'   end process stereo_mix_decode_proc;\n   main_stereo_mix(1) <= \'0\';' ;;
       esac || { note_fail "decode_mutant_${m}_pattern"; continue; }
+      # driver: the lint must refuse it already at the extraction, nothing is built
+      if [ $m = driver ]; then
+         if gen_decode "$M/mega65.vhd" "$M/tb_stereo_mix_decode.vhd" > "$M/gen.txt"; then
+            note_fail "decode_mutant_${m}_not_refused_by_the_lint"
+         elif grep -q "main_stereo_mix outside of" "$M/gen.txt"; then
+            echo "  mutant '$m' rejected at the extraction: $(sed -E 's/^ *//' "$M/gen.txt" | head -1)"
+         else
+            sed 's/^/    /' "$M/gen.txt"
+            note_fail "decode_mutant_${m}_refused_for_another_reason"
+         fi
+         continue
+      fi
       # a mutant must be valid VHDL and run; only a bench that runs and reports errors counts
       if ! { gen_decode "$M/mega65.vhd" "$M/tb_stereo_mix_decode.vhd" > /dev/null &&
              analyze "$M" "$M/tb_stereo_mix_decode.vhd" > /dev/null; }; then
