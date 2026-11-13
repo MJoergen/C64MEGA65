@@ -135,7 +135,9 @@ Hardware: the section `Version WIP-V6-A22X3` of `tests/README.md`.
 
 ## 9. Follow-ups before the Vivado build (decided by sy2002, not started)
 
-Four small changes that shall go into `WIP-V6-A22X3` before it is built. Each one gets its own commit with a test, on a private clone first; then all suites (`tools/suites.py`, `bankdepth_test.py`, `mount_reject_test.py`) and the benches that copy code out of the changed files. Afterwards the numbers of sections 2, 3 and 7, the items of section 5.4, the firmware size in `tests/README.md` and `doc/developer.md` and the numbers table of `doc/dev-strrom/STATUS.md` need an update. None of this is in a released version yet, so `VERSIONS.md` needs no entry.
+Four small changes that shall go into `WIP-V6-A22X3` before it is built. Each one gets its own commit with a test, on a private clone first; then all suites (`tools/suites.py`, `bankdepth_test.py`, `mount_reject_test.py`) and the benches that copy code out of the changed files. Afterwards the numbers of sections 2, 3 and 7, the items of section 5.4, the firmware size in `tests/README.md` and `doc/developer.md` and the numbers table of `doc/dev-strrom/STATUS.md` need an update.
+
+**Bugfixes are documented in `VERSIONS.md` as soon as they are done:** every fix that a user can notice gets its entry in the section `## Bugfixes` of Version 6 in the same commit as the fix, written from the point of view of the user (what went wrong, in which situation). This holds for the follow-ups below and for every defect that is found and fixed on the way. A change that only improves a feature of this version that was never released belongs into the entry of that feature instead, if it changes what the entry says; if it is unclear where a change belongs, ask sy2002.
 
 ### 9.1 One parking buffer per drive for the menu text
 
