@@ -192,7 +192,8 @@ _HLP_HEAP1_OK   MOVE    MENU_HEAP_SIZE, R8
                 ;
                 ; Behind these strings, every virtual drive needs one more
                 ; buffer of @SCR$OSM_O_DX words, its parking slot: it
-                ; remembers the text of the line of the drive during the
+                ; remembers the text of the line of the drive and, in its
+                ; last word, the "%s is replaced" flag of the line during the
                 ; period, where OPTM_S_SAVING from config.vhd is being shown,
                 ; i.e. while the save buffer is dirty. OPTM_HEAP_LAST points
                 ; to the parking slot of drive 0; the slot of drive n is at
@@ -1891,16 +1892,19 @@ _OPTM_CBS_1     MOVE    VD_CACHE_DIRTY, R9
                 ; _OPTM_CBS_REPL can do its job
 
                 ; Check, if we already did replace "%s" during a former
-                ; callback: we use the last byte within the current line
-                ; of the scratch buffer as flag. We can do this, because the
-                ; scratch buffer is 2 bytes longer than the maximum length
-                ; of the string; one of these bytes is used for the zero
-                ; terminator in case of a long string and one is used for
-                ; this flag.
+                ; callback: we use the last word of the slot of the line
+                ; (index @SCR$OSM_O_DX - 1) as flag. We can do this, because
+                ; a complete line has at most @SCR$OSM_O_DX - 2 characters
+                ; plus its zero terminator, so the last word is free. The
+                ; bare file name that HANDLE_MOUNTING stores can be one
+                ; character longer: then its zero terminator is the flag
+                ; word and equals the flag 0.
                 ; We need to check this, because otherwise we will have a
                 ; nested replacement because %s will replaced by something
                 ; that has already been the result of a replacement.
                 ;
+                ; Flag = 0: The slot holds the bare file name that
+                ;           HANDLE_MOUNTING stored, i.e. we need to replace
                 ; Flag = 1: We replaced the file name in a former run of #2b
                 ; Flag = 2: We replaced due to case #2a, i.e. we need to
                 ;           restore the original filename

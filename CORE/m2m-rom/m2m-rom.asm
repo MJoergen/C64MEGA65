@@ -1729,9 +1729,10 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (2 * VDRIVES_NUM + submenus +
 ; CRTROM_MAN_NUM) * OSM width = 24 x 27 = 648 words for the "%s" replacement
-; strings and one parking slot per virtual drive (see HELP_MENU); it
-; depends on those counts, NOT on the item count, so it only grows when
-; submenus are added. Peak use is 4418 + 648 = 5066, leaving 182 words of
+; strings and one parking slot per virtual drive (see HELP_MENU). It does
+; NOT depend on the item count: it grows by one OSM width (27 words) per
+; submenu and per manually loadable CRT/ROM and by two OSM widths per virtual
+; drive. Peak use is 4418 + 648 = 5066, leaving 182 words of
 ; headroom (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live
 ; numbers). The Keyboard Shortcuts submenu (#142) added 102 items and 7
 ; submenus. Keep this as small as it safely can be: every word reserved here

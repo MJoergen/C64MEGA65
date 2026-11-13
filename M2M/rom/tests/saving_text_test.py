@@ -29,12 +29,28 @@ The script cuts the real code out of the sources on every run:
 It links them against stubs for everything else: the virtual drives
 (VD_DRVNO, VD_MOUNTED, VD_DRV_READ; the last two also overwrite R9 to R12),
 the CRT/ROM items, SUBMENU_SUMMARY and OPTM_SUMM_SCAN, LOG_HEAP2 (prints the
-demand in R10) and FATAL. The emulator has no config.vhd device, so the
-selector registers M2M$RAMROM_DEV and M2M$RAMROM_4KWIN become RAM variables
-in the extracted OPTM_CB_SHOW, the menu groups sit in the M2M$RAMROM_DATA
-window, and the three reads of a string window (OPTM_S_MOUNT, OPTM_S_SAVING,
-OPTM_S_CRTROM, taken from config.vhd) become a call of a stub that returns
-the string of the selected device and window.
+demand in R10) and FATAL; SAVE_DEVSEL and RESTORE_DEVSEL are the real ones
+from M2M/rom/tools.asm.
+
+The device selection: the emulator has no config.vhd device, so the selector
+registers M2M$RAMROM_DEV and M2M$RAMROM_4KWIN become RAM variables in the
+extracted code. Every stub leaves the selection exactly as its real routine
+does: VD_DRVNO and CRTROM_M_NO select config.vhd with the window of the
+mount items or of the CRT/ROM items, VD_MOUNTED the device of the virtual
+drives with VD_WIN_CAD, VD_DRV_READ that device with the window of the drive,
+the others do not change it. Each redraw starts with a selection that is
+wrong for every read, and each further line starts with what the line before
+it left. The three reads of a string window (OPTM_S_MOUNT, OPTM_S_SAVING,
+OPTM_S_CRTROM, taken from config.vhd) become a call of a stub that prints
+the selection and returns what the selected device and window hold: one of
+the three strings, or a marker for every other selection. The menu groups
+sit in the M2M$RAMROM_DATA window whatever is selected, because the emulator
+cannot switch it; instead, a probe in front of the two reads of the groups
+in OPTM_CB_SHOW, and the stubs of SUBMENU_SUMMARY and OPTM_SUMM_SCAN (whose
+real routines read the groups through the window), report every selection
+other than config.vhd with M2M$CFG_OPTM_GROUPS. What stays uncovered: the
+reads of the mount items and the CRT/ROM items by the real VD_DRVNO and
+CRTROM_M_NO, which are stubbed.
 
 Two configurations run in the QNICE emulator: the real numbers of this core
 (two drives, menu width 27) and three drives with a width of 20. Each first
@@ -104,9 +120,13 @@ OPTM_SUBMENU = equ(MENU, "OPTM_SUBMENU")
 IR_ITEMS, IR_STDSEL = equ(MENU, "OPTM_IR_ITEMS"), equ(MENU, "OPTM_IR_STDSEL")
 STRUCTSIZE = equ(MENU, "OPTM_STRUCTSIZE")
 RAMROM_DATA = equ(M2MSYSDEF, "M2M$RAMROM_DATA")
+CONFIG_DEV = equ(M2MSYSDEF, "M2M$CONFIG")
+WIN_MSTR, WIN_SSTR, WIN_CRSTR = (equ(M2MSYSDEF, "M2M$CFG_OPTM_MSTR"), equ(M2MSYSDEF, "M2M$CFG_OPTM_SSTR"),
+                                 equ(M2MSYSDEF, "M2M$CFG_OPTM_CRSTR"))
 S_MOUNT, S_SAVING, S_CRTROM = (vhdl_string("OPTM_S_MOUNT"), vhdl_string("OPTM_S_SAVING"),
                                vhdl_string("OPTM_S_CRTROM"))
 REGION = 0xC000                    # the guard, the slots and the parking slots
+VDRIVES_DEVICE = 0x0101            # C_DEV_C64_VDRIVES in CORE/vhdl/globals.vhd
 BHEAP = 0xE000                     # OPTM_HEAP in the budget cases (never written)
 MARK = [0xA88A, 0xB99B, 0xC00C, 0xB11B, 0xC12C]   # R8 to R12 before every call
 DRV, CRT = 0, 1
@@ -303,8 +323,23 @@ def real_code():
                     r"MOVE[ \t]+M2M\$RAMROM_DATA, R8", r"\1RSUB    TB_WINDOW, 1", cb)
     if n != 3:
         sys.exit("OPTM_CB_SHOW does not read the three string windows as expected: adapt the test")
+    # the two reads of the menu groups through the window get a probe in front
+    # that reports a wrong selection (the emulator cannot switch the window)
+    cb, n1 = re.subn(r"\n([ \t]+)(MOVE[ \t]+@R1, R1[ \t]+; R1: menu group id)",
+                     r"\n\1RSUB    TB_GRPCHK, 1\n\1\2", cb)
+    cb, n2 = re.subn(r"\n(_OPTM_CBS_I2[ \t]+)(MOVE[ \t]+@R0\+\+, R1)",
+                     r"\n\1RSUB    TB_GRPCHK, 1\n                \2", cb)
+    if (n1, n2) != (1, 1):
+        sys.exit("OPTM_CB_SHOW does not read the menu groups as expected: adapt the test")
+    devsel = (cut(TOOLS, r"^SAVE_DEVSEL\s+INCRB", end=r"^RESTORE_DEVSEL\s") +
+              cut(TOOLS, r"^RESTORE_DEVSEL\s+INCRB", through=r"^\s+RET\b"))
+    for hw, tb in (("M2M$RAMROM_DEV,", "TB_RAMROM_DEV,"), ("M2M$RAMROM_4KWIN,", "TB_4KWIN,")):
+        if devsel.count(hw) != 2:
+            sys.exit("SAVE_DEVSEL / RESTORE_DEVSEL changed: adapt the test")
+        devsel = devsel.replace(hw, tb)
     return {
         "cb": cb,
+        "devsel": devsel,
         "rpl": cut(TOOLS, r"^M2M\$RPL_S\s+SYSCALL\(enter, 1\)", through=r"^_M2M\$RPL_S_S\s+\.ASCII_W"),
         "budget": cut(OPTIONS, r"^\s+; Check if the planned memory usage in OPTM_HEAP will not",
                       end=r"^_HLP_HEAP2_OK\s"),
@@ -488,6 +523,10 @@ _HLP_HEAP2_OK   MOVE    S_OK, R8
 ; One redraw: every "%s" line of the menu through OPTM_CB_SHOW
 ; ----------------------------------------------------------------------------
 DRAW            INCRB
+                MOVE    TB_RAMROM_DEV, R0       ; the first line starts with a
+                MOVE    0x0BAD, @R0             ; selection that is wrong for
+                MOVE    TB_4KWIN, R0            ; every read, each further line
+                MOVE    0x0BAD, @R0             ; with what the one before left
                 MOVE    TB_LINES, R0
 _DRW_LINE       MOVE    @R0++, R1               ; R1: menu index
                 CMP     0xFFFF, R1
@@ -597,28 +636,72 @@ TB_MOUNT        SYSCALL(enter, 1)
 ; Stubs
 ; ----------------------------------------------------------------------------
 
-; the string of the selected window of config.vhd in R8
+; R8 = the string that the selected device and window hold: one of the three
+; strings of config.vhd, or a marker for every other selection; prints the
+; selection
 TB_WINDOW       INCRB
+                MOVE    S_READ, R8
+                SYSCALL(puts, 1)
                 MOVE    TB_RAMROM_DEV, R0
+                MOVE    @R0, R8
+                RSUB    PRHEX, 1
+                MOVE    TB_4KWIN, R1
+                MOVE    @R1, R1
+                MOVE    R1, R8
+                RSUB    PRHEX, 1
+                SYSCALL(crlf, 1)
                 CMP     M2M$CONFIG, @R0
                 RBRA    _TBW_BAD, !Z
-                MOVE    TB_4KWIN, R0
-                MOVE    @R0, R0
                 MOVE    TB_MSTR, R8
-                CMP     M2M$CFG_OPTM_MSTR, R0
+                CMP     M2M$CFG_OPTM_MSTR, R1
                 RBRA    _TBW_RET, Z
                 MOVE    TB_SSTR, R8
-                CMP     M2M$CFG_OPTM_SSTR, R0
+                CMP     M2M$CFG_OPTM_SSTR, R1
                 RBRA    _TBW_RET, Z
                 MOVE    TB_CRSTR, R8
-                CMP     M2M$CFG_OPTM_CRSTR, R0
+                CMP     M2M$CFG_OPTM_CRSTR, R1
                 RBRA    _TBW_RET, Z
 _TBW_BAD        MOVE    TB_BADWIN, R8
 _TBW_RET        DECRB
                 RET
 
-; menu group 0x00D0 + n is drive n
+; the menu groups are read through the window: config.vhd and its window
+; M2M$CFG_OPTM_GROUPS must be selected; reports any other selection, keeps
+; all registers
+TB_GRPCHK       INCRB
+                MOVE    TB_RAMROM_DEV, R0
+                MOVE    TB_4KWIN, R1
+                CMP     M2M$CONFIG, @R0
+                RBRA    _TGC_BAD, !Z
+                CMP     M2M$CFG_OPTM_GROUPS, @R1
+                RBRA    _TGC_RET, Z
+_TGC_BAD        MOVE    R8, R2
+                MOVE    S_GRPSEL, R8
+                SYSCALL(puts, 1)
+                MOVE    @R0, R8
+                RSUB    PRHEX, 1
+                MOVE    @R1, R8
+                RSUB    PRHEX, 1
+                SYSCALL(crlf, 1)
+                MOVE    R2, R8
+_TGC_RET        DECRB
+                RET
+
+; menu group 0x00D0 + n is drive n; like the real routine, it leaves
+; config.vhd and its window M2M$CFG_OPTM_MOUNT selected if the group is part
+; of the menu, and the selection untouched if not
 VD_DRVNO        INCRB
+                MOVE    TB_GROUPS, R0
+                MOVE    {nitems}, R1
+_VDN_FIND       CMP     R8, @R0++
+                RBRA    _VDN_SEL, Z
+                SUB     1, R1
+                RBRA    _VDN_FIND, !Z
+                RBRA    _VDN_NO, 1
+_VDN_SEL        MOVE    TB_RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    TB_4KWIN, R0
+                MOVE    M2M$CFG_OPTM_MOUNT, @R0
                 MOVE    R8, R0
                 AND     0xFFF0, R0
                 CMP     0x00D0, R0
@@ -632,8 +715,15 @@ _VDN_NO         MOVE    0xFFFF, R8
                 DECRB
                 RET
 
-; Carry = drive R8 is mounted; R8 unchanged, R9 to R12 overwritten
+; Carry = drive R8 is mounted; R8 unchanged, R9 to R12 overwritten; like the
+; real routine (VD_CAD_READ), it leaves the device of the virtual drives and
+; its window VD_WIN_CAD selected
 VD_MOUNTED      INCRB
+                MOVE    TB_RAMROM_DEV, R0
+                MOVE    VDRIVES_DEVICE, R1
+                MOVE    @R1, @R0
+                MOVE    TB_4KWIN, R0
+                MOVE    VD_WIN_CAD, @R0
                 MOVE    TB_MNT, R0
                 ADD     R8, R0
                 MOVE    0x7E01, R9
@@ -648,8 +738,16 @@ _VDM_NO         AND     0xFFFB, SR
 _VDM_RET        DECRB
                 RET
 
-; R8 = write cache of drive R8 is dirty; R9 to R12 overwritten
+; R8 = write cache of drive R8 is dirty; R9 to R12 overwritten; like the real
+; routine, it leaves the device of the virtual drives and the window of the
+; drive (VD_WIN_DRV + drive) selected
 VD_DRV_READ     INCRB
+                MOVE    TB_RAMROM_DEV, R0
+                MOVE    VDRIVES_DEVICE, R1
+                MOVE    @R1, @R0
+                MOVE    TB_4KWIN, R0
+                MOVE    VD_WIN_DRV, @R0
+                ADD     R8, @R0
                 CMP     VD_CACHE_DIRTY, R9
                 RBRA    _VDR_OK, Z
                 MOVE    R8, R0
@@ -667,8 +765,21 @@ _VDR_OK         MOVE    TB_DTY, R0
                 DECRB
                 RET
 
-; menu group 0x00E0 + n is CRT/ROM n
+; menu group 0x00E0 + n is CRT/ROM n; like the real routine, it leaves
+; config.vhd and its window M2M$CFG_OPTM_CRTROM selected if the group is part
+; of the menu, and the selection untouched if not
 CRTROM_M_NO     INCRB
+                MOVE    TB_GROUPS, R0
+                MOVE    {nitems}, R1
+_CMN_FIND       CMP     R8, @R0++
+                RBRA    _CMN_SEL, Z
+                SUB     1, R1
+                RBRA    _CMN_FIND, !Z
+                RBRA    _CMN_NO, 1
+_CMN_SEL        MOVE    TB_RAMROM_DEV, R0
+                MOVE    M2M$CONFIG, @R0
+                MOVE    TB_4KWIN, R0
+                MOVE    M2M$CFG_OPTM_CRTROM, @R0
                 MOVE    R8, R0
                 AND     0xFFF0, R0
                 CMP     0x00E0, R0
@@ -694,12 +805,21 @@ CRTROM_CHK_NO   INCRB
 _CCN_RET        DECRB
                 RET
 
-; standard semantics for every submenu
-SUBMENU_SUMMARY XOR     R8, R8
+; standard semantics for every submenu; the real one needs config.vhd and the
+; groups window selected (its Volume branch walks the groups through it) and
+; does not change the selection
+SUBMENU_SUMMARY RSUB    TB_GRPCHK, 1
+                XOR     R8, R8
                 RET
 
-; the selected item of a submenu is the second line behind its opener
-OPTM_SUMM_SCAN  ADD     2, R8
+; the selected item of a submenu is the second line behind its opener; the
+; real one reads the groups through the window, does not change the
+; selection and destroys R10 to R12
+OPTM_SUMM_SCAN  RSUB    TB_GRPCHK, 1
+                ADD     2, R8
+                MOVE    0x7E09, R10
+                MOVE    0x7E0A, R11
+                MOVE    0x7E0B, R12
                 OR      0x0004, SR
                 RET
 
@@ -732,14 +852,13 @@ FATAL           MOVE    R9, R10
                 MOVE    @R8, R8
                 ABRA    R8, 1
 
-SAVE_DEVSEL
-RESTORE_DEVSEL  RET
 
 ; ----------------------------------------------------------------------------
 ; The real code
 ; ----------------------------------------------------------------------------
 {cb}
 {rpl}
+{devsel}
 {nl}
 {ellipsis}
 
@@ -769,7 +888,9 @@ S_CHKNO         .ASCII_W "CRTROM_CHK_NO: ILLEGAL NUMBER"
 TB_MSTR         .ASCII_W "{s_mount}"
 TB_SSTR         .ASCII_W "{s_saving}"
 TB_CRSTR        .ASCII_W "{s_crtrom}"
-TB_BADWIN       .ASCII_W "?WRONG WINDOW?"
+TB_BADWIN       .ASCII_W "?WRONG DEVICE OR WINDOW?"
+S_READ          .ASCII_W "READ"
+S_GRPSEL        .ASCII_W "GROUPS READ WITH THE WRONG SELECTION"
 ERR_F_MENUSUB   .ASCII_W "ERR_F_MENUSUB"
 ERR_F_MENUNGRP  .ASCII_W "ERR_F_MENUNGRP"
 ERR_F_MENUDRV   .ASCII_W "ERR_F_MENUDRV"
@@ -811,6 +932,7 @@ TB_MNT          .DW     0, 0, 0, 0, 0, 0, 0, 0
 TB_DTY          .DW     0, 0, 0, 0, 0, 0, 0, 0
 TB_RAMROM_DEV   .DW     0
 TB_4KWIN        .DW     0
+VDRIVES_DEVICE  .DW     {vdrives_device}
 TB_SP           .DW     0
 TB_SR           .DW     0
 TB_CONT         .DW     0
@@ -863,7 +985,7 @@ def testbed(code, cfg, work):
     return TESTBED.format(
         sysdef=QSYSDEF, mondef=mondef, m2msysdef=M2MSYSDEF,
         optm_submenu="0x%04X" % OPTM_SUBMENU, ir_items=IR_ITEMS, ir_stdsel=IR_STDSEL,
-        nitems=len(cfg.menu), op_session=SESSION, op_mount=MOUNT, op_unmount=UNMOUNT,
+        nitems=len(cfg.menu), vdrives_device="0x%04X" % VDRIVES_DEVICE, op_session=SESSION, op_mount=MOUNT, op_unmount=UNMOUNT,
         op_dirty=DIRTY, m8="0x%04X" % MARK[0], m9="0x%04X" % MARK[1], m10="0x%04X" % MARK[2],
         m11="0x%04X" % MARK[3], m12="0x%04X" % MARK[4],
         region="0x%04X" % REGION, dx=cfg.dx, rows=cfg.rows,
@@ -943,6 +1065,9 @@ def model(cfg):
         if g == OPTM_SUBMENU:
             subidx[i] = len(subidx)
 
+    def read(window):                     # a string of config.vhd: the selection it needs
+        out.append("READ %s %s" % (h(CONFIG_DEV), h(window)))
+
     def complete(a, tpl):                 # _OPTM_CBS_3 and _OPTM_CBS_4
         mem.put(a, rpl_s(tpl, mem.string(a), maxw))
         mem.w[flag(a)] = 1
@@ -958,6 +1083,7 @@ def model(cfg):
             n = g & 0xF
             a = slot(cfg.v + cfg.s + n)
             if not ldf[n]:
+                read(WIN_CRSTR)
                 mem.put(a, rpl_s(tpl, S_CRTROM, maxw))
             elif mem.w[flag(a)] != 1:
                 complete(a, tpl)
@@ -965,12 +1091,14 @@ def model(cfg):
         n = g & 0xF                       # virtual drive
         a = slot(n)
         if not mnt[n]:
+            read(WIN_MSTR)
             mem.put(a, rpl_s(tpl, S_MOUNT, maxw))
         elif dty[n]:
             if mem.w[flag(a)] != 2:       # park the text and its flag, show <Saving>
                 f = mem.w[flag(a)]
                 mem.strcpy(a, park(n))
                 mem.w[flag(park(n))] = f
+                read(WIN_SSTR)
                 mem.put(a, rpl_s(tpl, S_SAVING, maxw))
                 mem.w[flag(a)] = 2
         elif mem.w[flag(a)] == 2:         # the parked text comes back
@@ -1104,12 +1232,29 @@ PARKFLAG = (I + "MOVE    SCR$OSM_O_DX, R8" + I +
             "ADD     R8, R9                  ; R9: flag in the parking slot" + I +
             "ADD     R0, R8                  ; R8: flag of the line" + I +
             "MOVE    @R8, @R9")
+SELECT = ("MOVE    M2M$CONFIG, @R3" + I +
+          "MOVE    TB_4KWIN, R3" + I +
+          "MOVE    M2M$CFG_OPTM_%s, @R3")
 BUDGET = ("MOVE    SCR$OSM_O_DX, R8        ; demand: R9 is still the" + I +
           "MOVE    @R8, R8                 ; amount of %s strings; add" + I +
           "MOVE    VDRIVES_NUM, R11        ; one parking slot per" + I +
           "ADD     @R11, R9                ; virtual drive and multiply" + I +
           "SYSCALL(mulu, 1)                ; with @SCR$OSM_O_DX")
 
+# Equivalent mutants: the firmware behaves exactly the same with them, so no
+# test can catch them; they were tried and are no gaps of this test:
+#   * the parked flag written before the strcpy of case #2a: the flag word of
+#     the parking slot is free or receives the zero terminator of the longest
+#     bare file name, which equals the flag 0
+#   * CMP 1 / !Z instead of CMP 0 / Z in the restore of case #2b: a parked
+#     flag is only 0 or 1
+#   * no selection of the device config.vhd before the read of OPTM_S_CRTROM:
+#     CRTROM_M_NO runs right before it on the same path and leaves M2M$CONFIG
+#     selected (the window selection is needed and is tested)
+#   * no selection of config.vhd and its groups window in _OPTM_CBS_I1, or no
+#     RESTORE_DEVSEL behind it: the selection made at the start of
+#     OPTM_CB_SHOW is still active there, because SUBMENU_SUMMARY and
+#     OPTM_SUMM_SCAN do not change it
 MUTANTS = [
     # the parking slot of the drive, when the text is parked and restored
     ("park_single_buffer", replace("cb", (PARK, "MOVE    R0, R8" + I + "MOVE    OPTM_HEAP_LAST, R9" + I +
@@ -1139,6 +1284,17 @@ MUTANTS = [
     ("restore_condition_inverted", replace("cb", ("RBRA    _OPTM_CBS_3, Z\n", "RBRA    _OPTM_CBS_3, !Z\n"))),
     ("restore_reads_flag_of_line", replace("cb", ("ADD     R8, R9                  ; like the normal case #2b",
                                                   "ADD     R0, R9"))),
+    # the selection of config.vhd and of its window before the reads of
+    # OPTM_S_MOUNT (case #1) and OPTM_S_SAVING (case #2a), of OPTM_S_CRTROM
+    # (case (b-2)) and of the menu groups
+    ("no_device_before_mount", replace("cb", (SELECT % "MSTR", SELECT.split(I, 1)[1] % "MSTR"))),
+    ("no_device_before_saving", replace("cb", (SELECT % "SSTR", SELECT.split(I, 1)[1] % "SSTR"))),
+    ("no_window_before_mount", replace("cb", (SELECT % "MSTR", SELECT.rsplit(I, 1)[0]))),
+    ("no_window_before_saving", replace("cb", (SELECT % "SSTR", SELECT.rsplit(I, 1)[0]))),
+    ("no_window_before_crtrom", replace("cb", (SELECT % "CRSTR", SELECT.rsplit(I, 1)[0]))),
+    ("wrong_window_for_saving", replace("cb", ("M2M$CFG_OPTM_SSTR, @R3", "M2M$CFG_OPTM_CRSTR, @R3"))),
+    ("no_device_before_groups", replace("cb", ("MOVE    M2M$CONFIG, @R1\n", ""))),
+    ("no_window_before_groups", replace("cb", ("MOVE    M2M$CFG_OPTM_GROUPS, @R1\n", ""))),
 ]
 
 

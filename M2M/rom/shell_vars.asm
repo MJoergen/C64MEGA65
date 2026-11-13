@@ -47,7 +47,8 @@ OPTM_DTY_STATUS .BLOCK 1                        ; cache dirty status; all drvs
 ;
 ; OPTM_HEAP_LAST points to the first parking slot. The parking slot of virtual
 ; drive n (at @OPTM_HEAP_LAST + n x @SCR$OSM_O_DX) holds the text of the line
-; of the drive while the cache dirty "Saving" message is shown.
+; of the drive while the cache dirty "Saving" message is shown, and in its
+; last word the "%s is replaced" flag of the line.
 ; See also OPTM_CB_SHOW and HELP_MENU.
 OPTM_HEAP       .BLOCK 1
 OPTM_HEAP_LAST  .BLOCK 1
