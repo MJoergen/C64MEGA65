@@ -43,10 +43,12 @@ OPTM_DTY_STATUS .BLOCK 1                        ; cache dirty status; all drvs
 ; VDrive strings:   <amount of virtual drives> x @SCR$OSM_O_DX
 ; Submenu strings:  <amount of submenus> x @SCR$OSM_O_DX
 ; CRT/ROM strings:  <amount of manual loadable CRTs/ROMs> x @SCR$OSM_O_DX
+; Parking slots:    <amount of virtual drives> x @SCR$OSM_O_DX
 ;
-; OPTM_HEAP_LAST points to a scratch buffer that can hold a modified filename
-; for saving/restoring while the cache dirty "Saving" message is shown.
-; See also OPTM_CB_SHOW. 
+; OPTM_HEAP_LAST points to the first parking slot. The parking slot of virtual
+; drive n (at @OPTM_HEAP_LAST + n x @SCR$OSM_O_DX) holds the text of the line
+; of the drive while the cache dirty "Saving" message is shown.
+; See also OPTM_CB_SHOW and HELP_MENU.
 OPTM_HEAP       .BLOCK 1
 OPTM_HEAP_LAST  .BLOCK 1
 OPTM_HEAP_SIZE  .BLOCK 1                        ; size of this scratch buffer

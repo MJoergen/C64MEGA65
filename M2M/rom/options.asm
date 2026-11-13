@@ -190,12 +190,15 @@ _HLP_HEAP1_OK   MOVE    MENU_HEAP_SIZE, R8
                 ; of submenus plus the amount of manual CRT/ROM loading items
                 ; (i.e. CRTROM_MAN_NUM).
                 ;
-                ; But need one more than that (i.e. VDRIVES_NUM +
-                ; amount of submenus + CRTROM_MAN_NUM) because we need a
-                ; scratch buffer to remember the adjusted filename during the
+                ; Behind these strings, every virtual drive needs one more
+                ; buffer of @SCR$OSM_O_DX words, its parking slot: it
+                ; remembers the text of the line of the drive during the
                 ; period, where OPTM_S_SAVING from config.vhd is being shown,
-                ; i.e. while the save buffer is dirty. We store the pointer
-                ; to this in OPTM_HEAP_LAST.
+                ; i.e. while the save buffer is dirty. OPTM_HEAP_LAST points
+                ; to the parking slot of drive 0; the slot of drive n is at
+                ; @OPTM_HEAP_LAST + n x @SCR$OSM_O_DX. So the demand is
+                ; (2 x VDRIVES_NUM + amount of submenus + CRTROM_MAN_NUM)
+                ; times @SCR$OSM_O_DX.
                 MOVE    OPTM_SCOUNT, R11        ; R11: amount of submenus
                 MOVE    @R11, R11
                 MOVE    SCR$OSM_O_DX, R8
@@ -210,8 +213,11 @@ _HLP_HEAP1_OK   MOVE    MENU_HEAP_SIZE, R8
                 MOVE    R10, @R8
                 MOVE    OPTM_HEAP, R11
                 ADD     @R11, @R8
-                MOVE    SCR$OSM_O_DX, R8        ; VDRIVES_NUM + amt submen + 1
-                ADD     @R8, R10
+                MOVE    SCR$OSM_O_DX, R8        ; demand: R9 is still the
+                MOVE    @R8, R8                 ; amount of %s strings; add
+                MOVE    VDRIVES_NUM, R11        ; one parking slot per
+                ADD     @R11, R9                ; virtual drive and multiply
+                SYSCALL(mulu, 1)                ; with @SCR$OSM_O_DX
                 RSUB    LOG_HEAP2, 1
                 MOVE    OPTM_HEAP_SIZE, R8
                 CMP     R10, @R8                ; demand > heap?
@@ -1840,9 +1846,12 @@ _OPTM_CBS_1     MOVE    VD_CACHE_DIRTY, R9
                 CMP     2, @R8                  ; did we replace earlier?
                 RBRA    _OPTM_CBS_RET, Z        ; yes: return
 
-                MOVE    R0, R8                  ; remember filename
-                MOVE    OPTM_HEAP_LAST, R9
-                MOVE    @R9, R9
+                MOVE    OPTM_HEAP_LAST, R9      ; remember the text of the line
+                MOVE    @R9, R9                 ; in the parking slot of this
+                ADD     R0, R9                  ; drive: @OPTM_HEAP_LAST plus
+                MOVE    OPTM_HEAP, R8           ; R0 minus @OPTM_HEAP
+                SUB     @R8, R9
+                MOVE    R0, R8
                 SYSCALL(strcpy, 1)
 
                 MOVE    M2M$RAMROM_DEV, R3      ; replace %s w. OPTM_S_SAVING
@@ -1890,8 +1899,11 @@ _OPTM_CBS_2     MOVE    SCR$OSM_O_DX, R8        ; read "%s is replaced" flag
                 RBRA    _OPTM_CBS_3, !Z         ; no: normal case #2b
 
                 ; we need to restore the original filename
-                MOVE    OPTM_HEAP_LAST, R8
-                MOVE    @R8, R8
+                MOVE    OPTM_HEAP_LAST, R8      ; restore the text from the
+                MOVE    @R8, R8                 ; parking slot of this drive
+                ADD     R0, R8
+                MOVE    OPTM_HEAP, R9
+                SUB     @R9, R8
                 MOVE    R0, R9
                 SYSCALL(strcpy, 1)
                 RBRA    _OPTM_CBS_4, 1          ; set replaced flag
