@@ -6,15 +6,16 @@
 #
 #   mix     the audio path of CORE/vhdl/main.vhd (crossfeed + master volume), copied verbatim into
 #           tb_stereo_mix.vhd, against golden.py (MiSTer's aud_mix_top), plus mutants that must fail
-#   decode  the Stereo Mix decode of CORE/vhdl/mega65.vhd, copied verbatim into
-#           tb_stereo_mix_decode.vhd, all selections, plus mutants that must fail
+#   decode  the Stereo Mix decoder of CORE/vhdl/mega65.vhd (a register that holds its value while
+#           no item is selected), copied verbatim into tb_stereo_mix_decode.vhd: power-up value,
+#           every item, hold, every transition torn both ways; plus mutants that must fail
 #   wiring  differential GHDL analysis (base commit versus working tree) of main.vhd and of
 #           mega65.vhd (against the entity declaration of main of the same tree); mutants that
 #           must be caught
 #   all     everything (default)
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
-# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime about 10 s.
+# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime about 30 s.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -189,25 +190,36 @@ gen_decode() {
 import re, sys
 m65, tmpl, out = sys.argv[1:4]
 src = open(m65).read().splitlines()
+
+def fail(msg):
+    print("    mega65.vhd: " + msg)
+    sys.exit(1)
+
 consts = [l for l in src if re.match(r"\s*constant C_MENU_STEREO_MIX_\w+\s*:\s*natural\s*:=\s*\d+;", l)]
-start = [i for i, l in enumerate(src) if re.match(r"\s*main_stereo_mix\s*<=", l)]
-if len(consts) != 4 or len(start) != 1:
-    print(f"    mega65.vhd: found {len(consts)} C_MENU_STEREO_MIX_* constants (expected 4) and "
-          f"{len(start)} decode starts (expected 1)")
-    sys.exit(1)
-decode = []
-for i in range(start[0], min(start[0] + 10, len(src))):
-    decode.append(src[i])
-    if src[i].split("--")[0].rstrip().endswith(";"):
-        break
-else:
-    print("    mega65.vhd: end of the main_stereo_mix assignment not found")
-    sys.exit(1)
+if len(consts) != 4:
+    fail(f"found {len(consts)} C_MENU_STEREO_MIX_* constants (expected 4)")
+sigs = [l for l in src if re.match(r"\s*signal main_stereo_mix\s*:", l)]
+if len(sigs) != 1:
+    fail(f"found {len(sigs)} declarations of main_stereo_mix (expected 1)")
+start = [i for i, l in enumerate(src) if re.match(r"\s*stereo_mix_decode_proc\s*:\s*process\b", l)]
+if len(start) != 1:
+    fail(f"found {len(start)} stereo_mix_decode_proc (expected 1)")
+end = [i for i in range(start[0], len(src)) if re.match(r"\s*end process stereo_mix_decode_proc\s*;", src[i])]
+if not end:
+    fail("end of stereo_mix_decode_proc not found")
+decode = src[start[0]:end[0] + 1]
+# the process must be the only driver of main_stereo_mix
+outside = [i + 1 for i, l in enumerate(src)
+           if re.search(r"\bmain_stereo_mix\s*<=", l.split("--")[0]) and not start[0] <= i <= end[0]]
+if outside:
+    fail(f"main_stereo_mix is also assigned outside of stereo_mix_decode_proc, line(s) {outside}")
 t = open(tmpl).read()
 t = t.replace("-- @MEGA65_CONSTANTS@", "\n".join(consts))
+t = t.replace("-- @MEGA65_SIGNALS@", "\n".join(sigs))
 t = t.replace("-- @MEGA65_DECODE@", "\n".join(decode))
 open(out, "w").write(t)
-print(f"    copied {len(consts)} constants and {len(decode)} decode lines from mega65.vhd")
+print(f"    copied {len(consts)} constants, the declaration of main_stereo_mix and stereo_mix_decode_proc "
+      f"({len(decode)} lines) from mega65.vhd")
 PYEOF
 }
 
@@ -222,22 +234,44 @@ if want decode; then
       note_fail decode_build
    fi
 
-   for m in swap nomono; do
+   # comb: the combinational decoder that decodes the empty selection to Full Stereo (no register,
+   #       no power-up value); nohold: a register that falls back to Full Stereo when no bit is set;
+   #       swap: Wide decoded from the Narrow bit; nomono: Mono missing; nofull: the Full Stereo bit
+   #       ignored; noinit: no power-up value; badinit: Mono as the power-up value; third: Wide and
+   #       Narrow set together decode to Mono (only the "both bits set" phase can see it)
+   for m in comb nohold swap nomono nofull noinit badinit third; do
       M="$BUILD/decode_mut_$m"
       mkdir -p "$M"
       case $m in
-         swap)   mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
-                    "\"01\" when main_osm_control_i(C_MENU_STEREO_MIX_WIDE)" "\"01\" when main_osm_control_i(C_MENU_STEREO_MIX_NARROW)" ;;
-         nomono) mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
-                    "\"11\" when main_osm_control_i(C_MENU_STEREO_MIX_MONO)   = '1' else" "" ;;
+         comb)    mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     "stereo_mix_decode_proc : process (main_clk_o)" "stereo_mix_decode_proc : process (all)" \
+                     $'      if rising_edge(main_clk_o) then\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE) = \'1\' then' \
+                     $'      if true then\n         main_stereo_mix <= "00";\n         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE) = \'1\' then' \
+                     'std_logic_vector(1 downto 0) := "00";  -- OSM "Stereo Mix"' 'std_logic_vector(1 downto 0);  -- OSM "Stereo Mix"' ;;
+         nohold)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     "elsif main_osm_control_i(C_MENU_STEREO_MIX_FULL) = '1' then" "else" ;;
+         swap)    mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     "main_osm_control_i(C_MENU_STEREO_MIX_WIDE)" "main_osm_control_i(C_MENU_STEREO_MIX_NARROW)" ;;
+         nomono)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     $'         elsif main_osm_control_i(C_MENU_STEREO_MIX_MONO) = \'1\' then\n            main_stereo_mix <= "11";\n' "" ;;
+         nofull)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     $'         elsif main_osm_control_i(C_MENU_STEREO_MIX_FULL) = \'1\' then\n            main_stereo_mix <= "00";\n' "" ;;
+         noinit)  mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     'std_logic_vector(1 downto 0) := "00";  -- OSM "Stereo Mix"' 'std_logic_vector(1 downto 0);  -- OSM "Stereo Mix"' ;;
+         badinit) mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     'std_logic_vector(1 downto 0) := "00";  -- OSM "Stereo Mix"' 'std_logic_vector(1 downto 0) := "11";  -- OSM "Stereo Mix"' ;;
+         third)   mutate "$REPO/CORE/vhdl/mega65.vhd" "$M/mega65.vhd" \
+                     'main_stereo_mix <= "01";' 'main_stereo_mix <= "01" or (main_osm_control_i(C_MENU_STEREO_MIX_NARROW) & '\''0'\'');' ;;
       esac || { note_fail "decode_mutant_${m}_pattern"; continue; }
+      # a mutant must be valid VHDL and run; only a bench that runs and reports errors counts
       if ! { gen_decode "$M/mega65.vhd" "$M/tb_stereo_mix_decode.vhd" > /dev/null &&
              analyze "$M" "$M/tb_stereo_mix_decode.vhd" > /dev/null; }; then
          note_fail "decode_mutant_${m}_does_not_build"
       elif run_tb "$M" tb_stereo_mix_decode "$M/run.log" > "$M/tb.txt"; then
          note_fail "decode_mutant_${m}_not_detected"
       elif grep -q TB_ERROR "$M/tb.txt"; then
-         echo "  mutant '$m' rejected: $(grep -c TB_ERROR "$M/tb.txt") wrong cases"
+         echo "  mutant '$m' rejected: $(grep -m1 'TB: [0-9]* checks' "$M/tb.txt" | sed -E 's/^ *TB: //')"
+         echo "     first error: $(grep -m1 TB_ERROR "$M/tb.txt" | sed -E 's/^ *TB_ERROR: //')"
       else
          note_fail "decode_mutant_${m}_did_not_run"
       fi

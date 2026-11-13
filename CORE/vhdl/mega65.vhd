@@ -279,7 +279,7 @@ signal c64_drive_unmount          : std_logic_vector(C_VDNUM - 1 downto 0);  -- 
 signal sid_setup                  : std_logic_vector(1 downto 0);
 signal sid_port                   : natural range 0 to 4;
 signal main_volume                : natural range 0 to 20 := 20;   -- OSM "Volume" slider step: 0 = 0%/mute .. 20 = 100% (5% each)
-signal main_stereo_mix            : std_logic_vector(1 downto 0);  -- OSM "Stereo Mix": 00 = Full Stereo .. 11 = Mono (#247)
+signal main_stereo_mix            : std_logic_vector(1 downto 0) := "00";  -- OSM "Stereo Mix": 00 = Full Stereo .. 11 = Mono (#247)
 
 -- Keyboard shortcuts F9 to F14 (issue #142): bit n = '1' means that F(9+n) is configured as the freezer key
 signal main_sc_freeze             : std_logic_vector(5 downto 0);
@@ -840,13 +840,35 @@ begin
 
    -- Stereo Mix (issue #247): the four-way "Stereo: %s" radio group in MiSTer's
    -- AUDIO_MIX encoding (00 = Full Stereo/no mix, 01 = Wide Stereo/25%,
-   -- 10 = Narrow Stereo/50%, 11 = Mono/100%). Full Stereo is the group default
-   -- and also what an empty selection decodes to. The crossfeed itself is
-   -- applied in main.vhd (audio_stereo_mix_proc), in front of the volume.
-   main_stereo_mix <= "01" when main_osm_control_i(C_MENU_STEREO_MIX_WIDE)   = '1' else
-                      "10" when main_osm_control_i(C_MENU_STEREO_MIX_NARROW) = '1' else
-                      "11" when main_osm_control_i(C_MENU_STEREO_MIX_MONO)   = '1' else
-                      "00";
+   -- 10 = Narrow Stereo/50%, 11 = Mono/100%). Full Stereo is the group default.
+   -- The crossfeed itself is applied in main.vhd (audio_stereo_mix_proc), in
+   -- front of the volume.
+   --
+   -- The decoder is a register that HOLDS its value while no bit of the group is
+   -- set; it starts at Full Stereo. Reason: as for the volume (see
+   -- volume_decode_proc above), the Shell writes the menu bits one at a time and
+   -- the framework moves every bit of the menu vector into the main clock domain
+   -- on its own, so while the selection moves from one item to another, the main
+   -- clock domain can briefly see no bit or two bits set. Holding the last value
+   -- on "no bit" means that only the old and the new mix are ever applied; a
+   -- decoder that falls back to Full Stereo on "no bit" would apply Full Stereo
+   -- for that moment, also when neither the old nor the new item is Full Stereo.
+   -- If two bits are set, the first one in the order Wide, Narrow, Mono, Full
+   -- Stereo wins: both are the old or the new value, so any fixed order is right.
+   stereo_mix_decode_proc : process (main_clk_o)
+   begin
+      if rising_edge(main_clk_o) then
+         if main_osm_control_i(C_MENU_STEREO_MIX_WIDE) = '1' then
+            main_stereo_mix <= "01";
+         elsif main_osm_control_i(C_MENU_STEREO_MIX_NARROW) = '1' then
+            main_stereo_mix <= "10";
+         elsif main_osm_control_i(C_MENU_STEREO_MIX_MONO) = '1' then
+            main_stereo_mix <= "11";
+         elsif main_osm_control_i(C_MENU_STEREO_MIX_FULL) = '1' then
+            main_stereo_mix <= "00";
+         end if;
+      end if;
+   end process stereo_mix_decode_proc;
 
    -- MEGA65's power led: By default, it is on and glows green when the MEGA65 is powered on.
    -- We switch it to blue when a long reset is detected and as long as the user keeps pressing the preset button

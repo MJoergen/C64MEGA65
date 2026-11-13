@@ -1,11 +1,28 @@
 ----------------------------------------------------------------------------------------------------
--- Stereo Mix bench (GitHub issue #247), part 2: the Stereo Mix decode of CORE/vhdl/mega65.vhd
+-- Stereo Mix bench (GitHub issue #247), part 2: the Stereo Mix decoder of CORE/vhdl/mega65.vhd
 --
--- Template: run.sh copies the C_MENU_STEREO_MIX_* constants and the main_stereo_mix assignment
--- verbatim out of the current CORE/vhdl/mega65.vhd into the two marker lines below and fails if
--- it cannot find them. The bench selects each of the four radio items alone (MiSTer's AUDIO_MIX
--- encoding: Full Stereo "00", Wide Stereo "01", Narrow Stereo "10", Mono "11") and the empty
--- selection (must decode to Full Stereo), each with all other menu bits at '0' and at '1'.
+-- Template: run.sh copies verbatim out of the current CORE/vhdl/mega65.vhd
+--    * the constants C_MENU_STEREO_MIX_FULL, C_MENU_STEREO_MIX_WIDE, C_MENU_STEREO_MIX_NARROW and
+--      C_MENU_STEREO_MIX_MONO,
+--    * the declaration of main_stereo_mix (including the power-up value),
+--    * stereo_mix_decode_proc
+-- into the marker lines below and fails if it cannot find them or if main_stereo_mix is assigned
+-- anywhere else in mega65.vhd. The menu vector of the bench has 512 bits like the one of
+-- mega65.vhd.
+--
+-- MiSTer's AUDIO_MIX encoding: Full Stereo "00", Wide Stereo "01", Narrow Stereo "10", Mono "11".
+-- Checks of the decoder (a register that holds its value while no bit of the group is set):
+--    * power-up: "00" (Full Stereo) in every clock cycle while no bit of the group has ever been set
+--      (a monitor, first with all other menu bits at '0', then at '1')
+--    * every single item
+--    * hold: from each of the four values, the empty selection keeps the value for C_HOLD clock
+--      cycles (the monitor checks every one of them)
+--    * every transition between two of the four items, both ways the Shell and the per-bit clock
+--      domain crossing can tear it: first "no bit set" (the old value must be held), then the new
+--      bit; first "both bits set" (the old or the new value), then only the new bit. A monitor
+--      checks in every clock cycle of a transition that main_stereo_mix is the old or the new value
+--      and nothing else, and the final value must be the new one.
+--    * all of this with all other menu bits at '0' and at '1'
 --
 -- done by sy2002 in 2026 and licensed under GPL v3
 ----------------------------------------------------------------------------------------------------
@@ -21,12 +38,51 @@ architecture sim of tb_stereo_mix_decode is
 
 -- @MEGA65_CONSTANTS@
 
-   signal main_osm_control_i : std_logic_vector(255 downto 0) := (others => '0');
-   signal main_stereo_mix    : std_logic_vector(1 downto 0);
+-- @MEGA65_SIGNALS@
+
+   constant C_PERIOD          : time := 10 ns;
+   signal main_clk_o          : std_logic := '0';
+   signal running             : boolean   := true;
+   signal main_osm_control_i  : std_logic_vector(511 downto 0) := (others => '0');
+
+   -- monitor: while mon_on, main_stereo_mix must be mon_a or mon_b in every clock cycle; while
+   -- powerup_on, it must be "00"
+   signal mon_on              : boolean := false;
+   signal mon_a               : std_logic_vector(1 downto 0) := "00";
+   signal mon_b               : std_logic_vector(1 downto 0) := "00";
+   signal mon_err             : natural := 0;
+   signal mon_cycles          : natural := 0;
+   signal powerup_on          : boolean := true;
+   signal powerup_err         : natural := 0;
+   signal powerup_cycles      : natural := 0;
 
 begin
 
+   main_clk_o <= not main_clk_o after C_PERIOD / 2 when running;
+
 -- @MEGA65_DECODE@
+
+   monitor : process (main_clk_o)
+   begin
+      if falling_edge(main_clk_o) then
+         if mon_on then
+            mon_cycles <= mon_cycles + 1;
+            if main_stereo_mix /= mon_a and main_stereo_mix /= mon_b then
+               mon_err <= mon_err + 1;
+               if mon_err < 10 then                         -- the first ones in detail
+                  report "TB_ERROR: monitor: main_stereo_mix was " & to_string(main_stereo_mix) &
+                         ", allowed are only " & to_string(mon_a) & " and " & to_string(mon_b) severity error;
+               end if;
+            end if;
+         end if;
+         if powerup_on then
+            powerup_cycles <= powerup_cycles + 1;
+            if main_stereo_mix /= "00" then
+               powerup_err <= powerup_err + 1;
+            end if;
+         end if;
+      end if;
+   end process monitor;
 
    stimulus : process
       type nat4_t is array (0 to 3) of natural;
@@ -34,49 +90,151 @@ begin
       constant C_BIT  : nat4_t := (C_MENU_STEREO_MIX_FULL, C_MENU_STEREO_MIX_WIDE,
                                    C_MENU_STEREO_MIX_NARROW, C_MENU_STEREO_MIX_MONO);
       constant C_EXP  : slv4_t := ("00", "01", "10", "11");
-      variable osm    : std_logic_vector(255 downto 0);
-      variable errors : natural := 0;
-      variable n      : natural := 0;
+      constant C_HOLD : natural := 100;                     -- clock cycles of the hold check
 
-      procedure check(sel : integer; others_v : std_logic) is
-         variable exp : std_logic_vector(1 downto 0);
+      variable errors : natural := 0;
+      variable cases  : natural := 0;
+      variable osm    : std_logic_vector(511 downto 0);
+      variable bg     : std_logic := '0';
+
+      function name(i : integer) return string is
       begin
-         osm := (others => others_v);
-         for i in 0 to 3 loop
-            osm(C_BIT(i)) := '0';
+         case i is
+            when 0      => return "Full";
+            when 1      => return "Wide";
+            when 2      => return "Narrow";
+            when 3      => return "Mono";
+            when others => return "none";
+         end case;
+      end function;
+
+      procedure clocks(n : natural) is
+      begin
+         for i in 1 to n loop
+            wait until rising_edge(main_clk_o);
          end loop;
-         if sel >= 0 then
-            osm(C_BIT(sel)) := '1';
-            exp := C_EXP(sel);
-         else
-            exp := "00";                                 -- nothing selected: Full Stereo
+         wait until falling_edge(main_clk_o);
+      end procedure;
+
+      procedure check(expected : std_logic_vector(1 downto 0); label_s : string) is
+      begin
+         cases := cases + 1;
+         if main_stereo_mix /= expected then
+            errors := errors + 1;
+            report "TB_ERROR: other bits '" & to_string(bg) & "', " & label_s & ": main_stereo_mix = " &
+                   to_string(main_stereo_mix) & ", expected " & to_string(expected) severity error;
+         end if;
+      end procedure;
+
+      -- the menu vector with the background value outside the group and only item i inside (-1: none)
+      procedure set_only(i : integer) is
+      begin
+         osm := (others => bg);
+         for k in 0 to 3 loop
+            osm(C_BIT(k)) := '0';
+         end loop;
+         if i >= 0 then
+            osm(C_BIT(i)) := '1';
          end if;
          main_osm_control_i <= osm;
-         wait for 10 ns;
-         n := n + 1;
-         if main_stereo_mix /= exp then
-            errors := errors + 1;
-            report "TB_ERROR selection " & integer'image(sel) & " other bits '" &
-                   std_logic'image(others_v) & "': got " & to_string(main_stereo_mix) &
-                   ", expected " & to_string(exp);
-         end if;
-      end procedure check;
+      end procedure;
+
    begin
-      for o in 0 to 1 loop
-         for sel in -1 to 3 loop
-            if o = 0 then
-               check(sel, '0');
-            else
-               check(sel, '1');
-            end if;
+      ------------------------------------------------------------------------------------------------
+      -- power-up: no bit of the group has ever been set -> "00" (Full Stereo) in every clock cycle
+      ------------------------------------------------------------------------------------------------
+      clocks(10);
+      bg := '1';
+      set_only(-1);
+      clocks(10);
+      powerup_on <= false;
+      wait for 0 ns;
+      cases := cases + 1;
+      if powerup_err /= 0 then
+         errors := errors + 1;
+         report "TB_ERROR: power-up: main_stereo_mix was not ""00"" in " & integer'image(powerup_err) &
+                " of " & integer'image(powerup_cycles) & " clock cycles" severity error;
+      else
+         report "TB: power-up: main_stereo_mix = ""00"" (Full Stereo) in all " & integer'image(powerup_cycles) &
+                " clock cycles";
+      end if;
+
+      for background in 0 to 1 loop
+         if background = 0 then
+            bg := '0';
+         else
+            bg := '1';
+         end if;
+
+         ---------------------------------------------------------------------------------------------
+         -- every single item, in the order Wide, Narrow, Mono, Full: every step changes the value
+         ---------------------------------------------------------------------------------------------
+         for k in 1 to 4 loop
+            set_only(k mod 4);
+            clocks(2);
+            check(C_EXP(k mod 4), "single item " & name(k mod 4));
+         end loop;
+
+         ---------------------------------------------------------------------------------------------
+         -- hold: the empty selection keeps every one of the four values for C_HOLD clock cycles
+         ---------------------------------------------------------------------------------------------
+         for i in 0 to 3 loop
+            set_only(i);
+            clocks(2);
+            check(C_EXP(i), "hold " & name(i) & ", item selected");
+            mon_a <= C_EXP(i); mon_b <= C_EXP(i); mon_on <= true;
+            set_only(-1);
+            clocks(C_HOLD);
+            check(C_EXP(i), "hold " & name(i) & ", no bit set for " & integer'image(C_HOLD) & " cycles");
+            mon_on <= false;
+         end loop;
+
+         ---------------------------------------------------------------------------------------------
+         -- every transition a -> b, torn both ways
+         ---------------------------------------------------------------------------------------------
+         for a in 0 to 3 loop
+            for b in 0 to 3 loop
+               if a /= b then
+                  -- first "no bit set": the old value is held, then the new bit
+                  set_only(a);
+                  clocks(2);
+                  check(C_EXP(a), name(a) & " -> " & name(b) & ", start");
+                  mon_a <= C_EXP(a); mon_b <= C_EXP(b); mon_on <= true;
+                  set_only(-1);
+                  clocks(5);
+                  check(C_EXP(a), name(a) & " -> " & name(b) & ", no bit set");
+                  set_only(b);
+                  clocks(2);
+                  check(C_EXP(b), name(a) & " -> " & name(b) & " through no bit set, done");
+                  mon_on <= false;
+
+                  -- first "both bits set": the old or the new value (monitor), then only the new bit
+                  set_only(a);
+                  clocks(2);
+                  check(C_EXP(a), name(a) & " -> " & name(b) & ", start");
+                  mon_on <= true;
+                  osm(C_BIT(b)) := '1';
+                  main_osm_control_i <= osm;
+                  clocks(5);
+                  set_only(b);
+                  clocks(2);
+                  check(C_EXP(b), name(a) & " -> " & name(b) & " through both bits set, done");
+                  mon_on <= false;
+               end if;
+            end loop;
          end loop;
       end loop;
-      report "TB: " & integer'image(n) & " cases, " & integer'image(errors) & " wrong";
+
+      wait for 0 ns;
+      errors := errors + mon_err;
+      report "TB: " & integer'image(cases) & " checks, " & integer'image(errors) & " errors (monitor: " &
+             integer'image(mon_cycles) & " clock cycles checked, " & integer'image(mon_err) & " with a third value)";
       if errors = 0 then
          report "TB: RESULT PASS";
       else
          report "TB: RESULT FAIL";
       end if;
+      running <= false;
       wait;
    end process stimulus;
 
