@@ -6,7 +6,7 @@ Entry point for anyone, human or coding agent, who picks up this work. It record
 
 * **Done:** `mh_implement_247` (Stereo Mix), `mh_fix_issue_255` (bank cache with 32 banks), `mh_implement_153` (unload a cartridge) and `mh_implement_142` (keyboard shortcuts) are merged into `develop` in this order, each with `--no-ff`, on top of the string ROM (`622a0f4`). `CORE_VERSION` is `WIP-V6-A22X3`.
 * **Follow-up commits on top of the merges:** 64 register banks for QNICE, the shorter text of the message for a too large `.crt`, `bankdepth_test.py`, the documentation, one flag correction in the shortcut code, and the fix of two defects in the mount code (section 2).
-* **Next:** Vivado build of R3 and R6, hardware test (section 7).
+* **Next:** the four follow-ups of section 9 (decided, not started), then the Vivado build of R3 and R6 and the hardware test (section 7).
 * **Not yet built with Vivado and not yet tested on hardware.**
 
 ## 1. Decisions
@@ -132,3 +132,38 @@ Hardware: the section `Version WIP-V6-A22X3` of `tests/README.md`.
 * `menuidx.py <rev>...` (a rev can be `WORKTREE`): what every menu index constant points to, compared across revisions.
 * `mdlint.py <from> <to>` : Marked 2 and MathJax lint of the Markdown lines that a range of commits adds.
 * `suites.py <step> <suite>...` : runs the firmware suites and the benches one after the other with one result line each; it replaces the clipboard tools by no-ops, because `make_rom.sh` and the assembler wrapper of QNICE copy their output to the clipboard.
+
+## 9. Follow-ups before the Vivado build (decided by sy2002, not started)
+
+Four small changes that shall go into `WIP-V6-A22X3` before it is built. Each one gets its own commit with a test, on a private clone first; then all suites (`tools/suites.py`, `bankdepth_test.py`, `mount_reject_test.py`) and the benches that copy code out of the changed files. Afterwards the numbers of sections 2, 3 and 7, the items of section 5.4, the firmware size in `tests/README.md` and `doc/developer.md` and the numbers table of `doc/dev-strrom/STATUS.md` need an update. None of this is in a released version yet, so `VERSIONS.md` needs no entry.
+
+### 9.1 One parking buffer per drive for the menu text
+
+* **Problem:** while the line of a drive shows `<Saving>`, its real text is parked in `OPTM_HEAP_LAST` (`M2M/rom/options.asm`, lines 1844 and 1893; address computed in `HELP_MENU`, line 209). There is one buffer for all drives, so when two drives save at the same time the line of one drive can show the text of the other until the next mount. Found by reading only.
+* **First:** a testbed that shows it (two dirty drives, one finishes).
+* **Design:** one slot per drive behind the `%s` strings: slot = `OPTM_HEAP_LAST` + drive number times `SCR$OSM_O_DX`. The budget check of `HELP_MENU` then needs `VDRIVES_NUM` slots instead of 1: 24 x 27 = 648 instead of 621 words with two drives, peak 5,066 of 5,248. Update the comments at `MENU_HEAP_SIZE` in `m2m-rom.asm` and at `OPTM_HEAP_LAST` in `shell_vars.asm`.
+* **Done when:** the testbed fails before and passes after; `LOG_HEAP2` in the full-system simulation shows 182 free words.
+
+### 9.2 Stereo Mix decoder as a holding register
+
+* **Problem:** `main_stereo_mix` (`CORE/vhdl/mega65.vhd`, line 846) is decoded combinationally. The Shell writes the menu bits one at a time in ascending order, so while the selection moves downwards no bit is set for a few microseconds and the mix is Full Stereo for that time.
+* **Design:** a clocked process like `volume_decode_proc` next to it: the register starts at `"00"`, takes the value of a set bit and holds its value while no bit of the group is set. With two bits set any fixed priority is right, because both are the old or the new value.
+* **Tests:** the decode part of `CORE/vhdl/test/tb_stereo_mix/run.sh` copies the decoder out of `mega65.vhd` and expects the empty selection to decode to Full Stereo: change it to the pattern of the volume part of `tb_shortcuts` (power-up value, every item alone, hold on the empty selection from every state, all transitions torn both ways with a monitor that allows only the old and the new value, mutants). `tb_shortcuts`, `tb_capslock` and `menu_test.py verify` also read `mega65.vhd`.
+* **Limit:** switching the mix stays an abrupt step. If the hardware test still hears a tick, the next step is a crossfade of a few milliseconds in `audio_stereo_mix_proc` of `main.vhd` (one multiplier per channel), which would also suit the volume steps.
+
+### 9.3 No waiting time after a shortcut session without a window
+
+* **Problem:** every invisible session of a shortcut leaves `HELP_MENU` through `_HLP_RET` (`M2M/rom/options.asm`, line 268), which waits 333 ms before the keyboard is connected to the core again, so that the Return or Run/Stop that closed the menu does not reach the C64. After a session that showed no file browser (Next disk that mounts the next image) there is no such key: F9 to F14 are not part of the C64 keyboard. The message of Next disk appears only after the wait, and a second press within it is lost.
+* **Design:** a flag that `SC$SESSION` clears and that `HANDLE_MOUNTING` sets when it opens the file browser or shows an error window (not on the preselected path of `VD_NEXT_DISK`). In the direct exit of `HELP_MENU` (`_HLP_DIRECT`, line 261) skip `WAIT333MS` when the flag is clear. The exit of the visible menu stays exactly as it is. Mind the variables that `SC$INIT` clears in one go (`shortcuts_vars.asm`).
+* **Done when:** `shortcuts_test.py` shows the wait only for sessions with a window; the trace of the visible menu is unchanged; in the full-system simulation (`sim/scenarios/r3a.stim`) the message of Next disk follows the mount directly and a second key press right after it is honored.
+
+### 9.4 No hidden redraw of the menu in a shortcut session
+
+* **Problem:** after a CRT or PRG load in an invisible session, `_OPTM_GK_MNT` (`M2M/rom/options.asm`, line 1349) calls `OPTM_SHOW` and redraws the whole menu into the hidden video RAM. It costs time and it is the deepest point of the general stack (107 of 768 words free, section 5.4).
+* **Design:** skip the `OPTM_SHOW` there while `OPTM_DIRECT` is set; the state updates of `_OPTM_GK_MNT` (`OPTM_SET`, the menu bits) stay.
+* **Done when:** the visible menu behaves as before (`menu_test.py run`, `crt_unload_test.py`, `shortcuts_test.py`); in the full-system simulation (`sim/scenarios/r3b.stim`, Load PRG and Load CRT) the lowest stack pointer is about 300 words higher than `0xF94B` and nothing else differs.
+
+### How the work is organized
+
+One implementing agent per change on a private clone (`git clone --local` of this repository at the current commit, plus the working trees of the two submodules and the QNICE binaries copied from the main checkout), with a brief that contains the design above; the controller reviews the diff, brings the commit into the main checkout with `git cherry-pick` and runs the suites itself. Every command that assembles needs a no-op `pbcopy` first in PATH (`tools/suites.py` does it by itself). 9.2 is independent of the others; 9.1, 9.3 and 9.4 all touch `options.asm` and are best done one after the other. A last run of the full-system simulation on the final commit covers 9.1, 9.3 and 9.4 together.
+
