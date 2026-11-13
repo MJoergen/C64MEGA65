@@ -177,19 +177,24 @@ class Model:
         self.help_exit(self.keyread)        # no key read: no waiting time
         return r
 
-    def visible(self, sel, keyread):
-        """the user opens the menu with Help and closes it again"""
-        self.selected, self.keyread = sel, keyread
+    def visible(self, select=False):
+        """the user opens the menu with Help, selects the line under the
+        cursor with Return if select is set, and closes the menu with Help"""
+        sel = self.selected
         self.help_head(0)
         self.out("SHOW")
         self.out("ON")
         self.out("RUN", self.h(sel), self.h(self.level))
+        if select:                          # the mount code behind the line
+            self.out("K", self.h(self.m["OPTM_KEY_SELECT"]))
+            self.out("CB")
+            if self.cb_keys:
+                self.keyread = 1
         self.out("K", self.h(self.m["OPTM_KEY_CLOSE"]))
         cur = sel + self.run_shift
         self.help_close()
         self.selected = self.start if self.groups[cur] == self.m["OPTM_CLOSE"] else cur
         self.help_exit(True)                # always, whatever keyread says
-        self.out("VAL", self.h(self.selected))
 
     def press_in(self, grp):
         idx = next((i for i, g in enumerate(self.groups) if g & 0xFF == grp), None)
@@ -413,7 +418,19 @@ def expected(sysdef, menu, c, dflt):
     M.out("== T14 visible menu")
     M.start = 1
     for sel, keyread in ((2, 0), (2, 1), (8, 0), (8, 1)):
-        M.visible(sel, keyread)
+        M.selected, M.keyread = sel, keyread
+        M.visible()
+        M.out("VAL", M.h(M.selected))
+    M.out("== T15 key flag after the visible menu")
+    M.keyread, M.selected = 0, 2
+    M.visible(select=True)                          # mounts: the flag is set
+    M.out("VAL", M.h(M.keyread))
+    M.pickset(c["C64_OSM_SC_F11"], 4)
+    M.nd_status = 0; M.tb_sckey(2)                  # next disk, no key read
+    M.pickset(c["C64_OSM_SC_F12"], 2); M.tb_sckey(3)    # mount: file browser
+    M.visible()                                     # Help, Help
+    M.out("VAL", M.h(M.keyread))
+    M.tb_sckey(2)                                   # next disk, no key read
     M.out("DONE")
     return "\n".join(M.t) + "\n"
 
@@ -440,6 +457,9 @@ MUTANTS = [
                                        + I + "RBRA    _HLP_RECONN, Z" + I + "RSUB    WAIT333MS, 1")),
     # SC$SESSION (shortcuts.asm)
     ("session_keeps_flag", mutant("mod", r"\n[ \t]+MOVE[ \t]+HM_KEYREAD, R2[^\n]*\n[ \t]+MOVE[ \t]+0, @R2[^\n]*", "")),
+    ("session_clears_flag_at_end",
+     mutant("mod", r"(\n[ \t]+MOVE[ \t]+HM_KEYREAD, R2[^\n]*\n[ \t]+MOVE[ \t]+0, @R2[^\n]*)"
+                   r"(\n[ \t]+MOVE[ \t]+M2M\$KEY_HELP, R8[^\n]*\n[ \t]+RSUB[ \t]+HELP_MENU, 1[^\n]*)", r"\2\1")),
 ]
 
 

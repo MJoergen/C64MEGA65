@@ -1764,9 +1764,9 @@ HEAP            .BLOCK 1
 ; The stack starts at 0xFEE0 (search var VAR$STACK_START in m2m-rom.lis to
 ; calculate the address). To see, if there is enough room for the stack
 ; given the HEAP_SIZE do this calculation: Add 30208 words to HEAP which
-; is currently 0x82A0 (the core-specific buffers and status words above sit
+; is currently 0x82A1 (the core-specific buffers and status words above sit
 ; just before it) and subtract the result from 0xFEE0. This yields currently a
-; stack size of 1600, which is more than 1.5k words and therefore sufficient.
+; stack size of 1599, which is more than 1.5k words and therefore sufficient.
 ; Mind the menu: OPTM_RUN and OPTM_SHOW each reserve one stack word per menu
 ; line (301 lines today), so a much larger menu needs a larger stack.
 

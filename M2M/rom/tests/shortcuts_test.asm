@@ -373,6 +373,46 @@ _T14_NEXT       MOVE    @R4++, R5               ; R5: OPTM_SELECTED
                 RBRA    _T14_NEXT, 1
 _T14_END
 
+                ; --------------------------------------------------------
+                ; T15: a session starts with a clear HM_KEYREAD also after
+                ; the visible menu: the user mounts a disk image in the
+                ; visible menu (its mount code reads keys), then a session
+                ; reads no key; then a session with a key read, the visible
+                ; menu and a session without a key read
+                ; --------------------------------------------------------
+                MOVE    S_T15, R8
+                RSUB    TB_PUTS, 1
+                MOVE    HM_KEYREAD, R0
+                MOVE    0, @R0
+                MOVE    OPTM_SELECTED, R0       ; visible menu: Return on the
+                MOVE    2, @R0                  ; line of drive 8, then Help
+                MOVE    TB_VIS_SEL, R0
+                MOVE    1, @R0
+                MOVE    M2M$KEY_HELP, R8
+                RSUB    HELP_MENU, 1
+                MOVE    HM_KEYREAD, R8          ; set by the mount code: 1
+                MOVE    @R8, R8
+                RSUB    TB_VAL, 1
+                MOVE    C64_OSM_SC_F11, R8      ; F11: Next disk drive 8,
+                MOVE    4, R9                   ; mounted directly: no key
+                RSUB    TB_PICK, 1
+                MOVE    TB_ND_STATUS, R0
+                MOVE    0, @R0
+                MOVE    2, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    C64_OSM_SC_F12, R8      ; F12: Mount drive 8: file
+                MOVE    2, R9                   ; browser
+                RSUB    TB_PICK, 1
+                MOVE    3, R8
+                RSUB    TB_SCKEY, 1
+                MOVE    M2M$KEY_HELP, R8        ; visible menu, closed with
+                RSUB    HELP_MENU, 1            ; Help right away
+                MOVE    HM_KEYREAD, R8          ; still 1 from the session
+                MOVE    @R8, R8
+                RSUB    TB_VAL, 1
+                MOVE    2, R8                   ; F11: Next disk, no key
+                RSUB    TB_SCKEY, 1
+
                 MOVE    S_DONE, R8
                 RSUB    TB_PUTS, 1
                 SYSCALL(exit, 1)
@@ -421,6 +461,8 @@ _TBR_3          MOVE    TB_KEYB, R0
                 MOVE    TB_CB_KEYS, R0          ; a selected line opens the
                 MOVE    1, @R0                  ; file browser
                 MOVE    TB_ND_KEYS, R0          ; next disk: no error window
+                MOVE    0, @R0
+                MOVE    TB_VIS_SEL, R0          ; visible menu: Help only
                 MOVE    0, @R0
                 RSUB    SC$INIT, 1
                 DECRB
@@ -833,8 +875,16 @@ _OR_RET         MOVE    R1, R8
                 DECRB
                 RET
 
-TB_REALGK       MOVE    OPTM_KEY_CLOSE, R8      ; the real key function is
-                RET                             ; never called here
+; key function of the visible menu: Return once if TB_VIS_SEL is set (the
+; user selects the line under the cursor), otherwise Help (close the menu)
+TB_REALGK       MOVE    TB_VIS_SEL, R8
+                CMP     0, @R8
+                RBRA    _TBGK_CLOSE, Z
+                MOVE    0, @R8
+                MOVE    OPTM_KEY_SELECT, R8
+                RET
+_TBGK_CLOSE     MOVE    OPTM_KEY_CLOSE, R8
+                RET
 
 VD_DRV_READ     INCRB                           ; R8: drive, R9: VD_CACHE_DIRTY
                 MOVE    TB_DIRTY, R0
@@ -912,6 +962,7 @@ S_T11           .ASCII_W "== T11 key repeat"
 S_T12           .ASCII_W "== T12 shift layer and help"
 S_T13           .ASCII_W "== T13 sessions with and without key"
 S_T14           .ASCII_W "== T14 visible menu"
+S_T15           .ASCII_W "== T15 key flag after the visible menu"
 S_REM           .ASCII_W "REM"
 S_SHOW          .ASCII_W "SHOW"
 S_ON            .ASCII_W "ON"
@@ -961,6 +1012,7 @@ TB_RUN_SHIFT    .BLOCK 1                        ; OPTM_RUN cursor offset
 TB_SAVE_BLOCK   .BLOCK 1                        ; ROSM_SAVE: dirty cache
 TB_CB_KEYS      .BLOCK 1                        ; selection reads keys
 TB_ND_KEYS      .BLOCK 1                        ; next disk reads keys
+TB_VIS_SEL      .BLOCK 1                        ; visible menu: Return once
 OPTM_DIRECT     .BLOCK 1
 HM_KEYREAD      .BLOCK 1
 OPTM_SELECTED   .BLOCK 1

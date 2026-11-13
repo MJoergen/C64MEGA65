@@ -209,9 +209,8 @@ VD_NXT_INFO     .BLOCK  VDRIVES_MAX             ; 4 x VDRIVES_MAX words
 ;                   before it reconnects the keyboard to the core, so that the
 ;                   last key that the user pressed in the window does not
 ;                   reach the core. The exit of the visible menu always waits
-;                   and ignores it. Not
-;                   initialized: its value only matters between SC$SESSION
-;                   and the end of HELP_MENU.
+;                   and ignores it. Not initialized: its value only matters
+;                   between SC$SESSION and the end of HELP_MENU.
 HM_KEYREAD      .BLOCK  1
 
 ; System to handle manually and automatically loaded cartridges and ROMs
