@@ -335,13 +335,14 @@ labeled "Drive":
 * Power green: Machine is powered on, core is running.
 * Power blue: You pressed the reset button long enough to initiate a so
   called "Hard-reset" [(learn more)](https://c64.mega65.org/resetting-the-core.html).
-* Drive off: No access to simulated 1541 drive.
+* Drive off: No access to a simulated drive (1541 or 1581) or to the internal
+  floppy drive ("Internal 1581").
 * Drive green: The currently running C64 software is reading from or writing
-  to the simulated 1541 drive.
-* Drive blinking green: The last read/write operation to the simulated 1541
-  drive failed.
-* Drive yellow: The C64 core is writing changes made by the simulated 1541
-  drive to the disk image file (`*.d64`) on the SD card.
+  to a simulated drive or to the internal floppy drive.
+* Drive blinking green: The last operation of a drive failed. The drive keeps
+  blinking until the next command clears the error, like a real 1541 or 1581.
+* Drive yellow: The C64 core is writing changes made by a simulated drive to
+  the disk image file (`*.d64` or `*.d81`) on the SD card.
   [Learn more](https://c64.mega65.org/working-with-disks-and-drives.html#led-information-of-disk-status--disk-flush)
   about how this mechanism works.
 
@@ -379,12 +380,12 @@ on the MEGA65 FileHost.
 
 ## 23) Can I write to real disks with the built-in floppy drive?
 
-From WIP-V6-A21X1 on, yes: in "Internal 1581" mode the built-in drive writes sectors like a real 1581 (`SAVE`, scratch, `VALIDATE`, copy programs, GEOS). Formatting a real disk follows with WIP-V6-A21X2.
+From WIP-V6-A21X1 on, yes: in "Internal 1581" mode the built-in drive writes like a real 1581 (`SAVE`, scratch, `VALIDATE`, copy programs, GEOS) and formats disks (`N0:`).
 
 **The write-protect tab of the disk is the only guard.** There is no menu switch: with the tab hole closed the C64 can write to the disk, with the hole open it cannot, and the drive answers with `26, WRITE PROTECT ON`. Keep the hole open on originals and on everything you could not replace, and write to blank disks or to disks whose contents you would not miss.
 
 * DD disks only; HD disks (two holes) do not work.
-* `25, WRITE ERROR`: the DOS read the written sectors back and they did not match. Try another disk; if fresh disks fail too, please report it.
+* `25, WRITE ERROR`: the DOS read the written sectors back and they did not match. Try another disk; if fresh disks fail too, please report it. (The DOS only reads back on disks that were formatted by a 1581 or by this core, or after `U0>V1`.)
 * If the drive knocks and reads nothing right after you switched the MEGA65 on, its own little controller started up in a bad state: switch the MEGA65 off and on again.
 
 [Learn more](README.md#writing-to-real-disks-with-the-internal-1581).

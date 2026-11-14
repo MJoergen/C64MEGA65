@@ -1921,6 +1921,8 @@ may support simulation acceleration, but production values MUST satisfy:
 | Force Interrupt internal WD recovery | at least 16 us before accepting a new WD command |
 | Source-switch admission quiet | at least 500 ms with released/inactive IEC and no drive-work event; race barrier only, never cache-clean proof |
 
+> **As built (issue #257, WIP-V6-A25).** The row "Motor-to-media-ready qualification" above (and the `media_ready` definition in section 13.2) is not what the core does, and it must not be restored from this specification, because it fails on real hardware. The core asserts `media_ready` with the first index edge of a motor-on interval, for every medium and without a minimum time. The genuine 1581 ROM examines READY exactly once, 0.80 s after it switched the motor on (0.83 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so a second edge 200 ms after the first can miss the exam, and the job then ends with `74,DRIVE NOT READY`. Record: [dev-fdd/ISSUE257.md](dev-fdd/ISSUE257.md).
+
 The representative mechanism must meet its 197–203 ms qualification target,
 but that narrow data-sheet range is not used as a runtime on/off gate. The
 wider 150–250 ms edge window prevents modestly aged but readable mechanisms
@@ -2231,6 +2233,8 @@ Index capture starts with motor assertion, but Ready is clamped false until 505
 ms. If no usable edge history exists at that point, even two later edges at the
 broad 250 ms limit fit within the independent 1.10 s deadline with filter margin.
 The six-edge WD Motor-On spin-up sequence remains separate.
+
+> **As built (issue #257, WIP-V6-A25).** The core does not use this startup rule, nor the two-edge term and the 505 ms clamp of the `media_ready` definition at the top of this section, and they must not be restored from this specification: they fail on real hardware. READY asserts with the first index edge of a motor-on interval; it falls with the motor request, 500 ms after the last index edge, on reset and on disable. The genuine 1581 ROM examines READY exactly once, 0.80 s after it switched the motor on (0.83 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so a second edge can miss the exam. Record: [dev-fdd/ISSUE257.md](dev-fdd/ISSUE257.md).
 
 The narrow 197–203 ms range is a mechanism/write qualification. Ordinary read
 plausibility accepts 150–250 ms and warns outside 180–220 ms. A blank indexed

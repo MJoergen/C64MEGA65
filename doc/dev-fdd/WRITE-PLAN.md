@@ -243,14 +243,14 @@ session as the step (`M 7000 707F` style per `doc/1581_dd_debug_device.md`, now 
 | Step | Action | Expected | If not |
 |---|---|---|---|
 | 1 | Read regression: the A18X2 read recipes (directory, LOAD, a side-1 file, a genuine-1581 disk if available) | unchanged | stop: integration regressed the read path |
-| 2 | Power-on, Internal 1581 on drive 8, blank disk tab **open** (protected): `SAVE"T",8` | `26, WRITE PROTECT ON`; `CNT_WR_WP` = 3 (the DOS tries three times), `CNT_WR_GATE` = 0, `WR_STATE.wr_ok` = 0 | gate opened: STOP everything, sim W4 is wrong |
+| 2 | Power-on, Internal 1581 on drive 8, formatted disk tab **open** (protected): `SAVE"T",8` | `26, WRITE PROTECT ON`; `CNT_WR_GATE` = 0, `WR_STATE.wr_ok` = 0; `CNT_WR_WP` = 0: the DOS samples the tab at log-in (`$CB76` into `$01FA`) and refuses the write job itself (`$CF8A`), no write command reaches the WD. `CNT_WR_WP` = 3 (three attempts) only when the tab is opened after the log-in | gate opened: STOP everything, sim W4 is wrong |
 | 3 | Close the tab (writable), wait 1 s: `WR_STATE.wr_ok` = 1 | 1 | qualifier never qualifies: check polarity / settle |
-| 4 | Use a disk that is already 1581-formatted (by the MEGA65 core's F011 or a real 1581 — format is M4): `SAVE"T",8` of a 2-block program | drive LED; `CNT_WR_SECT` a multiple of 10 (one flush per touched side: directory side + data side, so 20 or 30); `WR_GATE_CYC` = 849,600 ± 100; `CNT_WR_LOST` = 0; `CNT_WR_ABORT` = 0; `WR_FIRST_MARGIN` ≥ 18; `WR_DRQ_MARGIN` ≥ 1; the trace ring shows each flush as RA, RA, ten writes starting at R + 1, RA, ten reads | LOST > 0: DRQ service slower than modelled; FIRST_MARGIN < 10: the gap calibration is off |
+| 4 | Use a disk that is already 1581-formatted (by the MEGA65 core's F011 or a real 1581 — format is M4): `SAVE"T",8` of a 2-block program | drive LED; `CNT_WR_SECT` a multiple of 10 (one flush per touched side: directory side + data side, so 20 or 30); `WR_GATE_CYC` = 849,600 ± 100; `CNT_WR_LOST` = 0; `CNT_WR_ABORT` = 0; `WR_FIRST_MARGIN` ≥ 18; `WR_DRQ_MARGIN` ≥ 1; the trace ring shows each flush as RA, RA, ten writes starting at R + 1, RA; ten reads follow only with the DOS's verify on (`$8D` bit 7: loaded from BAM byte 6 at every log-in, set by a 1581 format, clear on a disk formatted by the MEGA65 core; `U0>V1` sets it until the next log-in) | LOST > 0: DRQ service slower than modelled; FIRST_MARGIN < 10: the gap calibration is off |
 | 5 | `LOAD"T",8` after a power cycle; `VALIDATE` | loads; `0, OK` | FILE NOT FOUND / 23 READ ERROR: splice or CRC — Greaseweazle or MEGA65-core read of the disk |
 | 6 | A 30-block file spanning both sides; LOAD back | byte-exact (compare in memory or via a D81 copy) | |
 | 7 | paich64's `SAV-WRITE` (D81 on 8, Internal 1581 on 9), run 0 | completes; all files audit clean; counters as in 4 | |
-| 8 | Eject mid-SAVE (sacrificial disk) | `CNT_WR_ABORT` +1 reason 0x08; DOS error; no hang; next disk works | |
-| 9 | Press reset mid-SAVE | no hang after reset; counters show the abort; next SAVE works | |
+| 8 | Eject mid-SAVE (sacrificial disk) | DOS error 74; no hang; next disk works; an unclosed file of 0 blocks stays on the disk. `CNT_WR_ABORT` +1 with reason 0x08 only if the eject cut a running flush burst (about 0.25 s each, about 3 % of a stock-speed SAVE) | |
+| 9 | Press reset mid-SAVE | no hang after reset; next SAVE works; the counters show an abort only if the reset cut a running flush burst | |
 | 10 | Referee: the disk from step 6 read by an independent reader (section 5.3) | directory + file identical | |
 
 ### 5.2 Round 2 (after M4, format)

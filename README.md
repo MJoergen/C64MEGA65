@@ -129,7 +129,7 @@ Important: If you use VGA displays or analog retro monitors, please switch off
 
 ### Writing to real disks with the Internal 1581
 
-*This applies from WIP-V6-A21X1 on.* The built-in floppy drive in "Internal 1581" mode also writes: `SAVE`, scratching and renaming files, `VALIDATE`, copy programs and GEOS work on real disks as they do with a real 1581. Formatting a real disk (`N0:`) follows with WIP-V6-A21X2. Please read this before you insert a disk you care about.
+*This applies from WIP-V6-A21X1 on.* The built-in floppy drive in "Internal 1581" mode also writes: `SAVE`, scratching and renaming files, `VALIDATE`, copy programs and GEOS work on real disks as they do with a real 1581, and so does formatting a disk (`N0:`). Please read this before you insert a disk you care about.
 
 **The write-protect tab of the disk is the only thing that protects it.** There is no switch in the menu and no "are you sure": if the tab is closed, the C64 can write to the disk, and it will. On a 3.5" disk the tab is the small sliding shutter in the corner:
 
@@ -139,7 +139,7 @@ Important: If you use VGA displays or analog retro monitors, please switch off
 So keep the hole **open** on every original and on every disk you could not replace. For writing, use blank disks or disks whose contents you would not miss: writing real disks is the youngest part of the core.
 
 * Use **double density (DD)** disks, the kind with one square hole. High-density (HD) disks, with two holes and usually marked "HD", do not work.
-* `25, WRITE ERROR` means that the 1581 DOS read the sectors back after writing them and they did not match what it wrote. Try another disk first; a worn or dirty disk is the usual cause. If it happens with fresh disks, please report it together with a dump of the [diagnostic device](doc/1581_dd_debug_device.md).
+* `25, WRITE ERROR` means that the 1581 DOS read the sectors back after writing them and they did not match what it wrote. Try another disk first; a worn or dirty disk is the usual cause. If it happens with fresh disks, please report it together with a dump of the [diagnostic device](doc/1581_dd_debug_device.md). The DOS only reads back if its "verify" switch is on for the disk, and that switch is stored on the disk: it is on for disks formatted by a 1581 or by this core and off for disks formatted by the MEGA65 core (`HEADER`). `OPEN 15,8,15,"U0>V1":CLOSE 15` switches it on until you change the disk or initialize it again.
 * Rarely, the drive mechanism itself starts up in a bad state: right after switching on, it knocks and reads nothing, not even a disk that worked before. This is the small controller inside the drive, not the core and not your disk: switch the MEGA65 off and on again.
 
 ### Constraints and Roadmap

@@ -96,7 +96,12 @@ guide are the authority; upstream wiki text is background at best.
 │   │   │                  Software cartridge (.crt) handling — MEGA65-specific
 │   │   │                  bank cache in BRAM (HyperRAM is too slow for direct exec)
 │   │   ├── reu_mapper.vhd REU → HyperRAM Avalon bridge
-│   │   └── prg_loader.vhd .prg autostart logic
+│   │   ├── prg_loader.vhd .prg autostart logic
+│   │   ├── c1581_error_led.vhd  error blink of a 1581 (its power LED) for the drive LED
+│   │   └── physical_1581/ the MEGA65's internal 3.5" drive as a 1581 ("Internal 1581"):
+│   │                      controller (mechanics, media state, read and write engines),
+│   │                      MFM decoder, read-ahead buffer, MFM encoder and writer, FIFOs,
+│   │                      diagnostic device; see doc/the_1581_book.md
 │   ├── m2m-rom/           ← QNICE assembly: the "Shell" firmware (on-screen menu,
 │   │   │                    file browser, mounting, ROM/cartridge loading)
 │   │   ├── m2m-rom.asm    entry; pulls in M2M/rom/main.asm + shell.asm + callbacks
@@ -1182,6 +1187,10 @@ hardware saw the code.
 | Menu items / labels       | `CORE/vhdl/config.vhd` (OPTM_ITEMS, OPTM_GROUPS, WHS)     |
 | Menu wiring → core        | `mega65.vhd` `C_MENU_*` constants → `main_osm_control_i`  |
 | Disk mount / vdrive       | `vdrives.vhd`, `M2M/rom/vdrives.asm`, `iec_drive/`        |
+| Internal 1581 (the MEGA65's floppy drive as a 1581) | `CORE/vhdl/physical_1581/` (start with the header of `physical_1581_controller.vhd`), the `phys_mode` parts of `fdc1772.v`, `doc/the_1581_book.md`, `doc/dev-fdd/` (specs, records, genuine-ROM emulator `rom_emu/`). There is no instrument on the floppy bus: the diagnostic device (`doc/1581_dd_debug_device.md`, `physical_1581_diag.vhd`) is the only view into the hardware, so ask for its dump with every hardware report (decoder: `doc/dev-fdd/tools/diag_dump_decode.py`). The simulation regression of the folder takes hours; `doc/dev-fdd/tools/README.md` has the job queue that runs and judges it |
+| Internal 1581 answers `74, DRIVE NOT READY` although a disk is in the drive | READY (`media_ready` in `physical_1581_controller.vhd`): the 1581 ROM examines it 0.80 to 0.83 s after it switched the motor on and does not retry, and READY needs the first index pulse; `SPINUP_MAX_MS` of the diagnostic device shows the margin. `doc/dev-fdd/ISSUE257.md`, proofs I1 to I5 of `doc/dev-fdd/rom_emu/run_257_proofs.py`, bench `tb_physical_1581_media_contract` |
+| Internal 1581 reads slowly (one revolution per sector, a format takes minutes) | the read-ahead buffer (`physical_1581_rdahead.vhd`, states `RD_ADOPT` and `RD_COPY` of the controller): the WD front end presents a sector only after its CRC verdict and at disk pace, so the next request comes a sector late. `CNT_RD_AHEAD` / `CNT_RD_AHEAD_DROP` of the diagnostic device, benches `tb_physical_1581_rdahead_ctl` (fast, with mutants: `run_tb_rdahead_ctl.sh`), `tb_physical_1581_rdseq` and `tb_physical_1581_rdahead_loop`, proofs R1 to R6 of `run_257_proofs.py` |
+| Drive LED (activity, error blink, yellow while saving) | `main.vhd` (`drive_led_o`, `drive_led_col_o`, `img_drive_busy`), `CORE/vhdl/c1581_error_led.vhd`, `led` and `pwr_led` of `iec_drive.sv`; bench `CORE/vhdl/test/tb_drive_led/` |
 | A save lands in the wrong file, or a menu line shows a file that is not mounted or loaded | `HANDLE_MOUNTING` and `LOAD_IMAGE` (`M2M/rom/shell.asm`): the file handle of a drive (`HNDL_VD_FILES`, used by `FLUSH_CACHE` for the write-back) and the menu line may only change after `PREP_LOAD_IMAGE` accepted the file; test `M2M/rom/tests/mount_reject_test.py` |
 | The menu line of a drive shows a wrong text after `<Saving>` | `OPTM_CB_SHOW` (`M2M/rom/options.asm`, cases #2a and #2b): every drive has a parking slot at `@OPTM_HEAP_LAST` + drive number x `@SCR$OSM_O_DX`, and the last word of the slot keeps the "%s is replaced" flag of the parked text; budget check in `HELP_MENU`; memory map at `OPTM_HEAP` in `M2M/rom/shell_vars.asm`; test `M2M/rom/tests/saving_text_test.py` |
 | The key that ended the file browser reaches the C64 after a keyboard shortcut, or a shortcut reacts a third of a second late | `HM_KEYREAD` (`M2M/rom/shell_vars.asm`): `HANDLE_MOUNTING` sets it before it reads a key, `SC$SESSION` clears it, and `_HLP_DIRECT` (`M2M/rom/options.asm`) waits 333 ms before it reconnects the keyboard only if it is set; tests `M2M/rom/tests/shortcuts_test.py` and `mount_reject_test.py` |
