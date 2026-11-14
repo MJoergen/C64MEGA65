@@ -6,7 +6,7 @@
 #   A  Help; Right (last item), Up, Up: Advanced Settings; Return; Right, Up, Up (Paddles,
 #      Mouse); Return: Mouse; Left, Down, Space: Port 1: Amiga; Down, Down, Return: Port 2:
 #      Amiga; Right, Return: Back (the cursor is on Mouse); Down, Return: Paddles; Left, Down,
-#      Space: Port 1: Atari CX30; Down, Down, Space on Port 2: C64 (already selected: no
+#      Space: Port 1: Atari CX30; Down, Space on Port 2: C64 (already selected: no
 #      change); Run/Stop (the cursor is on Paddles); Help closes the menu and saves the changes
 #   B  Help: the menu opens again in Advanced Settings with the cursor on Paddles; Up, Return:
 #      Mouse; Left, Return: Port 1: C64; Right, Return: Back; Down, Return: Paddles; Run/Stop;
@@ -89,9 +89,7 @@ mark A: Space selects Port 1: Atari CX30
 press 0020 3
 wait_quiet 20000 500
 dump a_paddles_atari
-mark A: Down, Down, Space on Port 2: C64 (already selected)
-press 0002 3
-wait_quiet 20000 500
+mark A: Down, Space on Port 2: C64 (already selected)
 press 0002 3
 wait_quiet 20000 500
 dump a_cursor_p2c64
