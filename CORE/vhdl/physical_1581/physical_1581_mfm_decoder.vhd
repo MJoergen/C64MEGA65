@@ -75,7 +75,7 @@ entity physical_1581_mfm_decoder is
 
     -- decoded data field
     data_start_o      : out std_logic := '0';             -- pulse when DAM recognized
-    data_deleted_o    : out std_logic := '0';             -- F8 (valid data_start..data_end)
+    data_deleted_o    : out std_logic := '0';             -- F8; valid at data_end_o (until the next data_end_o)
     data_byte_o       : out unsigned(7 downto 0) := (others => '0');
     data_byte_valid_o : out std_logic := '0';             -- pulse per payload byte
     data_end_o        : out std_logic := '0';             -- pulse after data CRC checked

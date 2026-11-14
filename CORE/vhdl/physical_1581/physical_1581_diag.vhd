@@ -41,6 +41,13 @@
 --     0x1A-0x21, 0x37) count and latch read ops only; write ops share the
 --     done channel and are counted in the v8 words instead. The trace ring
 --     records both.
+--   * (map v9, issue #257) the read-ahead counters (0x9E Read Sectors served
+--     from the controller's read-ahead buffer, 0x9F adoptions given up) and
+--     the spin-up time: milliseconds from the rising edge of the motor-on
+--     level to the first index edge after it (0xA0 the last measurement,
+--     0xA1 the largest since reset). The stock 1581 ROM samples READY once,
+--     0.80 to 0.83 s after it switched the motor on, and READY needs that
+--     first index edge: the two words show the margin on real hardware.
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -67,6 +74,9 @@ use ieee.numeric_std.all;
 use work.physical_1581_pkg.all;
 
 entity physical_1581_diag is
+  generic (
+    G_MS_CYC            : natural := 50_000  -- clk_i cycles per millisecond (spin-up time, map v9)
+  );
   port (
     clk_i               : in  std_logic;    -- 50 MHz (c64_clk_sd_i == QNICE clock)
     rst_i               : in  std_logic;
@@ -207,6 +217,14 @@ entity physical_1581_diag is
     dbg_wr_wp_i            : in  std_logic := '0';   -- toggle: a write refused by the WD write-protect pre-check
     dbg_wr_drop_i          : in  std_logic := '0';   -- toggle: a data-register write was dropped
 
+    -----------------------------------------------------------------------------
+    -- map v9 read-ahead strobes (issue #257): 1-cycle controller pulses on this
+    -- clock. The spin-up time needs no input of its own: it is measured from
+    -- st_motor_on_i to diag_index_qual_i. Defaulted for older testbenches.
+    -----------------------------------------------------------------------------
+    diag_rd_ahead_i        : in  std_logic := '0';   -- a Read Sector was served from the read-ahead buffer
+    diag_rd_ahead_drop_i   : in  std_logic := '0';   -- an adoption was given up, the live path took over
+
     -- WR_CTRL (0x9A) -> controller wr_precomp_mode_i
     wr_precomp_mode_o      : out std_logic_vector(1 downto 0);
 
@@ -328,8 +346,13 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_WR_FIN     : integer := 16#9B#;   -- 16-bit: write ops finalized in the WD front end
   constant RM_WR_PUSHFULL    : integer := 16#9C#;   -- 16-bit: words refused by a full writer FIFO
   constant RM_WR_DISCARD     : integer := 16#9D#;   -- 16-bit: writer sessions discarded at ARM
+  -- map v9 (read-ahead, spin-up time, issue #257)
+  constant RM_CNT_RD_AHEAD   : integer := 16#9E#;   -- 16-bit: Read Sectors served from the read-ahead buffer
+  constant RM_CNT_RD_AHEAD_DROP : integer := 16#9F#; -- 16-bit: adoptions given up (the live path took over)
+  constant RM_SPINUP_LAST_MS : integer := 16#A0#;   -- motor-on to first index edge, last measurement (ms); FFFF = none yet
+  constant RM_SPINUP_MAX_MS  : integer := 16#A1#;   -- the largest RM_SPINUP_LAST_MS since reset (ms)
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"08";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"09";
   -- capability flags: bit0 = read-only (cleared since map v8: WR_CTRL is writable),
   --                   bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
@@ -445,6 +468,23 @@ architecture rtl of physical_1581_diag is
   signal prev_wr_drop   : std_logic := '0';
   signal ctrl_phase     : std_logic_vector(3 downto 0);   -- CTRL_STATE bits 15:12
   signal wr_wstate      : std_logic_vector(2 downto 0);   -- WR_STATE bits 6:4
+
+  ---------------------------------------------------------------------------
+  -- map v9: read-ahead counters and the spin-up time. A measurement starts
+  -- with every rising edge of the motor-on level and ends with the first
+  -- motor-qualified index edge after it; it counts whole milliseconds and
+  -- saturates at FFFE (FFFF means "no measurement yet"). spinup_last keeps
+  -- the previous result while a measurement runs.
+  ---------------------------------------------------------------------------
+  constant C_SPINUP_NONE : unsigned(15 downto 0) := x"FFFF";
+  constant C_SPINUP_SAT  : unsigned(15 downto 0) := x"FFFE";
+  signal cnt_rd_ahead, cnt_rd_ahead_drop : unsigned(15 downto 0) := (others => '0');
+  signal prev_motor     : std_logic := '0';
+  signal spinup_run     : std_logic := '0';                        -- a measurement is running
+  signal spinup_pre     : natural range 0 to G_MS_CYC - 1 := 0;    -- cycles of the current millisecond
+  signal spinup_ms      : unsigned(15 downto 0) := (others => '0'); -- milliseconds of the running measurement
+  signal spinup_last    : unsigned(15 downto 0) := C_SPINUP_NONE;
+  signal spinup_max     : unsigned(15 downto 0) := (others => '0');
 
   ---------------------------------------------------------------------------
   -- saturating +1 helper (increments only on 'ev')
@@ -574,6 +614,15 @@ begin
         prev_wr_fin     <= dbg_wr_fin_i;
         prev_wr_wp      <= dbg_wr_wp_i;
         prev_wr_drop    <= dbg_wr_drop_i;
+        -- map v9
+        cnt_rd_ahead      <= (others => '0');
+        cnt_rd_ahead_drop <= (others => '0');
+        prev_motor        <= st_motor_on_i;
+        spinup_run        <= '0';
+        spinup_pre        <= 0;
+        spinup_ms         <= (others => '0');
+        spinup_last       <= C_SPINUP_NONE;
+        spinup_max        <= (others => '0');
       else
         -- derived event pulses
         rddone_evt := rd_done_tgl_i  xor prev_rd_done;
@@ -736,6 +785,41 @@ begin
           wr_drq_min   <= (others => '1');
         end if;
 
+        -- map v9: read-ahead counters ---------------------------------------
+        cnt_rd_ahead      <= sat_inc16(cnt_rd_ahead,      diag_rd_ahead_i);
+        cnt_rd_ahead_drop <= sat_inc16(cnt_rd_ahead_drop, diag_rd_ahead_drop_i);
+
+        -- map v9: spin-up time. The rising edge of the motor-on level starts
+        -- a measurement (again, if one is running: the time counts from the
+        -- last edge); the first motor-qualified index edge ends it. An index
+        -- edge in the clock of the motor edge itself is a spin-up of 0 ms.
+        prev_motor <= st_motor_on_i;
+        if st_motor_on_i = '1' and prev_motor = '0' then
+          spinup_pre <= 0;
+          spinup_ms  <= (others => '0');
+          if diag_index_qual_i = '1' then
+            spinup_run  <= '0';
+            spinup_last <= (others => '0');
+          else
+            spinup_run  <= '1';
+          end if;
+        elsif spinup_run = '1' then
+          if diag_index_qual_i = '1' then
+            spinup_run  <= '0';
+            spinup_last <= spinup_ms;
+            if spinup_ms > spinup_max then
+              spinup_max <= spinup_ms;
+            end if;
+          elsif spinup_pre = G_MS_CYC - 1 then
+            spinup_pre <= 0;
+            if spinup_ms /= C_SPINUP_SAT then
+              spinup_ms <= spinup_ms + 1;
+            end if;
+          else
+            spinup_pre <= spinup_pre + 1;
+          end if;
+        end if;
+
         -- WR_CTRL (0x9A): the only QNICE-writable word
         if qnice_ce_i = '1' and qnice_we_i = '1' and
            to_integer(unsigned(qnice_addr_i)) = RM_WR_CTRL then
@@ -775,7 +859,7 @@ begin
   --   00 waiting for ready, 01 positioning (ID search, 22-byte gap, waiting
   --   for the index of a Write Track), 10 streaming (WGATE open), 11 ending
   --   (tail, abort or the writer still draining).
-  -- So the Shell classifies Writing (8..B) / Format (C..F) / Reading (1..5)
+  -- So the Shell classifies Writing (8..B) / Format (C..F) / Reading (1..7)
   -- from this one word, and its idle-gate mask over bits 15:10 and 3 covers
   -- writes unchanged. The full write phase is in WR_STATE (0x80).
   ---------------------------------------------------------------------------
@@ -953,6 +1037,12 @@ begin
       when RM_CNT_WR_FIN      => qnice_data_o <= std_logic_vector(cnt_wr_fin);
       when RM_WR_PUSHFULL     => qnice_data_o <= std_logic_vector(diag_wr_pushfull_i);
       when RM_WR_DISCARD      => qnice_data_o <= std_logic_vector(diag_wr_discard_i);
+
+      -- map v9: read-ahead counters, spin-up time
+      when RM_CNT_RD_AHEAD    => qnice_data_o <= std_logic_vector(cnt_rd_ahead);
+      when RM_CNT_RD_AHEAD_DROP => qnice_data_o <= std_logic_vector(cnt_rd_ahead_drop);
+      when RM_SPINUP_LAST_MS  => qnice_data_o <= std_logic_vector(spinup_last);
+      when RM_SPINUP_MAX_MS   => qnice_data_o <= std_logic_vector(spinup_max);
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

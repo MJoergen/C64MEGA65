@@ -2,7 +2,8 @@
 -- tb_physical_1581_diag.vhd
 --
 -- Stand-alone unit test of physical_1581_diag (the QNICE diagnostic register
--- bank, issue #90; map v8 write instruments issue #244). It drives known
+-- bank, issue #90; map v8 write instruments issue #244; map v9 read-ahead
+-- counters and spin-up time issue #257). It drives known
 -- diagnostic inputs and event
 -- strobes, reads every documented register word over the QNICE read interface,
 -- and asserts:
@@ -18,10 +19,18 @@
 --     codes, the WR_STATE packing, simulated write ops (sector, write-protect
 --     refused, lost, track, aborted) driving the cumulative write counters
 --     and the last-op latches, the WD-side toggles, and that write ops leave
---     the read-op counters and the last-read latches alone.
+--     the read-op counters and the last-read latches alone,
+--   * map v9: the two read-ahead counters (count, saturate, leave each other
+--     alone) and the spin-up time: reset values, the measurement from the last
+--     rising edge of the motor-on level to the first index edge after it, the
+--     previous value while a measurement runs, later index edges ignored, the
+--     maximum, the saturation at FFFE and an index edge in the clock of the
+--     motor edge. The main instance counts 10 clocks per millisecond
+--     (G_MS_CYC) so that the saturation is reachable; a second instance with
+--     the production default checks the real scale of 50,000 clocks.
 --
 -- Purely combinational reads and same-clock counters => no timing subtlety; the
--- whole run is a few microseconds of sim time.
+-- whole run is a few tens of milliseconds of sim time.
 --
 -- C64MEGA65 project, GPLv3.
 -------------------------------------------------------------------------------
@@ -105,6 +114,9 @@ architecture sim of tb_physical_1581_diag is
   signal dbg_wr_fin, dbg_wr_wp, dbg_wr_drop : std_logic := '0';
   signal wr_precomp_mode : std_logic_vector(1 downto 0);
 
+  -- map v9 read-ahead strobes
+  signal diag_rd_ahead, diag_rd_ahead_drop : std_logic := '0';
+
   -- QNICE interface
   signal q_ce   : std_logic := '0';
   signal q_we   : std_logic := '0';
@@ -112,11 +124,16 @@ architecture sim of tb_physical_1581_diag is
   signal q_wdat : std_logic_vector(15 downto 0) := (others => '0');
   signal q_data : std_logic_vector(15 downto 0);
 
+  -- second instance (production G_MS_CYC): its own read port
+  signal q2_addr : std_logic_vector(7 downto 0) := (others => '0');
+  signal q2_data : std_logic_vector(15 downto 0);
+
 begin
 
   clk <= not clk after 10 ns;   -- 50 MHz
 
   dut : entity work.physical_1581_diag
+    generic map (G_MS_CYC => 10)        -- 10 clocks per "millisecond": the spin-up saturation is reachable
     port map (
       clk_i => clk, rst_i => rst,
       st_media_ready_i => st_media_ready, st_index_i => st_index, st_track0_i => st_track0,
@@ -164,9 +181,37 @@ begin
       wr_busy_i => wr_busy, wr_ok_i => wr_ok, f_wgate_i => f_wgate, f_wdata_i => f_wdata,
       wr_pop_i => wr_pop, wr_fifo_level_i => wr_fifo_level,
       dbg_wr_fin_i => dbg_wr_fin, dbg_wr_wp_i => dbg_wr_wp, dbg_wr_drop_i => dbg_wr_drop,
+      diag_rd_ahead_i => diag_rd_ahead, diag_rd_ahead_drop_i => diag_rd_ahead_drop,
       wr_precomp_mode_o => wr_precomp_mode,
       qnice_ce_i => q_ce, qnice_we_i => q_we, qnice_addr_i => q_addr,
       qnice_data_i => q_wdat, qnice_data_o => q_data
+    );
+
+  -- The production scale of the spin-up time (G_MS_CYC default = 50,000
+  -- clocks per millisecond): a second bank on the same motor and index
+  -- inputs. Only its spin-up words are read.
+  dut_ms : entity work.physical_1581_diag
+    port map (
+      clk_i => clk, rst_i => rst,
+      st_media_ready_i => st_media_ready, st_index_i => st_index, st_track0_i => st_track0,
+      st_wprot_i => st_wprot, st_change_i => st_change, st_motor_on_i => st_motor_on,
+      st_head_settled_i => st_head_settled, st_locked_i => st_locked, st_head_cyl_i => st_head_cyl,
+      rd_done_tgl_i => rd_done_tgl, rd_result_i => rd_result, rd_crc_err_i => rd_crc_err,
+      rd_rnf_i => rd_rnf, rd_deleted_i => rd_deleted,
+      rd_c_i => rd_c, rd_h_i => rd_h, rd_r_i => rd_r, rd_n_i => rd_n,
+      step_ack_tgl_i => step_ack_tgl,
+      diag_in_bits_i => diag_in_bits, diag_out_bits_i => diag_out_bits,
+      diag_index_period_i => diag_index_period, diag_index_width_i => diag_index_width,
+      diag_last_gap_i => diag_last_gap, diag_calc_crc_i => diag_calc_crc,
+      diag_stored_crc_i => diag_stored_crc,
+      diag_index_edge_i => diag_index_edge, diag_index_qual_i => diag_index_qual,
+      diag_id_valid_i => diag_id_valid, diag_id_crc_ok_i => diag_id_crc_ok,
+      diag_data_end_i => diag_data_end, diag_data_crc_ok_i => diag_data_crc_ok,
+      diag_gap_error_i => diag_gap_error,
+      diag_rd_phase_i => diag_rd_phase, diag_step_phase_i => diag_step_phase,
+      diag_head_valid_i => diag_head_valid, diag_head_dir_out_i => diag_head_dir_out,
+      wr_precomp_mode_o => open,
+      qnice_ce_i => '1', qnice_addr_i => q2_addr, qnice_data_o => q2_data
     );
 
   stim : process
@@ -286,6 +331,37 @@ begin
       pulse1(wr_pop);
     end procedure;
 
+    -- map v9: read a word of the second instance (production G_MS_CYC)
+    procedure expect2(addr : integer; exp : std_logic_vector(15 downto 0); name : string) is
+    begin
+      q2_addr <= std_logic_vector(to_unsigned(addr, 8));
+      wait for 2 ns;
+      if q2_data /= exp then
+        report "FAIL " & name & " @0x" & to_hstring(std_logic_vector(to_unsigned(addr, 8)))
+             & ": got " & to_hstring(q2_data) & " exp " & to_hstring(exp) severity error;
+        fails := fails + 1;
+      else
+        report "  OK  " & name & " = 0x" & to_hstring(q2_data);
+      end if;
+    end procedure;
+
+    procedure clkw(n : natural) is
+    begin
+      for i in 1 to n loop wait until rising_edge(clk); end loop;
+    end procedure;
+
+    -- map v9: the motor-on level rises; the first motor-qualified index edge
+    -- is sampled n clocks after the clock that sampled the motor edge, so the
+    -- bank has counted n - 1 full clocks: (n - 1) / G_MS_CYC milliseconds
+    procedure spin_up(n : natural) is
+    begin
+      st_motor_on <= '0';
+      clkw(2);
+      st_motor_on <= '1';
+      clkw(n);
+      pulse1(diag_index_qual);
+    end procedure;
+
     variable v_readop, v_cancel, v_trc, v_chrn : std_logic_vector(15 downto 0);
   begin
     -- ---- reset ----------------------------------------------------------
@@ -297,7 +373,11 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"08FE", "VERSION/CAP (map v8, bit0 read-only cleared)");
+    expect(16#01#, x"09FE", "VERSION/CAP (map v9, bit0 read-only cleared)");
+    expect(16#9E#, x"0000", "CNT_RD_AHEAD(reset)");
+    expect(16#9F#, x"0000", "CNT_RD_AHEAD_DROP(reset)");
+    expect(16#A0#, x"FFFF", "SPINUP_LAST_MS(reset: no measurement yet)");
+    expect(16#A1#, x"0000", "SPINUP_MAX_MS(reset)");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
     expect(16#36#, x"0000", "EST(reset input)");
@@ -733,7 +813,78 @@ begin
     expect(16#92#, x"0084", "WR_REASON_ACC (writer)");
     expect(16#9C#, x"0007", "WR_PUSHFULL (writer)");
     expect(16#9D#, x"0009", "WR_DISCARD (writer)");
-    expect(16#9E#, x"0000", "reserved word 0x9E reads 0");
+
+    -- ---- map v9: read-ahead counters --------------------------------------
+    for i in 1 to 9 loop pulse1(diag_rd_ahead); end loop;
+    for i in 1 to 2 loop pulse1(diag_rd_ahead_drop); end loop;
+    expect(16#9E#, x"0009", "CNT_RD_AHEAD=9");
+    expect(16#9F#, x"0002", "CNT_RD_AHEAD_DROP=2");
+    diag_rd_ahead <= '1';               -- one count per clock: past the 16-bit range
+    clkw(65_540);
+    diag_rd_ahead <= '0';
+    wait until rising_edge(clk);
+    expect(16#9E#, x"FFFF", "CNT_RD_AHEAD saturates at FFFF");
+    expect(16#9F#, x"0002", "CNT_RD_AHEAD_DROP untouched by the other counter");
+    diag_rd_ahead_drop <= '1';
+    clkw(65_540);
+    diag_rd_ahead_drop <= '0';
+    wait until rising_edge(clk);
+    expect(16#9F#, x"FFFF", "CNT_RD_AHEAD_DROP saturates at FFFF");
+
+    -- ---- map v9: spin-up time (10 clocks per millisecond in this bank) -----
+    spin_up(535);
+    expect(16#A0#, x"0035", "SPINUP_LAST_MS=53 (534 full clocks)");
+    expect(16#A1#, x"0035", "SPINUP_MAX_MS=53");
+    for i in 1 to 3 loop               -- the index edges of the following revolutions
+      clkw(25);
+      pulse1(diag_index_qual);
+    end loop;
+    clkw(40);
+    expect(16#A0#, x"0035", "SPINUP_LAST_MS: only the first index edge counts");
+    expect(16#A1#, x"0035", "SPINUP_MAX_MS: only the first index edge counts");
+    st_motor_on <= '0';
+    clkw(30);
+    expect(16#A0#, x"0035", "SPINUP_LAST_MS held with the motor off");
+    st_motor_on <= '1';
+    clkw(60);
+    expect(16#A0#, x"0035", "SPINUP_LAST_MS shows the previous value while a measurement runs");
+    clkw(65);
+    pulse1(diag_index_qual);            -- sampled 125 clocks after the motor edge: 124 full clocks
+    expect(16#A0#, x"000C", "SPINUP_LAST_MS=12");
+    expect(16#A1#, x"0035", "SPINUP_MAX_MS keeps the larger value");
+    -- the time counts from the LAST rising edge of the motor level
+    st_motor_on <= '0';
+    clkw(2);
+    st_motor_on <= '1';
+    clkw(300);
+    spin_up(51);
+    expect(16#A0#, x"0005", "SPINUP_LAST_MS=5 from the last motor edge, not 35");
+    spin_up(7005);
+    expect(16#A0#, x"02BC", "SPINUP_LAST_MS=700");
+    expect(16#A1#, x"02BC", "SPINUP_MAX_MS=700");
+    -- saturation: no index edge for more than 0xFFFE milliseconds
+    spin_up(655_500);
+    expect(16#A0#, x"FFFE", "SPINUP_LAST_MS saturates at FFFE");
+    expect(16#A1#, x"FFFE", "SPINUP_MAX_MS saturates with it");
+    -- an index edge in the clock of the motor edge itself: 0 ms
+    st_motor_on <= '0';
+    clkw(2);
+    st_motor_on <= '1';
+    pulse1(diag_index_qual);
+    expect(16#A0#, x"0000", "SPINUP_LAST_MS=0 for an index edge in the clock of the motor edge");
+    expect(16#A1#, x"FFFE", "SPINUP_MAX_MS unchanged by a shorter measurement");
+    -- the production scale (second instance, 50,000 clocks per millisecond):
+    -- 125,009 full clocks are 2 ms there and 12,500 ms in the scaled bank; the
+    -- 655,499 clocks of the saturation run were 13 ms
+    spin_up(125_010);
+    expect(16#A0#, x"30D4", "SPINUP_LAST_MS=12500 (scaled bank)");
+    expect2(16#A0#, x"0002", "SPINUP_LAST_MS=2 at 50,000 clocks per millisecond");
+    expect2(16#A1#, x"000D", "SPINUP_MAX_MS=13 at 50,000 clocks per millisecond");
+    expect2(16#01#, x"09FE", "VERSION of the second instance");
+    st_motor_on <= '0';
+    wait until rising_edge(clk);
+
+    expect(16#A2#, x"0000", "reserved word 0xA2 reads 0");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

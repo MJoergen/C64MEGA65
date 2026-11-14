@@ -16,6 +16,41 @@
 -- front end releases it at DRQ cadence only after this controller reports a
 -- clean field CRC, or drains it unseen when this controller reports an error.
 --
+-- Read-ahead (issue #257). The WD front end presents a clean sector at disk
+-- pace, so the DOS's request for the next sector of a track arrives one sector
+-- time late: the ID of that sector has passed and its data field is under the
+-- head. Waiting for the ID to come round again would cost a revolution per
+-- sector. After a clean Read Sector the read-ahead engine
+-- (physical_1581_rdahead) therefore keeps listening to the decoder and
+-- captures the sector that passes into a buffer of its own, with the checks of
+-- a live read: a CRC-valid ID with N = 2, the data mark in time, exactly 512
+-- bytes, a good data CRC. A Read Sector that asks for the sector the engine
+-- holds or is taking is served from that buffer:
+--   RD_ADOPT   wait for the capture to complete. A capture that fails or is
+--              abandoned, a 40 ms bound, and a step, a side change, a motor
+--              stop, the loss of the index pulses or a decoder reset during
+--              the wait hand the request to the live path (RD_WAIT) with its
+--              full budget. A Force Interrupt and a disk change end it like
+--              every read.
+--   RD_COPY    512 bytes from the buffer into the read FIFO, one per 16
+--              clocks, then the tagged done like RD_STREAM. Once it has
+--              begun, the copy is stopped only by a Force Interrupt and by a
+--              disk change, which end it like every read (and by reset and
+--              disable, which end everything): the sector was captured and
+--              checked before anything that happens during the 164 us of the
+--              copy.
+-- The engine lives only while the read FSM is idle or serves from the buffer,
+-- on a ready, settled, unchanged medium (ra_kill): every live read, Read
+-- Address, Verify and write operation, every step, side change, motor stop,
+-- loss of the index pulses, disk change, Force Interrupt and decoder reset
+-- switches it off and invalidates the buffer, and only the next clean Read
+-- Sector arms it again. The engine also releases a held sector 24 ms after
+-- its data mark (G_DATA_WD_CYC of physical_1581_rdahead). So the WD front
+-- end still never sees a byte of a sector whose CRC was not checked, and
+-- every sector served from the buffer left the disk after the last of these
+-- events that came before its copy began, and at most 24 ms before its
+-- request was accepted: about one sector time.
+--
 -- Write engine (issue #244, WRITE-SPEC 5.3/5.4/6/7). The op code decides which
 -- engine runs; both share RD_IDLE's acceptance (one pending latch, one done
 -- toggle with its sequence tag and C_DONE_GAP spacing) and RD_SEARCH's ID
@@ -205,6 +240,8 @@ entity physical_1581_controller is
     diag_dam_unarmed_o  : out std_logic := '0';   -- pulse: DAM ignored (no ID/data lock-up)
     diag_match_id_o     : out std_logic := '0';   -- 1-cycle pulse: requested sector ID matched
     diag_dam_miss_o     : out std_logic := '0';   -- 1-cycle pulse: matched ID had no DAM
+    diag_rd_ahead_o     : out std_logic := '0';   -- 1-cycle pulse: a Read Sector was served from the read-ahead buffer
+    diag_rd_ahead_drop_o: out std_logic := '0';   -- 1-cycle pulse: an adoption was given up, the live path took over
     -- adaptive quantiser half-cell estimate (Q8.4; issue #90 round 12)
     diag_est_o          : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12);
     -- FSM phases + head estimate
@@ -334,9 +371,11 @@ architecture rtl of physical_1581_controller is
   signal head_settled : std_logic := '1';   -- at rest = settled; cleared on step acceptance
 
   -- read engine
+  -- RD_ADOPT / RD_COPY: a Read Sector served from the read-ahead buffer.
   -- WR_* states: the write engine (issue #244). Write Sector searches in the
   -- shared RD_SEARCH state (op_r tells the engines apart).
   type rd_st_t is (RD_IDLE, RD_WAIT, RD_SEARCH, RD_DAM, RD_STREAM, RD_ADDR,
+                   RD_ADOPT, RD_COPY,
                    WR_WAIT, WR_GAP, WR_STREAM, WR_TAIL, WR_ABORT,
                    WR_TRK_ARM, WR_TRK_STREAM);
   signal rd_st      : rd_st_t := RD_IDLE;
@@ -387,11 +426,57 @@ architecture rtl of physical_1581_controller is
   signal saw_bad_crc: std_logic := '0';
   signal m_c, m_h, m_r, m_n : unsigned(7 downto 0) := (others => '0');
   signal addr_idx   : integer range 0 to 5 := 0;
-  signal deleted_l  : std_logic := '0';
+  signal deleted_l  : std_logic := '0';   -- deleted flag of the sector RD_COPY serves (from the read-ahead engine)
   signal ovf_l      : std_logic := '0';   -- a FIFO write was dropped during this op
   signal rd_req_evt : std_logic := '0';   -- 1-cycle diag strobe: read request accepted
   signal dec_a1_candidate, dec_a1_reject, dec_a1_train : std_logic;
   signal dec_mark_fe, dec_mark_dam, dec_dam_unarmed : std_logic;
+
+  ---------------------------------------------------------------------------
+  -- read-ahead (issue #257): the engine physical_1581_rdahead and the two
+  -- read states that serve a request from its buffer
+  ---------------------------------------------------------------------------
+  -- RD_ADOPT gives up after this many clocks (40 ms) whatever the engine
+  -- shows; the engine's own watchdogs end a capture within 24 ms
+  constant C_RA_ADOPT_WD_CYC : natural := 2_000_000;
+  -- RD_COPY pushes one byte per C_RA_COPY_DIV clocks (320 ns). The read
+  -- FIFO's Gray-coded write pointer crosses into the drive clock domain over
+  -- a false path, and its read side must never sample two pointer bits in
+  -- transition: with this spacing that holds whatever the routing is. The
+  -- spacing also serves the buffer's registered read port: the address is
+  -- stable for many clocks before its byte is taken (two clocks are the
+  -- least). The whole copy takes 164 us; the sector pitch leaves about 3 ms.
+  constant C_RA_COPY_DIV     : natural := 16;
+  -- clocks between the last push and the done toggle. The WD front end
+  -- finalizes a read on "done and FIFO empty", so the done must not overtake
+  -- the bytes on their way through the FIFO's pointer synchronizer. The 512
+  -- pushes before it already see to that; these clocks are margin.
+  constant C_RA_DONE_GAP     : natural := 64;
+
+  -- (v, c, r) of the engine's held sector or of its capture in flight
+  -- against a requested track and sector
+  function ra_hit(v : std_logic; c, r, trk, sec : unsigned(7 downto 0)) return boolean is
+  begin
+    return v = '1' and c = trk and r = sec;
+  end function;
+
+  signal ra_kill     : std_logic;          -- engine off, buffer invalid (level)
+  signal ra_arm      : std_logic := '0';   -- 1-cycle: a Read Sector completed with RES_OK
+  signal ra_busy     : std_logic;          -- the buffer is committed to a copy
+  signal ra_consume  : std_logic := '0';   -- 1-cycle: the held sector was delivered
+  signal ra_hold_v   : std_logic;
+  signal ra_hold_c, ra_hold_h, ra_hold_r, ra_hold_n : unsigned(7 downto 0);
+  signal ra_hold_del : std_logic;
+  signal ra_cap_v    : std_logic;
+  signal ra_cap_c, ra_cap_r : unsigned(7 downto 0);
+  signal ra_hold_hit : std_logic;          -- the held sector is the accepted request (trk_r, sec_r)
+  signal ra_cap_hit  : std_logic;          -- the capture in flight is the accepted request
+  signal ra_rd_addr  : unsigned(8 downto 0);
+  signal ra_rd_data  : unsigned(7 downto 0);
+  signal ra_wd_cnt   : natural range 0 to C_RA_ADOPT_WD_CYC := 0;
+  signal ra_idx      : natural range 0 to 512 := 0;                 -- bytes pushed by RD_COPY
+  signal ra_div      : natural range 0 to C_RA_COPY_DIV - 1 := 0;
+  signal ra_gap_cnt  : natural range 0 to C_RA_DONE_GAP := 0;
 
   ---------------------------------------------------------------------------
   -- write engine (issue #244)
@@ -525,6 +610,56 @@ begin
       last_gap_o => dec_last_gap,
       crc_value_o => dec_crc_value,
       est_o => dec_est
+    );
+
+  ---------------------------------------------------------------------------
+  -- read-ahead engine (issue #257), on the decoder's record stream
+  ---------------------------------------------------------------------------
+  -- The engine is off, and its buffer invalid, in every clock in which one of
+  -- these terms is true. They cover everything after which the flux under the
+  -- head may differ from the flux the buffer was filled from, and every
+  -- operation other than a Read Sector served from the buffer (each of them
+  -- leaves the three states of the last line; a live read passes RD_WAIT).
+  -- The cancel edge counts while idle as well.
+  ra_kill <= '1' when rst_i = '1' or en = '0'
+                   or motor_s = '0' or media_ready = '0'
+                   or change_c = '1'
+                   or head_settled = '0'
+                   or side_s /= side_prev or side_settle /= 0
+                   or dec_rst = '1'
+                   or cnq_s /= cnq_d
+                   or not (rd_st = RD_IDLE or rd_st = RD_ADOPT or rd_st = RD_COPY)
+             else '0';
+
+  ra_hold_hit <= '1' when ra_hit(ra_hold_v, ra_hold_c, ra_hold_r, trk_r, sec_r) else '0';
+  ra_cap_hit  <= '1' when ra_hit(ra_cap_v,  ra_cap_c,  ra_cap_r,  trk_r, sec_r) else '0';
+
+  -- The buffer belongs to the copy from the clock in which RD_ADOPT commits
+  -- (the same condition as in the FSM) to the end of RD_COPY: a data mark in
+  -- that very clock must not start a capture into the buffer either.
+  ra_busy <= '1' when rd_st = RD_COPY or
+                      (rd_st = RD_ADOPT and ra_kill = '0' and ra_hold_hit = '1')
+             else '0';
+
+  ra_rd_addr <= to_unsigned(ra_idx mod 512, 9);
+
+  i_rdahead : entity work.physical_1581_rdahead
+    generic map (
+      G_DAM_TIMEOUT_CYC => G_DAM_TIMEOUT_CYC
+    )
+    port map (
+      clk_i => clk_i, rst_i => rst_i,
+      arm_i => ra_arm, kill_i => ra_kill, busy_i => ra_busy, consume_i => ra_consume,
+      id_valid_i => id_valid, id_crc_ok_i => id_crc_ok,
+      id_c_i => id_c, id_h_i => id_h, id_r_i => id_r, id_n_i => id_n,
+      data_start_i => data_start, data_byte_i => data_byte,
+      data_byte_valid_i => data_byte_v, data_end_i => data_end,
+      data_crc_ok_i => data_crc_ok, data_deleted_i => data_deleted,
+      hold_v_o => ra_hold_v, hold_c_o => ra_hold_c, hold_h_o => ra_hold_h,
+      hold_r_o => ra_hold_r, hold_n_o => ra_hold_n, hold_deleted_o => ra_hold_del,
+      cap_v_o => ra_cap_v, cap_c_o => ra_cap_c, cap_r_o => ra_cap_r,
+      rd_addr_i => ra_rd_addr, rd_data_o => ra_rd_data,
+      active_o => open
     );
 
   ---------------------------------------------------------------------------
@@ -675,6 +810,8 @@ begin
     "0011" when RD_DAM,
     "0100" when RD_STREAM,
     "0101" when RD_ADDR,
+    "0110" when RD_ADOPT,
+    "0111" when RD_COPY,
     "1000" when WR_WAIT,
     "1001" when WR_GAP,
     "1010" when WR_STREAM,
@@ -730,6 +867,8 @@ begin
     variable v_wr_term       : boolean;
     variable v_wr_res        : std_logic_vector(4 downto 0);
     variable v_wr_rnf        : std_logic;
+    variable v_take_live     : boolean;   -- the request at the live edge can be served from the read-ahead buffer
+    variable v_take_pend     : boolean;   -- the same for the latched pending request
 
     -- completion of a write op: result + done toggle with the usual tag and
     -- spacing (the same handshake as every read completion)
@@ -754,6 +893,10 @@ begin
       rd_req_evt <= '0';
       diag_match_id_o <= '0';
       diag_dam_miss_o <= '0';
+      diag_rd_ahead_o <= '0';
+      diag_rd_ahead_drop_o <= '0';
+      ra_arm      <= '0';
+      ra_consume  <= '0';
       enc_valid   <= '0';
       enc_start   <= '0';
       enc_feed    <= '0';
@@ -819,6 +962,15 @@ begin
       side_changed  := (side_s /= side_prev);
       side_prev     <= side_s;
 
+      -- read-ahead acceptance: a Read Sector whose track and sector the
+      -- engine holds or is taking, on a living engine
+      v_take_live := rd_op_i = RDOP_READ_SECTOR and ra_kill = '0' and
+                     (ra_hit(ra_hold_v, ra_hold_c, ra_hold_r, rd_track_i, rd_sector_i) or
+                      ra_hit(ra_cap_v,  ra_cap_c,  ra_cap_r,  rd_track_i, rd_sector_i));
+      v_take_pend := pend_op = RDOP_READ_SECTOR and ra_kill = '0' and
+                     (ra_hit(ra_hold_v, ra_hold_c, ra_hold_r, pend_trk, pend_sec) or
+                      ra_hit(ra_cap_v,  ra_cap_c,  ra_cap_r,  pend_trk, pend_sec));
+
       -- a write strobe while the FIFO reports full means that byte was DROPPED:
       -- remember it so the operation cannot complete "successfully" with a
       -- silently truncated stream (real WD1772: LOST DATA -> the DOS re-reads)
@@ -863,6 +1015,13 @@ begin
           last_dir_vld   <= '0';
           head_cyl       <= 0;
         end if;
+        -- read-ahead: the engine is off through the enable term of ra_kill
+        -- (nothing armed, nothing held); the registers of RD_ADOPT and
+        -- RD_COPY are loaded again before every use
+        ra_wd_cnt  <= 0;
+        ra_idx     <= 0;
+        ra_div     <= 0;
+        ra_gap_cnt <= 0;
         -- write engine idle (WRITE-SPEC 7): the writer closes WGATE in this
         -- clock through its own en_i term; no done (the WD is gone). The write
         -- FIFO is drained here, so it is empty when the drive is re-enabled
@@ -1117,6 +1276,10 @@ begin
               -- an abortable state (the next done toggle could otherwise land
               -- too close to the previous one); a live edge arriving in that
               -- window is latched as pending below, so it cannot be lost.
+              -- Read-ahead: a Read Sector for the sector the engine holds or
+              -- is taking goes to RD_ADOPT (v_take_live / v_take_pend). Every
+              -- other request takes RD_WAIT or WR_WAIT as before, and leaving
+              -- RD_IDLE that way switches the engine off (ra_kill).
               if done_gap_cnt = 0 then
                 if rd_req_edge then
                   op_r   <= rd_op_i;
@@ -1137,6 +1300,9 @@ begin
                     wr_bound     <= '0';
                     wr_aborted_l <= '0';
                     rd_st  <= WR_WAIT;
+                  elsif v_take_live then
+                    ra_wd_cnt <= C_RA_ADOPT_WD_CYC;
+                    rd_st  <= RD_ADOPT;          -- served from the read-ahead buffer
                   else
                     rd_st  <= RD_WAIT;
                   end if;
@@ -1159,6 +1325,9 @@ begin
                     wr_bound     <= '0';
                     wr_aborted_l <= '0';
                     rd_st  <= WR_WAIT;
+                  elsif v_take_pend then
+                    ra_wd_cnt <= C_RA_ADOPT_WD_CYC;
+                    rd_st  <= RD_ADOPT;          -- served from the read-ahead buffer
                   else
                     rd_st  <= RD_WAIT;
                   end if;
@@ -1277,7 +1446,6 @@ begin
               if dam_cnt /= 0 then dam_cnt <= dam_cnt - 1; end if;
               if index_edge = '1' then edge_cnt <= edge_cnt + 1; end if;
               if data_start = '1' then
-                deleted_l <= data_deleted;
                 rd_st     <= RD_STREAM;
               elsif id_valid = '1' or dam_cnt = 0 then
                 -- another ID or local timeout: resume ID search within the budget
@@ -1314,7 +1482,7 @@ begin
               end if;
               if data_end = '1' then
                 rd_c_o <= m_c; rd_h_o <= m_h; rd_r_o <= m_r; rd_n_o <= m_n;
-                rd_deleted_o <= deleted_l;
+                rd_deleted_o <= data_deleted;      -- the decoder shows the mark of this field with data_end
                 if ovf_l = '1' or (byte_wr_o = '1' and byte_ovf_i = '1') then
                   -- one or more payload bytes never made it into the FIFO: the
                   -- stream is truncated, so fail the op. CRC-only, never with
@@ -1323,12 +1491,85 @@ begin
                   rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 elsif data_crc_ok = '1' then
                   rd_result_o <= RES_OK; rd_crc_err_o <= '0'; rd_rnf_o <= '0';
+                  -- a clean Read Sector: from the next clock on (rd_st is
+                  -- RD_IDLE then) the read-ahead engine listens for the
+                  -- sector that follows
+                  if op_r = RDOP_READ_SECTOR then
+                    ra_arm <= '1';
+                  end if;
                 else
                   rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
                 end if;
                 rd_done_tgl_o <= not rd_done_tgl_o;
                 rd_done_seq_o <= seq_r;
                 done_gap_cnt  <= C_DONE_GAP;
+                rd_st <= RD_IDLE;
+              end if;
+
+            when RD_ADOPT =>
+              -- The request is served from the read-ahead buffer. Commit as
+              -- soon as the engine holds the requested sector; wait while the
+              -- sector is still on its way into the buffer. Whatever else the
+              -- engine shows (the capture failed or was abandoned, the engine
+              -- was switched off) and the 40 ms bound hand the request to the
+              -- live path with its full budget. That path starts in RD_WAIT,
+              -- which also switches the engine off.
+              if ra_wd_cnt /= 0 then ra_wd_cnt <= ra_wd_cnt - 1; end if;
+              if ra_kill = '0' and ra_hold_hit = '1' then
+                -- the ID and the deleted flag of the held sector, kept here
+                -- because a kill term or the sector's age may clear the
+                -- engine's copy of them during the copy
+                diag_match_id_o <= '1';
+                m_c <= ra_hold_c; m_h <= ra_hold_h; m_r <= ra_hold_r; m_n <= ra_hold_n;
+                deleted_l  <= ra_hold_del;
+                ra_idx     <= 0;
+                ra_div     <= 0;
+                ra_gap_cnt <= C_RA_DONE_GAP;
+                rd_st      <= RD_COPY;
+              elsif ra_kill = '0' and ra_cap_hit = '1' and ra_wd_cnt /= 0 then
+                null;
+              else
+                diag_rd_ahead_drop_o <= '1';
+                rdy_wd_cnt <= to_unsigned(G_READY_WD_CYC, 32);
+                rd_st      <= RD_WAIT;
+              end if;
+
+            when RD_COPY =>
+              -- 512 bytes from the buffer into the read FIFO: the buffer's
+              -- read address is ra_idx, its registered output is stable long
+              -- before the push C_RA_COPY_DIV clocks later. Then
+              -- C_RA_DONE_GAP clocks, and the completion of RD_STREAM. A kill
+              -- term does not stop the copy (the engine keeps its buffer
+              -- contents, and ra_busy keeps a capture from starting); a
+              -- cancel edge and a disk change end it through the global rule
+              -- above like every read.
+              if ra_idx /= 512 then
+                if ra_div = C_RA_COPY_DIV - 1 then
+                  ra_div      <= 0;
+                  byte_data_o <= ra_rd_data;
+                  byte_wr_o   <= '1';
+                  ra_idx      <= ra_idx + 1;
+                else
+                  ra_div <= ra_div + 1;
+                end if;
+              elsif ra_gap_cnt /= 0 then
+                ra_gap_cnt <= ra_gap_cnt - 1;
+              else
+                rd_c_o <= m_c; rd_h_o <= m_h; rd_r_o <= m_r; rd_n_o <= m_n;
+                rd_deleted_o <= deleted_l;
+                if ovf_l = '1' or (byte_wr_o = '1' and byte_ovf_i = '1') then
+                  -- a push was dropped by a full FIFO: fail the op like
+                  -- RD_STREAM does. CRC-only, never with RNF (the $CD5A
+                  -- success hole -- see the search-exhaustion comment).
+                  rd_result_o <= RES_DATA_CRC_ERROR; rd_crc_err_o <= '1'; rd_rnf_o <= '0';
+                else
+                  rd_result_o <= RES_OK; rd_crc_err_o <= '0'; rd_rnf_o <= '0';
+                  diag_rd_ahead_o <= '1';
+                end if;
+                rd_done_tgl_o <= not rd_done_tgl_o;
+                rd_done_seq_o <= seq_r;
+                done_gap_cnt  <= C_DONE_GAP;
+                ra_consume    <= '1';        -- the engine forgets the delivered sector
                 rd_st <= RD_IDLE;
               end if;
 

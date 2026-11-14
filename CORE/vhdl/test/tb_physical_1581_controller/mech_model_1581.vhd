@@ -26,6 +26,11 @@
 --   false (default): the procedural read-only generator -- RDATA is
 --     regenerated every 193.28 ms from golden_1581_pkg, the index free-runs
 --     independently. Unchanged; f_wgate_i must stay '1' (fatal otherwise).
+--     Two test options, both off by default: cfg_badcrc_sec_i /= 0 writes the
+--     data field of that sector with a wrong CRC (sampled when the CRC bytes
+--     of the sector go out, so a testbench can spoil a single pass), and
+--     cfg_deleted_sec_i /= 0 gives that sector the deleted data mark F8
+--     (sampled at its data mark; the CRC covers the mark as written).
 --   true: a LIVE ROTATING FLUX STORE (the AExp tb_fdd_write p_disk model,
 --     ported). An internal 50 MHz timebase (20 ns, phase-aligned with a
 --     testbench clock started at '0' with a 10 ns half period) turns the
@@ -78,6 +83,8 @@ entity mech_model_1581 is
     cfg_wprot_i       : in  std_logic;    -- disk is write protected
     cfg_change_i      : in  std_logic;    -- disk-changed line asserted
     cfg_noindex_i     : in  std_logic := '0';  -- G_WRITABLE: suppress the index pulse (sensor fault)
+    cfg_badcrc_sec_i  : in  integer := 0;      -- read-only generator: sector with a wrong data CRC (0 = none)
+    cfg_deleted_sec_i : in  integer := 0;      -- read-only generator: sector with the deleted data mark (0 = none)
 
     -- driven TO the controller ----------------------------------------------
     f_index_o         : out std_logic := '1';   -- active-low index
@@ -211,6 +218,7 @@ begin
     variable s    : integer;              -- side    sampled for this revolution
     variable v    : unsigned(15 downto 0);
     variable pl   : unsigned(7 downto 0);
+    variable dam  : unsigned(7 downto 0);  -- data mark of this record
   begin
     if spinning(f_motora_i, f_selecta_i, cfg_present_i) then
       -- sample geometry once per revolution
@@ -252,17 +260,25 @@ begin
         mfm_a1(f_rdata_o, prev);                          -- 3 x A1 (sync)
         mfm_a1(f_rdata_o, prev);
         mfm_a1(f_rdata_o, prev);
-        mfm_byte(f_rdata_o, x"FB", prev);                 -- data address mark
+        if sec = cfg_deleted_sec_i then
+          dam := x"F8";                                   -- test option: deleted data mark
+        else
+          dam := x"FB";
+        end if;
+        mfm_byte(f_rdata_o, dam, prev);                   -- data address mark
         v := x"FFFF";
         v := crc16_update(v, x"A1");
         v := crc16_update(v, x"A1");
         v := crc16_update(v, x"A1");
-        v := crc16_update(v, x"FB");
+        v := crc16_update(v, dam);
         for off in 0 to 511 loop
           pl := golden_payload(c, s, sec, off);
           mfm_byte(f_rdata_o, pl, prev);
           v := crc16_update(v, pl);
         end loop;
+        if sec = cfg_badcrc_sec_i then
+          v := not v;                                     -- test option: wrong data CRC
+        end if;
         mfm_byte(f_rdata_o, v(15 downto 8), prev);        -- data CRC hi
         mfm_byte(f_rdata_o, v(7 downto 0),  prev);        -- data CRC lo
 

@@ -732,6 +732,8 @@ architecture synthesis of main is
   signal   p1581_diag_dam_unarmed  : std_logic;
   signal   p1581_diag_match_id     : std_logic;
   signal   p1581_diag_dam_miss     : std_logic;
+  signal   p1581_diag_rd_ahead      : std_logic;          -- a Read Sector was served from the read-ahead buffer (map v9)
+  signal   p1581_diag_rd_ahead_drop : std_logic;          -- an adoption was given up, the live path took over (map v9)
   signal   p1581_fifo_level      : unsigned(9 downto 0);  -- rdfifo wr_level_o      -> diag fifo_level_i (both 50 MHz)
 
   -- Turbo mode (issue #87): Smart disk-activity detector (turbo_smart_iec_detector_proc).
@@ -2691,6 +2693,8 @@ begin
       diag_dam_unarmed_o  => p1581_diag_dam_unarmed,
       diag_match_id_o     => p1581_diag_match_id,
       diag_dam_miss_o     => p1581_diag_dam_miss,
+      diag_rd_ahead_o     => p1581_diag_rd_ahead,
+      diag_rd_ahead_drop_o => p1581_diag_rd_ahead_drop,
       diag_est_o          => p1581_diag_est,
       diag_rd_phase_o     => p1581_diag_rd_phase,
       diag_step_phase_o   => p1581_diag_step_phase,
@@ -2880,6 +2884,10 @@ begin
       dam_unarmed_i       => p1581_diag_dam_unarmed,
       match_id_i          => p1581_diag_match_id,
       dam_miss_i          => p1581_diag_dam_miss,
+
+      -- map v9 read-ahead strobes (issue #257), native 50 MHz
+      diag_rd_ahead_i      => p1581_diag_rd_ahead,
+      diag_rd_ahead_drop_i => p1581_diag_rd_ahead_drop,
 
       -- map v8 write instruments (issue #244): controller taps (50 MHz), the pin
       -- levels, the wfifo pop + read-side level, and the three fdc1772 write

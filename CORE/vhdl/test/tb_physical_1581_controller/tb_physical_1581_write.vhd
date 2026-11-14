@@ -32,6 +32,20 @@
 --   3  W4 (write protect), W5 (disk change), W6 (Force Interrupt)
 --   4  W7 (drive reset), W8 (first byte late), W9 (one byte 40 us late)
 --   5  W3 (Write Track, stock DOS token stream), W12 (index loss)
+--   6  write, then read: the read-ahead buffer of issue #257 must never
+--      serve data that was captured before a write. R1 (control): the sector
+--      after a live read is served from the buffer. R2: Write Track while
+--      the buffer holds sector 10 of the old track (no data mark passes the
+--      head between that sector and the index); sector 10 then reads the new
+--      format, live. R3: a sector held in the buffer is written and read
+--      back: the new data, live. (Two rules of the design stand behind these
+--      results, and either one is enough here: every write operation
+--      switches the read-ahead engine off, and the engine releases a held
+--      sector 24 ms after its data mark. tb_physical_1581_rdahead_ctl has
+--      the scenarios in which only one of the two acts.)
+--   7  R4: ten Write Sectors, then Read Address and ten Read Sectors in the
+--      DOS's verify order and timing: all ten as written, nine of them
+--      served from the buffer
 -- Every writing scenario re-seeds the track with its own seed key (a payload
 -- that differs from the one written) and asserts positively that WGATE
 -- opened and that no seed edge survives inside the written span.
@@ -42,7 +56,7 @@
 --
 -- Run (B = absolute scratch workdir, from a scratch directory; analysis order
 -- as in tb_mech_model_1581 plus inputs, rdfifo, wfifo, encoder, writer,
--- controller):
+-- rdahead, controller):
 --   ghdl --elab-run --std=08 --workdir=B tb_physical_1581_write \
 --     -gG_GROUP=1 --assert-level=error
 --   python3 CORE/vhdl/test/tb_physical_1581_controller/wr_twin.py \
@@ -140,6 +154,8 @@ architecture sim of tb_physical_1581_write is
   signal d_wr_precnt, d_wr_pushfull : unsigned(15 downto 0);
   signal d_wr_reason, d_wr_reason_acc : std_logic_vector(7 downto 0);
   signal d_wr_wflags  : std_logic_vector(4 downto 0);
+  signal d_rd_ahead, d_rd_ahead_drop : std_logic;
+  signal n_ahead, n_drop : integer := 0;     -- read-ahead strobes since power-up
 
   -- mechanism model
   signal cfg_wprot   : std_logic := '0';
@@ -235,7 +251,8 @@ begin
       diag_wr_discard_o => d_wr_discard, diag_wr_gateopen_o => d_wr_gateopen,
       diag_wr_wabort_o => d_wr_wabort, diag_wr_precnt_o => d_wr_precnt,
       diag_wr_pushfull_o => d_wr_pushfull, diag_wr_reason_o => d_wr_reason,
-      diag_wr_reason_acc_o => d_wr_reason_acc, diag_wr_wflags_o => d_wr_wflags
+      diag_wr_reason_acc_o => d_wr_reason_acc, diag_wr_wflags_o => d_wr_wflags,
+      diag_rd_ahead_o => d_rd_ahead, diag_rd_ahead_drop_o => d_rd_ahead_drop
     );
 
   i_rfifo : entity work.physical_1581_rdfifo
@@ -310,6 +327,15 @@ begin
         report "FAIL: decoder activity while WGATE is open (decoder not held in reset)" severity error;
       if d_id_valid = '1' then idv_pos <= m_pos; end if;
       if d_match_id = '1' then match_pos <= m_pos; end if;
+    end if;
+  end process;
+
+  -- read-ahead strobes
+  ra_cnt : process (clk)
+  begin
+    if rising_edge(clk) then
+      if d_rd_ahead = '1' then n_ahead <= n_ahead + 1; end if;
+      if d_rd_ahead_drop = '1' then n_drop <= n_drop + 1; end if;
     end if;
   end process;
 
@@ -397,6 +423,7 @@ begin
     variable sl        : line;
     variable tk        : buf_t;              -- Write Track token stream
     variable ntk       : integer := 0;
+    variable a0        : integer;            -- n_ahead before a read
 
     procedure clkw(n : natural) is
     begin
@@ -632,9 +659,13 @@ begin
       phys_active <= '1'; cia_motor_on <= '1'; cia_side <= '1';
       wait for 50 us;
       do_step('1');                                -- Restore: head at track 0
-      wait until st_media_ready = '1' for 2 sec;
+      -- The store model starts its revolution with the index pulse, and the
+      -- drive is ready with that first index edge: long before the Restore
+      -- step has returned. A wait for a level that is already there would
+      -- sit out its whole timeout, so each one is skipped when it holds.
+      if st_media_ready /= '1' then wait until st_media_ready = '1' for 2 sec; end if;
       assert st_media_ready = '1' report "FAIL: media never ready" severity failure;
-      wait until st_head_settled = '1' for 100 ms;
+      if st_head_settled /= '1' then wait until st_head_settled = '1' for 100 ms; end if;
       if wr_ok /= '1' then wait until wr_ok = '1' for 100 ms; end if;
       assert wr_ok = '1' report "FAIL: tab never qualified" severity failure;
       report "startup: media ready, head settled, tab qualified at " & time'image(now);
@@ -1048,6 +1079,137 @@ begin
         report "FAIL: W12: WGATE window " & integer'image(m_wg_len) & " cycles" severity error;
       report "  W12: index lost mid-track: WGATE closed by the end watchdog after " & integer'image(m_wg_len)
            & " cycles (watchdog " & integer'image(C_WR_TRK_END_WD_CYC) & " from the start edge), RES_NO_INDEX + rnf";
+
+    -------------------------------------------------------------------------
+    elsif G_GROUP = 6 then
+    -------------------------------------------------------------------------
+      -- Write, then read. A Read Address before every part switches the
+      -- read-ahead engine off, so the Read Sector that follows it is live
+      -- and arms the engine at a known place: the sector after it ends
+      -- 19.3 ms later and stays held until the next data mark (2.9 ms). The
+      -- index gap lies between sector 10 and sector 1: sector 1 ends 26.0 ms
+      -- after sector 10, and sector 10 stays held for 7.5 ms, until its data
+      -- mark is 24 ms old (the data mark of sector 1 comes 9.6 ms after it).
+      m_seed(0, 0, 40);
+
+      -- R1 (control): the sector after a live read is held in the buffer
+      -- 20 ms later (27 ms across the index gap): a Read Sector is served
+      -- from it at once
+      read_addr(0, r0);
+      s := nxt(r0);
+      exp_seed(40, 0, 0, s);
+      a0 := n_ahead;
+      read_check(0, s, "R1 first sector");
+      assert n_ahead = a0 report "FAIL: R1: the read after a Read Address was not live" severity error;
+      if s = 10 then wait for 27 ms; else wait for 20 ms; end if;
+      s1 := nxt(s);
+      exp_seed(40, 0, 0, s1);
+      t0 := now;
+      read_check(0, s1, "R1 following sector");
+      assert n_ahead = a0 + 1
+        report "FAIL: R1: sector " & integer'image(s1) & " was not served from the read-ahead buffer" severity error;
+      assert now - t0 < 1 ms report "FAIL: R1: the held sector took " & time'image(now - t0) severity error;
+      report "  R1: sector " & integer'image(s1) & " served from the read-ahead buffer " & time'image(now - t0)
+           & " after the request";
+
+      -- R2: Write Track while the buffer holds sector 10 of the old track.
+      -- The write waits for the index, which comes before any other data
+      -- mark, and the decoder is held in reset while the head writes: no
+      -- capture replaces the held sector. The write operation switches the
+      -- engine off (and the sector would be released by its age, 24 ms after
+      -- its data mark, long before the read that follows the write).
+      read_addr(0, r0);
+      exp_seed(40, 0, 0, 9);
+      read_check(0, 9, "R2 sector 9");
+      wait for 20 ms;                              -- sector 10 is held
+      build_format(0, 0, 16#E5#);
+      g0 := gate_falls;
+      track_start(G_LAT_US);
+      wait_done(1 sec);
+      expect(RES_OK, "R2 Write Track");
+      assert wr_lost = '0' report "FAIL: R2: LOST flag" severity error;
+      assert gate_falls = g0 + 1 report "FAIL: R2: WGATE windows " & integer'image(gate_falls - g0) severity error;
+      stream_track(3, to_integer(d_wr_bytes));
+      for i in 0 to 511 loop exp(i) := x"E5"; end loop;
+      a0 := n_ahead;
+      t0 := now;
+      read_check(0, 10, "R2 sector 10 of the new track");
+      assert n_ahead = a0 report "FAIL: R2: the read after the Write Track was served from the read-ahead buffer" severity error;
+      assert now - t0 > 100 ms report "FAIL: R2: the read after the Write Track took only " & time'image(now - t0) severity error;
+      report "  R2: Write Track with sector 10 held in the buffer; sector 10 read back live in " & time'image(now - t0)
+           & " with the new format";
+      m_dump(0, 0, 3);
+
+      -- R3: a sector is written while the buffer holds its old contents; the
+      -- read that follows returns the new data, live
+      m_seed(0, 0, 40);
+      read_addr(0, r0);
+      s := nxt(r0);
+      exp_seed(40, 0, 0, s);
+      read_check(0, s, "R3 first sector");
+      if s = 10 then wait for 27 ms; else wait for 20 ms; end if;
+      s1 := nxt(s);
+      exp_wpay(61, s1);
+      g0 := gate_falls;
+      write_start(0, s1, '0', '0', G_LAT_US);
+      wait_done(1 sec);
+      expect(RES_OK, "R3 write");
+      check_window("R3", true);
+      stream_sector(1, '0', "FB");
+      a0 := n_ahead;
+      t0 := now;
+      read_check(0, s1, "R3 new data after the write");
+      assert n_ahead = a0 report "FAIL: R3: the read after the write was served from the read-ahead buffer" severity error;
+      assert now - t0 > 100 ms report "FAIL: R3: the read after the write took only " & time'image(now - t0) severity error;
+      report "  R3: sector " & integer'image(s1) & " written while held in the buffer, read back live in "
+           & time'image(now - t0) & " with the new data";
+      m_dump(0, 0, 1);
+
+    -------------------------------------------------------------------------
+    elsif G_GROUP = 7 then
+    -------------------------------------------------------------------------
+      -- R4: the DOS side flush (ten Write Sectors, as W2) and its verify:
+      -- Read Address, 2.26 ms, then Read Sector R+1 .. R. The WD presents a
+      -- sector for 513 byte-times after the done and the DOS issues the next
+      -- command 67 us after BUSY fell (read_check has used 200 us of that).
+      m_seed(0, 0, 41);
+      read_addr(0, r0);
+      s := r0;
+      for k in 1 to 10 loop
+        s := nxt(s);
+        exp_wpay(63, s);
+        g0 := gate_falls;
+        write_start(0, s, '0', '0', G_LAT_US);
+        wait_done(1 sec);
+        expect(RES_OK, "R4 write " & integer'image(k));
+        assert wr_lost = '0' report "FAIL: R4: LOST flag on sector " & integer'image(s) severity error;
+        check_window("R4." & integer'image(k) & " sector " & integer'image(s), true);
+        stream_sector(1, '0', "FB");
+        if s = 10 then wait for 95 us; else wait for 70 us; end if;
+      end loop;
+      wait for 1650 us;
+      read_addr(0, r0);
+      wait for 2260 us;
+      s := r0;
+      a0 := n_ahead;
+      t0 := now;
+      for k in 1 to 10 loop
+        s := nxt(s);
+        exp_wpay(63, s);
+        read_check(0, s, "R4 verify");
+        t1 := now - 200 us;                      -- the done of this read
+        if k < 10 then
+          wait for 513 * 31_972 ns - 200 us + 67 us;
+        end if;
+      end loop;
+      report "  R4: ten Read Sectors in the DOS's verify order took " & time'image(t1 - t0)
+           & " from the first request to the last done, " & integer'image(n_ahead - a0)
+           & " of them served from the read-ahead buffer, " & integer'image(n_drop) & " adoptions given up";
+      assert n_ahead - a0 = 9
+        report "FAIL: R4: " & integer'image(n_ahead - a0) & " sectors from the read-ahead buffer, expected 9" severity error;
+      assert t1 - t0 < 260 ms
+        report "FAIL: R4: the verify took more than 260 ms" severity error;
+      m_dump(0, 0, 1);
     end if;
 
     -------------------------------------------------------------------------
