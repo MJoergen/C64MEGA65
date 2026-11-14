@@ -51,6 +51,10 @@ port (
    -- Flip joystick ports
    qnice_flip_joyports_o   : out std_logic;
 
+   -- Paddle type per physical port of the MEGA65 (independent of "Flip joystick ports"), issue #193:
+   -- index 0 = port 1, index 1 = port 2; '1' = Atari CX30 paddles, '0' = C64 paddles
+   qnice_paddle_atari_o    : out std_logic_vector(1 downto 0);
+
    -- On-Screen-Menu selections
    qnice_osm_control_i     : in  std_logic_vector(511 downto 0);
 
@@ -163,6 +167,9 @@ port (
    main_pot1_y_i           : in  std_logic_vector(7 downto 0);
    main_pot2_x_i           : in  std_logic_vector(7 downto 0);
    main_pot2_y_i           : in  std_logic_vector(7 downto 0);
+   -- Mouse type per physical port of the MEGA65 (independent of "Flip joystick ports"), issue #190:
+   -- index 0 = port 1, index 1 = port 2; '1' = Amiga mouse, '0' = C64 mouse (1351)
+   main_mouse_amiga_o      : out std_logic_vector(1 downto 0);
    main_rtc_i              : in  std_logic_vector(64 downto 0);
 
    -- CBM-488/IEC serial port
@@ -525,15 +532,24 @@ subtype R_MENU_RRNET is natural range 192 downto 190;
 --    10 = Volume up
 -- Freeze is handled in VHDL (main_sc_freeze, keyboard.vhd and main.vhd), all other actions are
 -- handled by the Shell (m2m-rom.asm).
-constant C_MENU_SC_F9         : natural := 200;
-constant C_MENU_SC_F10        : natural := 216;
-constant C_MENU_SC_F11        : natural := 232;
-constant C_MENU_SC_F12        : natural := 248;
-constant C_MENU_SC_F13        : natural := 264;
-constant C_MENU_SC_F14        : natural := 280;
+constant C_MENU_SC_F9         : natural := 202;
+constant C_MENU_SC_F10        : natural := 218;
+constant C_MENU_SC_F11        : natural := 234;
+constant C_MENU_SC_F12        : natural := 250;
+constant C_MENU_SC_F13        : natural := 266;
+constant C_MENU_SC_F14        : natural := 282;
 -- Ordinal of the Freeze item within a key picker. Deliberately not named with the menu index prefix:
 -- make_rom.sh exports every menu index constant to the Shell, and this is an ordinal, not an index.
 constant C_SC_FREEZE          : natural := 1;
+-- Mouse and Paddles submenus (GitHub issues #190 and #193): each submenu has one radio group of two
+-- items per port, "C64" (default) and the other device. "Port 1" and "Port 2" are the physical
+-- sockets of the MEGA65, independent of "Flip joystick ports". The constants below are the flat
+-- indices of the non-default items; only these bits are decoded (see qnice_paddle_atari_o and
+-- main_mouse_amiga_o)
+constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;
+constant C_MENU_MOUSE_P2_AMIGA   : natural := 304;
+constant C_MENU_PADDLES_P1_ATARI : natural := 311;
+constant C_MENU_PADDLES_P2_ATARI : natural := 314;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -734,6 +750,12 @@ begin
    c64_turbo_speed   <= "10" when main_kb_capslock_n_i = '0' or main_osm_control_i(C_MENU_TURBO_4X) = '1' else
                         "01" when main_osm_control_i(C_MENU_TURBO_3X) = '1' else
                         "00";   -- C_MENU_TURBO_2X (group default)
+
+   -- Mouse type per physical port (issue #190): only the bit of the Amiga item is decoded, so the
+   -- moment in which the Shell has cleared one bit of the radio group and not yet set the other
+   -- one reads as a C64 mouse
+   main_mouse_amiga_o(0) <= main_osm_control_i(C_MENU_MOUSE_P1_AMIGA);
+   main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);
 
    -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
    c64_rom <= "00" when main_osm_control_i(C_MENU_KERNAL_JIFFY)   else
@@ -1209,6 +1231,12 @@ begin
 
    -- Flip joystick ports (i.e. the joystick in port 2 is used as joystick 1 and vice versa)
    qnice_flip_joyports_o      <= qnice_osm_control_i(C_MENU_FLIP_JOYS);
+
+   -- Paddle type per physical port (issue #193): only the bit of the Atari CX30 item is decoded, so
+   -- the moment in which the Shell has cleared one bit of the radio group and not yet set the
+   -- other one reads as C64 paddles
+   qnice_paddle_atari_o(0)    <= qnice_osm_control_i(C_MENU_PADDLES_P1_ATARI);
+   qnice_paddle_atari_o(1)    <= qnice_osm_control_i(C_MENU_PADDLES_P2_ATARI);
 
    ---------------------------------------------------------------------------------------------
    -- Core specific device handling (QNICE clock domain, device IDs in globals.vhd)

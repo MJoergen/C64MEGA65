@@ -1721,26 +1721,28 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; The On-Screen-Menu uses the heap for several data structures. This heap
 ; is located before the main system heap in memory.
 ; You need to deduct MENU_HEAP_SIZE from the actual heap size below.
-; Example: If your HEAP_SIZE would be 30208, then you write 30208-5248=24960
+; Example: If your HEAP_SIZE would be 30208, then you write 30208-5632=24576
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
-; 5248 words comfortably fit the current menu: 301 items, 18 submenus and a
-; 3192-character OPTM_ITEMS string give budget 1 = 22 + 3192 + 4*301 = 4418
+; 5632 words comfortably fit the current menu: 323 items, 20 submenus and a
+; 3402-character OPTM_ITEMS string give budget 1 = 22 + 3402 + 4*323 = 4716
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (2 * VDRIVES_NUM + submenus +
-; CRTROM_MAN_NUM) * OSM width = 24 x 27 = 648 words for the "%s" replacement
+; CRTROM_MAN_NUM) * OSM width = 26 x 27 = 702 words for the "%s" replacement
 ; strings and one parking slot per virtual drive (see HELP_MENU). It does
 ; NOT depend on the item count: it grows by one OSM width (27 words) per
 ; submenu and per manually loadable CRT/ROM and by two OSM widths per virtual
-; drive. Peak use is 4418 + 648 = 5066, leaving 182 words of
+; drive. Peak use is 4716 + 702 = 5418, leaving 214 words of
 ; headroom (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live
 ; numbers). The Keyboard Shortcuts submenu (#142) added 102 items and 7
-; submenus. Keep this as small as it safely can be: every word reserved here
-; is one word less for the (sorted) file browser heap.
+; submenus, the Input Devices section with the submenus Mouse and Paddles
+; (#190, #193) 22 items and 2 submenus. Keep this as small as it safely can
+; be: every word reserved here is one word less for the (sorted) file
+; browser heap.
 ;
 ; The OPTM_ITEMS string is read through a 4K window of config.vhd, so it must
-; stay below 4096 characters (3192 now).
-MENU_HEAP_SIZE  .EQU 5248
+; stay below 4096 characters (3402 now).
+MENU_HEAP_SIZE  .EQU 5632
 
 #ifndef RELEASE
 
@@ -1748,14 +1750,14 @@ MENU_HEAP_SIZE  .EQU 5248
 ; this needs to be the last variable before the monitor variables as it is
 ; only defined as "BLOCK 1" to avoid a large amount of null-values in
 ; the ROM file
-HEAP_SIZE       .EQU 1920                       ; 7168 - 5248 = 1920
+HEAP_SIZE       .EQU 1536                       ; 7168 - 5632 = 1536
 HEAP            .BLOCK 1
 
-; in RELEASE mode: 24.4k of heap which leads to a better user experience
+; in RELEASE mode: 24k of heap which leads to a better user experience
 ; when it comes to folders with a lot of files
 #else
 
-HEAP_SIZE       .EQU 24960                      ; 30208 - 5248 = 24960
+HEAP_SIZE       .EQU 24576                      ; 30208 - 5632 = 24576
 HEAP            .BLOCK 1
  
 ; The monitor variables use 22 words, round to 32 for being safe and subtract
@@ -1768,7 +1770,7 @@ HEAP            .BLOCK 1
 ; just before it) and subtract the result from 0xFEE0. This yields currently a
 ; stack size of 1599, which is more than 1.5k words and therefore sufficient.
 ; Mind the menu: OPTM_RUN and OPTM_SHOW each reserve one stack word per menu
-; line (301 lines today), so a much larger menu needs a larger stack.
+; line (323 lines today), so a much larger menu needs a larger stack.
 
                 .ORG    0xFEE0                  ; @TODO: automate calculation
 #endif

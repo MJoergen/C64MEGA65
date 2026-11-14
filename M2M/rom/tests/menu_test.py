@@ -18,7 +18,9 @@ Usage:
                                   cross-check them against the golden model
     python3 menu_test.py mutate   inject behavior-changing edits into the
                                   dependency assembly and confirm the suite
-                                  catches every one (coverage proof for #229)
+                                  catches every one (coverage proof for #229);
+                                  edits of config.vhd / mega65.vhd must be
+                                  caught by verify
     python3 menu_test.py ghdl     drive the real config.vhd SEL_OPTM_DEPS
                                   decoder through ghdl and check the raw word
                                   against the model (skips if ghdl is absent;
@@ -79,6 +81,7 @@ G = dict(
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
     SC_F9=37, SC_F10=38, SC_F11=39, SC_F12=40, SC_F13=41, SC_F14=42,
+    MOUSE_P1=43, MOUSE_P2=44, PADDLES_P1=45, PADDLES_P2=46,
 )
 
 OPEN = ("SUBMENU",)
@@ -281,6 +284,8 @@ V6_MENU = [
     (" On: MK3 & Std ROM",       "SIM_RRNET", []),
     (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
+    (" Input Devices",           None, ["HEADLINE"]),    # #142, #190, #193
+    ("",                         None, ["LINE"]),
     (" Keyboard Shortcuts",     None, OPEN),            # region 12 (in 10), #142
     (" Keyboard Shortcuts",     None, ["HEADLINE"]),
     ("",                        None, ["LINE"]),
@@ -382,6 +387,26 @@ V6_MENU = [
     (" Back",                   None, CLOSE),           # close region 18
     ("",                        None, ["LINE"]),
     (" Back",                   None, CLOSE),           # close region 12
+    (" Mouse",                   None, OPEN),            # region 19 (in 10), #190
+    (" Mouse",                   None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Port 1: C64",             "MOUSE_P1", ["STDSEL"]),
+    (" Port 1: Amiga",           "MOUSE_P1", []),
+    ("",                         None, ["LINE"]),
+    (" Port 2: C64",             "MOUSE_P2", ["STDSEL"]),
+    (" Port 2: Amiga",           "MOUSE_P2", []),
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 19
+    (" Paddles",                 None, OPEN),            # region 20 (in 10), #193
+    (" Paddles",                 None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Port 1: C64",             "PADDLES_P1", ["STDSEL"]),
+    (" Port 1: Atari CX30",      "PADDLES_P1", []),
+    ("",                         None, ["LINE"]),
+    (" Port 2: C64",             "PADDLES_P2", ["STDSEL"]),
+    (" Port 2: Atari CX30",      "PADDLES_P2", []),
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 20
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 10
     ("",                         None, ["LINE"]),
@@ -1870,8 +1895,70 @@ def nav_script():
     assert (s.level, s.cursor) == (12, f12)
     s.feed(KEY_MENUUP)              # pop to region 10
     assert (s.level, s.cursor) == (10, ks)
-    s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 167)
+    # Input Devices (#190, #193): the submenus Mouse and Paddles follow the
+    # Keyboard Shortcuts submenu in Advanced Settings. Each holds two radio
+    # groups of two items (port 1, port 2) that must not influence each
+    # other. Selecting an item that is already selected is silent (no S line
+    # in the trace), so a selection that wrongly cleared the other group would
+    # show up in the emulator trace as an extra S line.
+    mo = flat_index(" Mouse")                    # opener of region 19
+    pa = flat_index(" Paddles")                  # opener of region 20
+    adv_close = next(i for i in range(pa + 1, len(V6_MENU))
+                     if V6_MENU[i][0] == " Back"
+                     and submenu_path(V6_MENU, i) == [" Advanced Settings"])
+    m1c, m1a = group_members(V6_MENU, "MOUSE_P1")
+    m2c, m2a = group_members(V6_MENU, "MOUSE_P2")
+    p1c, p1a = group_members(V6_MENU, "PADDLES_P1")
+    p2c, p2a = group_members(V6_MENU, "PADDLES_P2")
+
+    def radio(on, off):
+        return s.sel[on] == 1 and s.sel[off] == 0
+
+    assert radio(m1c, m1a) and radio(m2c, m2a)   # factory defaults: C64
+    assert radio(p1c, p1a) and radio(p2c, p2a)
+    s.feed(KEY_DOWN)                # Keyboard Shortcuts -> Mouse
+    assert (s.level, s.cursor) == (10, mo)
+    s.feed(KEY_SELECT)              # enter region 19 (depth 2)
+    assert (s.level, s.cursor) == (19, m1c)      # " Port 1: C64"
+    s.feed(KEY_DOWN)                # " Port 1: Amiga"
+    s.feed(KEY_SELECT)              # radio-select it via Return
+    assert radio(m1a, m1c) and radio(m2c, m2a)   # port 2 stays C64
+    s.feed(KEY_DOWN)                # skips the separator: " Port 2: C64"
+    assert s.cursor == m2c
+    s.feed(KEY_DOWN)                # " Port 2: Amiga"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert radio(m2a, m2c) and radio(m1a, m1c)   # port 1 stays Amiga
+    s.until(KEY_UP, m1a)            # back to " Port 1: Amiga"
+    s.feed(KEY_SELECT)              # still selected: silent
+    s.until(KEY_DOWN, m2c)          # " Port 2: C64"
+    s.feed(KEY_SELECT)              # port 2 back to C64, port 1 unchanged
+    assert radio(m2c, m2a) and radio(m1a, m1c)
+    s.feed(KEY_LAST)                # last item of the view: " Back"
+    assert (s.level, s.cursor) == (19, m2a + 2)
+    s.feed(KEY_SELECT)              # leave via the closer: Advanced Settings,
+    assert (s.level, s.cursor) == (10, mo)       # cursor on the opener
+    s.feed(KEY_DOWN)                # " Paddles"
+    assert s.cursor == pa
+    s.feed(KEY_SELECT)              # enter region 20 (depth 2)
+    assert (s.level, s.cursor) == (20, p1c)      # " Port 1: C64"
+    s.feed(KEY_LAST)                # " Back"
+    assert (s.level, s.cursor) == (20, p2a + 2)
+    s.feed(KEY_UP)                  # " Port 2: Atari CX30"
+    assert s.cursor == p2a
+    s.feed(KEY_SELECT)              # radio-select it via Return
+    assert radio(p2a, p2c) and radio(p1c, p1a)   # port 1 stays C64
+    s.until(KEY_UP, p1a)            # " Port 1: Atari CX30"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert radio(p1a, p1c) and radio(p2a, p2c)   # port 2 stays Atari
+    assert radio(m1a, m1c) and radio(m2c, m2a)   # the mouse groups unchanged
+    s.until(KEY_DOWN, p2a)          # " Port 2: Atari CX30"
+    s.feed(KEY_SELALT)              # still selected: silent
+    s.feed(KEY_MENUUP)              # Run/Stop: back to Advanced Settings,
+    assert (s.level, s.cursor) == (10, pa)       # cursor on the opener
+    s.feed(KEY_DOWN)                # the closer of Advanced Settings
+    assert s.cursor == adv_close
+    s.feed(KEY_SELECT)              # leave via the closer: main menu,
+    assert (s.level, s.cursor) == (0, 167)       # cursor on the opener
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -2031,6 +2118,7 @@ def menu_layout_errors():
         nav_turbo_v6_model()
     except AssertionError as e:
         errors.append("turbo toggle walk on the V6 menu: %s" % e)
+    errors += input_devices_errors()
     return errors
 
 
@@ -2420,6 +2508,12 @@ C_MENU = [
     ("C_MENU_SC_F13",     "SC_F13", 0),   # first item ("Off") of the F13 picker (#142)
     ("C_MENU_SC_F14",     "SC_F14", 0),   # first item ("Off") of the F14 picker (#142)
     ("C_MENU_VOLUME_100",   "VOLUME", 0),   # 100%: first item of the volume radio group
+    # Input Devices (#190, #193): the non-default item of each radio group,
+    # pinned to its label and submenu by input_devices_errors() below
+    ("C_MENU_MOUSE_P1_AMIGA",   "MOUSE_P1", 1),     # Amiga mouse at port 1
+    ("C_MENU_MOUSE_P2_AMIGA",   "MOUSE_P2", 1),     # Amiga mouse at port 2
+    ("C_MENU_PADDLES_P1_ATARI", "PADDLES_P1", 1),   # Atari CX30 paddles at port 1
+    ("C_MENU_PADDLES_P2_ATARI", "PADDLES_P2", 1),   # Atari CX30 paddles at port 2
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
     # decodes its three "On" items as one slice, see rrnet_range() below
 ]
@@ -2468,6 +2562,82 @@ def rrnet_range():
         "the same modes, see mega65.vhd" % (labels,)
     assert "STDSEL" in V6_MENU[m[0]][2], "RR-Net default is no longer \" Off\""
     return (m[-1], m[1])
+
+
+# The Input Devices section of Advanced Settings (#190, #193): each constant is
+# the flat index of the non-default item of a radio group of two. mega65.vhd
+# decodes only that bit, so a constant that points to the C64 item or to the
+# other port silently inverts or swaps a device. Pin each constant to its
+# label, its group, its submenu and its default partner directly in front of it.
+INPUT_DEVICES = [
+    # (constant, submenu, item label, group, label of the default item)
+    ("C_MENU_MOUSE_P1_AMIGA",   " Mouse",   " Port 1: Amiga",      "MOUSE_P1",   " Port 1: C64"),
+    ("C_MENU_MOUSE_P2_AMIGA",   " Mouse",   " Port 2: Amiga",      "MOUSE_P2",   " Port 2: C64"),
+    ("C_MENU_PADDLES_P1_ATARI", " Paddles", " Port 1: Atari CX30", "PADDLES_P1", " Port 1: C64"),
+    ("C_MENU_PADDLES_P2_ATARI", " Paddles", " Port 2: Atari CX30", "PADDLES_P2", " Port 2: C64"),
+]
+
+# the lines of the Advanced Settings view from the Input Devices headline on
+INPUT_DEVICES_VIEW = [" Input Devices", "", " Keyboard Shortcuts", " Mouse",
+                      " Paddles", "", " Back"]
+
+
+def submenu_path(menu, idx):
+    """Labels of the submenu openers that enclose line idx, outermost first
+    (an opener is not part of its own path, a closer is)."""
+    stack = []
+    for i in range(idx):
+        f = tuple(menu[i][2])
+        if f == OPEN:
+            stack.append(menu[i][0])
+        elif f == CLOSE:
+            stack.pop()
+    return stack
+
+
+def input_devices_errors():
+    """Structural checks of the Input Devices section on the golden model.
+    Returns a list of error strings."""
+    errors = []
+    menu = V6_MENU
+    vals = c_menu_values()
+    adv = " Advanced Settings"
+    for name, sub, label, gname, dlabel in INPUT_DEVICES:
+        v = vals[name]
+        t, g, f = menu[v]
+        if (t, g) != (label, gname) or "STDSEL" in f:
+            errors.append("%s = %d points to %r (group %s, flags %r), expected "
+                          "the non-default %r of %s" % (name, v, t, g, f, label, gname))
+        if submenu_path(menu, v) != [adv, sub]:
+            errors.append("%s = %d is in the submenu path %r, expected %r"
+                          % (name, v, submenu_path(menu, v), [adv, sub]))
+        mem = group_members(menu, gname)
+        if mem != [v - 1, v]:
+            errors.append("group %s has the members %r, expected the default "
+                          "directly followed by %s = %d" % (gname, mem, name, v))
+        elif menu[v - 1][0] != dlabel or "STDSEL" not in menu[v - 1][2]:
+            errors.append("group %s: line %d is %r %r, expected the default %r"
+                          % (gname, v - 1, menu[v - 1][0], menu[v - 1][2], dlabel))
+    for sub in (" Mouse", " Paddles"):
+        op = [i for i, (t, _, f) in enumerate(menu) if t == sub and tuple(f) == OPEN]
+        if len(op) != 1:
+            errors.append("%d openers %r, expected one" % (len(op), sub))
+        elif submenu_path(menu, op[0]) != [adv]:
+            errors.append("opener %r is in %r, expected %r"
+                          % (sub, submenu_path(menu, op[0]), [adv]))
+    g = menu_masked(menu)
+    opener = flat_index(adv)
+    level = build_new(g, 0)["arr"][opener] & 0x7FFF
+    vis = visible_lines(g, level, None, menu_stdsel(menu))
+    labels = [menu[i][0] for i in vis]
+    if " Input Devices" not in labels:
+        errors.append("no Input Devices headline in the Advanced Settings view")
+    else:
+        tail = labels[labels.index(" Input Devices"):]
+        if tail != INPUT_DEVICES_VIEW:
+            errors.append("Advanced Settings view from Input Devices on: %r, "
+                          "expected %r" % (tail, INPUT_DEVICES_VIEW))
+    return errors
 
 
 def vhdl_tb_vectors():
@@ -2860,6 +3030,29 @@ def verify():
     if not m or (int(m.group(1)), int(m.group(2))) != (hi, lo):
         errors.append("R_MENU_RRNET range mismatch: model says "
                       "%d downto %d" % (hi, lo))
+    # --- mega65.vhd: the ports of the Input Devices section (#190, #193).
+    # Index 0 is the physical port 1, index 1 port 2; each bit is assigned
+    # exactly once, from the non-default item of its own port, out of the menu
+    # vector of the clock domain of the port
+    for port, vec, names in (
+            ("qnice_paddle_atari_o", "qnice_osm_control_i",
+             ("C_MENU_PADDLES_P1_ATARI", "C_MENU_PADDLES_P2_ATARI")),
+            ("main_mouse_amiga_o", "main_osm_control_i",
+             ("C_MENU_MOUSE_P1_AMIGA", "C_MENU_MOUSE_P2_AMIGA"))):
+        if not re.search(r"\b%s\s*:\s*out\s+std_logic_vector\s*\(\s*1\s+downto"
+                         r"\s+0\s*\)" % port, mega):
+            errors.append("mega65.vhd: no port %s : out std_logic_vector(1 "
+                          "downto 0)" % port)
+        for k, cname in enumerate(names):
+            rx = (r"^\s*%s\s*\(\s*%d\s*\)\s*<=\s*%s\s*\(\s*%s\s*\)\s*;"
+                  % (port, k, vec, cname))
+            if len(re.findall(rx, mega, re.M)) != 1:
+                errors.append("mega65.vhd: %s(%d) is not assigned exactly once "
+                              "from %s(%s)" % (port, k, vec, cname))
+        cnt = len(re.findall(r"^\s*%s\b[^;]*<=" % port, mega, re.M))
+        if cnt != 2:
+            errors.append("mega65.vhd: %d assignments to %s, expected 2"
+                          % (cnt, port))
 
     # --- the intended layout of the golden model itself (Model submenu line
     # counts, no double separators in any view and state, turbo toggle walk)
@@ -2985,7 +3178,9 @@ def run():
 # Each mutant is a behavior-changing single-token edit to the assembly; a
 # correct test suite must catch (kill) every one. A surviving mutant marks a
 # blind spot. The golden model (this file) is left untouched, so the mutated
-# assembly is checked against the correct expectation.
+# assembly is checked against the correct expectation. A mutant with "verify"
+# as its fifth element edits config.vhd or mega65.vhd instead and must be
+# caught by "verify" (run in a fresh process); all others by "run".
 # ---------------------------------------------------------------------------
 
 MUTANTS = [
@@ -3081,6 +3276,30 @@ MUTANTS = [
      "M2M/rom/optm_deps.asm",
      "MOVE    2, R7                   ; single-select: states 0 and 1",
      "MOVE    1, R7                   ; single-select: states 0 and 1"),
+    # Input Devices (#190, #193): edits of config.vhd and mega65.vhd, which
+    # only "verify" reads (fifth element: the gate that must catch them)
+    ("mega65.vhd  C_MENU_MOUSE_P1_AMIGA points to Port 1: C64",
+     "CORE/vhdl/mega65.vhd",
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;",
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 300;", "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to the item of port 1",
+     "CORE/vhdl/mega65.vhd",
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 314;",
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 311;", "verify"),
+    ("mega65.vhd  main_mouse_amiga_o(1) decodes the mouse of port 1",
+     "CORE/vhdl/mega65.vhd",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P1_AMIGA);", "verify"),
+    ("config.vhd  Port 1: Atari CX30 in the radio group of port 2",
+     "CORE/vhdl/config.vhd",
+     "OPTM_G_PADDLES_P1,                       -- Port 1: Atari CX30",
+     "OPTM_G_PADDLES_P2,                       -- Port 1: Atari CX30", "verify"),
+    ("config.vhd  Amiga instead of C64 is the default of the mouse at port 2",
+     "CORE/vhdl/config.vhd",
+     "OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: C64\n"
+     "                                             OPTM_G_MOUSE_P2,                         -- Port 2: Amiga",
+     "OPTM_G_MOUSE_P2,                         -- Port 2: C64\n"
+     "                                             OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: Amiga", "verify"),
 ]
 
 
@@ -3092,14 +3311,27 @@ def _quiet_run():
         return run()
 
 
+def _verify_gate():
+    """verify in a fresh process, so that it reads the mutated file"""
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), "verify"],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                       timeout=600)
+    return r.returncode
+
+
+GATES = {"run": _quiet_run, "verify": _verify_gate}
+
+
 def mutate():
     print("baseline (unmutated) suite must pass first:")
-    if _quiet_run() != 0:
+    if _quiet_run() != 0 or _verify_gate() != 0:
         print("  BASELINE FAILS - fix the suite before mutation testing")
         return 1
     print("  baseline OK\n")
     fails = 0
-    for desc, rel, old, new in MUTANTS:
+    for mutant in MUTANTS:
+        desc, rel, old, new = mutant[:4]
+        gate = mutant[4] if len(mutant) > 4 else "run"
         path = os.path.join(REPO, rel)
         src = open(path).read()
         if src.count(old) != 1:
@@ -3109,7 +3341,7 @@ def mutate():
         try:
             with open(path, "w") as f:
                 f.write(src.replace(old, new))
-            killed = _quiet_run() != 0
+            killed = GATES[gate]() != 0
         finally:
             with open(path, "w") as f:        # always restore the original
                 f.write(src)
