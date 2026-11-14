@@ -2525,12 +2525,26 @@ def group_members(menu, gname):
 
 def c_menu_values():
     """name -> flat index in the V6 menu, derived independently from labels
-    and group ordinals."""
+    and group ordinals. An entry whose group has no member with its ordinal
+    is left out; c_menu_errors() reports it."""
     out = {}
     for name, gname, ordinal in C_MENU:
         members = group_members(V6_MENU, gname)
-        out[name] = members[ordinal]
+        if 0 <= ordinal < len(members):
+            out[name] = members[ordinal]
     return out
+
+
+def c_menu_errors():
+    """The C_MENU entries that c_menu_values() cannot resolve."""
+    errors = []
+    for name, gname, ordinal in C_MENU:
+        members = group_members(V6_MENU, gname)
+        if not 0 <= ordinal < len(members):
+            errors.append("%s: group %s has %d member(s) in the golden model, "
+                          "there is no item with the ordinal %d"
+                          % (name, gname, len(members), ordinal))
+    return errors
 
 
 def volume_indices():
@@ -2603,6 +2617,10 @@ def input_devices_errors():
     vals = c_menu_values()
     adv = " Advanced Settings"
     for name, sub, label, gname, dlabel in INPUT_DEVICES:
+        if name not in vals:
+            errors.append("%s cannot be resolved in the golden model (see the "
+                          "C_MENU errors)" % name)
+            continue
         v = vals[name]
         t, g, f = menu[v]
         if (t, g) != (label, gname) or "STDSEL" in f:
@@ -2783,7 +2801,12 @@ def vhdl_blocks():
     out.append("constant %-33s: natural := %d;"
                % ("C_MENU_DRV9_1581_LN", flat_index(" 9:Internal 1581        ")))
     for name, gname, ordinal in C_MENU:
-        out.append("constant %-33s: natural := %d;" % (name, vals[name]))
+        if name in vals:
+            out.append("constant %-33s: natural := %d;" % (name, vals[name]))
+        else:
+            out.append("-- %s: no line in the golden model" % name)
+    for e in c_menu_errors():
+        out.append("-- ERROR: " + e)
     lo, hi = osm_scaling_range()[1], osm_scaling_range()[0]
     out.append("subtype C_MENU_OSM_SCALING is natural range %d downto %d;"
                % (hi, lo))
@@ -2861,6 +2884,223 @@ def config_deps_errors(entries, vals):
     return errors, found
 
 
+def config_groups(cfg):
+    """The OPTM_GROUPS array of config.vhd (cfg without comments): returns
+    (source expression per line, evaluated value per line, errors), or
+    (None, None, []) if the array is not found."""
+    m = re.search(r"constant\s+OPTM_GROUPS\s*:\s*OPTM_GTYPE\s*:=\s*\((.*?)\);",
+                  cfg, re.S)
+    if not m:
+        return None, None, []
+    errors = []
+    body = re.sub(r"--[^\n]*", "", m.group(1))
+    # split on top-level commas only: an entry may contain commas inside
+    # an OPTM_DEP(mother, item) / OPTM_DEP2(mother, a, b) call
+    entries, depth, cur = [], 0, ""
+    for ch in body:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            if cur.strip():
+                entries.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        entries.append(cur.strip())
+    env = dict(parse_vhdl_constants(cfg, "OPTM_G_"))
+    env.update(parse_vhdl_constants(cfg, "OPTM_G"))
+    # dependency format 2 helpers: a 4-bit item MASK in bits 28..25
+    env["OPTM_DEP"] = lambda m, i: dep_value(m, 2 ** i)
+    env["OPTM_DEP2"] = lambda m, a, b: dep_value(m, 2 ** a + 2 ** b)
+    vals = []
+    for e in entries:
+        try:
+            # parenthesize: an entry may span multiple source lines
+            vals.append(eval("(" + e.replace("16#", "0x").replace("#", "")
+                             + ")", {}, env))
+        except Exception:
+            errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
+            vals.append(-1)
+    return entries, vals, errors
+
+
+def config_items(cfg):
+    """The OPTM_ITEMS string of config.vhd (cfg without comments) as the
+    Shell reads it through the config window: VHDL has no escapes in string
+    literals, so every "\\n" is two characters. None if it is not found."""
+    m = re.search(r"constant\s+OPTM_ITEMS\s*:\s*string\s*:=(.*?);", cfg, re.S)
+    if not m:
+        return None
+    parts = re.findall(r'"((?:[^"]|"")*)"', m.group(1))
+    return "".join(p.replace('""', '"') for p in parts)
+
+
+# ---------------------------------------------------------------------------
+# The menu heap of the Shell (MENU_HEAP_SIZE and HEAP_SIZE in
+# CORE/m2m-rom/m2m-rom.asm), computed from the real menu of config.vhd and
+# globals.vhd exactly as HELP_MENU in M2M/rom/options.asm allocates it:
+#   structure: OPTM_STRUCTSIZE (record) + OPTM_ITEMS + 1 (zero terminator)
+#              + 4 x OPTM_SIZE (groups, stdsel, lines, dependencies) + 1
+#   slots:     (2 x C_VDNUM + submenu openers + C_CRTROMS_MAN_NUM) x
+#              (OPTM_DX + 2), for the "%s" texts and one parking slot per drive
+# A MENU_HEAP_SIZE that is too small ends in ERR_FATAL_HEAP1 or
+# ERR_FATAL_HEAP2 at the first press of Help; a HEAP_SIZE that is too large
+# lets the heap of the file browser run into the stack.
+# ---------------------------------------------------------------------------
+
+MENU_HEAP_HEADROOM = 180        # words that MENU_HEAP_SIZE keeps free at peak
+# MENU_HEAP_SIZE + HEAP_SIZE in each branch of m2m-rom.asm (see the comments
+# at HEAP_SIZE and at the stack there): firmware in ROM (RELEASE) or in RAM
+HEAP_TOTAL = {"RELEASE": 30208, "not RELEASE": 7168}
+
+
+def heap_branches(asm):
+    """The HEAP_SIZE definitions of m2m-rom.asm per preprocessor branch:
+    {"RELEASE": [(value, line)], "not RELEASE": [...], "unconditional": [...]}"""
+    out = {"RELEASE": [], "not RELEASE": [], "unconditional": []}
+    stack = []
+    for line in asm.split("\n"):
+        t = line.strip()
+        m = re.match(r"#(ifdef|ifndef)\s+(\w+)", t)
+        if m:
+            stack.append((m.group(2), m.group(1) == "ifdef"))
+            continue
+        if re.match(r"#if\b", t):
+            stack.append((None, True))
+            continue
+        if re.match(r"#else\b", t) and stack:
+            name, pos = stack.pop()
+            stack.append((name, not pos))
+            continue
+        if re.match(r"#endif\b", t) and stack:
+            stack.pop()
+            continue
+        m = re.match(r"HEAP_SIZE\s+\.EQU\s+(\d+)", line)
+        if m:
+            rel = [pos for name, pos in stack if name == "RELEASE"]
+            key = ("unconditional" if not rel else
+                   "RELEASE" if rel[-1] else "not RELEASE")
+            out[key].append((int(m.group(1)), line))
+    return out
+
+
+def heap_check():
+    """Returns (errors, numbers) of the menu heap check, see above."""
+    errors = []
+    cfg = re.sub(r"--[^\n]*", "", open(os.path.join(REPO, "CORE/vhdl/config.vhd")).read())
+    glb = re.sub(r"--[^\n]*", "", open(os.path.join(REPO, "CORE/vhdl/globals.vhd")).read())
+    asm = open(os.path.join(REPO, "CORE/m2m-rom/m2m-rom.asm")).read()
+    masm = open(os.path.join(REPO, "M2M/rom/menu.asm")).read()
+
+    def one(rx, text, what):
+        found = re.findall(rx, text, re.M)
+        if len(found) != 1:
+            errors.append("%s: found %d times, expected once" % (what, len(found)))
+            return None
+        return found[0]
+
+    oc = parse_vhdl_constants(cfg, "OPTM_")
+    gc = parse_vhdl_constants(glb, "C_")
+    n, dx = oc.get("OPTM_SIZE"), oc.get("OPTM_DX")
+    vd, crt = gc.get("C_VDNUM"), gc.get("C_CRTROMS_MAN_NUM")
+    rec = one(r"^OPTM_STRUCTSIZE\s+\.EQU\s+(\d+)", masm, "M2M/rom/menu.asm: OPTM_STRUCTSIZE")
+    items = config_items(cfg)
+    entries, vals, _ = config_groups(cfg)
+    mhs = one(r"^MENU_HEAP_SIZE\s+\.EQU\s+(\d+)", asm, "m2m-rom.asm: MENU_HEAP_SIZE")
+    if None in (n, dx, vd, crt, rec, items, entries, mhs):
+        errors.append("menu heap: cannot read OPTM_SIZE, OPTM_DX, OPTM_ITEMS, "
+                      "OPTM_GROUPS, C_VDNUM, C_CRTROMS_MAN_NUM, OPTM_STRUCTSIZE "
+                      "or MENU_HEAP_SIZE")
+        return errors, {}
+    rec, mhs = int(rec), int(mhs)
+    if len(vals) != n:
+        errors.append("menu heap: OPTM_GROUPS has %d entries, OPTM_SIZE is %d"
+                      % (len(vals), n))
+    strlen = len(items)
+    openers = sum(1 for v in vals if v >= 0 and (v & SUBMENU) and not (v & 0xFF))
+    structure = rec + strlen + 1 + 4 * n + 1
+    slots = 2 * vd + openers + crt
+    width = dx + 2
+    budget2 = slots * width
+    peak = structure + budget2
+    num = dict(items=n, submenus=openers, chars=strlen, record=rec + 2,
+               structure=structure, slots=slots, width=width, budget2=budget2,
+               peak=peak, menu_heap=mhs, headroom=mhs - peak, heap={})
+
+    # (a) the peak fits with the required headroom
+    if peak + MENU_HEAP_HEADROOM > mhs:
+        errors.append("menu heap: peak %d (structure %d + slots %d) leaves %d "
+                      "words of MENU_HEAP_SIZE %d, at least %d are required"
+                      % (peak, structure, budget2, mhs - peak, mhs,
+                         MENU_HEAP_HEADROOM))
+    # (b) MENU_HEAP_SIZE + HEAP_SIZE in each branch
+    br = heap_branches(asm)
+    if br["unconditional"]:
+        errors.append("m2m-rom.asm: HEAP_SIZE outside of the RELEASE branches")
+    for key, total in HEAP_TOTAL.items():
+        if len(br[key]) != 1:
+            errors.append("m2m-rom.asm: %d HEAP_SIZE definitions in the %s "
+                          "branch, expected one" % (len(br[key]), key))
+            continue
+        hs, line = br[key][0]
+        num["heap"][key] = hs
+        if mhs + hs != total:
+            errors.append("m2m-rom.asm (%s): MENU_HEAP_SIZE %d + HEAP_SIZE %d = "
+                          "%d, expected %d" % (key, mhs, hs, mhs + hs, total))
+        m = re.search(r";\s*(\d+)\s*-\s*(\d+)\s*=\s*(\d+)", line)
+        if not m or tuple(map(int, m.groups())) != (total, mhs, hs):
+            errors.append("m2m-rom.asm (%s): the comment of HEAP_SIZE is %r, "
+                          "expected \"%d - %d = %d\"" % (key, line.split(";", 1)[-1].strip(),
+                                                         total, mhs, hs))
+    # (c) the numbers in the comment above MENU_HEAP_SIZE and at the stack
+    lines = asm.split("\n")
+    at = [i for i, l in enumerate(lines) if re.match(r"MENU_HEAP_SIZE\s+\.EQU", l)][0]
+    k = at
+    while k > 0 and lines[k - 1].lstrip().startswith(";"):
+        k -= 1
+    text = " ".join(l.strip().lstrip(";").strip() for l in lines[k:at])
+    total = HEAP_TOTAL["RELEASE"]
+    sentences = [
+        ("the example", r"Example: If your HEAP_SIZE would be (\d+), then you "
+         r"write (\d+)-(\d+)=(\d+)", (total, total, mhs, total - mhs)),
+        ("the menu and budget 1", r"(\d+) words comfortably fit the current menu: "
+         r"(\d+) items, (\d+) submenus and a (\d+)-character OPTM_ITEMS string "
+         r"give budget 1 = (\d+) \+ (\d+) \+ 4\s*\*\s*(\d+) = (\d+)",
+         (mhs, n, openers, strlen, rec + 2, strlen, n, structure)),
+        ("budget 2", r"OSM width = (\d+) x (\d+) = (\d+) words", (slots, width, budget2)),
+        ("peak and headroom", r"Peak use is (\d+) \+ (\d+) = (\d+), leaving (\d+) "
+         r"words of headroom", (structure, budget2, peak, mhs - peak)),
+        ("the length of OPTM_ITEMS", r"below 4096 characters \((\d+) now\)", (strlen,)),
+    ]
+    for what, rx, exp in sentences:
+        found = re.findall(rx, text)
+        if len(found) != 1:
+            errors.append("comment above MENU_HEAP_SIZE: %s found %d times, "
+                          "expected once" % (what, len(found)))
+            continue
+        got = tuple(int(x) for x in (found[0] if isinstance(found[0], tuple)
+                                     else (found[0],)))
+        if got != exp:
+            errors.append("comment above MENU_HEAP_SIZE, %s: %r, the menu gives %r"
+                          % (what, got, exp))
+    today = one(r"\((\d+) lines today\)", asm, "m2m-rom.asm: \"(N lines today)\" at the stack")
+    if today is not None and int(today) != n:
+        errors.append("m2m-rom.asm, comment at the stack: %s lines today, the "
+                      "menu has %d" % (today, n))
+    return errors, num
+
+
+def heap_summary(num):
+    return ("menu heap: structure %d + slots %d x %d = %d words at peak of "
+            "MENU_HEAP_SIZE %d (headroom %d, at least %d), HEAP_SIZE %s"
+            % (num["structure"], num["slots"], num["width"], num["peak"],
+               num["menu_heap"], num["headroom"], MENU_HEAP_HEADROOM,
+               " / ".join("%d (%s)" % (v, k) for k, v in num["heap"].items())))
+
+
 def verify():
     errors = []
     cfg_deps = {}
@@ -2896,42 +3136,11 @@ def verify():
                           % (cn, gconsts.get(cn), gid))
 
     # --- config.vhd: OPTM_GROUPS array entries
-    m = re.search(r"constant\s+OPTM_GROUPS\s*:\s*OPTM_GTYPE\s*:=\s*\((.*?)\);",
-                  cfg, re.S)
-    if not m:
+    entries, vals, gerrors = config_groups(cfg)
+    if entries is None:
         errors.append("OPTM_GROUPS array not found")
     else:
-        body = re.sub(r"--[^\n]*", "", m.group(1))
-        # split on top-level commas only: an entry may contain commas inside
-        # an OPTM_DEP(mother, item) / OPTM_DEP2(mother, a, b) call
-        entries, depth, cur = [], 0, ""
-        for ch in body:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-            if ch == "," and depth == 0:
-                if cur.strip():
-                    entries.append(cur.strip())
-                cur = ""
-            else:
-                cur += ch
-        if cur.strip():
-            entries.append(cur.strip())
-        env = dict(gconsts)
-        env.update(parse_vhdl_constants(cfg, "OPTM_G"))
-        # dependency format 2 helpers: a 4-bit item MASK in bits 28..25
-        env["OPTM_DEP"] = lambda m, i: dep_value(m, 2 ** i)
-        env["OPTM_DEP2"] = lambda m, a, b: dep_value(m, 2 ** a + 2 ** b)
-        vals = []
-        for e in entries:
-            try:
-                # parenthesize: an entry may span multiple source lines
-                vals.append(eval("(" + e.replace("16#", "0x").replace("#", "")
-                                 + ")", {}, env))
-            except Exception:
-                errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
-                vals.append(-1)
+        errors += gerrors
         model_words = menu_words(V6_MENU, V6_DEPS)
         if len(vals) != len(model_words):
             errors.append("OPTM_GROUPS has %d entries, model says %d"
@@ -2968,6 +3177,7 @@ def verify():
 
     # --- mega65.vhd: C_MENU_* values
     mconsts = parse_vhdl_constants(mega, "C_MENU_")
+    errors += c_menu_errors()
     for name, val in c_menu_values().items():
         if mconsts.get(name) != val:
             errors.append("%s = %s, model says %d"
@@ -3031,9 +3241,13 @@ def verify():
         errors.append("R_MENU_RRNET range mismatch: model says "
                       "%d downto %d" % (hi, lo))
     # --- mega65.vhd: the ports of the Input Devices section (#190, #193).
-    # Index 0 is the physical port 1, index 1 port 2; each bit is assigned
-    # exactly once, from the non-default item of its own port, out of the menu
-    # vector of the clock domain of the port
+    # Index 0 is the physical port 1, index 1 port 2; each bit has exactly one
+    # driver, the assignment from the non-default item of its own port, out of
+    # the menu vector of the clock domain of the port. Drivers are counted per
+    # statement (comments are stripped above, statements end at ";"): every
+    # "<port>(k) <=", "<port> <=" or "<port>(a downto b) <=" anywhere in a
+    # statement, and every "=> <port>" (an actual in a port map)
+    stmts = [" ".join(s.split()) for s in mega.split(";")]
     for port, vec, names in (
             ("qnice_paddle_atari_o", "qnice_osm_control_i",
              ("C_MENU_PADDLES_P1_ATARI", "C_MENU_PADDLES_P2_ATARI")),
@@ -3043,20 +3257,36 @@ def verify():
                          r"\s+0\s*\)" % port, mega):
             errors.append("mega65.vhd: no port %s : out std_logic_vector(1 "
                           "downto 0)" % port)
+        rx_target = re.compile(r"\b%s\s*(\(\s*(\d+)\s*\)|\([^()]*\))?\s*<=" % port)
+        rx_actual = re.compile(r"=>\s*%s\b\s*(\(\s*(\d+)\s*\))?" % port)
+        drivers = {k: [] for k in range(len(names))}
+        for s in stmts:
+            for rx in (rx_target, rx_actual):
+                for m in rx.finditer(s):
+                    bits = ([int(m.group(2))] if m.group(2) is not None
+                            else list(drivers))
+                    for b in bits:
+                        drivers.setdefault(b, []).append(s)
         for k, cname in enumerate(names):
-            rx = (r"^\s*%s\s*\(\s*%d\s*\)\s*<=\s*%s\s*\(\s*%s\s*\)\s*;"
-                  % (port, k, vec, cname))
-            if len(re.findall(rx, mega, re.M)) != 1:
-                errors.append("mega65.vhd: %s(%d) is not assigned exactly once "
-                              "from %s(%s)" % (port, k, vec, cname))
-        cnt = len(re.findall(r"^\s*%s\b[^;]*<=" % port, mega, re.M))
-        if cnt != 2:
-            errors.append("mega65.vhd: %d assignments to %s, expected 2"
-                          % (cnt, port))
+            want = r"%s\s*\(\s*%d\s*\)\s*<=\s*%s\s*\(\s*%s\s*\)" % (port, k, vec, cname)
+            got = drivers[k]
+            if len(got) != 1 or not re.fullmatch(want, got[0]):
+                errors.append("mega65.vhd: %s(%d) must have exactly one driver, "
+                              "%s <= %s(%s); found %d: %r"
+                              % (port, k, port + "(%d)" % k, vec, cname,
+                                 len(got), [g[:80] for g in got]))
+        for b in sorted(set(drivers) - set(range(len(names)))):
+            errors.append("mega65.vhd: %s(%d) is driven, the port has 2 bits"
+                          % (port, b))
 
     # --- the intended layout of the golden model itself (Model submenu line
     # counts, no double separators in any view and state, turbo toggle walk)
     errors += menu_layout_errors()
+
+    # --- m2m-rom.asm: the menu heap fits the real menu, the heap sizes add
+    # up and the numbers in their comments are the real ones
+    herrors, hnum = heap_check()
+    errors += herrors
 
     if errors:
         print("VERIFY FAIL (%d errors):" % len(errors))
@@ -3070,6 +3300,7 @@ def verify():
           "tracked in V6_DEPS)" % len(cfg_deps))
     print("  layout: Model submenu %s visible lines, no double separators"
           % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
+    print("  " + heap_summary(hnum))
     # additionally drive the real SEL_OPTM_DEPS decoder through ghdl, if present
     return vhdl_check()
 
@@ -3115,6 +3346,14 @@ def run():
         print("PASS: menu layout (Model submenu %s visible lines, no double "
               "separators, turbo toggle walk)"
               % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
+    herrors, hnum = heap_check()        # real menu against m2m-rom.asm
+    if herrors:
+        print("FAIL: menu heap")
+        for e in herrors:
+            print("  -", e)
+        fails += 1
+    else:
+        print("PASS: " + heap_summary(hnum))
     wide = wide_menu_errors()           # golden model at 512 items
     if wide:
         print("FAIL: wide menu")
@@ -3178,10 +3417,19 @@ def run():
 # Each mutant is a behavior-changing single-token edit to the assembly; a
 # correct test suite must catch (kill) every one. A surviving mutant marks a
 # blind spot. The golden model (this file) is left untouched, so the mutated
-# assembly is checked against the correct expectation. A mutant with "verify"
-# as its fifth element edits config.vhd or mega65.vhd instead and must be
-# caught by "verify" (run in a fresh process); all others by "run".
+# assembly is checked against the correct expectation.
+# A mutant is (description, file, old, new[, gates]). old and new are one
+# string or tuples of strings (several replacements in the same file, each
+# old string must occur exactly once). gates names the gate or the tuple of
+# gates that must all catch it, "run" if it is missing: "run" runs the suite
+# in this process, "verify" runs verify in a fresh process (so it also sees a
+# mutant of this file) and counts only a reported VERIFY FAIL, not a crash.
 # ---------------------------------------------------------------------------
+
+# the lines of m2m-rom.asm that the heap mutants below edit
+_MHS = "MENU_HEAP_SIZE  .EQU 5632"
+_HS_DBG = "HEAP_SIZE       .EQU 1536                       ; 7168 - 5632 = 1536"
+_HS_REL = "HEAP_SIZE       .EQU 24576                      ; 30208 - 5632 = 24576"
 
 MUTANTS = [
     ("optm_deps.asm  OPTM_DEP_OK never hides a line",
@@ -3300,6 +3548,55 @@ MUTANTS = [
      "                                             OPTM_G_MOUSE_P2,                         -- Port 2: Amiga",
      "OPTM_G_MOUSE_P2,                         -- Port 2: C64\n"
      "                                             OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: Amiga", "verify"),
+    # second drivers of a port bit that a count of the assignments at the
+    # start of a line does not see
+    ("mega65.vhd  a second driver of main_mouse_amiga_o(0) behind another statement",
+     "CORE/vhdl/mega65.vhd",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA); "
+     "main_mouse_amiga_o(0) <= '0';", "verify"),
+    ("mega65.vhd  main_mouse_amiga_o(1) also driven as the actual of a port map",
+     "CORE/vhdl/mega65.vhd",
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),",
+     "         mouse_type_o           => main_mouse_amiga_o(1),\n"
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),", "verify"),
+    # an unresolvable C_MENU entry of the golden model itself must be a
+    # reported error of verify, not a crash (the strings are split so that
+    # they occur only once in this file: in V6_MENU)
+    ("menu_test.py  Port 1: Amiga in the radio group of port 2 (golden model)",
+     "M2M/rom/tests/menu_test.py",
+     '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P1", [])',
+     '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P2", [])', "verify"),
+] + [
+    # the menu heap of m2m-rom.asm, see heap_check(): every mutant must be
+    # caught by verify and by run
+    (desc, "CORE/m2m-rom/m2m-rom.asm", old, new, ("verify", "run"))
+    for desc, old, new in (
+        ("H1  the old sizes 5248 / 24960 / 1920 with the menu of 323 lines",
+         (_MHS, _HS_DBG, _HS_REL),
+         (_MHS.replace("5632", "5248"),
+          "HEAP_SIZE       .EQU 1920                       ; 7168 - 5248 = 1920",
+          "HEAP_SIZE       .EQU 24960                      ; 30208 - 5248 = 24960")),
+        ("H2  HEAP_SIZE 24960 with MENU_HEAP_SIZE 5632 (into the stack area)",
+         _HS_REL,
+         "HEAP_SIZE       .EQU 24960                      ; 30208 - 5632 = 24576"),
+        ("H3  MENU_HEAP_SIZE 5440, consistent everywhere (22 words headroom)",
+         (_MHS, _HS_DBG, _HS_REL,
+          "write 30208-5632=24576", "; 5632 words comfortably fit",
+          "leaving 214 words of"),
+         (_MHS.replace("5632", "5440"),
+          "HEAP_SIZE       .EQU 1728                       ; 7168 - 5440 = 1728",
+          "HEAP_SIZE       .EQU 24768                      ; 30208 - 5440 = 24768",
+          "write 30208-5440=24768", "; 5440 words comfortably fit",
+          "leaving 22 words of")),
+        ("H4  HEAP_SIZE of the branch without RELEASE left at 1920",
+         _HS_DBG,
+         "HEAP_SIZE       .EQU 1920                       ; 7168 - 5632 = 1536"),
+        ("H5  stale line count in the comment at the stack",
+         "; line (323 lines today),", "; line (301 lines today),"),
+        ("H6  stale submenu count in the comment above MENU_HEAP_SIZE",
+         "323 items, 20 submenus and a", "323 items, 18 submenus and a"),
+    )
 ]
 
 
@@ -3311,37 +3608,75 @@ def _quiet_run():
         return run()
 
 
+def _run_gate():
+    """run in this process; returns (caught, first failure line)"""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fails = run()
+    out = buf.getvalue().split("\n")
+    detail = [l for l in out if l.startswith("  - ")]
+    first = [l for l in out if l.startswith(("FAIL", "ASSEMBLE FAIL", "RUN TIMEOUT"))]
+    return fails != 0, (detail or first or [""])[0]
+
+
 def _verify_gate():
-    """verify in a fresh process, so that it reads the mutated file"""
+    """verify in a fresh process, so that it reads the mutated file (also a
+    mutated menu_test.py); only a reported VERIFY FAIL counts as caught, a
+    crash of the script does not. Returns (caught, first error line)"""
     r = subprocess.run([sys.executable, os.path.abspath(__file__), "verify"],
                        stdin=subprocess.DEVNULL, capture_output=True, text=True,
                        timeout=600)
-    return r.returncode
+    errs = [l for l in r.stdout.split("\n") if l.startswith("  - ")]
+    if r.returncode != 0 and "VERIFY FAIL" in r.stdout:
+        return True, errs[0] if errs else ""
+    if r.returncode != 0:
+        tail = (r.stdout + r.stderr).strip().split("\n")[-1]
+        return False, "verify did not report the error, it ended with: " + tail
+    return False, ""
 
 
-GATES = {"run": _quiet_run, "verify": _verify_gate}
+GATES = {"run": _run_gate, "verify": _verify_gate}
 
 
 def mutate():
     print("baseline (unmutated) suite must pass first:")
-    if _quiet_run() != 0 or _verify_gate() != 0:
+    if _quiet_run() != 0 or subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "verify"],
+            stdin=subprocess.DEVNULL, capture_output=True).returncode != 0:
         print("  BASELINE FAILS - fix the suite before mutation testing")
         return 1
     print("  baseline OK\n")
     fails = 0
     for mutant in MUTANTS:
         desc, rel, old, new = mutant[:4]
-        gate = mutant[4] if len(mutant) > 4 else "run"
+        # the gates that must catch the mutant: one name or a tuple of names
+        gates = mutant[4] if len(mutant) > 4 else "run"
+        gates = (gates,) if isinstance(gates, str) else gates
+        # a mutant is one replacement or a tuple of replacements in one file
+        pairs = list(zip(old, new)) if isinstance(old, tuple) else [(old, new)]
         path = os.path.join(REPO, rel)
         src = open(path).read()
-        if src.count(old) != 1:
-            print("SETUP ERROR (%d matches): %s" % (src.count(old), desc))
+        mutated, bad = src, []
+        for o, n in pairs:
+            if mutated.count(o) != 1:
+                bad.append(mutated.count(o))
+            mutated = mutated.replace(o, n)
+        if bad:
+            print("SETUP ERROR (%s matches): %s" % (bad, desc))
             fails += 1
             continue
+        notes = []
         try:
             with open(path, "w") as f:
-                f.write(src.replace(old, new))
-            killed = GATES[gate]() != 0
+                f.write(mutated)
+            killed = True
+            for g in gates:
+                caught, note = GATES[g]()
+                notes.append("%s: %s" % (g, note[:110] if caught else
+                                         "NOT CAUGHT " + note[:90]))
+                killed = killed and caught
         finally:
             with open(path, "w") as f:        # always restore the original
                 f.write(src)
@@ -3350,6 +3685,9 @@ def mutate():
         else:
             print("SURVIVED %s   <-- TEST GAP" % desc)
             fails += 1
+        if len(mutant) > 4:
+            for nt in notes:
+                print("           %s" % nt)
     # the suite regenerates its own fixtures on the next run, but restore a
     # clean, unmutated set right away
     gen()

@@ -7,6 +7,9 @@
 #      Left (Off), 4 x Down: Next disk drive 8; Space; Run/Stop 3 x; Help
 #   D  Help; Left (first item), 5 x Down: CRT line; Return: browser; Down, Return on
 #      GOOD.CRT: loads and parses; Space on the CRT line: unload; Help closes
+# The walk of B needs the menu of WIP-V6-A26 or later (Mouse and Paddles behind Keyboard
+# Shortcuts). For an older firmware use one Up instead of three after the Right in Advanced
+# Settings: there the three Ups end on an RR-Net item, and the next Return resets the core.
 set sd_int 1
 reset
 wait_uart 1500 MHz
