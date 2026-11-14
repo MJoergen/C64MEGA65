@@ -53,16 +53,13 @@ Version 6 - MONTH DAY, 2026
   and CRT (Composite).
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/223)
 
-* Keyboard shortcuts: `F9` to `F14` (`F10`, `F12` and `F14` are `Shift` plus
-  `F9`, `F11` and `F13`) trigger actions while the on-screen menu is closed.
-  Assign them in the new `Keyboard Shortcuts` submenu of
+* Keyboard shortcuts: `F9` to `F14` trigger actions while the on-screen menu
+  is closed. Assign them in the new `Keyboard Shortcuts` submenu of
   `Advanced Settings`: Freeze, mount a disk image on drive 8 or 9, mount the
   next disk image of the same folder on drive 8 or 9 (handy for multi-disk
   games), load a PRG, load a CRT, flip the joystick ports, volume down and
   volume up. The file browser opens right away and after you select a file
-  you are back in the running program. A short on-screen message confirms
-  actions such as the new volume. Defaults: `F9` Freeze, `F10` Load CRT,
-  `F11` Mount drive 8, `F12` Load PRG, `F13` Volume down, `F14` Volume up.
+  you are back in the running program.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/142)
 
 * For simulated freezer cartridges (`*.crt`), the freezer button is now a
@@ -104,9 +101,7 @@ Version 6 - MONTH DAY, 2026
 
 * Unload a simulated cartridge (`*.crt`): press `Space` on the `CRT:` line of
   the on-screen menu. This is like pulling the cartridge out of the C64: the
-  C64 restarts without it and the menu shows `CRT:<Load>` again. With "Use
-  hardware slot" the C64 does not use the `.crt`, so it is just unloaded and
-  the C64 keeps running. `Return` on `CRT:` still loads another `.crt`.
+  C64 restarts without it and the menu shows `CRT:<Load>` again.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/153)
 
 * The file browser loads large directories up to 15x faster.
@@ -234,11 +229,7 @@ Version 6 - MONTH DAY, 2026
 * Simulated cartridges (`*.crt`) that work with many banks at once showed
   flickering lines where the game splits the screen, for example the
   EasyFlash version of "Eye of the Beholder" below its 3D view while the
-  party moves. Each bank that had to be fetched from the HyperRAM stopped
-  the C64's CPU for more than a raster line, so that the game's raster
-  interrupts ran late. The core now keeps 32 instead of 8 banks ready, so
-  that a game that works with up to 32 banks only waits for the HyperRAM
-  when it uses a bank for the first time.
+  party moves.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/255)
 
 * After a Super Snapshot V5 simulated cartridge (`*.crt`), the next `.crt`
