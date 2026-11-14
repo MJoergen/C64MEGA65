@@ -1,13 +1,28 @@
 -------------------------------------------------------------------------------
--- Focused media-state/Read-Address compatibility regression for issue #90.
+-- Focused media-state/Read-Address compatibility regression (issues #90, #257).
 --
--- Proves the two hardware- and genuine-ROM-derived repairs together:
---   * cold/new media requires two index edges, but a previously confirmed and
---     unchanged medium becomes ready after the first edge on motor restart;
---   * disk change clears that history, restoring the two-edge requirement;
---   * disable/re-enable also clears history and restores cold qualification;
+-- Proves the media-state contract of the controller and one Read Address rule:
+--   * READY (media_ready) asserts with the first index edge of a motor-on
+--     interval, for every medium: cold, restarted, changed, re-enabled. The
+--     stock 1581 ROM examines READY 0.80 to 0.83 s after it switched the motor
+--     on, and the mechanism can take more than 0.6 s to its first index pulse
+--     (0.63 to 0.67 s on an R6, issue #257); a second edge 0.2 s later can
+--     come after the exam. An edge that arrives while the motor is off does
+--     not count;
+--   * READY does not depend on the disk-change latch: on the mechanism they
+--     are separate lines, and the ROM reads them separately;
+--   * READY stays up without a gap while index edges keep coming, and it
+--     falls with the motor request, when the edges stop for two maximum
+--     periods, and when the drive is disabled;
+--   * the disk-change latch is set by the raw line, by reset and by disable,
+--     and only a step with the line released clears it;
 --   * physical Read Address ignores the F011 formatter's CRC-valid sector-11
 --     ID and returns the following stock-compatible sector 1.
+--
+-- The first failed check ends the run with a failure, so the last line
+-- "ALL TESTS PASSED" is only reached when every check held.
+-- run_tb_media_contract.sh runs the bench and the mutants of the controller
+-- that it has to reject.
 --
 -- This test is intentionally small and drives INDEX/RDATA directly.  The long
 -- closed-loop controller/mechanism test remains the end-to-end data-path proof.
@@ -50,6 +65,10 @@ architecture sim of tb_physical_1581_media_contract is
   type byte_arr_t is array (0 to 5) of unsigned(7 downto 0);
   signal cap : byte_arr_t := (others => (others => '0'));
   signal cap_count : integer range 0 to 6 := 0;
+
+  -- per-clock monitors of READY, switched by the stimulus
+  signal expect_ready : std_logic := '0';   -- '1': media_ready has to be '1' on every clock
+  signal expect_idle  : std_logic := '0';   -- '1': media_ready has to be '0' on every clock
 begin
   clk <= not clk after 10 ns;
 
@@ -103,10 +122,26 @@ begin
     end if;
   end process;
 
+  monitor_p : process (clk)
+  begin
+    if rising_edge(clk) then
+      assert not (expect_ready = '1' and media_ready /= '1')
+        report "ready dropped where it has to stay up" severity failure;
+      assert not (expect_idle = '1' and media_ready /= '0')
+        report "ready asserted where it has to stay down" severity failure;
+    end if;
+  end process;
+
   stim : process
     variable prev_ack  : std_logic;
     variable prev_done : std_logic;
     variable prev_data : std_logic := '0';
+
+    -- a failed check ends the run
+    procedure check (cond : boolean; msg : string) is
+    begin
+      assert cond report msg severity failure;
+    end procedure;
 
     procedure pulse_index is
     begin
@@ -152,72 +187,101 @@ begin
     rst <= '0'; phys_active <= '1'; cia_motor_on <= '1';
     wait for 2 us;
 
-    -- A real step with no raw change assertion clears the conservative latch.
+    -- Power-up: the latch is armed, nothing is ready, and the motor request
+    -- alone does not make the drive ready.
+    check(change_latched = '1', "power-up change latch is not set");
+    expect_idle <= '1';
+    wait for 5 ms;
+    expect_idle <= '0';
+
+    -- Cold medium, latch still set: the first index edge asserts ready, and
+    -- an index edge does not touch the latch.
+    pulse_index;
+    check(media_ready = '1', "cold medium not ready after the first index");
+    check(change_latched = '1', "an index edge cleared the change latch");
+
+    -- A real step with no raw change assertion clears the conservative latch
+    -- and leaves ready alone.
+    expect_ready <= '1';
     do_step;
-    assert change_latched = '0' report "power-up change latch did not clear" severity error;
+    check(change_latched = '0', "power-up change latch did not clear");
 
-    -- Cold/new medium: first edge is insufficient, second edge asserts ready.
+    -- Ready stays up, without a gap, while index edges keep coming: every
+    -- edge restarts the staleness interval (2 x 20 ms in this bench).
+    wait for 37 ms;
     pulse_index;
-    assert media_ready = '0' report "cold medium became ready after only one index" severity error;
+    wait for 37600 us;
     pulse_index;
-    assert media_ready = '1' report "cold medium not ready after two indexes" severity error;
 
-    -- Same unchanged medium: motor restart needs only one fresh edge, even if
-    -- spindle acceleration delays that first edge beyond the running-media
-    -- staleness interval.  Before the first edge there is no new rotation to
-    -- declare stale; /DSKCHG remains the authoritative media-change signal.
+    -- If the motor remains commanded but index disappears, readiness drops
+    -- (disk removed or stalled) two maximum periods after the last edge, not
+    -- earlier and not later; the next edge brings it back.
+    wait for 39 ms;
+    expect_ready <= '0';
+    wait for 1200 us;
+    check(media_ready = '0', "index staleness did not clear ready");
+    pulse_index;
+    check(media_ready = '1', "medium not ready again after the pulses returned");
+
+    -- Motor restart: ready falls with the motor request. An index edge that
+    -- arrives while the motor is off does not count, the restart alone does
+    -- not make the drive ready, and the first fresh edge does, even if
+    -- spindle acceleration delays that edge beyond the staleness interval.
     cia_motor_on <= '0'; wait for 2 us;
-    assert media_ready = '0' report "ready remained set with motor off" severity error;
-    cia_motor_on <= '1'; wait for 41 ms;
-    assert media_ready = '0'
-      report "ready asserted before the delayed first index" severity error;
+    check(media_ready = '0', "ready remained set with motor off");
+    expect_idle <= '1';
     pulse_index;
-    assert media_ready = '1'
-      report "confirmed unchanged medium lost history before delayed first index" severity error;
-
-    -- If the motor remains commanded but index disappears, the controller
-    -- treats the old rotation proof as stale.  Readiness drops and the next
-    -- observed medium must qualify with two edges again.
+    cia_motor_on <= '1';
     wait for 41 ms;
-    assert media_ready = '0'
-      report "index staleness did not clear ready" severity error;
+    expect_idle <= '0';
     pulse_index;
-    assert media_ready = '0'
-      report "stale rotation history incorrectly allowed one-index resume" severity error;
-    pulse_index;
-    assert media_ready = '1'
-      report "stale medium did not requalify after two indexes" severity error;
+    check(media_ready = '1', "restarted medium not ready after its delayed first index");
 
-    -- A disk-change assertion destroys that history.  A step clears the latch,
-    -- but the replacement medium must still earn a fresh two-edge proof.
+    -- Disk change with the motor off (the case of issue #257: a disk is
+    -- inserted while the drive is idle). The raw line sets the latch and
+    -- holds it; the replacement medium is ready with its first index edge
+    -- while the latch is still set, and only the step with the line released
+    -- clears the latch.
     cia_motor_on <= '0';
     f_change <= '0'; wait for 2 us;
-    assert change_latched = '1' report "disk change did not latch" severity error;
+    check(change_latched = '1', "disk change did not latch");
+    check(media_ready = '0', "ready remained set with motor off (change)");
+    expect_idle <= '1';
+    cia_motor_on <= '1'; wait for 1 ms;
+    expect_idle <= '0';
+    pulse_index;
+    check(media_ready = '1', "changed medium not ready after its first index");
+    expect_ready <= '1';
+    do_step;
+    check(change_latched = '1', "a step cleared the latch although the raw line is still asserted");
+    f_change <= '1'; wait for 2 us;
+    check(change_latched = '1', "the latch fell without a step");
+    do_step;
+    check(change_latched = '0', "step did not clear disk-change latch");
+
+    -- A raw change while the motor runs does not touch ready by itself (the
+    -- loss of index does), but it sets the latch again.
+    f_change <= '0'; wait for 2 us;
+    check(change_latched = '1', "disk change with running motor did not latch");
     f_change <= '1'; wait for 2 us;
     do_step;
-    assert change_latched = '0' report "step did not clear disk-change latch" severity error;
-    cia_motor_on <= '1'; wait for 2 us;
-    pulse_index;
-    assert media_ready = '0'
-      report "changed medium incorrectly reused one-index history" severity error;
-    pulse_index;
-    assert media_ready = '1' report "changed medium not ready after two indexes" severity error;
+    check(change_latched = '0', "step did not clear the second latch");
+    wait for 2 us;
+    expect_ready <= '0';
 
-    -- Disabling the physical path must never carry rotation confidence through
-    -- an image/internal source switch.  Re-enable starts conservatively, with
-    -- the change latch armed and a fresh two-index qualification required.
+    -- Disabling the physical path re-arms the latch (an image/internal source
+    -- switch presents as a disk change) and drops ready; after the re-enable
+    -- the first index edge makes the drive ready again.
     phys_active <= '0'; wait for 2 us;
-    assert media_ready = '0' report "ready remained set while disabled" severity error;
-    assert change_latched = '1' report "disable did not re-arm disk change" severity error;
-    phys_active <= '1'; wait for 2 us;
+    check(media_ready = '0', "ready remained set while disabled");
+    check(change_latched = '1', "disable did not re-arm disk change");
+    expect_idle <= '1';
+    phys_active <= '1'; wait for 1 ms;
+    expect_idle <= '0';
+    pulse_index;
+    check(media_ready = '1', "re-enabled controller not ready after its first index");
     do_step;
-    assert change_latched = '0' report "step did not clear re-enable change latch" severity error;
-    pulse_index;
-    assert media_ready = '0'
-      report "re-enabled controller incorrectly reused rotation history" severity error;
-    pulse_index;
-    assert media_ready = '1'
-      report "re-enabled controller did not qualify after two indexes" severity error;
+    check(change_latched = '0', "step did not clear re-enable change latch");
 
     -- Issue Read Address, then put a valid F011 sector-11 ID followed by a
     -- normal sector-1 ID on the wire.  Production must ignore 11 and return 1.
@@ -233,13 +297,12 @@ begin
     assert rd_done /= prev_done report "Read Address completion timeout" severity failure;
     wait for 1 us;
 
-    assert rd_result = RES_OK and rd_rnf = '0' and rd_crc_err = '0'
-      report "Read Address did not complete cleanly" severity error;
-    assert rd_r = x"01"
-      report "Read Address exposed out-of-range sector " & integer'image(to_integer(rd_r))
-      severity error;
-    assert cap_count = 6 report "Read Address did not emit six bytes" severity error;
-    assert cap(2) = x"01" report "Read Address payload contains sector 11" severity error;
+    check(rd_result = RES_OK and rd_rnf = '0' and rd_crc_err = '0',
+          "Read Address did not complete cleanly");
+    check(rd_r = x"01",
+          "Read Address exposed out-of-range sector " & integer'image(to_integer(rd_r)));
+    check(cap_count = 6, "Read Address did not emit six bytes");
+    check(cap(2) = x"01", "Read Address payload contains sector 11");
 
     report "tb_physical_1581_media_contract: ALL TESTS PASSED";
     finish;
@@ -247,7 +310,7 @@ begin
 
   guard : process
   begin
-    wait for 100 ms;
+    wait for 600 ms;
     report "global timeout" severity failure;
   end process;
 end architecture;

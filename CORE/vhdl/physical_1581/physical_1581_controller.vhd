@@ -311,18 +311,9 @@ architecture rtl of physical_1581_controller is
   -- maintained state
   signal side_prev     : std_logic := '0';
   signal side_settle   : unsigned(31 downto 0) := (others => '0');
-  signal idx_motor_cnt : integer range 0 to 7 := 0;
+  signal idx_seen      : std_logic := '0';   -- an index edge arrived in this motor-on interval and the pulses have not stopped since
   signal idx_gap_cnt   : unsigned(31 downto 0) := (others => '0');  -- cycles since the last index edge (motor on)
   signal media_ready   : std_logic := '0';
-  -- Sticky proof that this same, unchanged medium previously completed a
-  -- two-index rotation qualification.  Preserve it across ordinary motor-off
-  -- intervals so a restart may assert RDY after the first fresh index; clear
-  -- it on reset/disable, raw disk change, or index staleness after a commanded
-  -- motor interval has begun producing index edges.  A delayed first edge must
-  -- not invalidate the previous proof before the spindle can accelerate.  This
-  -- closes the stock 1581 ROM's finite PA1 spin-up window without weakening
-  -- cold-start/eject qualification.
-  signal rotation_confirmed : std_logic := '0';
   signal change_latched: std_logic := '0';
   signal motor_on_act  : std_logic := '0';
 
@@ -647,7 +638,7 @@ begin
   diag_index_period_o <= index_period;
   diag_index_width_o  <= index_width;
   diag_index_edge_o   <= index_edge;
-  diag_index_qual_o   <= index_edge and motor_on_act;   -- edges counted while motor is on
+  diag_index_qual_o   <= index_edge and motor_on_act;   -- index edges while the motor is on
   diag_last_gap_o     <= dec_last_gap;
   diag_calc_crc_o     <= dec_crc_value;
   diag_stored_crc_o   <= id_crc_stored;
@@ -848,10 +839,9 @@ begin
         rd_st         <= RD_IDLE;
         pend_v        <= '0';
         done_gap_cnt  <= 0;
-        idx_motor_cnt <= 0;
+        idx_seen      <= '0';
         idx_gap_cnt   <= (others => '0');
         media_ready   <= '0';
-        rotation_confirmed <= '0';
         motor_on_act  <= '0';
         -- The head is at rest while we are inactive, so it IS settled: the settle
         -- timer only guards reads against a just-finished step. Starting at '0'
@@ -893,7 +883,6 @@ begin
         ------------------------------------------------------------------
         if change_c = '1' then
           change_latched <= '1';
-          rotation_confirmed <= '0';
         end if;
 
         ------------------------------------------------------------------
@@ -909,66 +898,59 @@ begin
         ------------------------------------------------------------------
         -- motor / readiness
         --
-        -- media_ready models the REAL Chinon FB-354 RDY line of an original
-        -- 1581: it asserts when the motor has been on long enough AND real
-        -- index pulses prove a disk is turning at a plausible speed. It is
-        -- deliberately INDEPENDENT of the disk-change latch: on the original
-        -- mechanism RDY and /DSKCHG are separate signals, and the stock 1581
-        -- ROM waits for RDY (CIA PA1) BEFORE it runs the disk job whose seek
-        -- steps would clear the change latch. Gating RDY on the change latch
-        -- therefore deadlocks the ROM (head already at track 0 -> Restore
-        -- steps zero times -> latch never clears -> RDY never -> the DOS
-        -- times out without ever touching the WD). The change latch guards
-        -- data validity through CIA PA7 and the read-engine abort instead;
-        -- disk removal is caught here by the loss of index pulses.
+        -- media_ready models the RDY line of the mechanism of an original
+        -- 1581 (Chinon FB-354): the motor is on and index pulses show that a
+        -- disk is turning. It does not depend on the disk-change latch. On
+        -- the original mechanism RDY and /DSKCHG are separate signals, and
+        -- the stock 1581 ROM reads them separately: its readiness stage
+        -- ($CD7B) looks at /DSKCHG first (CIA PA7, $CD83), answers a changed
+        -- disk with a step in and a step out ($CD8A), waits 18 ms, looks at
+        -- PA7 again ($CDA1) and only then examines RDY (CIA PA1, $CDAD); it
+        -- examines RDY once more, alone, before a Read Address ($CD08). The
+        -- change latch guards data validity through PA7 and through the abort
+        -- of the read engine; the removal of a disk shows up here as the loss
+        -- of the index pulses.
+        --
+        -- RDY asserts with the FIRST index edge of a motor-on interval, for
+        -- every medium. The stock ROM gives the mechanism a fixed time: it
+        -- switches the motor on ($CD63), lets 80 ticks of 10 ms pass ($CE53)
+        -- and then runs the readiness stage once. Its RDY exam is 30 reads of
+        -- PA1 within about 200 us ($CDBC), and a single "not ready" read ends
+        -- the job with error 3 = "74,DRIVE NOT READY", without a retry.
+        -- Measured on the genuine ROM, the exam falls 0.800 s after motor-on
+        -- for an unchanged disk and 0.826 s after a disk change. The
+        -- mechanism of the MEGA65 can take more than 0.6 s from motor-on to
+        -- its first index pulse (0.63 to 0.67 s on an R6, issue #257), so RDY
+        -- cannot wait for a second pulse 200 ms later: that one can come
+        -- after the exam. The speed of the disk is not judged here; that
+        -- remains a matter of the decoder and of the CRCs.
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
 
-        -- Cold/new media still requires two index edges.  Once two edges have
-        -- confirmed a medium and no /DSKCHG assertion has occurred since, a
-        -- later motor restart may reassert RDY after its first fresh edge.
-        -- Hardware A/B proved why: the stock ROM's finite PA1 window can expire
-        -- before a worst-phase second edge, while an immediate warm command
-        -- succeeds.  Saving one revolution only for unchanged media preserves
-        -- eject/reinsert safety; the raw change and staleness paths below clear
-        -- the history.  Speed correctness remains a decode/CRC concern.
-        if motor_s = '1' and
-           (idx_motor_cnt >= 2 or
-            (rotation_confirmed = '1' and change_latched = '0' and
-             idx_motor_cnt >= 1)) then
+        if motor_s = '1' and idx_seen = '1' then
           media_ready <= '1';
         end if;
 
-        -- qualification counters + index-staleness eject detection. These come
+        -- index bookkeeping + index-staleness eject detection. These come
         -- AFTER the assert above so their deasserts win within the same cycle.
         if motor_s = '0' then
-          idx_motor_cnt <= 0;
-          media_ready   <= '0';
-          idx_gap_cnt   <= (others => '0');
+          idx_seen    <= '0';
+          media_ready <= '0';
+          idx_gap_cnt <= (others => '0');
         else
           if index_edge = '1' then
             idx_gap_cnt <= (others => '0');
-            if idx_motor_cnt >= 1 and change_latched = '0' and change_c = '0' then
-              rotation_confirmed <= '1';
-            end if;
-            if idx_motor_cnt < 7 then
-              idx_motor_cnt <= idx_motor_cnt + 1;
-            end if;
+            idx_seen    <= '1';
           elsif idx_gap_cnt < to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then
             idx_gap_cnt <= idx_gap_cnt + 1;
           else
-            -- No index edge for two maximum periods while the motor is on.
-            -- Always drop readiness and restart the current edge count.  Only
-            -- invalidate the same-medium history once this motor-on interval
-            -- has produced an index: before its first edge, spindle acceleration
-            -- can legitimately exceed this running-media deadline.  Raw
-            -- /DSKCHG remains the authoritative pre-first-edge eject signal.
-            media_ready   <= '0';
-            idx_motor_cnt <= 0;
-            idx_gap_cnt   <= (others => '0');
-            if idx_motor_cnt > 0 then
-              rotation_confirmed <= '0';
-            end if;
+            -- No index edge for two maximum periods while the motor is on:
+            -- the disk was removed or has stopped (or the spindle has not
+            -- produced its first pulse yet). Drop readiness until the next
+            -- edge.
+            media_ready <= '0';
+            idx_seen    <= '0';
+            idx_gap_cnt <= (others => '0');
           end if;
         end if;
 
