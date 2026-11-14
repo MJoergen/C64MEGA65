@@ -21,14 +21,14 @@ The submenu "Advanced Settings" has a section "Input Devices" with three submenu
 * "Port 1" and "Port 2" are the two sockets of the MEGA65. The setting describes the device that is plugged into that socket and travels with it when "Flip joystick ports" swaps the ports for the C64.
 * "C64" is the default for all four settings and behaves exactly as every version before: joysticks, Commodore paddles, the 1351 and compatible mice and adapters.
 * "Amiga" (Mouse): the port has an Amiga mouse. The core turns it into a Commodore 1351 in proportional mode, so every program with a 1351 driver works with it (GEOS, for example). The left button is the fire line, as on a 1351. The four direction lines of that port are hidden from the C64 while the setting is active, so the mouse cannot disturb the keyboard.
-* "Atari CX30" (Paddles): the port has paddles with 1 MOhm potentiometers (Atari CX30 and CX30+) instead of the 470 kOhm of Commodore paddles. The core scales the measurement so that the full rotation is used, as with a Commodore paddle.
+* "Atari CX30" (Paddles): the port has paddles with 1 MOhm potentiometers (Atari CX30 and CX30+) instead of the 470 kOhm of Commodore paddles. A C64 reaches the highest value 255 at about 250 to 350 kOhm, so a Commodore paddle uses half to three quarters of its rotation and an Atari paddle only a quarter to a third. With this setting the core measures with half the sensitivity: a 1 MOhm paddle then behaves like a 500 kOhm paddle, and the usable part of its rotation doubles.
 * The two settings of a port are independent menu items but not independent devices: with "Amiga" selected, the paddle setting of that port has no effect on what the C64 reads.
 
 Limits that come from the hardware:
 
 * The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled up to +5 V from one that is not (section 2), so a plain Amiga mouse has only its left button. A mouse or an adapter with pull-up resistors on these two pins (22 kOhm to pin 7, a known modification for the MEGA65) gets both buttons: right is the up line as on a 1351, middle is the down line as in the Micromys protocol.
-* A 1351 needs the paddle setting "C64" for its port.
-* While at least one port is set to "Atari CX30", the measuring cycle of both ports is longer (section 6). Paddles on the other port are not affected. A 1351 on the other port at the same time is untested.
+* Everything that is not an Atari paddle needs the paddle setting "C64" for its port: a 1351 (its position is encoded in steps of 2 µs), a KoalaPad, Commodore paddles.
+* While at least one port is set to "Atari CX30", the measuring cycle of both ports is longer (section 6), because one signal discharges all four paddle pins. Devices on the other port measure the same values as before. A 1351 on the other port synchronizes itself to the discharge and should not mind the longer cycle; this combination is untested.
 
 ## 2. The hardware
 
@@ -171,10 +171,14 @@ The measurement runs in the QNICE clock domain with a tick of 1 µs. A cycle so 
 New ports: `atari_paddles_a` and `atari_paddles_b` ('1': the paddles of that socket have 1 MOhm potentiometers; a is port 1, b is port 2).
 
 * At the latch tick of a cycle, the two inputs are taken over as the modes of the next cycle. A cycle is long if at least one mode is Atari, otherwise it is short and exactly as described above.
-* A long cycle has the same first 513 ticks; its count window goes on to tick 801 and it latches at tick 802 (803 ticks).
+* A long cycle has the same first 513 ticks; its count window goes on to tick 767 and it latches at tick 768 (769 ticks). A 1351 that sees no new discharge may drive its lines again 832 µs after the last one (section 6 of `RESEARCH-paddles.md`); the long cycle stays below that.
 * A pin of a socket in C64 mode is counted in the ticks 258 to 512 in both kinds of cycle. Its result is the same in a long cycle as in a short one.
-* A pin of a socket in Atari mode is counted in the ticks 258 to 801 (544 ticks). Its result is `(count * 15) / 32` (integer division), 0 to 255: the factor 15/32 is 470/1000 within 0.3 %, so a 1 MOhm potentiometer gives the value that a 470 kOhm potentiometer gives at the same angle of rotation, and 544 ticks are what a result of 255 needs.
+* A pin of a socket in Atari mode is counted in the ticks 258 to 767 (510 ticks). Its result is half the count, rounded down: 0 to 255, with 2 µs per step instead of 1 µs.
 * Nothing else changes: the tick, the discharge time, the Amiga part of the file (it stays switched off by its inputs), and the inversion and port switching of the four results in `qnice_wrapper.vhd`.
+
+The factor 2 is a ratio, not a calibration: the threshold of the comparator, the tolerance of the capacitor and the voltage of the port cancel out, so it is right on every board. A nominal Atari paddle (1 MOhm) reads like a 500 kOhm paddle; the units that were measured (790 to 840 kOhm) read like 400 to 420 kOhm, a little below a Commodore paddle (470 kOhm nominal). The exact ratio 1000/470 would bring such a unit closer to the point where it no longer reaches 255 at the end of its rotation, which is worse for a game than a slightly shorter usable rotation.
+
+A pin that never charges inside its window reads 255 in both modes (nothing connected), and a pin that is connected to +5 V reads 0 (the second and third button of some joysticks).
 
 With both modes at C64 the outputs `pot_drain`, `pota_x`, `pota_y`, `potb_x` and `potb_y` are identical, clock cycle by clock cycle, to those of the file before the change.
 
