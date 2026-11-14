@@ -5,6 +5,38 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A25 - TBD
+------------------------
+
+@TODO: Test the three changes for the `Internal 1581` that came out of the hardware test of issue #257, on R3/R3A and R6: the first access after inserting a disk, the speed of reading (format, load, verify), and the error blink of the drive LED. Use DD disks that may be overwritten. Where a step asks for a dump, dump the diagnostic device in the same visit of the console (`MD 7000 703F` and `MD 7080 70A1`, map v9, see `doc/1581_dd_debug_device.md`; select the device again at every visit). Everything of WIP-V6-A22X3 below still applies, and so do the write tests of WIP-V6-A21. Background and numbers: `doc/dev-fdd/ISSUE257.md`.
+
+First access after inserting a disk (in WIP-V6-A21X1 to A22X3 it failed with `74, DRIVE NOT READY` whenever the drive delivered its first index pulse late; a `SAVE` was then lost without a message on the C64):
+
+* @TODO With the MEGA65 switched on and the drive idle (motor off, LED off), insert a formatted disk and make `SAVE"A",8` the very first access. Error channel: `0 OK 0 0`, and the file is in the directory. Repeat at least ten times: take the disk out, wait until the motor is off, put it (or another disk) in again, and alternate the first access between `SAVE`, `LOAD"$",8` and `OPEN 15,8,15,"I0":CLOSE 15`. Not a single `74`.
+* @TODO The same right after a power cycle without a disk in the drive: insert the disk, first access.
+* @TODO Dump the device after these runs. `SPINUP_LAST_MS` (`0xA0`) and `SPINUP_MAX_MS` (`0xA1`) show how long the drive took from motor-on to its first index pulse, in milliseconds. Report both numbers for every board: READY needs this pulse, and the 1581 DOS examines READY once, 800 to 830 ms after it switched the motor on, so `SPINUP_MAX_MS` needs to stay well below `0x0320` (800).
+* @TODO Regression: with the disk in the drive at power-on the first access works as before. Take the disk out while the motor runs and access the empty drive: `74, DRIVE NOT READY` (this one is correct); the next disk works.
+
+Speed of reading (every sector of a track cost a full revolution of the disk):
+
+* @TODO Format a disk with `OPEN 15,8,15,"N0:NAME,ID":CLOSE 15` and time it from `Return` to `READY.`: about 1 min 45 s (WIP-V6-A21X1: 6 min 43 s; a real 1581: 75 to 105 s). Error channel `0 OK 0 0`, 3160 blocks free, `CNT_WR_TRACK` (`0x88`) reads `00A0`.
+* @TODO `LOAD` a long program (for example the 36-block `BIG`) from the internal drive, with the stock KERNAL and with JiffyDOS, time it and compare with WIP-V6-A22X3 if you can; `VERIFY` it against the source.
+* @TODO `SAVE` the same program with the DOS's verify on (a disk formatted by this core, or `OPEN 15,8,15,"U0>V1":CLOSE 15` first): `0 OK 0 0`, and it no longer takes noticeably longer than without verify.
+* @TODO Dump the device after these runs: `CNT_RD_AHEAD` (`0x9E`) is about nine tenths of the Read Sector operations (the trace ring shows the pattern: one Read Address, then ten Read Sectors per track side), `CNT_RD_AHEAD_DROP` (`0x9F`) is 0 or very small, `CNT_CRCERR` (`0x1E`), `CNT_RNF` (`0x1C`) and `CNT_LOST` (`0x2C`) are 0 on a healthy disk, `LAST_PRESENT` (`0x2B`) reads `0200` after a sector.
+* @TODO Data integrity: `SAV-WRITE` and `SAV-CHECK` as for WIP-V6-A21 (internal drive on 9 and a D81 on 8, then the other way round) pass. A disk written with this version is read completely by the MEGA65 core and by a Greaseweazle (1600 of 1600 sectors), and a disk written with WIP-V6-A21X1 loads and verifies here.
+* @TODO Disks formatted by the MEGA65 core (`HEADER`: eleven sector IDs per track), by this core and, if available, by a real 1581: directory, load, save and verify work on all of them.
+
+Error blink of the drive LED (a 1581 reports an error by blinking its power LED; the MEGA65's drive LED now shows that):
+
+* @TODO Internal 1581: `LOAD"NOSUCHFILE",8` ends with `?FILE NOT FOUND ERROR`, and the drive LED blinks green about five times per second until the next command to the drive (reading the error channel, for example); then it is off. The same with a write-protected disk and `SAVE` (`26, WRITE PROTECT ON`) and with the empty drive (`74, DRIVE NOT READY`).
+* @TODO The same with a D81 image, on drive 8 and on drive 9.
+* @TODO Regression: a D64 image blinks on an error as before. No blinking after a successful command, after a reset of the C64, after mounting or unmounting an image, or after switching a drive between "Disk Image" and "Internal 1581". While a drive reads or writes, the LED is steadily lit as before.
+* @TODO While the LED blinks because of an error, the mode of that drive can be changed in `Drive Settings` at the first attempt: the blink does not count as activity.
+
+Vivado build:
+
+* @TODO Timing is met on R3 and R6 in every clock domain. Compare the utilization with the WIP-V6-A22X3 build: the read-ahead buffer is a 512-byte RAM (one block RAM or about a hundred LUTs of distributed RAM), the rest of the changes a few hundred LUTs and flip-flops in the 50 MHz domain.
+
 Version WIP-V6-A22X3 - TBD
 --------------------------
 
