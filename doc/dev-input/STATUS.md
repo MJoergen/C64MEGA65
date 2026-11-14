@@ -27,7 +27,7 @@ Amiga mouse and Atari CX30 paddles, selectable per port in the on-screen menu. `
 | D3 | A new decoder (`amiga_mouse.vhd`) on the raw pins in the core clock domain; the Amiga part of the MEGA65 module `mouse_input.vhdl` stays switched off. | The debouncer swallows the quadrature (the experiment of 2022 on branch `dev-amigamouse` ran through a 5 ms filter, which explains its result); decoding in the core clock domain needs no crossing of a multi-bit position. |
 | D4 | The mouse is presented as a 1351: POT value = 64 + position with bit 0 clear; two counts of the mouse are one position unit of a 1351 driver. | Format of a real 1351; scale of the MEGA65 core and of VICE, so the same mouse feels the same in both cores. An exported bit 0 would make the drivers lose half a unit at every call with an odd difference. |
 | D5 | Rate limiter: one step per 400 µs, backlog of 127 counts. | A 1351 driver takes more than 63 steps between two calls as a movement in the other direction; fast optical mice would reach that at 8 cm/s. |
-| D6 | Right and middle button only for a mouse or adapter with pull-ups on pins 9 and 5, found out by observation (a value below 128 has been seen); a button that is pressed for 30 s is released. | The board cannot tell an open pin from a grounded one. The release covers the exchange of a mouse with pull-ups for one without. |
+| D6 | Right and middle button only for a mouse or adapter that holds pins 9 and 5 high while the buttons are released, found out by observation (a value below 128 has been seen); a button that is pressed for 30 s is released. No key of the keyboard as a substitute. | The board cannot tell an open pin from a grounded one. The release covers the exchange of such a device for one that only grounds the lines. The Amiga core for the MEGA65 (AExp) uses the same mechanism in the field. A substitute key is essential on an Amiga; C64 programs rarely use the right button. |
 | D7 | The direction lines of a port in Amiga mode are hidden from the C64. | On port 1 they are in parallel with the keyboard matrix. |
 | D8 | Atari paddles: the count of a longer window, halved (factor 2, window of 510 ticks, cycle of 769 ticks). The cycle is only long while a port is set to Atari, and a port in C64 mode is always counted in the same 255 ticks. | A ratio is independent of the board. A 1 MOhm paddle then reads like a 500 kOhm one. With all settings at "C64" the measurement is bit-identical to before, and a 1351 on a port in C64 mode always sees its window. |
 | D9 | The four paddle values cross into the core clock domain through `cdc_stable` instead of per-bit synchronizers. | Found during the analysis: a read of the SID register in the clock cycle of a change could return a value that was never measured (a 1351 jumps by up to 32 units). |
@@ -36,12 +36,12 @@ Amiga mouse and Atari CX30 paddles, selectable per port in the on-screen menu. `
 
 ## 2. Questions to the owner
 
-Asked on 2026-11-14, no answer yet; the work continues with the default.
+Asked on 2026-11-14, answered on 2026-11-15.
 
-1. Are the ports of the submenus the sockets of the MEGA65 (D1)? Default: yes.
-2. Does the right button of an Amiga mouse work with the MEGA65 core? Research answered it: not without a pull-up (mega65-core issue #751).
-3. Menu details (D10). Default: as described.
-4. End state: the branch is pushed, not merged. Default: yes.
+1. Are the ports of the submenus the sockets of the MEGA65 (D1)? Yes.
+2. Does the right button of an Amiga mouse work with the MEGA65 core? No; the documentation of the Amiga core (AExp) has the workarounds (section 7 of `RESEARCH-amiga-mouse.md`).
+3. Menu details (D10)? Yes, as described.
+4. End state: the branch is pushed, not merged? Yes.
 
 ## 3. Numbers
 
@@ -73,4 +73,4 @@ Stack, computed from the code (the measurement in the full-system simulation is 
 
 ## 6. What only the hardware can show
 
-The list is in section 7 of `RESEARCH-amiga-mouse.md` and section 8 of `RESEARCH-paddles.md`; the test steps will be in `tests/README.md`.
+The list is in section 8 of `RESEARCH-amiga-mouse.md` and section 8 of `RESEARCH-paddles.md`; the test steps will be in `tests/README.md`.

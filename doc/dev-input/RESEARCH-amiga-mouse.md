@@ -119,7 +119,18 @@ All ten joystick lines pass `debounce.vhd` (two flip-flops and "stable for 1 ms"
 | Light pen, light gun on port 1 | pulses of microseconds on the fire line (the LP input of the VIC-II is the debounced fire line of port 1 in this core) | broken; the latency of a scaler breaks pens anyway |
 | Protocols in which the C64 drives a line and reads the answer within microseconds (Inception, SNES pad adapters, Protopad, real-time clocks on the port) | | broken on every board today: they need the open-drain drivers of R5/R6, the CIA outputs wired to them and a read path around the filter |
 
-## 7. What only a real mouse on the hardware can settle
+## 7. The Amiga core for the MEGA65 (AExp) on the same hardware
+
+AExp runs Minimig on the MEGA65 and reads real Amiga mice through the same board circuits (its `README.md`, section "Mouse and joystick", and `doc/developers/architecture.md`, sections 8.6 and 11).
+
+* Movement: its copy of `debouncer.vhd` is reduced to two-flop synchronizers, and Minimig counts every transition of the two pairs like Denise. With the 1 ms filter "the pointer freezes and then jumps". Passive Amiga mice are tested on R3 this way; there is no glitch filter.
+* Right and middle button: `main.vhd` of AExp takes bit 7 of the measured paddle values (line high or not) and guards each button with a presence latch (a button is read only after its line has been seen high) and a watchdog (30 seconds of uninterrupted "pressed" clear the latch, which arms again within one measuring cycle). A push-pull USB adapter is tested on R6 for the right button.
+* What gives the right and middle button, from its README: an adapter that drives the lines (Micro Tom, USBAMI), replicas of the tank mouse that drive the lines (Alfa Data MegaMouse 400, Amitech Amiga Mouse, Amigakit Mouse), a mouSTer in Amiga mode with firmware 3.23.5313 or newer and `activepotlines=true` in the section `[mouse]` of its configuration, and any passive mouse behind a straight-through DB9 adapter with about 2 kOhm from pin 7 to pin 9 and another 2 kOhm from pin 7 to pin 5. An original tank mouse and a mouSTer with default settings only ground the lines.
+* After unplugging a device that drove the lines, a button stays "pressed" for up to half a minute.
+* Adapters with a polled wheel protocol (Micro Tom): a wheel driver of AmigaOS pulls pin 5 low once per frame and the adapter answers every falling edge with a code on the quadrature lines for some tens of microseconds. On the MEGA65 every discharge of the paddle measurement is such a request, about 1950 per second, so the pointer twitches at rest. Field evidence (AExp issue #41, R6): quiet with the mouse unplugged from the adapter, and quiet with a DB9 extension whose wire 5 is cut.
+* On the Amiga the right button is essential, so AExp also offers a key of the keyboard as a substitute. C64 programs with a 1351 driver rarely use the right button (GEOS reads only the left one).
+
+## 8. What only a real mouse on the hardware can settle
 
 * Whether the right and middle button work with a pull-up, and the measured values (expected about 11 to 16 for 22 kOhm).
 * Signal quality of the comparator outputs (3.3 kOhm in the mouse in parallel with 4.7 kOhm on the board, cable capacitance) and whether the filter length is right.

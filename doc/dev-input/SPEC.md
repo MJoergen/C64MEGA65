@@ -26,7 +26,8 @@ The submenu "Advanced Settings" has a section "Input Devices" with three submenu
 
 Limits that come from the hardware:
 
-* The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled up to +5 V from one that is not (section 2), so a plain Amiga mouse has only its left button. A mouse or an adapter with pull-up resistors on these two pins (22 kOhm to pin 7, a known modification for the MEGA65) gets both buttons: right is the up line as on a 1351, middle is the down line as in the Micromys protocol.
+* The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled or driven up to +5 V from one that is not (section 2), so an original Amiga mouse has only its left button. Both buttons work with everything that holds the two pins high while the buttons are released: mice and adapters with an active output stage, a mouSTer in Amiga mode with firmware 3.23.5313 or newer and `activepotlines=true`, or any passive mouse behind a straight-through adapter with two resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7 to pin 5. The right button is the up line as on a 1351, the middle button the down line as in the Micromys protocol. This is the experience and the mechanism of the Amiga core for the MEGA65 (AExp), whose documentation lists the devices.
+* USB adapters with a polled wheel protocol (Micro Tom, for example) take every discharge of the paddle pins as a request and answer it with a short code on the movement lines. The decoder counts such a code forwards and backwards again, so the position does not drift, but the pointer can twitch. The cure is the one of the Amiga core: an extension cable with wire 5 cut, which costs the middle button and the wheel.
 * Everything that is not an Atari paddle needs the paddle setting "C64" for its port: a 1351 (its position is encoded in steps of 2 µs), a KoalaPad, Commodore paddles.
 * While at least one port is set to "Atari CX30", the measuring cycle of both ports is longer (section 6), because one signal discharges all four paddle pins. Devices on the other port measure the same values as before. A 1351 on the other port synchronizes itself to the discharge and should not mind the longer cycle; this combination is untested.
 
@@ -138,7 +139,7 @@ The two buttons are derived from the measured values of the paddle pins of the s
 * A button that is reported as pressed for `G_STUCK_MS` (30 s) without interruption is released and the flag is cleared; it is set again by the next value below 128. This covers the exchange of a mouse with pull-ups for one without while the setting stays "Amiga": without this rule the right button of the second mouse would be pressed forever.
 * `enable_i` at '0' clears the flag and releases the button.
 
-A 22 kOhm pull-up measures 11 to 16 when the button is released and 255 when it is pressed; the thresholds accept pull-ups up to about 150 kOhm.
+A pin that is driven high or pulled up with 2 kOhm measures 0 to 3 when the button is released, a 22 kOhm pull-up 11 to 16, and all measure 255 when the button is pressed; the thresholds accept pull-ups up to about 150 kOhm. The Amiga core for the MEGA65 uses the same two rules (a button counts only after its line has been seen high; 30 seconds of "pressed" clear that) in the field.
 
 ## 5. Conditioning of the two ports: `debouncer.vhd`
 
