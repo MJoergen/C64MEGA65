@@ -58,14 +58,17 @@
 --
 -- 5. Right button (meas_x_i, pin 9) and middle button (meas_y_i, pin 5), each
 --    with its own instance of the same logic: a value below 128 means that a
---    pull-up exists and the button is released, and sets the flag "pull-up
---    seen"; a value of 192 or more means that nothing pulls the pin up, which is
---    a pressed button if the flag is set and a mouse without pull-ups if not;
---    values from 128 to 191 change nothing. A change of the reported state needs
---    its condition to hold for C_CONFIRM_TICKS ticks without interruption. A
---    button that is reported as pressed for C_STUCK_TICKS ticks is released and
---    the flag is cleared (a mouse with pull-ups exchanged for one without while
---    the setting stays "Amiga"); the next value below 128 sets it again.
+--    pull-up exists and the button is released; once that has held for the
+--    confirmation time, it sets the flag "pull-up seen". A value of 192 or more
+--    means that nothing pulls the pin up, which is a pressed button if the flag
+--    is set and a mouse without pull-ups if not; values from 128 to 191 change
+--    nothing. A change of the reported state or of the flag needs its condition
+--    to hold for C_CONFIRM_TICKS ticks without interruption (a value from 128
+--    to 191 interrupts it), so that a single measurement below 128 on a mouse
+--    without pull-ups (a device plugged in or out) cannot arm a press. A button
+--    that is reported as pressed for C_STUCK_TICKS ticks is released and the
+--    flag is cleared (a mouse with pull-ups exchanged for one without while the
+--    setting stays "Amiga"); the next confirmed value below 128 sets it again.
 --
 -- While enable_i is '0' nothing is counted, the backlog is empty, the position
 -- keeps its value, the buttons are released and their flags are cleared.
@@ -311,23 +314,29 @@ begin
       button_proc : process (clk_i)
          variable released : boolean;     -- below 128: a pull-up exists, the button is released
          variable open_pin : boolean;     -- 192 or more: nothing pulls the pin up
-         variable change   : boolean;     -- the condition for a change of the reported state
+         variable change   : boolean;     -- the condition for a change of the state or of the flag
       begin
          if rising_edge(clk_i) then
             released := meas(i)(7) = '0';
             open_pin := meas(i)(7 downto 6) = "11";
-            if btn_n(i) = '1' then
-               change := open_pin and pullup_seen = '1';
+            if btn_n(i) = '0' then
+               change := released;                          -- pressed: release
+            elsif pullup_seen = '1' then
+               change := open_pin;                          -- released: press
             else
-               change := released;
+               change := released;                          -- no flag yet: a pull-up exists
             end if;
 
-            -- a change needs its condition for C_CONFIRM_TICKS full ticks
+            -- a change of the state or of the flag needs its condition for C_CONFIRM_TICKS full ticks
             if not change then
                confirm_cnt <= 0;
             elsif tick = '1' then
                if confirm_cnt = C_CONFIRM_TICKS then
-                  btn_n(i)    <= not btn_n(i);
+                  if btn_n(i) = '1' and pullup_seen = '0' then
+                     pullup_seen <= '1';
+                  else
+                     btn_n(i)    <= not btn_n(i);
+                  end if;
                   confirm_cnt <= 0;
                else
                   confirm_cnt <= confirm_cnt + 1;
@@ -346,10 +355,6 @@ begin
                else
                   stuck_cnt   <= stuck_cnt + 1;
                end if;
-            end if;
-
-            if released then
-               pullup_seen <= '1';
             end if;
 
             if enable_i = '0' then

@@ -1436,7 +1436,7 @@ begin
          -- buttons: released at once by enable_i = '0', the flag is cleared
          meas_x <= x"0C";
          meas_y <= x"0C";
-         wait for 2 * C_TICK;
+         wait for (C_CONFIRM + 2) * C_TICK;
          meas_x <= x"FF";
          meas_y <= x"FF";
          wait_btn(0, '0', (C_CONFIRM + 2) * C_TICK, dt);
@@ -1489,6 +1489,9 @@ begin
          -- confirmation time of both buttons
          lo := C_CONFIRM * C_TICK;
          hi := (C_CONFIRM + 1) * C_TICK + 2 * C_PERIOD;
+         meas_x <= x"0C";                       -- the flag "pull-up seen" needs the confirmation time
+         meas_y <= x"0C";
+         wait for (C_CONFIRM + 2) * C_TICK;
          for k in 1 to 6 loop
             meas_x <= x"0C";
             meas_y <= x"0C";
@@ -1541,22 +1544,41 @@ begin
          c_o   := bchg(o);
          c0(b) := bchg(b);
 
-         -- 1. no pull-up: 255, sometimes a single sample of 192 .. 254, for three stuck times
+         -- 1. no pull-up: 255 for three stuck times, sometimes a single sample of 192 .. 254, a
+         -- single sample below 128 or a run of values below 128 shorter than the confirmation time
+         -- (plugging a device in or out); then a long 255: the flag was never set
          t1 := now + 3 * C_STUCK * C_TICK;
          while now < t1 loop
             rand_real(r, 20.0, 80.0, q);
             wait for q * 1 us;
-            rand_int(r, 192, 254, v);
-            set_meas(b, v);
-            wait for 10 us;
+            rand(r, q);
+            if q < 0.6 then
+               rand_int(r, 192, 254, v);
+               set_meas(b, v);
+               wait for 10 us;
+            elsif q < 0.8 then
+               rand_int(r, 0, 127, v);
+               set_meas(b, v);
+               wait for 10 us;
+            else
+               rand_real(r, 0.3, 0.97, q);
+               t := now + q * tconf;
+               while now < t loop
+                  rand_int(r, 0, 127, v);
+                  set_meas(b, v);
+                  wait for minimum(10 us, t - now);
+               end loop;
+            end if;
             set_meas(b, 255);
          end loop;
+         wait for 3 * tconf;
          if btn(b) /= '1' or bchg(b) /= c0(b) then
             err("button " & integer'image(b) & ": reported without a pull-up (" & integer'image(bchg(b) - c0(b)) &
                 " changes)");
          end if;
          note("button " & integer'image(b) & " without pull-up, " & rstr(to_us(3 * C_STUCK * C_TICK) / 1000.0, 1) &
-              " ms of 255 with single samples of 192 .. 254: never reported");
+              " ms of 255 with single samples of 192 .. 254, single samples below 128 and runs below 128 of 0.30 " &
+              "to 0.97 confirmation times, then a long 255: never reported");
 
          -- 2. pull-up: 12 released, 255 pressed, after the confirmation time
          for k in 1 to 4 loop
@@ -1675,14 +1697,23 @@ begin
          set_meas(b, 100);
          wait for 10 us;
          set_meas(b, 255);
+         wait for 3 * tconf;
+         if bchg(b) /= c0(b) then
+            err("button " & integer'image(b) & ": a single value below 128 armed a press");
+         end if;
+         set_meas(b, 100);
+         wait for 2 * tconf;
+         set_meas(b, 255);
          wait_btn(b, '0', 2 * hi, dt);
          if dt < lo or dt > hi then
-            err("button " & integer'image(b) & ": after one value below 128 the press came after " & rstr(to_us(dt)) & " us");
+            err("button " & integer'image(b) & ": after a confirmed value below 128 the press came after " &
+                rstr(to_us(dt)) & " us");
          end if;
          set_meas(b, 12);
          wait_btn(b, '1', 2 * hi, dt);
          note("button " & integer'image(b) & ": pull-up gone, the press is released after exactly " & integer'image(C_STUCK) &
-              " ticks (" & rstr(to_us(C_STUCK * C_TICK)) & " us); reported again only after a value below 128");
+              " ticks (" & rstr(to_us(C_STUCK * C_TICK)) & " us); a single value below 128 does not arm it again, " &
+              "a confirmed one does");
 
          -- 6. enable_i = '0' releases the button and clears the flag
          set_meas(b, 255);
