@@ -175,13 +175,14 @@ New ports: `atari_paddles_a` and `atari_paddles_b` ('1': the paddles of that soc
 * A long cycle has the same first 513 ticks; its count window goes on to tick 767 and it latches at tick 768 (769 ticks). A 1351 that sees no new discharge may drive its lines again 832 µs after the last one (section 6 of `RESEARCH-paddles.md`); the long cycle stays below that.
 * A pin of a socket in C64 mode is counted in the ticks 258 to 512 in both kinds of cycle. Its result is the same in a long cycle as in a short one.
 * A pin of a socket in Atari mode is counted in the ticks 258 to 767 (510 ticks). Its result is half the count, rounded down: 0 to 255, with 2 µs per step instead of 1 µs.
+* The four comparator inputs pass a two-stage synchronizer before they are counted. They are asynchronous to the clock, and an edge at the clock edge of a tick could otherwise be taken by some bits of a counter and not by others, which at a carry gives a value that was never measured.
 * Nothing else changes: the tick, the discharge time, the Amiga part of the file (it stays switched off by its inputs), and the inversion and port switching of the four results in `qnice_wrapper.vhd`.
 
 The factor 2 is a ratio, not a calibration: the threshold of the comparator, the tolerance of the capacitor and the voltage of the port cancel out, so it is right on every board. A nominal Atari paddle (1 MOhm) reads like a 500 kOhm paddle; the units that were measured (790 to 840 kOhm) read like 400 to 420 kOhm, a little below a Commodore paddle (470 kOhm nominal). The exact ratio 1000/470 would bring such a unit closer to the point where it no longer reaches 255 at the end of its rotation, which is worse for a game than a slightly shorter usable rotation.
 
 A pin that never charges inside its window reads 255 in both modes (nothing connected), and a pin that is connected to +5 V reads 0 (the second and third button of some joysticks).
 
-With both modes at C64 the outputs `pot_drain`, `pota_x`, `pota_y`, `potb_x` and `potb_y` are identical, clock cycle by clock cycle, to those of the file before the change.
+As long as both mode inputs are '0' at every latch tick, the outputs `pot_drain`, `pota_x`, `pota_y`, `potb_x` and `potb_y` are identical, clock cycle by clock cycle, to those of the file before the change with its four comparator inputs delayed by the two clock cycles (40 ns) of the synchronizer.
 
 ## 7. Crossing of the paddle values into the core clock domain
 
