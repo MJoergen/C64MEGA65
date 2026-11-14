@@ -2,6 +2,7 @@
 -- see AUTHORS details and license
 --
 -- Added to MiSTer2MEGA65 by sy2002 in January 2023
+-- Measurement for Atari CX30 paddles (1 MOhm) added by sy2002 in November 2026 (issue #193)
 
 use WORK.ALL;
 
@@ -18,6 +19,10 @@ entity mouse_input is
     amiga_mouse_assume_a : in std_logic;
     amiga_mouse_assume_b : in std_logic;
     
+    -- '1': the paddles of this socket have 1 MOhm potentiometers (Atari CX30)
+    atari_paddles_a : in std_logic := '0';
+    atari_paddles_b : in std_logic := '0';
+
     pot_drain : buffer std_logic;
     fa_potx : in std_logic;
     fa_poty : in std_logic;
@@ -61,12 +66,16 @@ end mouse_input;
 
 architecture behavioural of mouse_input is
 
-  signal pot_counter : integer := 0;
+  signal pot_counter : integer range 0 to 768 := 0;
   signal phi_counter : integer := 0;
-  signal pota_x_counter : integer := 0;
-  signal pota_y_counter : integer := 0;
-  signal potb_x_counter : integer := 0;
-  signal potb_y_counter : integer := 0;
+  signal pota_x_counter : integer range 0 to 510 := 0;
+  signal pota_y_counter : integer range 0 to 510 := 0;
+  signal potb_x_counter : integer range 0 to 510 := 0;
+  signal potb_y_counter : integer range 0 to 510 := 0;
+
+  -- Modes of the current measuring cycle, taken over at the latch tick: '1' = Atari CX30
+  signal atari_mode_a : std_logic := '0';
+  signal atari_mode_b : std_logic := '0';
 
   -- Flags for whether we think we have an amiga mouse plugged in or not
   -- If UP+DOWN or LEFT+RIGHT, and pots are open or short circuit, then it is an amiga mouse
@@ -345,12 +354,20 @@ begin
         potb_y <= potb_y_internal;
       end if;
 
+      -- Measuring cycle, one tick per microsecond: the ticks 0 to 255 discharge the four paddle
+      -- pins, and a pin counts the ticks from 258 on in which it reads '0'. A socket in C64 mode
+      -- counts up to tick 512, 1 us per step like the SID. A socket in Atari mode (1 MOhm
+      -- potentiometers) counts up to tick 767 and gets half the count, 2 us per step: the charge
+      -- time is proportional to the resistance, so a 1 MOhm paddle reads like a 500 kOhm paddle
+      -- on every board, whatever the threshold of the comparator and the tolerance of the
+      -- capacitor. A cycle latches at tick 513 (short cycle) or, while at least one socket is in
+      -- Atari mode, at tick 768 (long cycle); the latch tick takes over the modes of the next cycle.
       -- Assumes 50MHz clock
       if phi_counter < 49 then
         phi_counter <= phi_counter + 1;
       else
         phi_counter <= 0;
-        if pot_counter < 513 then
+        if pot_counter < 513 or (pot_counter < 768 and (atari_mode_a or atari_mode_b) = '1') then
           pot_counter <= pot_counter + 1;
           if pot_counter = 0 then
             -- Begin draining capacitor
@@ -359,33 +376,49 @@ begin
             -- Stop draining, begin counting
             pot_drain <= '0';
           elsif (pot_counter > 257) then
-            if fa_potx='0' then
-              if pota_x_counter /= 255 then
-                pota_x_counter <= pota_x_counter + 1;
+            if pot_counter < 513 or atari_mode_a = '1' then
+              if fa_potx='0' then
+                if pota_x_counter /= 510 then
+                  pota_x_counter <= pota_x_counter + 1;
+                end if;
+              end if;
+              if fa_poty='0' then
+                if pota_y_counter /= 510 then
+                  pota_y_counter <= pota_y_counter + 1;
+                end if;
               end if;
             end if;
-            if fa_poty='0' then
-              if pota_y_counter /= 255 then
-                pota_y_counter <= pota_y_counter + 1;
+            if pot_counter < 513 or atari_mode_b = '1' then
+              if fb_potx='0' then
+                if potb_x_counter /= 510 then
+                  potb_x_counter <= potb_x_counter + 1;
+                end if;
               end if;
-            end if;
-            if fb_potx='0' then
-              if potb_x_counter /= 255 then
-                potb_x_counter <= potb_x_counter + 1;
-              end if;
-            end if;
-            if fb_poty='0' then
-              if potb_y_counter /= 255 then
-                potb_y_counter <= potb_y_counter + 1;
+              if fb_poty='0' then
+                if potb_y_counter /= 510 then
+                  potb_y_counter <= potb_y_counter + 1;
+                end if;
               end if;
             end if;
           end if;
         else
           pot_counter <= 0;
-          pota_x_internal <= to_unsigned(pota_x_counter,8);
-          pota_y_internal <= to_unsigned(pota_y_counter,8);
-          potb_x_internal <= to_unsigned(potb_x_counter,8);
-          potb_y_internal <= to_unsigned(potb_y_counter,8);
+          if atari_mode_a = '1' then
+            pota_x_internal <= to_unsigned(pota_x_counter / 2, 8);
+            pota_y_internal <= to_unsigned(pota_y_counter / 2, 8);
+          else
+            pota_x_internal <= to_unsigned(pota_x_counter,8);
+            pota_y_internal <= to_unsigned(pota_y_counter,8);
+          end if;
+          if atari_mode_b = '1' then
+            potb_x_internal <= to_unsigned(potb_x_counter / 2, 8);
+            potb_y_internal <= to_unsigned(potb_y_counter / 2, 8);
+          else
+            potb_x_internal <= to_unsigned(potb_x_counter,8);
+            potb_y_internal <= to_unsigned(potb_y_counter,8);
+          end if;
+          atari_mode_a <= atari_paddles_a;
+          atari_mode_b <= atari_paddles_b;
           pota_x_counter <= 0;
           pota_y_counter <= 0;
           potb_x_counter <= 0;
