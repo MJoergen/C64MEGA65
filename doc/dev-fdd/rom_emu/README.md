@@ -65,6 +65,45 @@ controls (`ready_after_cycles`, `ready_resume_after_cycles`,
 `rotation_confirmed`, `force_ready`, and `force_change`) exist solely to force
 one media-state variable at a time around the genuine ROM.
 
+## Timing-exact proofs: `run_write_proofs.py` and `run_257_proofs.py`
+
+`machine.py` charges a flat three cycles per instruction, and its readiness
+controls are stand-ins. Two further runners use the cycle-exact 6502 and the
+rotational disk of `wd_write_model.py`:
+
+    python3 -I run_write_proofs.py   # issue #244: write-back, format, write protect (doc/dev-fdd/WRITE-SPEC.md)
+    python3 -I run_257_proofs.py     # issue #257, about 6 minutes; must end with RESULT: ALL 257 PROOFS PASS
+
+`run_257_proofs.py` models two things the other runners leave out: READY
+derived from index pulses (the time of the first pulse after motor-on is a
+parameter of the mechanism, the number of pulses READY waits for is the rule
+under test), and the delivery of a Read Sector as the RTL does it (`live` = a
+real WD1772, `quarantine` = delivery v2 of `fdc1772.v`, `readahead` = delivery
+v2 with the controller's read-ahead buffer). It proves:
+
+- **I1 to I5, the READY exam.** The ROM switches the motor on (`$CD63`), lets 80
+  ticks of 10 ms pass (`$CE53`; the count is set at `$B095`), and then examines
+  PA1 (`$CDAD` calls `$CDBC`, 30 reads): 0.8000 s after motor-on for an
+  unchanged disk, 0.8263 s for a changed one (step pair `$48`/`$68` and 18 ms
+  settle first, `$CD8A`). "Not ready" there is job error 3 =
+  `74,DRIVE NOT READY`, and the job is not retried. (A Read Address examines
+  PA1 again right before its command, `$CD08`.) With READY after two index pulses the
+  job fails as soon as the first pulse comes later than 0.62 s after motor-on;
+  with READY after one pulse the limit is 0.82 s. The failing case reproduces
+  the hardware dumps of issue #257 exactly: one step pair, no read or write
+  command, the motor on for 11.030 s, 53 index pulses.
+- **R1 to R6, sequential reads.** The DOS issues the next Read Sector 66 to
+  95 us after the BUSY drop (2.25 ms after a Read Address). Ten sectors of a
+  side take 215 ms on a real WD1772, 2032 ms with delivery v2 alone (the
+  sector is presented for 16.4 ms after its CRC verdict, so the next ID has
+  passed and every sector waits a revolution), and 232 ms with the read-ahead
+  buffer. A format of 80 cylinders: 100 s, 390 s (measured on hardware: 403 s)
+  and 102 s.
+- **L1 to L4, the LED lines.** The power LED (PA5) is lit and steady without
+  an error and toggles every 100.0 ms while an error is pending; when the
+  error is cleared, the DOS leaves it as it is, lit or dark. The activity LED
+  (PA6) follows the jobs.
+
 ## Transfer-loop timing margin (P-T)
 
 The `$C969` loop is busy-first/DRQ-second:
