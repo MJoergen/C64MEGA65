@@ -77,6 +77,16 @@ architecture behavioural of mouse_input is
   signal atari_mode_a : std_logic := '0';
   signal atari_mode_b : std_logic := '0';
 
+  -- The comparator outputs of the four paddle pins (3 downto 0: fb_poty, fb_potx, fa_poty,
+  -- fa_potx) are asynchronous to clk: two-stage synchronizer, '0' at power-up like a pin during
+  -- the discharge
+  signal pot_pins_d  : std_logic_vector(3 downto 0) := "0000";
+  signal pot_pins_dd : std_logic_vector(3 downto 0) := "0000";
+
+  attribute async_reg                : string;
+  attribute async_reg of pot_pins_d  : signal is "true";
+  attribute async_reg of pot_pins_dd : signal is "true";
+
   -- Flags for whether we think we have an amiga mouse plugged in or not
   -- If UP+DOWN or LEFT+RIGHT, and pots are open or short circuit, then it is an amiga mouse
   -- If POTs are not open/short circuit, then it must not be an Amiga mouse,
@@ -123,6 +133,14 @@ architecture behavioural of mouse_input is
   signal last_amiga_mouse_enable_b : std_logic := '0';
   
 begin
+
+  pot_sync_proc : process(clk) is
+  begin
+    if rising_edge(clk) then
+      pot_pins_d  <= fb_poty & fb_potx & fa_poty & fa_potx;
+      pot_pins_dd <= pot_pins_d;
+    end if;
+  end process pot_sync_proc;
 
   process(clk) is
     variable joybits : std_logic_vector(3 downto 0);
@@ -355,13 +373,15 @@ begin
       end if;
 
       -- Measuring cycle, one tick per microsecond: the ticks 0 to 255 discharge the four paddle
-      -- pins, and a pin counts the ticks from 258 on in which it reads '0'. A socket in C64 mode
-      -- counts up to tick 512, 1 us per step like the SID. A socket in Atari mode (1 MOhm
+      -- pins, and a pin counts the ticks from 258 on in which it reads '0' (behind the
+      -- synchronizer: a tick sees the pin as it was two clock cycles before). A socket in C64
+      -- mode counts up to tick 512, 1 us per step like the SID. A socket in Atari mode (1 MOhm
       -- potentiometers) counts up to tick 767 and gets half the count, 2 us per step: the charge
       -- time is proportional to the resistance, so a 1 MOhm paddle reads like a 500 kOhm paddle
       -- on every board, whatever the threshold of the comparator and the tolerance of the
       -- capacitor. A cycle latches at tick 513 (short cycle) or, while at least one socket is in
-      -- Atari mode, at tick 768 (long cycle); the latch tick takes over the modes of the next cycle.
+      -- Atari mode, at tick 768 (long cycle); the latch tick takes over the modes of the next
+      -- cycle.
       -- Assumes 50MHz clock
       if phi_counter < 49 then
         phi_counter <= phi_counter + 1;
@@ -377,24 +397,24 @@ begin
             pot_drain <= '0';
           elsif (pot_counter > 257) then
             if pot_counter < 513 or atari_mode_a = '1' then
-              if fa_potx='0' then
+              if pot_pins_dd(0)='0' then
                 if pota_x_counter /= 510 then
                   pota_x_counter <= pota_x_counter + 1;
                 end if;
               end if;
-              if fa_poty='0' then
+              if pot_pins_dd(1)='0' then
                 if pota_y_counter /= 510 then
                   pota_y_counter <= pota_y_counter + 1;
                 end if;
               end if;
             end if;
             if pot_counter < 513 or atari_mode_b = '1' then
-              if fb_potx='0' then
+              if pot_pins_dd(2)='0' then
                 if potb_x_counter /= 510 then
                   potb_x_counter <= potb_x_counter + 1;
                 end if;
               end if;
-              if fb_poty='0' then
+              if pot_pins_dd(3)='0' then
                 if potb_y_counter /= 510 then
                   potb_y_counter <= potb_y_counter + 1;
                 end if;

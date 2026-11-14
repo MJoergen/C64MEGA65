@@ -33,6 +33,9 @@ package tb_paddles_pkg is
    constant C_SHORT     : natural := 514;   -- ticks of a short cycle
    constant C_LONG      : natural := 769;   -- ticks of a long cycle
    constant C_DRAIN     : natural := 256;   -- ticks of the discharge
+   -- the two-stage synchronizer of the DUT: the edge of tick k sees a pin as it was at the
+   -- clock edge two cycles (40 ns) earlier
+   constant C_SYNC_NS   : natural := 40;
 
    -- What a pin does in one measuring cycle. All times in ns.
    --   K_NEVER     the capacitor never charges: '0' for the whole cycle
@@ -55,7 +58,9 @@ package tb_paddles_pkg is
    constant C_NONMONO : integer := -2;   -- charge_ns: not a single rising edge
    -- charge time after the end of the discharge of a monotonic stimulus
    function charge_ns(st : stim_t) return integer;
-   -- expected results for a charge time t (ns after the end of the discharge, or C_NEVER)
+   -- expected results for a charge time t (ns after the end of the discharge, or C_NEVER):
+   -- C64 min(255, max(0, floor((t + 40 ns) / 1 us) - 1)), Atari half of
+   -- min(510, max(0, floor((t + 40 ns) / 1 us) - 1)), rounded down; never charging 255
    function exp_c64(t : integer) return natural;
    function exp_atari(t : integer) return natural;
 
@@ -103,7 +108,7 @@ package body tb_paddles_pkg is
       if t < 0 then
          return 255;
       end if;
-      return minimum(255, maximum(0, t / 1000 - 1));
+      return minimum(255, maximum(0, (t + C_SYNC_NS) / 1000 - 1));
    end function exp_c64;
 
    function exp_atari(t : integer) return natural is
@@ -111,7 +116,7 @@ package body tb_paddles_pkg is
       if t < 0 then
          return 255;
       end if;
-      return minimum(510, maximum(0, t / 1000 - 1)) / 2;
+      return minimum(510, maximum(0, (t + C_SYNC_NS) / 1000 - 1)) / 2;
    end function exp_atari;
 
    -- lowbias32 integer hash
@@ -178,8 +183,8 @@ package body tb_paddles_pkg is
          end if;
          st := (K_CHARGE, x, 0, 0);
       elsif r < 63 then
-         rnd(h, 0, 600, x);                             -- on a tick and 1 ns either side
-         st.t1 := x * 1000;
+         rnd(h, 0, 600, x);                             -- on a sampling point and 1 ns either side
+         st.t1 := x * 1000 - C_SYNC_NS;
          rnd(h, -1, 1, x);
          st := (K_CHARGE, maximum(0, st.t1 + x), 0, 0);
       elsif r < 75 then
@@ -206,7 +211,8 @@ package body tb_paddles_pkg is
 
    function get_stim(part, seed, pin, n, csock : natural) return stim_t is
       type off_t is array (0 to 5) of integer;
-      constant C_OFF : off_t := (0, -1, 1, 250, 500, 999);
+      -- offsets within a microsecond: the sampling point (-40 ns) and 1 ns either side
+      constant C_OFF : off_t := (0, -41, -40, -39, 500, 959);
       variable m, v, t : integer;
    begin
       -- cycle 0 is the short C64 cycle after power-up in every part
@@ -223,12 +229,12 @@ package body tb_paddles_pkg is
 
          when P_ATARI =>
             if m <= 300 then
-               -- 0 to 600 us in steps of 500 ns over the four pins; the whole microseconds
-               -- alternate between 1 ns early, exact and 1 ns late
+               -- 0 to 600 us in steps of 500 ns over the four pins; the sampling points (whole
+               -- microseconds minus 40 ns) alternate between 1 ns early, exact and 1 ns late
                v := 4 * m + pin;
                t := v * 500;
                if v mod 2 = 0 then
-                  t := t + (v / 2) mod 3 - 1;
+                  t := t - C_SYNC_NS + (v / 2) mod 3 - 1;
                end if;
                return (K_CHARGE, maximum(0, t), 0, 0);
             elsif m = 301 then
@@ -239,20 +245,20 @@ package body tb_paddles_pkg is
                -- connected to +5 V: 0.30, 0.45, 0.60, 0.75 us
                return (K_CHARGE, 300 + 150 * pin, 0, 0);
             elsif m = 304 then
-               -- the saturation of the Atari mode: 510.999, 511.000, 511.001, 512.000 us
+               -- the saturation of the Atari mode: 510.959, 510.960, 510.961, 511.960 us
                case pin is
-                  when 0      => return (K_CHARGE, 510_999, 0, 0);
-                  when 1      => return (K_CHARGE, 511_000, 0, 0);
-                  when 2      => return (K_CHARGE, 511_001, 0, 0);
-                  when others => return (K_CHARGE, 512_000, 0, 0);
+                  when 0      => return (K_CHARGE, 510_959, 0, 0);
+                  when 1      => return (K_CHARGE, 510_960, 0, 0);
+                  when 2      => return (K_CHARGE, 510_961, 0, 0);
+                  when others => return (K_CHARGE, 511_960, 0, 0);
                end case;
             elsif m = 305 then
-               -- the saturation of the C64 mode: 255.999, 256.000, 256.001, 257.000 us
+               -- the saturation of the C64 mode: 255.959, 255.960, 255.961, 256.960 us
                case pin is
-                  when 0      => return (K_CHARGE, 255_999, 0, 0);
-                  when 1      => return (K_CHARGE, 256_000, 0, 0);
-                  when 2      => return (K_CHARGE, 256_001, 0, 0);
-                  when others => return (K_CHARGE, 257_000, 0, 0);
+                  when 0      => return (K_CHARGE, 255_959, 0, 0);
+                  when 1      => return (K_CHARGE, 255_960, 0, 0);
+                  when 2      => return (K_CHARGE, 255_961, 0, 0);
+                  when others => return (K_CHARGE, 256_960, 0, 0);
                end case;
             else
                return stim_random(seed, pin, n, true);

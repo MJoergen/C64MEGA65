@@ -1,6 +1,6 @@
 # Paddle measurement benches (issue #193)
 
-`M2M/vhdl/controllers/M65/mouse_input.vhdl` measures the four paddle pins of the two joystick sockets in the QNICE clock domain (50 MHz, one tick of 1 µs). A socket in C64 mode counts the ticks 258 to 512 in which its comparator output reads '0', as before; a socket in Atari mode (1 MOhm potentiometers of the Atari CX30, inputs `atari_paddles_a` and `atari_paddles_b`) counts the ticks 258 to 767 and delivers half the count, rounded down. While at least one socket is in Atari mode, a measuring cycle has 769 instead of 514 ticks; the modes of a cycle are the inputs at the latch tick of the previous cycle, C64 after power-up. The discharge (`pot_drain`) is on for the ticks 0 to 255 in both kinds of cycle. Section 6 of `doc/dev-input/SPEC.md` is the specification.
+`M2M/vhdl/controllers/M65/mouse_input.vhdl` measures the four paddle pins of the two joystick sockets in the QNICE clock domain (50 MHz, one tick of 1 µs). The four comparator outputs are asynchronous to that clock and pass a two-stage synchronizer, so the edge of a tick sees a pin as it was two clock cycles (40 ns) before. A socket in C64 mode counts the ticks 258 to 512 in which its comparator output reads '0'; a socket in Atari mode (1 MOhm potentiometers of the Atari CX30, inputs `atari_paddles_a` and `atari_paddles_b`) counts the ticks 258 to 767 and delivers half the count, rounded down. While at least one socket is in Atari mode, a measuring cycle has 769 instead of 514 ticks; the modes of a cycle are the inputs at the latch tick of the previous cycle, C64 after power-up. The discharge (`pot_drain`) is on for the ticks 0 to 255 in both kinds of cycle. The mode inputs are read only at the latch tick: whenever both are '0' at every latch tick, every output is, clock cycle by clock cycle, that of the file of the base commit fed with the comparator signals two clock cycles later. Section 6 of `doc/dev-input/SPEC.md` is the specification.
 
 ## How to run
 
@@ -8,12 +8,12 @@
 CORE/vhdl/test/tb_paddles/run.sh [identity|atari|mixed|modes|powerup|synth|mutants|all] [--keep]
 ```
 
-* `identity`: both sockets in C64 mode against the reference, which is `mouse_input.vhdl` of the base commit `6845596` (`WIP-V6-A25`) with its entity renamed to `mouse_input_ref`. Every output (`pot_drain`, the four results, the eight joystick outputs, `mouse_debug`) is compared at every change of any of them, over 2000 measuring cycles with random comparator signals of every kind (below) and random joystick inputs, then 100 further cycles in which the four Amiga inputs change at random as well.
-* `atari`: both sockets in Atari mode, charge times from 0 to 600 µs in steps of 0.5 µs (the whole microseconds alternately 1 ns early, exact and 1 ns late), never charging, charge time 0, a pin connected to +5 V, the saturation of both modes to the nanosecond, random charge times and the 1351. Every result from 0 to 255 has to appear on both sockets.
-* `mixed`: socket a in C64 mode and socket b in Atari mode, and the other way round. The socket in C64 mode gets charge times from 0 to 259 µs, a 1351 with every position p from 0 to 63 on both pins, and random signals of every kind; it has to deliver in each cycle exactly what the reference delivers in its cycle with the same number, although the cycles of the reference are short and those of the DUT long.
+* `identity`: both sockets in C64 mode against the reference, which is `mouse_input.vhdl` of the base commit `6845596` (`WIP-V6-A25`) with its entity renamed to `mouse_input_ref`; its four comparator inputs pass two flip-flops on the same clock, the synchronizer of the DUT. Every output (`pot_drain`, the four results, the eight joystick outputs, `mouse_debug`) is compared at every change of any of them, over 2000 measuring cycles with random comparator signals of every kind (below), random joystick inputs and random pulses of the mode inputs that are '0' at every latch tick (some of them back to '0' at the clock edge before the latch tick, some starting at the latch tick itself), then 100 further cycles in which the four Amiga inputs change at random as well.
+* `atari`: both sockets in Atari mode, charge times from 0 to 600 µs in steps of 0.5 µs (the sampling points, whole microseconds minus 40 ns, alternately 1 ns early, exact and 1 ns late), never charging, charge time 0, a pin connected to +5 V, the saturation of both modes to the nanosecond, random charge times and the 1351. Every result from 0 to 255 has to appear on both sockets.
+* `mixed`: socket a in C64 mode and socket b in Atari mode, and the other way round. The socket in C64 mode gets charge times from 0 to 259 µs, a 1351 with every position p from 0 to 63 on both pins, and random signals of every kind; it has to deliver in each cycle exactly what the reference (with the two flip-flops in front of it) delivers in its cycle with the same number, although the cycles of the reference are short and those of the DUT long.
 * `modes`: 2000 cycles (with a seed of their own, so the stimuli differ from those of `identity`) in which the two mode inputs change at random clock cycles (gaps from 1 to 60,000 clock cycles), a part of the changes aimed at the clock edges from 3 cycles before to 3 cycles after tick 513 and tick 768 of the running cycle.
 * `powerup`: the first cycles after power-up with the modes ab = 00, 11, 01 and 10 from the first clock cycle on, and with modes that change at random from the start.
-* `synth`: `ghdl --synth` of `mouse_input` must run without error; GHDL stops with an error for every inferred latch, which a mutant with a latch proves.
+* `synth`: `ghdl --synth` of `mouse_input` must run without error; GHDL stops with an error for every inferred latch, which a mutant with a latch proves. The runner also prints the flip-flops of the GHDL netlist (before any optimization): 277 in 46 registers, against 381 in 42 registers for the file of the base commit, whose tick counter and pin counters are unconstrained integers.
 * `mutants`: the mutants below, each built and run against the part that rejects it fastest.
 * `all` (default): everything; at most two simulations run at the same time.
 * `--keep`: keeps the build directory and prints its path.
@@ -26,19 +26,19 @@ The runner ends with `RESULT: PASS` (exit status 0) or `RESULT: FAIL ...`. Requi
 
 ## What the checker proves
 
-The checker of an instance sees only its ports. A cycle starts with the rising edge of `pot_drain`; the discharge has to last exactly 256 ticks and the cycle exactly 514 or 769 ticks, according to the modes that the DUT saw at the latch tick of the previous cycle; the results may change only in the clock cycle after the latch tick. An observer samples every pin at the clock edge of each tick, the edge at which the DUT samples it, and counts the '0' samples of the C64 window (ticks 258 to 512) and of the Atari window (258 to 767). The result of a socket in C64 mode has to be the C64 count, that of a socket in Atari mode half the Atari count, rounded down, for every kind of signal. For a monotonic signal the result also has to follow the relation below, and in the parts `atari` and `mixed` a socket in Atari mode has to deliver half the C64 result of the reference (rounded down) wherever that is below 255. The part `identity` validates the observer against the reference over all 2000 cycles.
+The checker of an instance sees only its ports. A cycle starts with the rising edge of `pot_drain`; the discharge has to last exactly 256 ticks and the cycle exactly 514 or 769 ticks, according to the modes that the DUT saw at the latch tick of the previous cycle; the results may change only in the clock cycle after the latch tick. An observer samples every pin at the clock edge two cycles before the edge of each tick, the edge at which the synchronizer of the DUT takes the sample that the tick uses, and counts the '0' samples of the C64 window (ticks 258 to 512) and of the Atari window (258 to 767). The result of a socket in C64 mode has to be the C64 count, that of a socket in Atari mode half the Atari count, rounded down, for every kind of signal. For a monotonic signal the result also has to follow the relation below, and in the parts `atari` and `mixed` a socket in Atari mode has to deliver half the C64 result of the reference (rounded down) wherever that is below 255. In the parts `atari` and `mixed` the reference gets the signals of its own board model through two flip-flops, as in `identity`. The part `identity` validates the observer against the reference over all 2000 cycles.
 
 The range of the tick counter (0 to 768) and of the four pin counters (0 to 510) is their declared range, which GHDL checks at every assignment: a violation stops the simulation without `RESULT PASS` (the mutant `latch_late` shows it). GHDL 5.1.1 cannot read a signal of the DUT through a VHDL-2008 external name (the simulation stops with "NULL access dereferenced"), so the bench does not look at the counter directly.
 
 ## The relation between charge time and result
 
-Let t be the time from the end of the discharge (the clock edge of tick 256, after which `pot_drain` is '0') to the change of the comparator output to '1'; a change exactly at a clock edge is seen at the next edge. Then, as checked by the bench for every monotonic signal:
+Let t be the time from the end of the discharge (the clock edge of tick 256, after which `pot_drain` is '0') to the change of the comparator output to '1' at the pin of the FPGA; a change exactly at a clock edge is seen at the next edge. The edge of tick k sees the pin as it was at the edge 40 ns before, (k - 256) µs - 40 ns after the end of the discharge. Then, as checked by the bench for every monotonic signal:
 
-* C64 mode: `min(255, max(0, floor(t / 1 us) - 1))`
-* Atari mode: `floor(min(510, max(0, floor(t / 1 us) - 1)) / 2)`
+* C64 mode: `min(255, max(0, floor((t + 40 ns) / 1 us) - 1))`
+* Atari mode: `floor(min(510, max(0, floor((t + 40 ns) / 1 us) - 1)) / 2)`
 * a capacitor that never charges reads 255 in both modes
 
-The first counted tick is tick 258, 2 µs after the end of the discharge: a pin that charges within 2 µs reads 0, which includes a pin connected to +5 V (0.3 to 0.8 µs through the 1 kOhm series resistor). The C64 result saturates from t = 256 µs on and the Atari result from t = 511 µs on. For the same signal the Atari result is the C64 result divided by two and rounded down, as long as the C64 result is below 255. A 1351 at position p (t = 64 + 2 x p µs) reads 63 + 2 x p in C64 mode.
+The first counted tick is tick 258, whose sample is taken 1.960 µs after the end of the discharge: a pin that charges within 1.960 µs reads 0, which includes a pin connected to +5 V (0.3 to 0.8 µs through the 1 kOhm series resistor). The steps of the C64 result lie at t = k µs - 40 ns; it saturates from t = 255.960 µs on, and the Atari result from t = 510.960 µs on. For the same signal the Atari result is the C64 result divided by two and rounded down, as long as the C64 result is below 255. A 1351 at position p (t = 64 + 2 x p µs) reads 63 + 2 x p in C64 mode.
 
 ## Mutants
 
@@ -46,6 +46,9 @@ Each mutant is one exact text replacement in a copy of `mouse_input.vhdl`; `run.
 
 | Mutant | Change | Rejected by |
 |---|---|---|
+| `no_sync` | no synchronizer: the measurement samples the pins directly | `identity` |
+| `one_stage` | synchronizer with one stage | `identity` |
+| `three_stages` | synchronizer with three stages | `identity` |
 | `halve` | Atari result of pin 9 of socket a not halved | `atari` |
 | `round_up` | Atari result rounded up | `atari` |
 | `window_short_a`, `window_short_b` | Atari window of a socket as short as the C64 window | `powerup` 10, 01 |

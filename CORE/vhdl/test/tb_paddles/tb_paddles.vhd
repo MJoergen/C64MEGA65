@@ -2,10 +2,11 @@
 -- Paddle bench (GitHub issue #193): the paddle measurement of mouse_input.vhdl with the Atari mode
 --
 -- DUT: mouse_input (the file under test). REF: mouse_input_ref, the file of the base commit with
--- its entity renamed, which knows only the C64 mode. Both run on 50 MHz (one tick = 50 clock
--- cycles = 1 us). Around them the board model (tb_paddles_board.vhd): one instance reacts to the
--- discharge of the DUT, one to that of the reference, both with the same stimulus per measuring
--- cycle; in the part "identity" the reference gets the pins of the DUT.
+-- its entity renamed, which knows only the C64 mode and has no synchronizer: its four comparator
+-- inputs pass two flip-flops in the bench. Both run on 50 MHz (one tick = 50 clock cycles = 1 us).
+-- Around them the board model (tb_paddles_board.vhd): one instance reacts to the discharge of the
+-- DUT, one to that of the reference, both with the same stimulus per measuring cycle; in the part
+-- "identity" the reference gets the pins of the DUT.
 --
 -- The checker of an instance knows nothing about its internals; it sees the discharge, the four
 -- pins and the four results, and the mode inputs of the DUT:
@@ -14,28 +15,30 @@
 --     a cycle are the mode inputs at the latch tick of the previous cycle (the clock cycle one tick
 --     before the start of the cycle), C64 for the first cycle after power-up
 --   * the results change only at the latch tick and then show the cycle that ends there
---   * the observer samples each pin at the clock edge of every tick k (the edge at which the DUT
---     samples it) and counts the '0' samples in the ticks 258 .. 512 (C64 window) and
---     258 .. 767 (Atari window); the result of a socket in C64 mode must be the C64 count, that
---     of a socket in Atari mode half the Atari count, rounded down; this holds for any stimulus,
---     including chatter, signals that fall back to '0' and noise
+--   * the observer samples each pin two clock cycles before the edge of every tick k (where the
+--     synchronizer of the DUT samples it) and counts the '0' samples in the ticks 258 .. 512
+--     (C64 window) and 258 .. 767 (Atari window); the result of a socket in C64 mode must be the
+--     C64 count, that of a socket in Atari mode half the Atari count, rounded down; this holds for
+--     any stimulus, including chatter, signals that fall back to '0' and noise
 --   * for a monotonic stimulus with the charge time t after the end of the discharge, the result
---     must also follow the formula: C64 min(255, max(0, floor(t / 1 us) - 1)), Atari
---     floor(min(510, max(0, floor(t / 1 us) - 1)) / 2), never charging 255
+--     must also follow the formula: C64 min(255, max(0, floor((t + 40 ns) / 1 us) - 1)), Atari
+--     floor(min(510, max(0, floor((t + 40 ns) / 1 us) - 1)) / 2), never charging 255
 --   * DUT only: a socket in C64 mode delivers in cycle n exactly what the reference delivers in
 --     its cycle n with the same stimulus; a socket in Atari mode with a monotonic stimulus
 --     delivers half of the C64 result of the reference, rounded down (if that is not saturated)
 -- The range of the tick counter and of the four pin counters is their declared range, which GHDL
 -- checks at every assignment (a violation stops the simulation without "RESULT PASS").
 -- Part "identity" additionally compares every output of DUT and reference at every change of any
--- of them, drives the joystick inputs at random, and the four Amiga inputs as well in its last
+-- of them, drives the joystick inputs at random, pulses the mode inputs at random so that they
+-- are '0' at every latch tick, and drives the four Amiga inputs at random as well in its last
 -- G_AMIGA cycles (whose results are then not checked against the observer).
 -- The checkers and the stimuli are event driven (a tick is a timeout at the time of its clock
 -- edge), which keeps the simulation time close to that of the two instances alone.
 --
 -- Generics: G_PART identity | atari | mixed | modes | powerup; G_MODES "ab" = modes of socket a and
 -- b as '0' (C64) or '1' (Atari) from power-up on, or "rn" for random changes at random clock
--- cycles (always in part "modes"); G_CYCLES measuring cycles of the DUT that are checked.
+-- cycles (always in part "modes"); G_CYCLES measuring cycles of the DUT that are checked; G_SEED
+-- seed of all random numbers.
 --
 -- done by sy2002 in 2026 and licensed under GPL v3
 ----------------------------------------------------------------------------------------------------
@@ -127,7 +130,9 @@ architecture sim of tb_paddles is
 
    signal clk      : std_logic := '0';
    signal drain    : std_logic_vector(0 to 1);            -- 0 = DUT, 1 = reference
-   signal pins     : pins_t;
+   signal pins     : pins_t := (others => "0000");       -- comparator inputs of DUT and reference
+   signal bpins1   : std_logic_vector(3 downto 0);         -- board model in front of the reference
+   signal ref_d    : std_logic_vector(3 downto 0) := "0000";   -- first delay stage of the reference
    signal res      : res_t;                               -- pota_x, pota_y, potb_x, potb_y
    signal jout     : slv8_t;
    signal dbg      : u8_t;
@@ -242,12 +247,24 @@ begin
    gen_board_ref : if C_REF generate
       i_board_ref : entity work.tb_paddles_board
          generic map (G_PART => C_PART, G_SEED => G_SEED, G_CSOCK => C_CSOCK)
-         port map (drain_i => drain(1), pins_o => pins(1));
+         port map (drain_i => drain(1), pins_o => bpins1);
    end generate gen_board_ref;
 
-   gen_share : if C_PART = P_IDENTITY generate
-      pins(1) <= pins(0);
-   end generate gen_share;
+   -- the reference gets its comparator signals through two flip-flops, the synchronizer that the
+   -- DUT has inside: in the part identity the pins of the DUT, otherwise its own board model
+   gen_ref_delay : if C_REF or C_PART = P_IDENTITY generate
+      p_ref_delay : process(clk)
+      begin
+         if rising_edge(clk) then
+            if C_PART = P_IDENTITY then
+               ref_d <= pins(0);
+            else
+               ref_d <= bpins1;
+            end if;
+            pins(1) <= ref_d;
+         end if;
+      end process p_ref_delay;
+   end generate gen_ref_delay;
 
    ---------------------------------------------------------------------------------------------
    -- mode inputs of the DUT: random changes at random clock cycles, a part of them aimed at the
@@ -299,6 +316,48 @@ begin
          end loop;
       end process p_modes;
    end generate gen_rand_modes;
+
+   ---------------------------------------------------------------------------------------------
+   -- part "identity": pulses of the mode inputs that are '00' again at every latch tick (tick 513,
+   -- all cycles are short); a value assigned at the time of a clock edge is seen from the next
+   -- edge on, so "00" assigned at the edge before the latch tick is what the latch tick sees, and
+   -- a pulse that starts at the latch tick itself is seen one clock cycle after it
+   ---------------------------------------------------------------------------------------------
+
+   gen_id_modes : if C_PART = P_IDENTITY generate
+      p_id_modes : process
+         constant C_LATCH : integer := (C_SHORT - 1) * C_TICK;   -- clock edges from tick 0 to the latch
+         variable st      : u32 := hash3(G_SEED, 555, 1);
+         variable r, b, e : integer;
+      begin
+         loop
+            wait until drain(0) = '1';                 -- the edge of tick 0
+            rnd(st, 0, 3, r);
+            if r > 0 then
+               rnd(st, 0, 9, r);
+               if r = 0 then
+                  b := C_LATCH;                         -- from the latch tick into the next cycle
+                  rnd(st, 1, 20_000, e);
+                  e := b + e;
+               else
+                  rnd(st, 0, C_LATCH - 2, b);
+                  rnd(st, 0, 9, r);
+                  if r = 0 then
+                     e := C_LATCH - 1;                  -- back to "00" at the last possible edge
+                  else
+                     rnd(st, b + 1, C_LATCH - 1, e);
+                  end if;
+               end if;
+               wait for b * 20 ns;
+               rnd(st, 1, 3, r);
+               atari  <= std_logic_vector(to_unsigned(r, 2));
+               n_mchg <= n_mchg + 1;
+               wait for (e - b) * 20 ns;
+               atari  <= "00";
+            end if;
+         end loop;
+      end process p_id_modes;
+   end generate gen_id_modes;
 
    ---------------------------------------------------------------------------------------------
    -- part "identity": the joystick inputs (tied to '1' in the design) at random, and the four
@@ -374,6 +433,7 @@ begin
 
             constant C_NAME : string(1 to 3) := name_of(i);
             constant C_US   : time := C_TICK * 20 ns;
+            constant C_SYNC : time := C_SYNC_NS * 1 ns;
 
             variable n        : integer := 0;              -- running cycle
             variable t0       : time;                      -- its start: the edge of tick 0
@@ -382,6 +442,11 @@ begin
             variable mode     : std_logic_vector(1 downto 0) := "00";   -- C64 after power-up
             variable mode_nx  : std_logic_vector(1 downto 0);
             variable k, k_end : integer;
+            variable k_last   : integer;                   -- last tick whose pin sample counts
+            variable t_next   : time;
+            variable t_mode   : time;
+            variable mode_ok  : boolean;
+            variable obs      : std_logic_vector(3 downto 0);
             variable n64, nat : nat4;
             variable chg_n    : natural;
             variable t_chg    : time;
@@ -433,21 +498,30 @@ begin
                chg_n := 0;
                t_chg := 0 ns;
                if mode = "00" then
-                  k_end := C_SHORT - 1;                 -- the latch tick of a short cycle
+                  k_end  := C_SHORT - 1;                -- the latch tick of a short cycle
+                  k_last := 512;
                else
-                  k_end := C_LONG - 1;                  -- the latch tick of a long cycle
+                  k_end  := C_LONG - 1;                 -- the latch tick of a long cycle
+                  k_last := 767;
                end if;
                mode_nx := "00";
-               k := 258;
+               k       := 258;
+               t_mode  := t0 + k_end * C_US;
+               mode_ok := false;
 
-               -- events until the next cycle starts; a timeout is the clock edge of tick k (delta
-               -- cycle 0, the DUT samples its inputs in the same delta cycle)
+               -- events until the next cycle starts; the timeouts are clock edges (delta cycle 0,
+               -- the DUT samples its inputs in the same delta cycle): the pin sample for tick k
+               -- two clock cycles before the edge of tick k (the synchronizer of the DUT), the
+               -- sample of the mode inputs at the edge of the latch tick
                loop
-                  if k <= k_end then
-                     wait on drain(i), res(i) for t0 + k * C_US - now;
-                  else
-                     wait on drain(i), res(i) for t0 + (C_LONG + 2) * C_US - now;
+                  t_next := t0 + (C_LONG + 2) * C_US;
+                  if k <= k_last then
+                     t_next := minimum(t_next, t0 + k * C_US - C_SYNC);
                   end if;
+                  if not mode_ok then
+                     t_next := minimum(t_next, t_mode);
+                  end if;
+                  wait on drain(i), res(i) for t_next - now;
                   ev_d := drain(i)'event;
                   ev_r := res(i)'event;
                   if ev_r then
@@ -470,25 +544,34 @@ begin
                      end if;
                   end if;
                   if not ev_d and not ev_r then
-                     if k > k_end then
+                     if now = t0 + (C_LONG + 2) * C_US then
                         err("no new discharge " & img(C_LONG + 2) & " ticks after the start of the cycle");
                         stop_req <= '1';
                         wait;
                      end if;
-                     if k <= 767 then
+                     if k <= k_last and now = t0 + k * C_US - C_SYNC then
+                        -- the board model in front of the instance (before the delay of the reference)
+                        if i = 0 then
+                           obs := pins(0);
+                        else
+                           obs := bpins1;
+                        end if;
                         for p in 0 to 3 loop
-                           if pins(i)(p) = '0' then
+                           if obs(p) = '0' then
                               nat(p) := nat(p) + 1;
                               if k <= 512 then
                                  n64(p) := n64(p) + 1;
                               end if;
                            end if;
                         end loop;
+                        k := k + 1;
                      end if;
-                     if k = k_end and i = 0 then
-                        mode_nx := atari;               -- what the DUT sees at its latch tick
+                     if not mode_ok and now = t_mode then
+                        mode_ok := true;
+                        if i = 0 then
+                           mode_nx := atari;            -- what the DUT sees at its latch tick
+                        end if;
                      end if;
-                     k := k + 1;
                   end if;
                end loop;
 
@@ -629,6 +712,9 @@ begin
    begin
       wait until fin(0) or stop_req = '1';
       wait for 2 us;
+      if C_PART = P_IDENTITY then
+         report "TB: identity: " & integer'image(n_mchg) & " pulses of the mode inputs, both '0' at every latch tick";
+      end if;
       if C_RAND then
          report "TB: mode inputs changed " & integer'image(n_mchg) & " times, " & integer'image(n_mtgt) &
                 " of them aimed at the clock edges up to 3 clock cycles before and after tick 513 or tick 768";

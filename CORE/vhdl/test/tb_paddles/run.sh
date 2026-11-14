@@ -4,17 +4,20 @@
 #
 #   CORE/vhdl/test/tb_paddles/run.sh [identity|atari|mixed|modes|powerup|synth|mutants|all] [--keep]
 #
-#   identity  both sockets in C64 mode: every output of the DUT equal to that of the file of the
-#             base commit (the reference) at all times, 2000 measuring cycles with random and
-#             non-monotonic comparator signals and random joystick inputs, then 100 cycles with
-#             random Amiga inputs as well
+#   identity  both mode inputs '0' at every latch tick: every output of the DUT equal to that of the
+#             file of the base commit (the reference, its comparator inputs through two flip-flops)
+#             at all times, 2000 measuring cycles with random and non-monotonic comparator signals,
+#             random joystick inputs and mode pulses, then 100 cycles with random Amiga inputs
+#   (the reference is the file of the base commit in all parts; the synchronizer of the DUT
+#   corresponds to the two flip-flops in front of it)
 #   atari     both sockets in Atari mode: charge times from 0 to 600 us against the formula, the
 #             observer and half the C64 result of the reference; every result from 0 to 255
 #   mixed     socket a C64 and b Atari, and the other way round: the C64 socket equal to the
 #             reference cycle by cycle (charge times, a 1351 for every p, random signals)
 #   modes     2000 cycles with random changes of the modes at random clock cycles
 #   powerup   the first cycles after power-up with the modes 00, 11, 01, 10 and random changes
-#   synth     ghdl --synth of mouse_input: no error and no latch; a mutant with a latch must fail
+#   synth     ghdl --synth of mouse_input: no error and no latch, flip-flop count; a mutant with
+#             a latch must fail
 #   mutants   mutants of mouse_input.vhdl that the bench must reject
 #   all       everything (default)
 #
@@ -187,20 +190,42 @@ synth() {
       > "$lib/synth.vhd" 2> "$lib/synth.log" && ! grep -q -i latch "$lib/synth.log"
 }
 
+# ffcount <netlist>: flip-flops in the VHDL netlist of ghdl --synth (bits assigned under rising_edge)
+ffcount() {
+   python3 - "$1" <<'PYEOF'
+import re, sys
+s = open(sys.argv[1]).read()
+width = {}
+for m in re.finditer(r"(\w+)\s*:\s*(?:out\s+|buffer\s+)?(?:std_logic_vector|unsigned)\s*\((\d+)\s+downto\s+(\d+)\)", s):
+    width.setdefault(m.group(1), int(m.group(2)) - int(m.group(3)) + 1)
+for m in re.finditer(r"(\w+)\s*:\s*(?:out\s+|buffer\s+)?std_logic\b(?!_)", s):
+    width.setdefault(m.group(1), 1)
+bits = regs = 0
+for m in re.finditer(r"if rising_edge \(\w+\) then\s*(.*?)\s*end if;", s, re.S):
+    for t in re.findall(r"^\s*(\w+)\s*<=", m.group(1), re.M):
+        bits += width.get(t, 0)
+        regs += 1
+print(f"{bits} flip-flops in {regs} registers (GHDL netlist before optimization)")
+PYEOF
+}
+
 if want synth; then
    echo "=== synthesis of mouse_input (ghdl --synth)"
    if synth "$BUILD/synth" "$SRC"; then
       W=$(grep -E "signal (pot_counter|pota_x_counter) :" "$BUILD/synth/synth.vhd" | sed -E 's/^ *signal ([a-z_]+) : std_logic_vector \(([0-9]+) downto 0\);/\1 \2/' |
           awk '{ printf "%s%s %d bits", sep, $1, $2 + 1; sep = ", " }')
-      echo "    no error, no latch ($W)"
+      echo "    no error, no latch ($W); $(ffcount "$BUILD/synth/synth.vhd")"
+      if synth "$BUILD/synth_base" "$BUILD/base.vhdl"; then
+         echo "    the file of $BASE: $(ffcount "$BUILD/synth_base/synth.vhd")"
+      fi
    else
       sed 's/^/    /' "$BUILD/synth/synth.log" | head -5
       note_fail synth
    fi
    M="$BUILD/synth_mut"
    mkdir -p "$M"
-   if mutate "$SRC" "$M/mouse_input.vhdl" $'begin\n\n  process(clk) is\n' \
-         $'  signal latch_q : std_logic;\nbegin\n\n  latch_q <= fa_potx when fb_potx = \'1\';\n\n  process(clk) is\n'; then
+   if mutate "$SRC" "$M/mouse_input.vhdl" $'\nbegin\n' \
+         $'\n  signal latch_q : std_logic;\nbegin\n\n  latch_q <= fa_potx when fb_potx = \'1\';\n'; then
       if synth "$M" "$M/mouse_input.vhdl"; then
          note_fail synth_mutant_not_detected
       else
@@ -213,12 +238,24 @@ fi
 
 # --------------------------------------------------------------------------------------------------
 # mutants: name, run (part and generics), exact text and its replacement
-MUTANTS="halve round_up window_short_a window_short_b c64_beyond_a c64_beyond_b no_extend always_long
+MUTANTS="no_sync one_stage three_stages halve round_up window_short_a window_short_b c64_beyond_a c64_beyond_b no_extend always_long
          extend_a_only latch_late unlatched relatch_256 latch_plus1 swap drain_long guard_255 powerup_long
          c64_halved"
 
 mutant_def() {
    case $1 in
+      no_sync)        M_ARGS="-gG_PART=identity -gG_CYCLES=40"
+                      M_OLD=$'  pot_sync_proc : process(clk) is\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= fb_poty & fb_potx & fa_poty & fa_potx;\n      pot_pins_dd <= pot_pins_d;\n    end if;\n  end process pot_sync_proc;\n'
+                      M_NEW=$'  pot_pins_dd <= fb_poty & fb_potx & fa_poty & fa_potx;\n'
+                      M_TXT="no synchronizer" ;;
+      one_stage)      M_ARGS="-gG_PART=identity -gG_CYCLES=40"
+                      M_OLD="      pot_pins_dd <= pot_pins_d;"
+                      M_NEW="      pot_pins_dd <= fb_poty & fb_potx & fa_poty & fa_potx;"
+                      M_TXT="synchronizer with one stage" ;;
+      three_stages)   M_ARGS="-gG_PART=identity -gG_CYCLES=40"
+                      M_OLD=$'  pot_sync_proc : process(clk) is\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= fb_poty & fb_potx & fa_poty & fa_potx;\n'
+                      M_NEW=$'  pot_sync_proc : process(clk) is\n    variable pot_pins_0 : std_logic_vector(3 downto 0) := "0000";\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= pot_pins_0;\n      pot_pins_0  := fb_poty & fb_potx & fa_poty & fa_potx;\n'
+                      M_TXT="synchronizer with three stages" ;;
       halve)          M_ARGS="-gG_PART=atari -gG_MODES=11 -gG_CYCLES=6"
                       M_OLD="            pota_x_internal <= to_unsigned(pota_x_counter / 2, 8);"
                       M_NEW="            pota_x_internal <= to_unsigned(pota_x_counter, 8);"
