@@ -1,0 +1,100 @@
+----------------------------------------------------------------------------------
+-- Commodore 64 for MEGA65
+--
+-- Bench of the drive LED equations of CORE/vhdl/main.vhd (GitHub issue #257), see
+-- README.md. run.sh copies the three assignments (drive_led_col_o, drive_led_o,
+-- img_drive_busy) verbatim out of main.vhd into this template; the bench then
+-- checks them for all 256 combinations of two drives.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------
+
+library ieee;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std.all;
+   use std.env.all;
+
+entity tb_drive_led_wiring is
+end entity tb_drive_led_wiring;
+
+architecture sim of tb_drive_led_wiring is
+
+   constant G_VDNUM : natural := 2;
+
+   signal   c64_drive_led     : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+   signal   c64_drive_err_led : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+   signal   cache_dirty       : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+   signal   phys_1581_en      : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');
+
+   signal   drive_led_o       : std_logic;
+   signal   drive_led_col_o   : std_logic_vector(23 downto 0);
+   signal   img_drive_busy    : std_logic_vector(G_VDNUM - 1 downto 0);
+
+begin
+
+-- @MAIN_ASSIGNMENTS@
+
+   stim_proc : process
+      variable v     : std_logic_vector(7 downto 0);
+      variable err_v : natural := 0;
+      variable act_v, blink_v, dirty_v : boolean;
+      variable led_v : std_logic;
+      variable col_v : std_logic_vector(23 downto 0);
+      variable busy_v : std_logic_vector(G_VDNUM - 1 downto 0);
+   begin
+      for i in 0 to 255 loop
+         v                 := std_logic_vector(to_unsigned(i, 8));
+         c64_drive_led     <= v(1 downto 0);
+         c64_drive_err_led <= v(3 downto 2);
+         cache_dirty       <= v(5 downto 4);
+         phys_1581_en      <= v(7 downto 6);
+         wait for 10 ns;
+
+         act_v   := v(1 downto 0) /= "00";
+         blink_v := v(3 downto 2) /= "00";
+         dirty_v := v(5 downto 4) /= "00";
+
+         -- LED: steady and yellow while a cache is dirty; otherwise green, lit by the activity of
+         -- a drive or by the lit phase of an error blink
+         if dirty_v then
+            led_v := '1';
+            col_v := x"FFFF00";
+         else
+            col_v := x"00FF00";
+            if act_v or blink_v then
+               led_v := '1';
+            else
+               led_v := '0';
+            end if;
+         end if;
+
+         -- busy word of the idle gate: the LED of an image drive or its dirty cache, never the
+         -- LED of the drive that runs the internal mechanism, never an error blink
+         for d in 0 to G_VDNUM - 1 loop
+            if (v(d) = '1' and v(6 + d) = '0') or v(4 + d) = '1' then
+               busy_v(d) := '1';
+            else
+               busy_v(d) := '0';
+            end if;
+         end loop;
+
+         if drive_led_o /= led_v or drive_led_col_o /= col_v or img_drive_busy /= busy_v then
+            err_v := err_v + 1;
+            if err_v <= 8 then
+               report "TB_ERROR: led=" & to_string(v(1 downto 0)) & " err=" & to_string(v(3 downto 2)) &
+                      " dirty=" & to_string(v(5 downto 4)) & " phys=" & to_string(v(7 downto 6)) &
+                      ": drive_led_o=" & std_logic'image(drive_led_o) & " (expected " & std_logic'image(led_v) &
+                      "), img_drive_busy=" & to_string(img_drive_busy) & " (expected " & to_string(busy_v) & ")";
+            end if;
+         end if;
+      end loop;
+
+      if err_v = 0 then
+         report "TB: RESULT PASS";
+      else
+         report "TB: RESULT FAIL, " & integer'image(err_v) & " of 256 combinations wrong";
+      end if;
+      finish;
+   end process stim_proc;
+
+end architecture sim;

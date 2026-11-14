@@ -396,6 +396,12 @@ architecture synthesis of main is
   signal   c64_pause     : std_logic;
   signal   c64_drive_led : std_logic_vector(G_VDNUM - 1 downto 0);
 
+  -- Error indication of the 1581 engines (issue #257): the 1581 DOS blinks its POWER LED (CIA PA5)
+  -- while an error is pending. c1581_error_led turns that into "blinks and is lit right now", and
+  -- the drive LED of the MEGA65 shows it in addition to the activity (see drive_led_o).
+  signal   c64_drive_pwr_led : std_logic_vector(G_VDNUM - 1 downto 0);   -- power LEDs of the 1581 engines
+  signal   c64_drive_err_led : std_logic_vector(G_VDNUM - 1 downto 0);   -- their error blink
+
   -- directly connect the C64's CIA1 to the emulated keyboard matrix within keyboard.vhd
   signal   cia1_pa_in  : std_logic_vector(7 downto 0);
   signal   cia1_pa_out : std_logic_vector(7 downto 0);
@@ -1044,21 +1050,35 @@ begin
   drive_led_col_o <= x"00FF00" when unsigned(cache_dirty) = 0 else
                      x"FFFF00";
 
-  -- the drive led is on if either the C64 is writing to the virtual disk (cached in RAM)
-  -- or if the dirty cache is dirty and/or currently being flushed to the SD card
-  drive_led_o     <= (or c64_drive_led) when unsigned(cache_dirty) = 0 else
+  -- the drive led is on if a drive is active (the 1541's LED, the 1581's activity LED or its WD1772
+  -- being busy), in the lit phases of a 1581's error blink, or if the dirty cache is dirty and/or
+  -- currently being flushed to the SD card. (A 1541 blinks its one LED itself on an error, that is
+  -- part of c64_drive_led.)
+  drive_led_o     <= ((or c64_drive_led) or (or c64_drive_err_led)) when unsigned(cache_dirty) = 0 else
                      '1';
+
+  drive_err_led_gen : for i in 0 to G_VDNUM - 1 generate
+
+    c1581_error_led_inst : entity work.c1581_error_led
+      port map (
+        clk_i     => clk_main_i,
+        pwr_led_i => c64_drive_pwr_led(i),
+        blink_o   => c64_drive_err_led(i)
+      ); -- c1581_error_led_inst
+
+  end generate drive_err_led_gen;
 
   -- "This image drive is busy or holds unsaved data" for the idle-gate (issues #90 and
   -- #93), one bit per drive: consulted by the QNICE Shell (via the phys-1581 diag device)
   -- before it allows a mode change of THAT drive. The LED covers live drive activity of
   -- both image engines; the per-drive dirty flag covers a write cache awaiting SD flush.
-  -- While the INTERNAL drive is the active source its LED reflects PHYSICAL activity (the
-  -- 1581 DOS drives it, e.g. the blinking error indicator), which the physical busy word
-  -- already covers -- so mask each drive's LED with its mode bit, otherwise an
-  -- Internal->Image switch would be spuriously blocked whenever the toggle lands in a
-  -- blink-ON phase. Slow, quasi-static levels, so a plain 2-FF sync into the diag clock
-  -- domain is sufficient.
+  -- While the INTERNAL drive is the active source its LED reflects PHYSICAL activity,
+  -- which the physical busy word already covers -- so mask each drive's LED with its mode
+  -- bit. The error blink of a 1581 (c64_drive_err_led) is deliberately not part of this
+  -- word: a drive that only reports an error is idle, and a mode change must not be
+  -- refused in the lit phases of a blink. (A 1541 blinks its own LED on an error, which is
+  -- part of c64_drive_led.) Slow, quasi-static levels, so a plain 2-FF sync into the diag
+  -- clock domain is sufficient.
   img_drive_busy <= (c64_drive_led and not phys_1581_en) or cache_dirty;
 
   img_busy_sync_proc : process (c64_clk_sd_i)
@@ -2466,8 +2486,9 @@ begin
       sd_buff_din  => iec_sd_buf_dout_sv,           -- read the buffer RAM within the drive (unpacked SV array, see M2M #57 comment)
       sd_buff_wr   => iec_sd_buf_wr,
 
-      -- drive led
+      -- drive led: activity of each drive, and the power LED of the 1581 engines
       led          => c64_drive_led,
+      pwr_led      => c64_drive_pwr_led,
 
       -- Parallel C1541 port
       par_stb_i    => iec_par_stb_in,

@@ -292,6 +292,7 @@ PYEOF
    SEEDS="$REPO/M2M/QNICE/vhdl/tools.vhd $REPO/M2M/vhdl/av_pipeline/video_modes_pkg.vhd
           $REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd $REPO/CORE/vhdl/globals.vhd
           $W/vdrives_pkg.vhd $W/qnice_csr_pkg.vhd $REPO/CORE/vhdl/physical_1581/physical_1581_pkg.vhd
+          $REPO/CORE/vhdl/c1581_error_led.vhd
           $KEYB_SRC"
    "$GHDL" -a $GF -fsynopsys -P"$W/xpm" --workdir="$W/seed" $SEEDS > "$W/seed.log" 2>&1 ||
       { sed 's/^/    /' "$W/seed.log" | head; note_fail wiring_seed; }

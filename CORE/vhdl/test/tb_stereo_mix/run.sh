@@ -323,7 +323,8 @@ fi
 PKGS="$REPO/M2M/QNICE/vhdl/tools.vhd
       $REPO/M2M/vhdl/av_pipeline/video_modes_pkg.vhd
       $REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd
-      $REPO/CORE/vhdl/globals.vhd"
+      $REPO/CORE/vhdl/globals.vhd
+      $REPO/CORE/vhdl/c1581_error_led.vhd"
 
 # vdrives_pkg <vdrives.vhd> <out>: the package vdrives_pkg only (the entity needs Xilinx libraries)
 vdrives_pkg() {

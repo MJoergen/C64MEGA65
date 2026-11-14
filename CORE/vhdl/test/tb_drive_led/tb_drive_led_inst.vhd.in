@@ -1,0 +1,87 @@
+----------------------------------------------------------------------------------
+-- Commodore 64 for MEGA65
+--
+-- Bench of the error blink detectors as main.vhd instantiates them (GitHub issue
+-- #257), see README.md. run.sh copies the generate block drive_err_led_gen
+-- verbatim out of main.vhd into this template, so the bench runs the real
+-- c1581_error_led with the generics, the clock and the per-drive wiring of
+-- main.vhd, in real time: the fastest core clock (NTSC flicker-free, 32.79 MHz)
+-- and the 100 ms toggles of the 1581 DOS.
+--
+-- The bench declares the signals that the block may use and nothing else: a block
+-- that takes another clock or another source does not analyze.
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------
+
+library ieee;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std.all;
+   use std.env.all;
+
+entity tb_drive_led_inst is
+end entity tb_drive_led_inst;
+
+architecture sim of tb_drive_led_inst is
+
+   constant G_VDNUM : natural := 2;
+
+   signal   clk_main_i        : std_logic                              := '0';
+   signal   c64_drive_led     : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '0');   -- activity: not a source
+   signal   c64_drive_pwr_led : std_logic_vector(G_VDNUM - 1 downto 0) := (others => '1');   -- power LEDs, lit
+   signal   c64_drive_err_led : std_logic_vector(G_VDNUM - 1 downto 0);
+
+begin
+
+   clk_main_i <= not clk_main_i after 15249 ps;     -- 32.79 MHz
+
+-- @MAIN_GENERATE@
+
+   stim_proc : process
+      -- the first failed check ends the run (the bench runs in real time, and a mutant fails early)
+      procedure check (cond : boolean; msg : string) is
+      begin
+         if not cond then
+            report "TB_ERROR: " & msg;
+            report "TB: RESULT FAIL";
+            finish;
+         end if;
+      end procedure check;
+   begin
+      wait for 10 ms;
+      check(c64_drive_err_led = "00", "blink with steady power LEDs");
+
+      for d in 0 to G_VDNUM - 1 loop
+         -- an error of drive d: the DOS toggles its power LED every 100 ms; the activity LED of
+         -- the drive flickers at the same time and must not matter
+         c64_drive_pwr_led(d) <= '0';                -- toggle 1
+         c64_drive_led(d)     <= '1';
+         wait for 100 ms;
+         c64_drive_pwr_led(d) <= '1';                -- toggle 2
+         c64_drive_led(d)     <= '0';
+         wait for 100 ms;
+         c64_drive_pwr_led(d) <= '0';                -- toggle 3: a blink from here on
+         wait for 100 ms;
+         c64_drive_pwr_led(d) <= '1';                -- toggle 4: lit
+         wait for 50 ms;
+         check(c64_drive_err_led(d) = '1', "drive " & integer'image(d) & ": lit phase of the blink not shown");
+         check(c64_drive_err_led(1 - d) = '0', "drive " & integer'image(d) & " blinks, the other drive shows it");
+         wait for 50 ms;
+         c64_drive_pwr_led(d) <= '0';                -- toggle 5: dark
+         wait for 50 ms;
+         check(c64_drive_err_led(d) = '0', "drive " & integer'image(d) & ": dark phase of the blink not shown");
+         wait for 50 ms;
+         c64_drive_pwr_led(d) <= '1';                -- toggle 6: lit, and the error is cleared
+         -- the window is 195 ms (at 32.79 MHz) to 204 ms (at 31.45 MHz) long
+         wait for 150 ms;
+         check(c64_drive_err_led(d) = '1', "drive " & integer'image(d) & ": the blink ended before its window");
+         wait for 100 ms;
+         check(c64_drive_err_led(d) = '0', "drive " & integer'image(d) & ": the blink did not end with its window");
+         check(c64_drive_err_led(1 - d) = '0', "drive " & integer'image(d) & " blinked, the other drive shows it");
+      end loop;
+
+      report "TB: RESULT PASS";
+      finish;
+   end process stim_proc;
+
+end architecture sim;

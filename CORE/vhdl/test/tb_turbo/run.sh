@@ -296,7 +296,8 @@ if want static; then
       done
       "$G" -a $F --work=xpm --workdir="$L/xpm" "$REPO/doc/dev-ntsc/tools/stubs/xpm_vcomponents.vhd" > /dev/null 2>&1
       "$G" -a $F --workdir="$L/lib" -P"$L/xpm" "$REPO/M2M/QNICE/vhdl/tools.vhd" "$REPO/M2M/vhdl/av_pipeline/video_modes_pkg.vhd" \
-         "$REPO/CORE/vhdl/globals.vhd" "$L/vdrives_pkg.vhd" "$REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd" > /dev/null 2>&1
+         "$REPO/CORE/vhdl/globals.vhd" "$L/vdrives_pkg.vhd" "$REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd" \
+         "$REPO/CORE/vhdl/c1581_error_led.vhd" > /dev/null 2>&1
       # GHDL rejects case statements on std_logic_vector without "others" (Vivado accepts them):
       # fpga64_rgbcolor is analyzed as entity only, the turbo_speed case of fpga64_sid_iec gets
       # "others" instead of "11" (same patch on both sides).
