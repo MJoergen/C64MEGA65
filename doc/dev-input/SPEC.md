@@ -63,7 +63,7 @@ Schematics of the Trenz boards TE0765-03 (R3) and TE0765-06 (R6), sheets `JOY.Sc
 
 ## 4. The Amiga mouse: `amiga_mouse.vhd`
 
-One instance per socket, in the core clock domain, fed by the raw pins. The 1 ms debouncer is not in this path: at 200 counts per inch a line of the mouse keeps its level for 1 ms at a hand speed of 25 cm/s and for 0.25 ms at 1 m/s. `G_CLK_FREQ` is the PAL frequency of the core clock, as for the debouncer; in NTSC mode the clock is 3.8 % faster and all times of this section are that much shorter.
+One instance per socket, in the core clock domain, fed by the raw pins. The 1 ms debouncer is not in this path: at 200 counts per inch a line of the mouse keeps its level for 1 ms at a hand speed of 25 cm/s and for 0.25 ms at 1 m/s. `G_CLK_FREQ` is the PAL frequency of the core clock, as for the debouncer; in NTSC mode the clock is 3.8 % faster and all times of this section are 3.7 % shorter.
 
 ```vhdl
 entity amiga_mouse is
@@ -100,7 +100,7 @@ end entity amiga_mouse;
 
 ### 4.1 Synchronizer and glitch filter
 
-Each of the four lines passes two flip-flops (attribute `async_reg`) and then a filter: the filtered value takes over the synchronized value once that has been stable for `G_FILTER_NS` (2 µs, 64 clock cycles). All four lines have the same delay, so the order of the edges is kept. The shortest legitimate stable time of a line is about 25 µs (an optical mouse with 1000 counts per inch at 2 m/s). The comparator outputs of the mouse are open collector with pull-ups (3.3 kOhm in the mouse, 4.7 kOhm on the board), and the buffer on the board has no Schmitt trigger: the filter removes the chatter of a slow rising edge and short spikes. Synchronizer and filter always run, also while `enable_i` is '0'.
+Each of the four lines passes two flip-flops (attribute `async_reg`) and then a filter: the filtered value takes over the synchronized value once that has been stable for `G_FILTER_NS` (2 µs, 63 clock cycles: a pulse of up to 63 clock periods never passes, a level of 64 periods always does). All four lines have the same delay, so the order of the edges is kept. The shortest legitimate stable time of a line is about 25 µs (an optical mouse with 1000 counts per inch at 2 m/s). The comparator outputs of the mouse are open collector with pull-ups (3.3 kOhm in the mouse, 4.7 kOhm on the board), and the buffer on the board has no Schmitt trigger: the filter removes the chatter of a slow rising edge and short spikes. Synchronizer and filter always run, also while `enable_i` is '0'.
 
 ### 4.2 Decoder
 
@@ -117,12 +117,12 @@ While `enable_i` is '0' nothing is counted and the backlog (4.3) is empty; the d
 
 ### 4.3 Backlog and rate limiter
 
-A 1351 driver computes the movement since its last call as the difference of two POT values modulo 128 and takes 64 to 127 as negative. A mouse that delivers more than 63 steps between two calls therefore moves the pointer in the wrong direction; with one step per count, a 200 cpi mouse reaches that at 40 cm/s when the driver runs once per PAL frame, and a 1000 cpi mouse at 8 cm/s. The decoder prevents this:
+A 1351 driver computes the movement since its last call as the difference of two POT values modulo 128 and takes 64 to 127 as negative. A mouse that delivers 63 or more steps between two calls therefore moves the pointer in the wrong direction; with one step per count, a 200 cpi mouse reaches that at 40 cm/s when the driver runs once per PAL frame, and a 1000 cpi mouse at 8 cm/s. The decoder prevents this:
 
 * The counts of an axis go into a backlog, a signed number between -`G_BACKLOG` and +`G_BACKLOG` (127). A count that would exceed the bound is dropped.
 * A free-running tick every `G_STEP_US` (400 µs) moves one count from the backlog into the position: position +1 and backlog -1 if the backlog is positive, the reverse if it is negative.
 
-The position therefore never changes by more than 50 steps in 20 ms (42 in an NTSC frame), which leaves a driver that is called once per frame 13 steps, or 5 ms of delay of its call, before the difference becomes ambiguous. While the mouse delivers fewer than 2500 counts per second (32 cm/s at 200 cpi), the backlog stays nearly empty and the position follows within about a millisecond. A faster movement saturates the pointer speed at 2500 steps per second, which is 1250 position units of a 1351 driver per second or a screen width of 320 units in a quarter of a second; after the mouse stops, the pointer moves on for at most 51 ms.
+The position therefore never changes by more than 50 steps in a PAL frame of 20 ms (44 in an NTSC frame of 16.7 ms with its faster clock), which leaves a driver that is called once per frame 12 steps, or 4.8 ms of delay of its call, before the difference becomes ambiguous. While the mouse delivers fewer than 2500 counts per second (32 cm/s at 200 cpi), the backlog holds two counts at most and the position follows within 0.53 ms (0.41 ms if the two lines of a pair are exactly 90 degrees apart; measured at 2400 counts per second with phases from 60 to 120 degrees). A faster movement saturates the pointer speed at 2500 steps per second, which is 1250 position units of a 1351 driver per second or a screen width of 320 units in a quarter of a second; after the mouse stops, the pointer moves on for at most 51 ms.
 
 ### 4.4 The position as POT values
 
@@ -132,11 +132,11 @@ The position of each axis is a 7-bit counter that wraps around; one count of the
 
 The two buttons are derived from the measured values of the paddle pins of the socket (`meas_x_i` for the right button, `meas_y_i` for the middle button), each with its own instance of the same logic:
 
-* A value below 128 means that something pulls the pin up to +5 V: a pull-up resistor exists and the button is released. This sets a flag "pull-up seen".
+* A value below 128 means that something pulls or drives the pin up to +5 V: the button is released, and the device is one whose buttons can be read. Once this has held for the confirmation time, a flag "pull-up seen" is set.
 * A value of 192 or more means that nothing pulls the pin up. If the flag is set, the button is pressed. If the flag is not set, the mouse has no pull-up and the button is never reported.
 * Values from 128 to 191 change nothing.
-* A change of the reported state needs its condition to hold for `G_CONFIRM_US` (4 ms, several measuring cycles) without interruption.
-* A button that is reported as pressed for `G_STUCK_MS` (30 s) without interruption is released and the flag is cleared; it is set again by the next value below 128. This covers the exchange of a mouse with pull-ups for one without while the setting stays "Amiga": without this rule the right button of the second mouse would be pressed forever.
+* A change of the reported state or of the flag needs its condition to hold for `G_CONFIRM_US` (4 ms, several measuring cycles) without interruption; a value from 128 to 191 is such an interruption.
+* A button that is reported as pressed for `G_STUCK_MS` (30 s) without interruption is released and the flag is cleared; it is set again by the next confirmed value below 128. This covers the exchange of a mouse with pull-ups for one without while the setting stays "Amiga": without this rule the right button of the second mouse would be pressed forever.
 * `enable_i` at '0' clears the flag and releases the button.
 
 A pin that is driven high or pulled up with 2 kOhm measures 0 to 3 when the button is released, a 22 kOhm pull-up 11 to 16, and all measure 255 when the button is pressed; the thresholds accept pull-ups up to about 150 kOhm. The Amiga core for the MEGA65 uses the same two rules (a button counts only after its line has been seen high; 30 seconds of "pressed" clear that) in the field.
@@ -163,6 +163,7 @@ The entity keeps its name and its existing ports and gets new ones. All vectors 
 * Two instances of `amiga_mouse`, one per socket, on the raw pins, `enable_i` from `amiga_i`. Its `meas_x_i` and `meas_y_i` are the true measured values of that socket: the measured values arrive already switched to C64 ports and inverted, so socket s takes the values of C64 port s when the ports are not flipped and of the other port when they are, and inverts them.
 * For a socket in Amiga mode, the four debounced direction lines are replaced before the port switcher: up is `right_btn_n_o`, down is `middle_btn_n_o`, left and right are '1'. The fire line is the debounced fire line as before (the left button). The port switcher and the on/off switches of the Shell then work on these lines as on those of a joystick.
 * `potN_x_o` and `potN_y_o` of a C64 port are the inverted `pot_x_o` and `pot_y_o` of the `amiga_mouse` of the socket that is connected to that C64 port, if that socket is in Amiga mode; otherwise they are `potN_x_i` and `potN_y_i`, unchanged.
+* The paddle outputs do not depend on the on/off switches of the Shell (as before), and `reset_n` resets the debouncers only, not the mice.
 * With `amiga_i` at "00" the ten joystick outputs and the four paddle outputs are exactly what they were without the new ports.
 
 ## 6. Paddles: `mouse_input.vhdl`
