@@ -31,6 +31,8 @@ python3 sim.py run rf NEW --sim nvc --sd sd/card_full.blk --cfg bank32 --tag ban
 python3 runtext.py uart|bits|cfg|peaks ...     # read the logs of a run; the header of each script has its options
 ```
 
+The config file on the images has one byte per menu line, 323 bytes for the menu of 323 lines. `make_sd.py` and `make_sd2.py` take the size, the version in the file name and the factory defaults from `CORE/vhdl/config.vhd`, so the images have to be built again whenever the menu or the version changes. A config file of the wrong size is reported as `Corrupt config file:` on the UART; the firmware then boots with the factory defaults and saves nothing.
+
 Scenarios (`scenarios/*.stim`):
 
 | Script | Content |
@@ -44,6 +46,7 @@ Scenarios (`scenarios/*.stim`):
 | `m1` | like `r4`, for the comparison of the SD commands before and after the fix of the mount code |
 | `m2` | a rejected disk image over a mounted one, then Run/Stop; a rejected CRT over a loaded one |
 | `m3` | a rejected disk image, then an accepted one |
+| `i1` | the submenus Mouse and Paddles of Advanced Settings: three selections with Space and Return, an item that is already selected, Back and Run/Stop, saved on close; the menu opens again in Advanced Settings, one selection back to the default, saved on close; a close without a change writes nothing |
 
 To compare two versions of the firmware, set up one work folder per version, run the same scripts in both and call `python3 compare.py <run of the first> <run of the second>`: it compares the UART output, the video RAM dumps, the port registers, the accesses through the 4k window, the SD card commands and the peaks of the CPU spy, and it lists every difference. `spy.log` has the exact lowest stack pointer between two dumps; `spy_peaks.log` records a new peak only every few words. The script `r2` contains one `TIMEOUT wait_uart` that is an artifact: the text `Unloaded CRT/ROM #` is sent while the Space key is still held. The scripts move through the menu with cursor keys, so they depend on its layout: `r2` needs the menu of WIP-V6-A26 or later (Mouse and Paddles behind Keyboard Shortcuts in Advanced Settings). To compare with an older firmware, run that version with a copy of `r2` that presses Up once instead of three times after the Right in Advanced Settings; with three Ups the cursor of an older firmware ends on an RR-Net item, and the next Return resets the core.
 
