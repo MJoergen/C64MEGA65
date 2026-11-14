@@ -2,6 +2,11 @@
 
 Running record of the investigation. Read this before touching `reu1764` again.
 
+**State after round 5 (2026-11-13): WIP-V6-A24X2 works with Joe3f00ff's genuine 1764 (section 1e,
+6e). Open before the merge into `develop`: Kugelblitz360's DMA-cartridge regression on A24X2, the
+user's go. Open beyond this issue: `Interrupt Register: err 1` of the CMD test (6e.3). The
+checklist below is the one that led into round 5; it is kept as written.**
+
 **Resume checklist for the next session, once Joe3f00ff has posted his round-5 results:**
 
 1. Read this file completely, then `PROTOCOL-round5.md` (what he was asked to run) and section 7d
@@ -45,8 +50,10 @@ for one byte per stall (fixed in A24X2); and for most of the session the REU did
 all**, which the A24X1 change cannot cause (section 6d.3) and which round 5 is built to pin down.
 Kugelblitz360's TeensyROM+ works on A24X1 (brief test). A24X2 was built by sy2002 on 2026-11-10
 from the sources of 2944e77 (R3: WNS 0.259 ns, WHS 0.028 ns; R6: WNS 0.334 ns, WHS 0.036 ns; no
-re-roll, sign-off gates passed, DRC without errors, no critical warning). **It has not run on
-hardware yet.** A24, A24X1 and A24X2 go to Joe and Kugelblitz360 only, not to the community. Do not
+re-roll, sign-off gates passed, DRC without errors, no critical warning) and posted to the issue
+on 2026-11-11 (comment 6800630934: `C64MEGA65-WIP-V6-A24X2.zip`, `reu-tests5.zip`, the round-5
+protocol). Joe3f00ff tested it on 2026-11-13 (round 5, section 1e): **every program of the
+round-5 disk reports the expected result.** A24, A24X1 and A24X2 go to Joe and Kugelblitz360 only, not to the community. Do not
 merge `reu1764` into `develop` before a round is clean.
 
 Folder contents:
@@ -192,6 +199,32 @@ Not delivered: `2-stash`; a `1-fetch`, `3-verify`, `9-values`, `12-position`, `1
 
 Kugelblitz360 (2026-11-08, comment 6726163861): the TeensyROM+'s REU emulation and the CMD tester
 run fine on A24X1 (a brief test); he offers to repeat Joe's tests on the TeensyROM+.
+
+## 1e. Round 5 (2026-11-13, Joe3f00ff, issue comment 6857015376, `ResultsA24X2.pdf`)
+
+All on A24X2, settings default with JiffyDOS, part A "all run in a row"; the core is his
+autostart core now (rounds 1 to 4: picked by hand in the NO SCROLL menu).
+
+| Program | Result | As expected |
+|---|---|---|
+| `15-health` | all nine registers `0 0`; `STASH STATUS 80 ADR 16640 LEN 1`; `FETCH STATUS 80 WRONG BYTES 0`; `VERIFY STATUS 80`; `VERIFY, BYTE 100 CHANGED: 48 BYTE 100`; `RESULT: REU AWAKE` | yes |
+| `3-verify` | `REU CHECK OK` twice; 0 faults in 100, 100, 25, 10 and 25 | yes |
+| `9-values` | `REU CHECK OK` twice; `0 FAULTS IN 50` for all eight values | yes |
+| `12-position` | line 50: off-status 80, ten times `80 255 1 318 55`; line 52: off-status 80, ten times `80 255 1 275 56` | yes, to the cycle |
+| `13-swapchk` | `REU CHECK OK` twice; `RUNS OK: 20 OF 20, WRONG C64: 0 REU: 0` | yes |
+| `1-fetch` | `REU CHECK OK` twice; `RUNS OK: 20 OF 20, BAD BYTES: 0` | yes |
+| `2-stash` | `REU CHECK OK` twice; `RUNS OK: 20 OF 20, BAD BYTES: 0` | yes |
+| `15-health` once more | reported OK; the photo is the first one again | no photo of its own |
+| CMD REUTEST, display on | 512K; every step OK except `Interrupt Register: err 1`; Bit Fill "takes its time"; "err 1 on each run one time in 5 runs" (one photo) | all but the interrupt step |
+| `16-soak` (part B) | ten lines from `3 3744 0 0` to `30 37296 0 0`; `DONE: 0 WRONG OF 37296` | yes |
+
+Part C was not needed: the REU answered throughout. Not reported: the About screen, a cold start
+before part A, the Bit Fill time in seconds.
+
+Joe's answers: he cannot say when the REU went silent in round 4 (he had only the photos). A
+short press of the reset button did not bring it back, a power cycle with about five seconds of
+waiting did; he saw the state in the CMD test only. Nothing connected but a LAN cable; the REU
+sits in a 90 degree adapter.
 
 ## 2. What the test programs really do (verified by disassembly)
 
@@ -668,6 +701,27 @@ RAM write a cartridge write reaches the RAM in one tick only, tick 28 (CYCLE_CPU
    that does nothing. Round 5 has this in every program, puts everything on one disk, and asks
    for the events around a failing check instead of a fixed sequence.
 
+## 6e. Deductions after round 5
+
+1. **The issue is solved on Joe's unit.** Every transfer type survives VIC-II stalls on A24X2:
+   verify (`3-verify`, `9-values`, `12-position`, the CMD phases), swap (`13-swapchk`: 20 swaps of
+   4 KB, no wrong byte on either side; the A24X1 model gives about 200), fetch and stash (20
+   transfers of 4 KB each). `12-position` shows the mechanism at work: the verify that a badline
+   interrupts now runs to its end and takes 318 cycles instead of 275, exactly the 43 cycles of
+   the stall, and ends in line 55. Every program carried its own proof that the REC executed.
+2. **The REU that did not answer (6d.1 to 6d.3) did not come back** in a session with eight
+   programs, five CMD runs and a 30 minute soak of 37296 register writes. Its cause stays
+   unknown. Two facts from Joe's answers: a reset did not cure it and a five second power cycle
+   did, and the core start changed from the NO SCROLL menu to autostart between the rounds.
+   Decision of sy2002 (2026-11-14): not pursued further.
+3. **`Interrupt Register: err 1` remains**, in about one of five CMD runs (Joe's wording allows
+   "in every run", there is one photo). It is no lost register write: `16-soak` and `15-health`
+   lost none of 37656. It does not depend on stalls (A22 with the display off, 6d.6) and is not
+   caused by this branch. What is left: the /IRQ line, the status read inside the interrupt
+   routine, or the one-byte stash. Unknown: whether the same REU does it on Joe's real C64, and
+   whether Version 5 did. Hardly any software uses the REU's interrupt. It does not block the
+   merge; the test that settles it is the CMD program on his real C64, five runs.
+
 ## 7. Experiments for Joe (`tests/reu-tests.d64`, BASIC, simulated REU must be off)
 
 All transfers use autoload commands 176..179 (`$B0..$B3`); the display is switched with
@@ -847,7 +901,7 @@ if round 5 shows that the state follows the core version.
   BA-low cycle, while the REC model keeps R/W low and its write data until tick 4, three ticks
   (95 ns) of opposite drive at the start of the VIC half, where nobody samples; a real REC has to
   have R/W high again before the VIC's access anyway. Built as WIP-V6-A24X2 on 2026-11-10 (timing
-  in the branch-state paragraph at the top); **not on hardware yet.**
+  in the branch-state paragraph at the top); confirmed on hardware in round 5 (section 1e).
 - **A24X1: three grace cycles for reads, implemented 2026-11-07 in `CORE/vhdl/main.vhd`
   (`cart_dma_ba_proc`, `handle_hardware_expansion_proc`, constant `C_CART_DMA_GRACE_RD_CYCLES = 3`,
   counter `core_dma_grace_cnt`, flag `core_dma_grace_long`).** After a served read (stash, verify,
