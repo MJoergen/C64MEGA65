@@ -145,6 +145,7 @@ constant C_DEV_HYPERRAM       : std_logic_vector(15 downto 0) := x"0004";
 constant C_DEV_I2C            : std_logic_vector(15 downto 0) := x"0005";
 constant C_DEV_RTC            : std_logic_vector(15 downto 0) := x"0006";
 constant C_DEV_STRROM         : std_logic_vector(15 downto 0) := x"0007";
+constant C_DEV_FB_NAMES       : std_logic_vector(15 downto 0) := x"0008";
 constant C_DEV_SYS_INFO       : std_logic_vector(15 downto 0) := x"00FF";
 
 -- String ROM: message strings of the QNICE firmware that are stored in a block RAM instead of in the
@@ -169,6 +170,8 @@ signal qnice_ramrom_data_in_hyperram : std_logic_vector(15 downto 0);
 signal qnice_ramrom_wait             : std_logic;
 signal qnice_ramrom_wait_hyperram    : std_logic;
 signal qnice_ramrom_ce_hyperram      : std_logic;
+signal qnice_fb_names_we             : std_logic;
+signal qnice_fb_names_data           : std_logic_vector(15 downto 0);
 signal qnice_ramrom_address          : std_logic_vector(31 downto 0);
 
 -- Shell configuration (config.vhd)
@@ -307,6 +310,7 @@ begin
       qnice_i2c_we_o           <= '0';
       qnice_rtc_ce_o           <= '0';
       qnice_rtc_we_o           <= '0';
+      qnice_fb_names_we        <= '0';
 
       -----------------------------------
       -- Framework devices
@@ -354,6 +358,11 @@ begin
             -- String ROM: read-only, one character per word
             when C_DEV_STRROM =>
                qnice_ramrom_data_in       <= x"00" & qnice_strrom_data;
+
+            -- Name store of the file browser (see dirbrowse.asm)
+            when C_DEV_FB_NAMES =>
+               qnice_fb_names_we          <= qnice_ramrom_we_o;
+               qnice_ramrom_data_in       <= qnice_fb_names_data;
 
             -- Read-only System Info (constants are defined in sysdef.asm)
             when C_DEV_SYS_INFO =>
@@ -491,6 +500,22 @@ begin
          qnice_ramrom_wait    <= qnice_ramrom_wait_i;
       end if;
    end process qnice_ramrom_devices;
+
+   -- Name store of the file browser: the names of the current folder (QNICE device C_DEV_FB_NAMES,
+   -- see M2M/rom/dirbrowse.asm); its size is set by C_FB_NAMES_AW in the core's globals.vhd
+   fb_names_ram : entity work.dualport_2clk_ram
+      generic map (
+         ADDR_WIDTH   => C_FB_NAMES_AW,
+         DATA_WIDTH   => 16,
+         FALLING_A    => true
+      )
+      port map (
+         clock_a   => clk_i,
+         address_a => qnice_ramrom_addr_o(C_FB_NAMES_AW - 1 downto 0),
+         data_a    => qnice_ramrom_data_out_o,
+         wren_a    => qnice_fb_names_we,
+         q_a       => qnice_fb_names_data
+      ); -- fb_names_ram
 
    -- String ROM: Same primitive and the same QNICE-side timing as the other block RAMs that QNICE reads
    -- (FALLING_B: QNICE expects the read to happen at the falling clock edge), so that no wait state is needed.

@@ -177,6 +177,16 @@ constant C_VD_BUFFER          : vd_buf_array := (  C_DEV_C64_MOUNT,
                                                    x"EEEE");                           -- Always finish the array using x"EEEE"
 
 ----------------------------------------------------------------------------------------------------------
+-- File browser of the Shell
+----------------------------------------------------------------------------------------------------------
+
+-- The file browser keeps the names of the current folder in a RAM of the framework (QNICE device
+-- 0x0008, see M2M/rom/dirbrowse.asm) and its list in the QNICE RAM. C_FB_NAMES_AW is the address
+-- width of the RAM in 16-bit words: 12 = 4K words (2 RAMB36) .. 16 = 64K words (32 RAMB36).
+-- 16 holds about 2,800 names of 45 characters. CORE/m2m-rom/make_rom.sh passes it to the Shell.
+constant C_FB_NAMES_AW        : natural := 16;
+
+----------------------------------------------------------------------------------------------------------
 -- System for handling simulated cartridges and ROM loaders
 ----------------------------------------------------------------------------------------------------------
 

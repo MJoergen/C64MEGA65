@@ -29,6 +29,16 @@
 #include "../../QNICE/dist_kit/monitor.def"
 
 CTX_MOUNT_DISKIMG .EQU 0x0100                   ; see ../sysdef.asm
+
+; The QNICE emulator has no M2M devices: the name store of the file browser
+; (see ../dirbrowse.asm) is emulated by one 4K-word window in RAM at fixed
+; addresses, and its device and window registers are plain RAM words there.
+; The folders of the test need less than one window of names.
+M2M$FB_NAMES     .EQU 0x0008
+FB_NAMES_WIN     .EQU 1
+M2M$RAMROM_DATA  .EQU 0xE000                    ; 0xE000 .. 0xEFFF
+M2M$RAMROM_DEV   .EQU 0xF000
+M2M$RAMROM_4KWIN .EQU 0xF001
 RING_MAX        .EQU 100                        ; guard against endless rings
 
                 .ORG    0x8000

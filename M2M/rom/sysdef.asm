@@ -209,6 +209,8 @@ M2M$CONFIG          .EQU 0x0002     ; Static Shell config data (config.vhd)
 M2M$ASCAL_PPHASE    .EQU 0x0003     ; ascal.vhd Polyphase filter RAM
 M2M$HYPERRAM        .EQU 0x0004     ; Device for the built-in 8MB of HyperRAM
 M2M$SDRAM           .EQU 0x0005     ; @TODO/RESERVED for future R4 boards 
+M2M$FB_NAMES        .EQU 0x0008     ; Name store of the file browser
+                                    ; (size: FB_NAMES_WIN, see dirbrowse.asm)
 M2M$STRROM          .EQU 0x0007     ; String ROM, read-only (see strrom.asm)
 
 M2M$SYS_INFO        .EQU 0x00FF     ; Device for System Info
