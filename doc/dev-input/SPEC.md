@@ -28,6 +28,7 @@ Limits that come from the hardware:
 
 * The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled or driven up to +5 V from one that is not (section 2), so an original Amiga mouse has only its left button. Both buttons work with everything that holds the two pins high while the buttons are released: mice and adapters with an active output stage, a mouSTer in Amiga mode with firmware 3.23.5313 or newer and `activepotlines=true`, or any passive mouse behind a straight-through adapter with two resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7 to pin 5. The right button is the up line as on a 1351, the middle button the down line as in the Micromys protocol. This is the experience and the mechanism of the Amiga core for the MEGA65 (AExp), whose documentation lists the devices.
 * USB adapters with a polled wheel protocol (Micro Tom, for example) take every discharge of the paddle pins as a request and answer it with a short code on the movement lines. The decoder counts such a code forwards and backwards again, so the position does not drift, but the pointer can twitch. The cure is the one of the Amiga core: an extension cable with wire 5 cut, which costs the middle button and the wheel.
+* After a mouse or adapter that provides the right and middle button is unplugged from a port that is set to "Amiga", the C64 sees both buttons pressed for up to five seconds (on port 1 that looks like held keys).
 * Everything that is not an Atari paddle needs the paddle setting "C64" for its port: a 1351 (its position is encoded in steps of 2 µs), a KoalaPad, Commodore paddles.
 * While at least one port is set to "Atari CX30", the measuring cycle of both ports is longer (section 6), because one signal discharges all four paddle pins. Devices on the other port measure the same values as before. A 1351 on the other port synchronizes itself to the discharge and should not mind the longer cycle; this combination is untested.
 
@@ -73,7 +74,7 @@ entity amiga_mouse is
       G_STEP_US     : natural := 400;      -- shortest time between two steps of the reported position
       G_BACKLOG     : natural := 127;      -- counts that may wait for the rate limiter; further ones are dropped
       G_CONFIRM_US  : natural := 4000;     -- a button on a paddle pin needs to be stable for this time
-      G_STUCK_MS    : natural := 30000     -- a button on a paddle pin that is pressed for longer is released
+      G_STUCK_MS    : natural := 5000      -- a button on a paddle pin that is pressed for longer is released
    );
    port (
       clk_i          : in  std_logic;
@@ -136,10 +137,10 @@ The two buttons are derived from the measured values of the paddle pins of the s
 * A value of 192 or more means that nothing pulls the pin up. If the flag is set, the button is pressed. If the flag is not set, the mouse has no pull-up and the button is never reported.
 * Values from 128 to 191 change nothing.
 * A change of the reported state or of the flag needs its condition to hold for `G_CONFIRM_US` (4 ms, several measuring cycles) without interruption; a value from 128 to 191 is such an interruption.
-* A button that is reported as pressed for `G_STUCK_MS` (30 s) without interruption is released and the flag is cleared; it is set again by the next confirmed value below 128. This covers the exchange of a mouse with pull-ups for one without while the setting stays "Amiga": without this rule the right button of the second mouse would be pressed forever.
+* A button that is reported as pressed for `G_STUCK_MS` (5 s) without interruption is released and the flag is cleared; it is set again by the next confirmed value below 128. This covers a device that held the pins high and is unplugged or exchanged for one that does not, while the setting stays "Amiga": the open pin looks like a pressed button, and without this rule it would stay pressed forever. The time is short because the two buttons are the up and down lines, which on C64 port 1 are in parallel with the keyboard matrix: for as long as the button is reported, the C64 sees held keys.
 * `enable_i` at '0' clears the flag and releases the button.
 
-A pin that is driven high or pulled up with 2 kOhm measures 0 to 3 when the button is released, a 22 kOhm pull-up 11 to 16, and all measure 255 when the button is pressed; the thresholds accept pull-ups up to about 150 kOhm. The Amiga core for the MEGA65 uses the same two rules (a button counts only after its line has been seen high; 30 seconds of "pressed" clear that) in the field.
+A pin that is driven high or pulled up with 2 kOhm measures 0 to 3 when the button is released, a 22 kOhm pull-up 11 to 16, and all measure 255 when the button is pressed; the thresholds accept pull-ups up to about 150 kOhm. The Amiga core for the MEGA65 uses the same two rules in the field (a button counts only after its line has been seen high; there, 30 seconds of "pressed" clear that, because an Amiga holds its right button for as long as a menu is open).
 
 ## 5. Conditioning of the two ports: `debouncer.vhd`
 
@@ -206,7 +207,7 @@ Each bit is the menu bit of the item that is not the default. The Shell writes t
 
 Benches under `CORE/vhdl/test/`, each with a `run.sh` that ends with `RESULT: PASS` and with mutants that have to fail:
 
-* `tb_amiga_mouse`: the decoder against a model of the mouse (speeds from single steps to 20,000 counts per second, both directions, both axes, chatter on every edge, pulses shorter than the filter, double transitions) and against the driver of the 1351 manual, called once per PAL frame and once per NTSC frame with jitter: up to the rate limit the driver follows the mouse exactly, above it the driver never sees a movement in the wrong direction. The buttons on the paddle pins with and without pull-up. The conditioning of the ports in all combinations of the port switcher, the Amiga settings and the on/off switches, and against the entity before the change for the setting "00".
+* `tb_amiga_mouse`: the decoder against a model of the mouse (speeds from single steps to 20,000 counts per second, both directions, both axes, chatter on every edge, pulses shorter than the filter, double transitions) and against the driver of the 1351 manual, called once per PAL frame and once per NTSC frame with jitter: the sum of the driver's results always equals the movement of the reported position, also above the rate limit and when the mouse reverses with a full backlog: no unit is lost or invented and no difference is misread. The buttons on the paddle pins with and without pull-up. The conditioning of the ports in all combinations of the port switcher, the Amiga settings and the on/off switches, and against the entity before the change for the setting "00".
 * `tb_paddles`: the paddle measurement against a model of the board circuit: identity with the file before the change in C64 mode for random and for non-monotonic comparator signals, the results and the cycle length in Atari mode and in mixed mode, changes of the modes at any time.
 * The wiring of the new ports through `framework.vhd`, `qnice_wrapper.vhd` and the four board files, by analysis and elaboration against the real entity declarations as in `tb_capslock`.
 * `M2M/rom/tests/menu_test.py`: the menu, the menu bits and the navigation into the two submenus.
