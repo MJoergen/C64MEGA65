@@ -9,12 +9,12 @@ CORE/vhdl/test/tb_paddles/run.sh [identity|atari|mixed|modes|powerup|synth|mutan
 ```
 
 * `identity`: both sockets in C64 mode against the reference, which is `mouse_input.vhdl` of the base commit `6845596` (`WIP-V6-A25`) with its entity renamed to `mouse_input_ref`; its four comparator inputs pass two flip-flops on the same clock, the synchronizer of the DUT. Every output (`pot_drain`, the four results, the eight joystick outputs, `mouse_debug`) is compared at every change of any of them, over 2000 measuring cycles with random comparator signals of every kind (below), random joystick inputs and random pulses of the mode inputs that are '0' at every latch tick (some of them back to '0' at the clock edge before the latch tick, some starting at the latch tick itself), then 100 further cycles in which the four Amiga inputs change at random as well.
-* `atari`: both sockets in Atari mode, charge times from 0 to 600 µs in steps of 0.5 µs (the sampling points, whole microseconds minus 40 ns, alternately 1 ns early, exact and 1 ns late), never charging, charge time 0, a pin connected to +5 V, the saturation of both modes to the nanosecond, random charge times and the 1351. Every result from 0 to 255 has to appear on both sockets.
-* `mixed`: socket a in C64 mode and socket b in Atari mode, and the other way round. The socket in C64 mode gets charge times from 0 to 259 µs, a 1351 with every position p from 0 to 63 on both pins, and random signals of every kind; it has to deliver in each cycle exactly what the reference (with the two flip-flops in front of it) delivers in its cycle with the same number, although the cycles of the reference are short and those of the DUT long.
+* `atari`: both sockets in Atari mode. The first 40 cycles after power-up put non-monotonic signals on all four pins (chatter around the crossing, signals that fall back to '0' and possibly rise again, before and after tick 512, and noise); then come charge times from 0 to 600 µs in steps of 0.5 µs (the sampling points, whole microseconds minus 40 ns, alternately 1 ns early, exact and 1 ns late), never charging, charge time 0, a pin connected to +5 V, the saturation of both modes to the nanosecond, random charge times and the 1351. Every result from 0 to 255 has to appear on both sockets.
+* `mixed`: socket a in C64 mode and socket b in Atari mode, and the other way round. The socket in Atari mode gets non-monotonic signals as in `atari` in every other cycle and charge times from 0 to 600 µs in the others. The socket in C64 mode gets charge times from 0 to 259 µs, a 1351 with every position p from 0 to 63 on both pins, and random signals of every kind; it has to deliver in each cycle exactly what the reference (with the two flip-flops in front of it) delivers in its cycle with the same number, although the cycles of the reference are short and those of the DUT long.
 * `modes`: 2000 cycles (with a seed of their own, so the stimuli differ from those of `identity`) in which the two mode inputs change at random clock cycles (gaps from 1 to 60,000 clock cycles), a part of the changes aimed at the clock edges from 3 cycles before to 3 cycles after tick 513 and tick 768 of the running cycle.
 * `powerup`: the first cycles after power-up with the modes ab = 00, 11, 01 and 10 from the first clock cycle on, and with modes that change at random from the start.
-* `synth`: `ghdl --synth` of `mouse_input` must run without error; GHDL stops with an error for every inferred latch, which a mutant with a latch proves. The runner also prints the flip-flops of the GHDL netlist (before any optimization): 277 in 46 registers, against 381 in 42 registers for the file of the base commit, whose tick counter and pin counters are unconstrained integers.
-* `mutants`: the mutants below, each built and run against the part that rejects it fastest.
+* `synth`: `ghdl --synth` of `mouse_input` must run without error, and the netlist that GHDL writes must carry the attribute `async_reg` on both stages of the synchronizer (`pot_pins_d`, `pot_pins_dd`). GHDL stops with an error for every inferred latch. Two mutants prove both checks: one with a latch and one without the attributes. The runner also prints the flip-flops of the GHDL netlist (before any optimization): 277 in 46 registers, against 381 in 42 registers for the file of the base commit, whose tick counter and pin counters are unconstrained integers.
+* `mutants`: the mutants below, each built and run against the parts listed for it; a mutant is rejected only if every one of its runs fails.
 * `all` (default): everything; at most two simulations run at the same time.
 * `--keep`: keeps the build directory and prints its path.
 
@@ -42,13 +42,15 @@ The first counted tick is tick 258, whose sample is taken 1.960 µs after the en
 
 ## Mutants
 
-Each mutant is one exact text replacement in a copy of `mouse_input.vhdl`; `run.sh mutants` prints one line per mutant with the first error that rejected it.
+Each mutant is an exact text replacement in a copy of `mouse_input.vhdl`, or three of them for `atari_first_one`, which needs a signal of its own; every text to be replaced has to occur exactly once. `run.sh mutants` prints each mutant with the first error of each of its runs. A mutant whose text no longer occurs, or that does not analyze or elaborate, is a failure of the suite and not a rejection, so that a stale replacement cannot pass for a rejected mutant.
 
 | Mutant | Change | Rejected by |
 |---|---|---|
 | `no_sync` | no synchronizer: the measurement samples the pins directly | `identity` |
 | `one_stage` | synchronizer with one stage | `identity` |
 | `three_stages` | synchronizer with three stages | `identity` |
+| `atari_first_one` | an Atari pin (pin 9 of socket a) counts only until its first '1' after tick 512 | `atari`, `mixed` 10 and `modes` |
+| `atari_after_one` | an Atari pin counts after tick 512 only if it read '0' in every tick since tick 258 | `atari`, `mixed` 10 and `modes` |
 | `halve` | Atari result of pin 9 of socket a not halved | `atari` |
 | `round_up` | Atari result rounded up | `atari` |
 | `window_short_a`, `window_short_b` | Atari window of a socket as short as the C64 window | `powerup` 10, 01 |
@@ -56,7 +58,7 @@ Each mutant is one exact text replacement in a copy of `mouse_input.vhdl`; `run.
 | `no_extend` | cycle never long | `powerup` 11 |
 | `always_long` | cycle always long | `powerup` 00 |
 | `extend_a_only` | only socket a in Atari mode makes the cycle long | `powerup` 01 |
-| `latch_late` | long cycle of 770 ticks | `powerup` 11 (range of the pin counter) |
+| `latch_late` | long cycle of 770 ticks | `powerup` 11 (range of the tick counter, 0 to 768) |
 | `unlatched` | modes taken over from the inputs in every clock cycle | `modes` |
 | `relatch_256` | the mode of socket a also taken over at the end of the discharge | `modes` |
 | `latch_plus1` | the modes taken over one clock cycle after the latch tick | `modes` |
@@ -66,6 +68,7 @@ Each mutant is one exact text replacement in a copy of `mouse_input.vhdl`; `run.
 | `powerup_long` | socket b in Atari mode at power-up | `powerup` 00 |
 | `c64_halved` | C64 result of pin 9 of socket b halved | `identity` |
 | `latch` (part `synth`) | a latch on an unused signal | `ghdl --synth` |
+| `no_async_reg` (part `synth`) | the synchronizer without the attribute `async_reg` | the check of the netlist |
 
 ## Files
 

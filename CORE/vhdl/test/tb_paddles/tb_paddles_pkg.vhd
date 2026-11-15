@@ -209,6 +209,32 @@ package body tb_paddles_pkg is
       return st;
    end function stim_random;
 
+   -- non-monotonic stimulus for a socket in Atari mode: chatter around a crossing, a signal that
+   -- falls back to '0' and possibly rises again, or noise; the times cover the whole Atari window,
+   -- before and after tick 512
+   function stim_nonmono(seed, pin, n : natural) return stim_t is
+      variable h          : u32 := hash3(seed, 400 + pin, n);
+      variable x, t1, t2  : integer;
+   begin
+      case (n + pin) mod 3 is
+         when 0 =>
+            rnd(h, 0, 600_000, x);
+            return (K_CHATTER, x, 0, 0);
+         when 1 =>
+            rnd(h, 0, 550_000, t1);
+            rnd(h, 1, 200_000, x);
+            t2 := t1 + x;
+            rnd(h, 0, 1, x);
+            if x = 0 then
+               return (K_FALLBACK, t1, t2, -1);
+            end if;
+            rnd(h, 1, 100_000, x);
+            return (K_FALLBACK, t1, t2, t2 + x);
+         when others =>
+            return (K_NOISE, 0, 0, 0);
+      end case;
+   end function stim_nonmono;
+
    function get_stim(part, seed, pin, n, csock : natural) return stim_t is
       type off_t is array (0 to 5) of integer;
       -- offsets within a microsecond: the sampling point (-40 ns) and 1 ns either side
@@ -228,6 +254,11 @@ package body tb_paddles_pkg is
             return stim_random(seed, pin, n, true);
 
          when P_ATARI =>
+            -- 40 cycles of non-monotonic signals on all four pins, then the charge times
+            if m < 40 then
+               return stim_nonmono(seed, pin, n);
+            end if;
+            m := m - 40;
             if m <= 300 then
                -- 0 to 600 us in steps of 500 ns over the four pins; the sampling points (whole
                -- microseconds minus 40 ns) alternate between 1 ns early, exact and 1 ns late
@@ -283,7 +314,11 @@ package body tb_paddles_pkg is
                   return stim_random(seed, pin, n, false);
                end if;
             else
-               -- the socket in Atari mode
+               -- the socket in Atari mode: non-monotonic signals in every other cycle, charge
+               -- times from 0 to 600 us in the others
+               if m mod 2 = 1 then
+                  return stim_nonmono(seed, pin, n);
+               end if;
                t := (m mod 234) * 2575 + C_OFF(m mod 6);
                if pin mod 2 = 1 then
                   t := 600_000 - t;

@@ -376,12 +376,13 @@ begin
       -- pins, and a pin counts the ticks from 258 on in which it reads '0' (behind the
       -- synchronizer: a tick sees the pin as it was two clock cycles before). A socket in C64
       -- mode counts up to tick 512, 1 us per step like the SID. A socket in Atari mode (1 MOhm
-      -- potentiometers) counts up to tick 767 and gets half the count, 2 us per step: the charge
-      -- time is proportional to the resistance, so a 1 MOhm paddle reads like a 500 kOhm paddle
-      -- on every board, whatever the threshold of the comparator and the tolerance of the
-      -- capacitor. A cycle latches at tick 513 (short cycle) or, while at least one socket is in
-      -- Atari mode, at tick 768 (long cycle); the latch tick takes over the modes of the next
-      -- cycle.
+      -- potentiometers) counts up to tick 767 and gets half the count, 2 us per step. The charge
+      -- time is proportional to the resistance plus the 1 kOhm series resistor, so the factor 2
+      -- does not depend on the threshold of the comparator, the capacitor or the port voltage: a
+      -- 1 MOhm paddle reads like a 500 kOhm paddle within about one count, as long as the leakage
+      -- at the node is far below a microampere. A cycle latches at tick 513 (short cycle) or,
+      -- while at least one socket is in Atari mode, at tick 768 (long cycle); the latch tick
+      -- takes over the modes of the next cycle.
       -- Assumes 50MHz clock
       if phi_counter < 49 then
         phi_counter <= phi_counter + 1;

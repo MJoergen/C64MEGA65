@@ -10,14 +10,16 @@
 #             random joystick inputs and mode pulses, then 100 cycles with random Amiga inputs
 #   (the reference is the file of the base commit in all parts; the synchronizer of the DUT
 #   corresponds to the two flip-flops in front of it)
-#   atari     both sockets in Atari mode: charge times from 0 to 600 us against the formula, the
-#             observer and half the C64 result of the reference; every result from 0 to 255
+#   atari     both sockets in Atari mode: non-monotonic signals against the observer, charge times
+#             from 0 to 600 us against the formula, the observer and half the C64 result of the
+#             reference; every result from 0 to 255
 #   mixed     socket a C64 and b Atari, and the other way round: the C64 socket equal to the
 #             reference cycle by cycle (charge times, a 1351 for every p, random signals)
 #   modes     2000 cycles with random changes of the modes at random clock cycles
 #   powerup   the first cycles after power-up with the modes 00, 11, 01, 10 and random changes
-#   synth     ghdl --synth of mouse_input: no error and no latch, flip-flop count; a mutant with
-#             a latch must fail
+#   synth     ghdl --synth of mouse_input: no error, no latch, async_reg on both synchronizer
+#             stages in the netlist, flip-flop count; mutants with a latch and without async_reg
+#             must fail
 #   mutants   mutants of mouse_input.vhdl that the bench must reject
 #   all       everything (default)
 #
@@ -53,16 +55,20 @@ FAILS=""
 note_fail() { FAILS="$FAILS $1"; echo "  FAIL: $1"; }
 want() { [ "$WHAT" = all ] || [ "$WHAT" = "$1" ]; }
 
-# mutate <src> <dst> <old> <new>: copy src to dst with exactly one occurrence of old replaced
+# mutate <src> <dst> <old> <new> [<old> <new> ...]: copy src to dst with each old replaced by its
+# new, one after the other; each old has to occur exactly once
 mutate() {
    python3 - "$@" <<'PYEOF'
 import sys
-src, dst, old, new = sys.argv[1:5]
+src, dst = sys.argv[1:3]
+pairs = sys.argv[3:]
 s = open(src).read()
-if s.count(old) != 1:
-    print(f"    mutant pattern found {s.count(old)} times (expected once): {old!r}")
-    sys.exit(1)
-open(dst, "w").write(s.replace(old, new))
+for old, new in zip(pairs[0::2], pairs[1::2]):
+    if s.count(old) != 1:
+        print(f"    mutant pattern found {s.count(old)} times (expected once): {old!r}")
+        sys.exit(1)
+    s = s.replace(old, new)
+open(dst, "w").write(s)
 PYEOF
 }
 
@@ -130,7 +136,7 @@ runs_of() {
 args_of() {
    case $1 in
       identity)   echo "-gG_PART=identity -gG_CYCLES=2000 -gG_AMIGA=100" ;;
-      atari)      echo "-gG_PART=atari -gG_MODES=11 -gG_CYCLES=337" ;;
+      atari)      echo "-gG_PART=atari -gG_MODES=11 -gG_CYCLES=377" ;;
       mixed_01)   echo "-gG_PART=mixed -gG_MODES=01 -gG_CYCLES=235" ;;
       mixed_10)   echo "-gG_PART=mixed -gG_MODES=10 -gG_CYCLES=235" ;;
       modes)      echo "-gG_PART=modes -gG_CYCLES=2000 -gG_SEED=2" ;;
@@ -209,12 +215,19 @@ print(f"{bits} flip-flops in {regs} registers (GHDL netlist before optimization)
 PYEOF
 }
 
+# attrs <netlist>: both stages of the synchronizer carry async_reg in the netlist that GHDL writes
+attrs() {
+   grep -q 'attribute async_reg of pot_pins_d : signal is "true";' "$1" &&
+   grep -q 'attribute async_reg of pot_pins_dd : signal is "true";' "$1"
+}
+
 if want synth; then
    echo "=== synthesis of mouse_input (ghdl --synth)"
-   if synth "$BUILD/synth" "$SRC"; then
+   if synth "$BUILD/synth" "$SRC" && attrs "$BUILD/synth/synth.vhd"; then
       W=$(grep -E "signal (pot_counter|pota_x_counter) :" "$BUILD/synth/synth.vhd" | sed -E 's/^ *signal ([a-z_]+) : std_logic_vector \(([0-9]+) downto 0\);/\1 \2/' |
           awk '{ printf "%s%s %d bits", sep, $1, $2 + 1; sep = ", " }')
-      echo "    no error, no latch ($W); $(ffcount "$BUILD/synth/synth.vhd")"
+      echo "    no error, no latch, async_reg on both synchronizer stages ($W)"
+      echo "    $(ffcount "$BUILD/synth/synth.vhd")"
       if synth "$BUILD/synth_base" "$BUILD/base.vhdl"; then
          echo "    the file of $BASE: $(ffcount "$BUILD/synth_base/synth.vhd")"
       fi
@@ -222,27 +235,35 @@ if want synth; then
       sed 's/^/    /' "$BUILD/synth/synth.log" | head -5
       note_fail synth
    fi
-   M="$BUILD/synth_mut"
-   mkdir -p "$M"
-   if mutate "$SRC" "$M/mouse_input.vhdl" $'\nbegin\n' \
-         $'\n  signal latch_q : std_logic;\nbegin\n\n  latch_q <= fa_potx when fb_potx = \'1\';\n'; then
-      if synth "$M" "$M/mouse_input.vhdl"; then
-         note_fail synth_mutant_not_detected
+   for m in latch no_async_reg; do
+      M="$BUILD/synth_mut_$m"
+      mkdir -p "$M"
+      case $m in
+         latch)        mutate "$SRC" "$M/mouse_input.vhdl" $'\nbegin\n' \
+                          $'\n  signal latch_q : std_logic;\nbegin\n\n  latch_q <= fa_potx when fb_potx = \'1\';\n' ;;
+         no_async_reg) mutate "$SRC" "$M/mouse_input.vhdl" \
+                          $'  attribute async_reg                : string;\n  attribute async_reg of pot_pins_d  : signal is "true";\n  attribute async_reg of pot_pins_dd : signal is "true";\n' "" ;;
+      esac || { note_fail "synth_mutant_${m}_pattern"; continue; }
+      if ! synth "$M" "$M/mouse_input.vhdl"; then
+         echo "    mutant '$m' rejected: $(grep -m1 'error:' "$M/synth.log" | sed -E 's/^[^:]*:[0-9]+:[0-9]+:[ ]*//')"
+      elif ! attrs "$M/synth.vhd"; then
+         echo "    mutant '$m' rejected: the netlist has no async_reg on both synchronizer stages"
       else
-         echo "    mutant 'latch' rejected: $(grep -m1 -i latch "$M/synth.log" | sed -E 's/^[^:]*:[0-9]+:[0-9]+:[ ]*//')"
+         note_fail "synth_mutant_${m}_not_detected"
       fi
-   else
-      note_fail synth_mutant_pattern
-   fi
+   done
 fi
 
 # --------------------------------------------------------------------------------------------------
 # mutants: name, run (part and generics), exact text and its replacement
-MUTANTS="no_sync one_stage three_stages halve round_up window_short_a window_short_b c64_beyond_a c64_beyond_b no_extend always_long
+MUTANTS="no_sync one_stage three_stages atari_first_one atari_after_one halve round_up window_short_a window_short_b c64_beyond_a c64_beyond_b no_extend always_long
          extend_a_only latch_late unlatched relatch_256 latch_plus1 swap drain_long guard_255 powerup_long
          c64_halved"
 
+# M_ARGS: the runs that must all reject the mutant, separated by ";"; M_OLD/M_NEW (and M_OLD2/
+# M_NEW2, M_OLD3/M_NEW3 for a mutant that needs more than one place): exact text replacements
 mutant_def() {
+   M_OLD2=""; M_NEW2=""; M_OLD3=""; M_NEW3=""
    case $1 in
       no_sync)        M_ARGS="-gG_PART=identity -gG_CYCLES=40"
                       M_OLD=$'  pot_sync_proc : process(clk) is\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= fb_poty & fb_potx & fa_poty & fa_potx;\n      pot_pins_dd <= pot_pins_d;\n    end if;\n  end process pot_sync_proc;\n'
@@ -256,6 +277,18 @@ mutant_def() {
                       M_OLD=$'  pot_sync_proc : process(clk) is\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= fb_poty & fb_potx & fa_poty & fa_potx;\n'
                       M_NEW=$'  pot_sync_proc : process(clk) is\n    variable pot_pins_0 : std_logic_vector(3 downto 0) := "0000";\n  begin\n    if rising_edge(clk) then\n      pot_pins_d  <= pot_pins_0;\n      pot_pins_0  := fb_poty & fb_potx & fa_poty & fa_potx;\n'
                       M_TXT="synchronizer with three stages" ;;
+      atari_first_one) M_ARGS="-gG_PART=atari -gG_MODES=11 -gG_CYCLES=12;-gG_PART=mixed -gG_MODES=10 -gG_CYCLES=12;-gG_PART=modes -gG_CYCLES=40"
+                      M_OLD=$'  signal atari_mode_b : std_logic := \'0\';\n'
+                      M_NEW=$'  signal atari_mode_b : std_logic := \'0\';\n  signal pota_x_one   : std_logic := \'0\';\n'
+                      M_OLD2=$'              if pot_pins_dd(0)=\'0\' then\n'
+                      M_NEW2=$'              if pot_counter > 512 and pot_pins_dd(0)=\'1\' then\n                pota_x_one <= \'1\';\n              end if;\n              if pot_pins_dd(0)=\'0\' and (pot_counter < 513 or pota_x_one = \'0\') then\n'
+                      M_OLD3=$'          pota_x_counter <= 0;\n'
+                      M_NEW3=$'          pota_x_counter <= 0;\n          pota_x_one <= \'0\';\n'
+                      M_TXT="an Atari pin counts only until its first '1' after tick 512" ;;
+      atari_after_one) M_ARGS="-gG_PART=atari -gG_MODES=11 -gG_CYCLES=12;-gG_PART=mixed -gG_MODES=10 -gG_CYCLES=12;-gG_PART=modes -gG_CYCLES=40"
+                      M_OLD="              if pot_pins_dd(0)='0' then"
+                      M_NEW="              if pot_pins_dd(0)='0' and (pot_counter < 513 or pota_x_counter = pot_counter - 258) then"
+                      M_TXT="an Atari pin counts after tick 512 only if it read '0' in every tick since tick 258" ;;
       halve)          M_ARGS="-gG_PART=atari -gG_MODES=11 -gG_CYCLES=6"
                       M_OLD="            pota_x_internal <= to_unsigned(pota_x_counter / 2, 8);"
                       M_NEW="            pota_x_internal <= to_unsigned(pota_x_counter, 8);"
@@ -331,19 +364,36 @@ mutant_def() {
    esac
 }
 
-# run_mutant <name>: builds and runs one mutant; writes its report line to $BUILD/mut_<name>.txt
+# run_mutant <name>: builds the mutant and runs it in each of its runs; writes its report to
+# $BUILD/mut_<name>.txt, first word REJECTED (every run failed), SURVIVED (a run passed), NOBUILD
+# (the mutant does not analyze or elaborate: a stale replacement) or PATTERN
 run_mutant() {
-   local m=$1 dir="$BUILD/mut_$1"
+   local m=$1 dir="$BUILD/mut_$1" repl runs r i=0 lines="" survived=0
    mutant_def "$m"
    mkdir -p "$dir"
-   if ! mutate "$SRC" "$dir/mouse_input.vhdl" "$M_OLD" "$M_NEW" > "$dir/pattern.txt"; then
+   repl=("$M_OLD" "$M_NEW")
+   [ -n "$M_OLD2" ] && repl+=("$M_OLD2" "$M_NEW2")
+   [ -n "$M_OLD3" ] && repl+=("$M_OLD3" "$M_NEW3")
+   if ! mutate "$SRC" "$dir/mouse_input.vhdl" "${repl[@]}" > "$dir/pattern.txt"; then
       echo "PATTERN  $m: $(cat "$dir/pattern.txt")" > "$BUILD/mut_$m.txt"
    elif ! build "$dir" "$dir/mouse_input.vhdl" > "$dir/build.txt"; then
-      echo "REJECTED $m ($M_TXT): does not build: $(head -1 "$dir/build.txt" | sed 's/^ *//')" > "$BUILD/mut_$m.txt"
-   elif sim "$dir" "$dir/run.log" $M_ARGS; then
-      echo "SURVIVED $m ($M_TXT)" > "$BUILD/mut_$m.txt"
+      echo "NOBUILD  $m ($M_TXT): the mutant does not build: $(head -1 "$dir/build.txt" | sed 's/^ *//')" > "$BUILD/mut_$m.txt"
    else
-      echo "REJECTED $m ($M_TXT; ${M_ARGS//-gG_/}): $(grep -m1 -E 'TB_ERROR|error' "$dir/run.log.tb" | sed 's/^ *//' | cut -c1-150)" > "$BUILD/mut_$m.txt"
+      IFS=';' read -ra runs <<< "$M_ARGS"
+      for r in "${runs[@]}"; do
+         i=$((i + 1))
+         if sim "$dir" "$dir/run$i.log" $r; then
+            survived=1
+            lines="$lines"$'\n'"      ${r//-gG_/}: passed"
+         else
+            lines="$lines"$'\n'"      ${r//-gG_/}: $(grep -m1 -E 'TB_ERROR|error' "$dir/run$i.log.tb" | sed 's/^ *//' | cut -c1-150)"
+         fi
+      done
+      if [ $survived -eq 1 ]; then
+         echo "SURVIVED $m ($M_TXT)$lines" > "$BUILD/mut_$m.txt"
+      else
+         echo "REJECTED $m ($M_TXT)$lines" > "$BUILD/mut_$m.txt"
+      fi
    fi
 }
 
@@ -359,9 +409,10 @@ if want mutants; then
       shift; [ $# -gt 0 ] && shift
    done | sed 's/^/    /'
    for m in $MUTANTS; do
-      case "$(cut -c1-8 "$BUILD/mut_$m.txt" 2>/dev/null)" in
+      case "$(head -1 "$BUILD/mut_$m.txt" 2>/dev/null | cut -c1-8)" in
          REJECTED) ;;
          SURVIVED) note_fail "mutant_${m}_not_detected" ;;
+         NOBUILD*) note_fail "mutant_${m}_does_not_build" ;;
          *)        note_fail "mutant_${m}_pattern" ;;
       esac
    done
