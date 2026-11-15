@@ -6,9 +6,9 @@
 ; Change in 2023: While this was originally made to be reusable also outside
 ; of the context of the Shell, from now on dirbrowse.asm is dependent on the
 ; global variable SF_CONTEXT in shell_vars.asm which will be handed over as a
-; parameter R10 to the filter function in _DIRBR_FILTWRAP. To undo this
+; parameter R10 to the filter function in _DIRBR_FILTENT. To undo this
 ; change, delete this comment and everything tagged with SF_CONTEXT in
-; _DIRBR_FILTWRAP.
+; _DIRBR_FILTENT.
 ;
 ; done by sy2002 in 2022, 2023 and licensed under GPL v3
 ; ****************************************************************************
@@ -34,9 +34,10 @@ _DIRBR_DSDESIZE .EQU    2                       ; amount of characters in sum
 ;       if the file shall not be filtered and 1 if it shall be filtered.
 ;       The string provided in R8 is always in upper case.
 ;       If R12 is zero, then no filter is applied.
+;       Filtered entries take no heap space.
 ; Output:
 ;   R8: (unchanged) Pointer to valid device handle
-;   R9: Amount of directory entries read
+;   R9: Amount of directory entries in the list
 ;  R10: head of sorted linked list
 ;  R11: Return code:
 ;       0 = OK
@@ -56,14 +57,10 @@ DIRBROWSE_READ  INCRB
                 XOR     R3, R3                  ; R3: current heap mem. usage
                 XOR     R4, R4                  ; R4: amount of entries read
                 XOR     R5, R5                  ; R5: head of linked list
-                XOR     R6, R6                  ; R6: filter function or 0
+                MOVE    _DIRBR_FILTERFN, R6     ; remember the filter function
+                MOVE    R12, @R6                ; for _DIRBR_FILTENT
+                MOVE    R12, R6                 ; R6: filter function or 0
                                                 ; R7: directory handle
-
-                CMP     0, R12                  ; filter function given?
-                RBRA    _DIRBR_START, Z         ; no: get started
-                MOVE    _DIRBR_FILTERFN, R6     ; yes: remember custom func.
-                MOVE    R12, @R6
-                MOVE    _DIRBR_FILTWRAP, R6     ; R6: internal wrapper func.
 
                 ; change directory to given path (if any) and then obtain the
                 ; directory handle: R8: device handle, R9: path
@@ -98,7 +95,15 @@ _DIRBR_LOOP     MOVE    R7, R8                  ; R8: directory handle
                 CMP     0, R10
                 RBRA    _DIRBR_LOOP, Z
 
-                MOVE    R1, R8                  ; R1: current heap ptr
+                ; apply the filter before the entry takes any heap space,
+                ; so that hidden files do not count against the heap
+                CMP     0, R6                   ; filter function given?
+                RBRA    _DIRBR_NEW, Z           ; no: keep every entry
+                RSUB    _DIRBR_FILTENT, 1       ; R8 = 1: hide this entry
+                CMP     1, R8
+                RBRA    _DIRBR_LOOP, Z          ; hidden: next entry
+
+_DIRBR_NEW      MOVE    R1, R8                  ; R1: current heap ptr
                 MOVE    R2, R9                  ; R2: maximum heap memory
                 MOVE    R3, R10                 ; R3: current heap memory
                 RSUB    _DIRBR_NEWELM, 1        ; new element on heap
@@ -111,7 +116,7 @@ _DIRBR_LOOP     MOVE    R7, R8                  ; R8: directory handle
 
                 MOVE    R5, R8                  ; R8: head of linked list
                                                 ; R9: still has new element
-                MOVE    R6, R10                 ; R10: filter func. or 0
+                XOR     R10, R10                ; R10: no filter (done above)
                                                 ; (R11 unused by SLL$APPEND)
 
                 RSUB    SLL$APPEND, 1           ; O(1) tail append; the
@@ -248,10 +253,8 @@ _DIRBR_NEWELM   INCRB
                 MOVE    R9, R4                  ; R4: maximum heap memory
                 MOVE    R10, R5                 ; R5: current heap memory
                 XOR     R6, R6                  ; R6: is it a directory?
-                ADD     SLL$NEXT, R0            ; init NEXT with 0 
-                MOVE    0, @R0
-                ADD     SLL$PREV, R1            ; init PREV with 0
-                MOVE    0, @R1
+                ADD     SLL$NEXT, R0
+                ADD     SLL$PREV, R1
                 ADD     SLL$DATA_SIZE, R2
                 ADD     SLL$DATA, R3
 
@@ -280,9 +283,14 @@ _DIRBR_NEWELM2  MOVE    R5, R7                  ; current heap memory
                 ADD     R9, R7                  ; memory needed by new entry
                 MOVE    R7, R10                 ; return new heap memory
                 ADD     SLL$OVRHD_SIZE, R10
-                CMP     R7, R4                  ; current+new <= max?
+                CMP     R10, R4                 ; current+new+header <= max?
                 RBRA    _DIRBR_NEOOM, N         ; no: out-of-memory!
 
+                ; nothing is written to the heap before the check above, so
+                ; an entry that does not fit leaves the memory behind the
+                ; heap untouched
+                MOVE    0, @R0                  ; init NEXT with 0
+                MOVE    0, @R1                  ; init PREV with 0
                 MOVE    R9, @R2                 ; put data size in SLL struct.
                 CMP     1, R6                   ; is it a directory?
                 RBRA    _DIRBR_NEWELM3, !Z      ; no: continue
@@ -463,50 +471,68 @@ _DIRBR_IAN_C0   AND     0xFFFB, SR              ; not a num: clear Carry
 _DIRBR_IAN_RET  DECRB
                 RET
 
-; SLL$APPEND filter function which is a wrapper for the user-defined
-; function specified for DIRBROWSE_READ. This is a simplification so that
-; DIRBROWSE_READ just expects a filter function that compares strings and
-; that does not need to be aware of the SLL semantics
-_DIRBR_FILTWRAP INCRB
+; Runs the filter function given to DIRBROWSE_READ on the directory entry in
+; _DIRBR_ENTRY before the entry takes any heap space, so that hidden entries
+; do not count against the heap. The filter function gets the same string as
+; it got when it ran on the heap copy: the name in upper case and, for a
+; directory, enclosed in "<" and ">".
+; Output: R8 = 0: show the entry, 1: hide it; R9, R10 and R11 are preserved
+_DIRBR_FILTENT  INCRB
 
                 MOVE    R9, R0                  ; backup R9, R10 & R11
-                MOVE    R10, R6                 ; SF_CONTEXT
-                MOVE    R11, R7                 ; SF_CONTEXT
-        
-                ; copy the string to the stack and make it upper case
-                ADD     SLL$DATA, R8            ; R8: pointer to string
-                SYSCALL(strlen, 1)              ; R9: length of string
-                ADD     1, R9
+                MOVE    R10, R1
+                MOVE    R11, R2
 
-                MOVE    R9, R3                  ; behind string sits flag
-                ADD     R8, R3
-                MOVE    @R3, R3                 ; R3: file/directory flag
+                MOVE    _DIRBR_ENTRY, R4        ; R6: directory flag
+                ADD     FAT32$DE_ATTRIB, R4
+                MOVE    @R4, R6
+                AND     FAT32$FA_DIR, R6        ; directory?
+                RBRA    _DIRBR_FE_1, Z          ; no: R6 = 0
+                MOVE    1, R6                   ; yes: R6 = 1
 
-                SUB     R9, SP
-                MOVE    R9, R2
-                MOVE    SP, R9
+                ; copy the name to the stack (with "<" and ">" if it is a
+                ; directory) and make it upper case
+_DIRBR_FE_1     MOVE    _DIRBR_ENTRY, R4
+                ADD     FAT32$DE_NAME, R4       ; R4: name
+                MOVE    R4, R8
+                SYSCALL(strlen, 1)
+                MOVE    R9, R5                  ; R5: length of the name
+                MOVE    R9, R3
+                ADD     1, R3                   ; zero terminator
+                ADD     R6, R3                  ; "<" and ">" if directory
+                ADD     R6, R3                  ; R3: stack space needed
+                SUB     R3, SP
+                MOVE    SP, R7                  ; R7: copy on the stack
+                MOVE    R7, R9
+                CMP     0, R6                   ; directory?
+                RBRA    _DIRBR_FE_2, Z
+                MOVE    _DIRBR_DS, @R9++        ; yes: "<" before the name
+_DIRBR_FE_2     MOVE    R4, R8
                 SYSCALL(strcpy, 1)
-                MOVE    R9, R8
+                CMP     0, R6                   ; directory?
+                RBRA    _DIRBR_FE_3, Z
+                ADD     R5, R9                  ; yes: ">" after the name
+                MOVE    _DIRBR_DE, @R9++
+                MOVE    0, @R9
+_DIRBR_FE_3     MOVE    R7, R8
                 SYSCALL(str2upper, 1)           ; R8 contains upper string
-
-                MOVE    R3, R9
-
-                ; SF_CONTEXT
-                MOVE    SF_CONTEXT, R10
-                MOVE    @R10, R10
-                MOVE    SF_CONTEXT_DATA, R11
-                MOVE    @R11, R11
 
                 ; call filter function (callback function)
                 ; R8: filename in upper-case
                 ; R9: 0=file/1=directory
                 ; R10: SF_CONTEXT
-                MOVE    _DIRBR_FILTERFN, R1
-                ASUB    @R1, 1
+                ; R11: SF_CONTEXT_DATA
+                MOVE    R6, R9
+                MOVE    SF_CONTEXT, R10
+                MOVE    @R10, R10
+                MOVE    SF_CONTEXT_DATA, R11
+                MOVE    @R11, R11
+                MOVE    _DIRBR_FILTERFN, R4
+                ASUB    @R4, 1
 
-                ADD     R2, SP                  ; restore stack
+                ADD     R3, SP                  ; restore stack
                 MOVE    R0, R9                  ; restore R9, R10 & R11
-                MOVE    R6, R10                 ; SF_CONTEXT
-                MOVE    R7, R11                 ; SF_CONTEXT
+                MOVE    R1, R10
+                MOVE    R2, R11
                 DECRB
                 RET

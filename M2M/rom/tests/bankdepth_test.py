@@ -184,19 +184,20 @@ INDIRECT = {
         'note': 'device handle filled only by FAT32$MOUNT_SD; R10 = '
                 'FAT32$DEV_* function index'},
     # llist.asm SLL$APPEND: filter function in R10 of the caller; the only
-    # caller is DIRBROWSE_READ, which passes 0 or _DIRBR_FILTWRAP.
+    # caller is DIRBROWSE_READ, which applies its filter before the entry
+    # takes heap space (_DIRBR_FILTENT) and therefore always passes 0.
     ('SLL$APPEND', 'ASUB', 'R2'): {
-        'kind': 'targets', 'targets': ['_DIRBR_FILTWRAP'],
-        'note': 'only caller DIRBROWSE_READ passes 0 or _DIRBR_FILTWRAP'},
+        'kind': 'targets', 'targets': [],
+        'note': 'only caller DIRBROWSE_READ passes 0 (no filter)'},
     # llist.asm SLL$SORT/_SORT_MERGE: comparator; the only callers
     # (DIRBROWSE_READ, twice) pass _DIRBR_COMPARE.
     ('_SORT_MERGE', 'ASUB', 'R11'): {
         'kind': 'targets', 'targets': ['_DIRBR_COMPARE'],
         'note': 'only callers (DIRBROWSE_READ) pass _DIRBR_COMPARE'},
-    # dirbrowse.asm _DIRBR_FILTWRAP: "ASUB @R1" = @_DIRBR_FILTERFN, set by
+    # dirbrowse.asm _DIRBR_FILTENT: "ASUB @R4" = @_DIRBR_FILTERFN, set by
     # DIRBROWSE_READ from R12; all callers (selectfile.asm x2, vdrives.asm)
     # pass FILTER_FILES (core callback in m2m-rom.asm) or 0.
-    ('_DIRBR_FILTWRAP', 'ASUB', '@R1'): {
+    ('_DIRBR_FE_3', 'ASUB', '@R4'): {
         'kind': 'targets', 'targets': ['FILTER_FILES'],
         'note': '_DIRBR_FILTERFN = R12 of DIRBROWSE_READ = FILTER_FILES'},
     # fat32_library.asm: NOP macro (#define NOP ABRA R15, 1)
