@@ -10,11 +10,12 @@
 #     MEGA65_Core, audio, max10 and pcm_to_pdm of the working tree
 #   * differential analysis against the base commit: framework.vhd, qnice_wrapper.vhd and the four
 #     board files, each in a library with what it instantiates (real entities where they analyze
-#     on their own, shells otherwise); the working tree must not show a diagnostic that the base
-#     does not show, and only diagnostics about entities outside the library ("not found", the
-#     components of xpm)
-# Static checks (the CDC instances are components of the Xilinx library xpm, which GHDL does not
-# know, so GHDL cannot check their port maps):
+#     on their own, shells otherwise) and with a stub of the Xilinx library xpm that declares the
+#     component xpm_cdc_array_single, so that GHDL checks the port maps of i_sys2main,
+#     i_main2qnice and i_qnice2main, the widths of the actuals included; the working tree must not
+#     show a diagnostic that the base does not show, and only "not found" for entities outside the
+#     library
+# Static checks (what GHDL cannot see):
 #   * i_qnice2main: every src_in slice has a dest_out slice with the identical range; the slices
 #     are contiguous from 0, do not overlap and add up to WIDTH; each source is paired with the
 #     destination it had in the base commit, except the four paddle values, which are gone
@@ -22,7 +23,8 @@
 #     main_clk_i, the four paddle values in the order and with the pairing of the base commit:
 #     source slice k carries the source of the k-th paddle pair, destination slice k feeds the
 #     debouncer input whose output is the destination of that pair
-#   * i_joy_debouncer gets main_mouse_amiga_i; main_pot1_x_o .. main_pot2_y_o have no other source
+#   * i_joy_debouncer gets main_mouse_amiga_i, and as flip_joys_i the destination of
+#     qnice_flip_joyports_i in i_qnice2main; main_pot1_x_o .. main_pot2_y_o have no other source
 #   * i_qnice_wrapper gets qnice_paddle_atari_i; qnice_wrapper.vhd passes bit 0 to atari_paddles_a
 #     and bit 1 to atari_paddles_b
 #   * each board file connects qnice_paddle_atari_o and main_mouse_amiga_o of MEGA65_Core to
@@ -78,7 +80,29 @@ DIFFED = ["framework", "qnice_wrapper"] + BOARDS
 GF = ["--std=08", "-frelaxed", "-fno-caret-diagnostics"]
 PADDLES = ["pot1_x", "pot1_y", "pot2_x", "pot2_y"]
 # diagnostics that entities outside the library of an analysis cause
-OUTSIDE = [r'^unit "\w+" not found in library "work"$', r'^no declaration for "xpm_\w+"$', r"ghdl: compilation error$"]
+OUTSIDE = [r'^unit "\w+" not found in library "work"$', r"ghdl: compilation error$"]
+
+# stub of the Xilinx library xpm: the declaration of the component as in xpm.vcomponents of Vivado
+XPM_STUB = """library ieee;
+use ieee.std_logic_1164.all;
+package vcomponents is
+   component xpm_cdc_array_single is
+      generic (
+         DEST_SYNC_FF   : integer := 4;
+         INIT_SYNC_FF   : integer := 0;
+         SIM_ASSERT_CHK : integer := 0;
+         SRC_INPUT_REG  : integer := 1;
+         WIDTH          : integer := 2
+      );
+      port (
+         dest_out : out std_logic_vector(WIDTH - 1 downto 0);
+         dest_clk : in  std_logic;
+         src_clk  : in  std_logic;
+         src_in   : in  std_logic_vector(WIDTH - 1 downto 0)
+      );
+   end component xpm_cdc_array_single;
+end package vcomponents;
+"""
 IDX = None
 
 
@@ -106,9 +130,9 @@ def strip_comments(text):
     return "\n".join(l.split("--", 1)[0] for l in text.splitlines())
 
 
-def no_xilinx(text):
+def no_unisim(text):
     return "\n".join(l for l in text.splitlines()
-                     if not re.match(r"\s*(library|use)\s+(xpm|unisim)\b", l, re.I)) + "\n"
+                     if not re.match(r"\s*(library|use)\s+unisim\b", l, re.I)) + "\n"
 
 
 def shell(text, ent):
@@ -126,6 +150,13 @@ class Ghdl:
     def __init__(self, ghdl, build):
         self.ghdl, self.build = ghdl, build
         os.makedirs(build, exist_ok=True)
+        self.xpm = os.path.join(build, "xpm")
+        os.makedirs(self.xpm, exist_ok=True)
+        p = os.path.join(build, "xpm_stub.vhd")
+        open(p, "w").write(XPM_STUB)
+        r = subprocess.run([ghdl, "-a"] + GF + ["--work=xpm", f"--workdir={self.xpm}", p], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise SystemExit("cannot analyze the stub of xpm: " + r.stdout + r.stderr)
 
     def write(self, name, text):
         p = os.path.join(self.build, name)
@@ -148,8 +179,8 @@ class Ghdl:
             shutil.rmtree(work)
         shutil.copytree(lib, work)
         p = os.path.join(work, name + ".vhd")
-        open(p, "w").write(no_xilinx(text))
-        r = subprocess.run([self.ghdl, "-a"] + GF + [f"--workdir={work}", p], capture_output=True, text=True)
+        open(p, "w").write(no_unisim(text))
+        r = subprocess.run([self.ghdl, "-a"] + GF + [f"--workdir={work}", f"-P{self.xpm}", p], capture_output=True, text=True)
         out = []
         for l in (r.stdout + r.stderr).splitlines():
             m = re.match(r"^[^:]*:\d+:\d+:\s*(.*)$", l)
@@ -369,6 +400,12 @@ def static_checks(tree, base):
                              "feeds potN_i of i_joy_debouncer, whose potN_o is the destination of the base")
     if deb is None or actual(da, "amiga_i") != "main_mouse_amiga_i":
         errs.append("framework.vhd: i_joy_debouncer does not get amiga_i => main_mouse_amiga_i")
+    # the port switcher of the debouncer: the core clock domain version of qnice_flip_joyports_i, which
+    # is its destination in i_qnice2main
+    flip_dst = [d for s, d in pairs.values() if s == "qnice_flip_joyports_i"]
+    if len(flip_dst) != 1 or actual(da, "flip_joys_i") != flip_dst[0]:
+        errs.append(f"framework.vhd: flip_joys_i of i_joy_debouncer is {actual(da, 'flip_joys_i')}, expected the "
+                    f"destination of qnice_flip_joyports_i in i_qnice2main ({', '.join(flip_dst) or 'none'})")
     code = strip_comments(fw)
     for p in PADDLES:
         n = len(re.findall(rf"\bmain_{p}_o\b", code, re.I))
@@ -541,6 +578,12 @@ def mutants():
          [("         src_in(838 downto 774)     => qnice_rtc,", "         src_in(839 downto 775)     => qnice_rtc,")]),
         ("framework_width_not_adapted", "framework",
          [("         WIDTH        => 839", "         WIDTH        => 871")]),
+        ("framework_rtc_slice_short", "framework",
+         [("         WIDTH        => 839", "         WIDTH        => 838"),
+          ("         src_in(838 downto 774)     => qnice_rtc,", "         src_in(837 downto 774)     => qnice_rtc,"),
+          ("         dest_out(838 downto 774)   => main_rtc_o", "         dest_out(837 downto 774)   => main_rtc_o")]),
+        ("framework_debouncer_flip_from_qnice", "framework",
+         [("         flip_joys_i          => main_flip_joyports,", "         flip_joys_i          => qnice_flip_joyports_i,")]),
     ]
     return ms
 

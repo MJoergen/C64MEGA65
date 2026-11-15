@@ -17,8 +17,9 @@
 #   wiring   the settings from MEGA65_Core through the four board files, framework.vhd and
 #            qnice_wrapper.vhd (wiring.py: GHDL analysis and elaboration against the real entity
 #            declarations, differential analysis against 6845596, static check of the clock domain
-#            crossings), the crossing of the paddle values in simulation (tb_amiga_cdc.vhd); plus
-#            the mutants of the wiring
+#            crossings), the crossing of the paddle values in simulation (tb_amiga_cdc.vhd), the
+#            port switcher of the paddle values copied out of qnice_wrapper.vhd (tb_amiga_flip.vhd.in);
+#            plus the mutants of the wiring
 #   synth    ghdl synth of amiga_mouse and of debouncer: no error, no latch, number of flip-flops
 #   all      everything (default)
 #
@@ -98,11 +99,32 @@ SRC_M2M="$BUILD/src/m2m"
 SRC_TB="$BUILD/src/tb"
 mkdir -p "$SRC_M2M" "$SRC_TB"
 cp "$REPO/M2M/vhdl/debounce.vhd" "$REPO/M2M/vhdl/amiga_mouse.vhd" "$REPO/M2M/vhdl/debouncer.vhd" \
-   "$REPO/M2M/vhdl/cdc_stable.vhd" "$SRC_M2M/" &&
-cp "$HERE"/*.vhd "$HERE/mutants.py" "$HERE/wiring.py" "$SRC_TB/" || { echo "cannot copy the sources"; exit 1; }
+   "$REPO/M2M/vhdl/cdc_stable.vhd" "$REPO/M2M/vhdl/qnice_wrapper.vhd" "$SRC_M2M/" &&
+cp "$HERE"/*.vhd "$HERE/tb_amiga_flip.vhd.in" "$HERE/mutants.py" "$HERE/wiring.py" "$SRC_TB/" ||
+   { echo "cannot copy the sources"; exit 1; }
+
+# gen_flip <qnice_wrapper.vhd> <bench.vhd>: the bench of the port switcher with the process
+# correct_and_flip_paddles copied verbatim out of qnice_wrapper.vhd
+gen_flip() {
+   python3 - "$1" "$SRC_TB/tb_amiga_flip.vhd.in" "$2" <<'PYEOF'
+import re, sys
+src, tmpl, out = sys.argv[1:4]
+s = open(src).read()
+m = re.findall(r"^[ \t]*correct_and_flip_paddles\s*:\s*process.*?^[ \t]*end process correct_and_flip_paddles;", s,
+               re.S | re.M)
+if len(m) != 1:
+    print(f"    qnice_wrapper.vhd: process correct_and_flip_paddles found {len(m)} times (expected once)")
+    sys.exit(1)
+t = open(tmpl).read()
+if t.count("-- @CORRECT_AND_FLIP_PADDLES@") != 1:
+    print("    tb_amiga_flip.vhd.in: marker not found")
+    sys.exit(1)
+open(out, "w").write(t.replace("-- @CORRECT_AND_FLIP_PADDLES@", m[0].strip()))
+PYEOF
+}
 # sources of a library: debounce, amiga_mouse, debouncer, debouncer_ref, cdc_stable, package, benches
-lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd> <cdc_stable.vhd>
-   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $3 $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd $SRC_TB/tb_amiga_ports.vhd $SRC_TB/tb_amiga_cdc.vhd"
+lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd> <cdc_stable.vhd> <tb_amiga_flip.vhd>
+   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $3 $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd $SRC_TB/tb_amiga_ports.vhd $SRC_TB/tb_amiga_cdc.vhd $4"
 }
 
 # --------------------------------------------------------------------------------------------------
@@ -117,10 +139,11 @@ M="$BUILD/main"
 BUILT=0
 if want decoder || want buttons || want ports || want wiring; then
    echo "=== build"
-   if ref_entity "$BUILD/debouncer_ref.vhd" &&
-      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" "$SRC_M2M/cdc_stable.vhd") &&
-      elaborate "$M" tb_amiga_mouse tb_amiga_ports tb_amiga_cdc; then
-      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE), cdc_stable and the three benches analyzed and elaborated"
+   if ref_entity "$BUILD/debouncer_ref.vhd" && gen_flip "$SRC_M2M/qnice_wrapper.vhd" "$BUILD/tb_amiga_flip.vhd" &&
+      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" "$SRC_M2M/cdc_stable.vhd" "$BUILD/tb_amiga_flip.vhd") &&
+      elaborate "$M" tb_amiga_mouse tb_amiga_ports tb_amiga_cdc tb_amiga_flip; then
+      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE), cdc_stable and the four benches analyzed and elaborated"
+      echo "  (tb_amiga_flip with the process correct_and_flip_paddles copied out of qnice_wrapper.vhd)"
       BUILT=1
    else
       note_fail build
@@ -164,6 +187,7 @@ if want ports; then
 fi
 if want wiring; then
    job cdc             run "$M" tb_amiga_cdc   "-gG_CHANGES=100000"
+   job flip            run "$M" tb_amiga_flip  ""
 fi
 
 # --------------------------------------------------------------------------------------------------
@@ -177,13 +201,16 @@ if [ $MUTANTS -eq 1 ] && [ $BUILT -eq 1 ] && [ "$WHAT" != synth ]; then
       AM="$SRC_M2M/amiga_mouse.vhd"
       DB="$SRC_M2M/debouncer.vhd"
       CS="$SRC_M2M/cdc_stable.vhd"
+      QW="$SRC_M2M/qnice_wrapper.vhd"
       case $file in
-         amiga_mouse) AM="$D/amiga_mouse.vhd" ;;
-         debouncer)   DB="$D/debouncer.vhd" ;;
-         cdc_stable)  CS="$D/cdc_stable.vhd" ;;
+         amiga_mouse)   AM="$D/amiga_mouse.vhd" ;;
+         debouncer)     DB="$D/debouncer.vhd" ;;
+         cdc_stable)    CS="$D/cdc_stable.vhd" ;;
+         qnice_wrapper) QW="$D/qnice_wrapper.vhd" ;;
       esac
       if python3 "$SRC_TB/mutants.py" make "$name" "$SRC_M2M/$file.vhd" "$D/$file.vhd" &&
-         analyze "$D" $(lib_sources "$AM" "$DB" "$CS") && elaborate "$D" "$unit"; then
+         gen_flip "$QW" "$D/tb_amiga_flip.vhd" &&
+         analyze "$D" $(lib_sources "$AM" "$DB" "$CS" "$D/tb_amiga_flip.vhd") && elaborate "$D" "$unit"; then
          job "mutant_$name" "$kind" "$D" "$unit" "$args -gG_STOP=true"
       else
          note_fail "mutant_${name}_build"

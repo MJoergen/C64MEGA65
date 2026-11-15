@@ -8,8 +8,8 @@
 #   mutants.py make <name> <src> <dst>   copy src to dst with the text of the mutant replaced;
 #                                    the old text must occur exactly once
 #
-# Each mutant is one exact text replacement in M2M/vhdl/amiga_mouse.vhd, M2M/vhdl/debouncer.vhd or
-# M2M/vhdl/cdc_stable.vhd, and names the bench run that has to reject it.
+# Each mutant is one exact text replacement in M2M/vhdl/amiga_mouse.vhd, M2M/vhdl/debouncer.vhd,
+# M2M/vhdl/cdc_stable.vhd or M2M/vhdl/qnice_wrapper.vhd, and names the bench run that has to reject it.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -129,6 +129,11 @@ MUTANTS = [
     # wiring: the crossing of the paddle values (the other mutants of the wiring are in wiring.py)
     ("cdc_without_stability_check", "wiring", "cdc_stable", "tb_amiga_cdc", "-gG_CHANGES=100000",
      "if dst_data_d = dst_data_dd then", "if true then"),
+    ("flip_inversion_removed", "wiring", "qnice_wrapper", "tb_amiga_flip", "",
+     "         qnice_pot1_x_n_o <= x\"FF\" - qnice_pot1_x;", "         qnice_pot1_x_n_o <= qnice_pot1_x;"),
+    ("flip_xy_exchanged", "wiring", "qnice_wrapper", "tb_amiga_flip", "",
+     "         qnice_pot2_x_n_o <= x\"FF\" - qnice_pot1_x;\n         qnice_pot2_y_n_o <= x\"FF\" - qnice_pot1_y;",
+     "         qnice_pot2_x_n_o <= x\"FF\" - qnice_pot1_y;\n         qnice_pot2_y_n_o <= x\"FF\" - qnice_pot1_x;"),
 ]
 
 
