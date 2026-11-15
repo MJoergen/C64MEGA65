@@ -7,6 +7,7 @@
 ; ****************************************************************************
 
 _DIRBR_FILTERFN .BLOCK  1                       ; pointer to filter function
+_DIRBR_NAMEBUF  .BLOCK  1                       ; name buffer (DIRBR$GETNAME)
 
 _DIRBR_FH       .BLOCK  FAT32$FDH_STRUCT_SIZE   ; file handle
 _DIRBR_ENTRY    .BLOCK  FAT32$DE_STRUCT_SIZE    ; directory entry

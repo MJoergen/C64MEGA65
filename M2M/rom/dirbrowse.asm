@@ -20,6 +20,28 @@ _DIRBR_DS       .EQU    0x3C                    ; ASCII of "<"
 _DIRBR_DE       .EQU    0x3E                    ; ASCII of ">"
 _DIRBR_DSDESIZE .EQU    2                       ; amount of characters in sum
 
+; Data of a list element (behind the three header words, see SLL$DATA in
+; llist.asm):
+;   DIRBR$FLAGS: DIRBR$FLAG_DIR for a directory, DIRBR$FLAG_NUM if the name
+;                consists of digits only (for the sort order)
+;   DIRBR$CLUS_LO, DIRBR$CLUS_HI: start cluster of the file or directory
+;                (see DIRBROWSE_NEXT)
+;   DIRBR$NAME:  the name with two characters per word, the first one in
+;                the high byte, ending with a zero byte: a name with an even
+;                amount of characters ends with the word 0x0000. Directory
+;                names are enclosed in "<" and ">".
+; DIRBR$GETNAME and DIRBR$UNPACK return the name as a normal string.
+DIRBR$FLAGS     .EQU    0                       ; offset from SLL$DATA
+DIRBR$CLUS_LO   .EQU    1                       ; offset from SLL$DATA
+DIRBR$CLUS_HI   .EQU    2                       ; offset from SLL$DATA
+DIRBR$NAME      .EQU    3                       ; offset from SLL$DATA
+DIRBR$FLAG_DIR  .EQU    0x0001
+DIRBR$FLAG_NUM  .EQU    0x0002
+
+; DIRBROWSE_READ keeps a buffer for DIRBR$GETNAME at the end of its heap:
+; "<" + up to 256 characters + ">" + zero terminator
+DIRBR$NAMEBUF_SIZE .EQU 259
+
 ; ----------------------------------------------------------------------------
 ; Read and sort all contents of the given path into a heap memory structure
 ; Input:
@@ -27,7 +49,8 @@ _DIRBR_DSDESIZE .EQU    2                       ; amount of characters in sum
 ;   R9: Pointer to path that shall be listed (zero-terminated string) or
 ;       0 to list the currently active directory of the device handle
 ;  R10: Pointer to heap
-;  R11: Maximum amount of available heap memory
+;  R11: Maximum amount of available heap memory; the last DIRBR$NAMEBUF_SIZE
+;       words of it are the name buffer of DIRBR$GETNAME
 ;  R12: Optional filter function that filters out files of a certain name.
 ;       The filter function takes a pointer to a string in R8 and a directory
 ;       flag in R9 (0=it is a file, 1=it is a directory) and returns 0 in R8,
@@ -53,7 +76,12 @@ DIRBROWSE_READ  INCRB
 
                 MOVE    R10, R0                 ; R0: head of the heap
                 MOVE    R10, R1                 ; R1: current heap ptr
-                MOVE    R11, R2                 ; R2: max memory on heap
+                MOVE    R11, R2                 ; R2: max memory on heap..
+                SUB     DIRBR$NAMEBUF_SIZE, R2  ; ..minus the name buffer
+                MOVE    R10, R7                 ; the name buffer sits at..
+                ADD     R2, R7                  ; ..the end of the heap
+                MOVE    _DIRBR_NAMEBUF, R6
+                MOVE    R7, @R6
                 XOR     R3, R3                  ; R3: current heap mem. usage
                 XOR     R4, R4                  ; R4: amount of entries read
                 XOR     R5, R5                  ; R5: head of linked list
@@ -190,14 +218,19 @@ DIRBROWSE_NEXT  INCRB
 _DIRBR_NX_LOOP  MOVE    R0, R0                  ; end of list reached?
                 RBRA    _DIRBR_NX_WRAP, Z       ; yes: wrap around
 
-                ; the data blob ends with the directory flag and the start
-                ; cluster (low, high)
+                ; the data blob starts with the flags and the start cluster
+                ; (see DIRBR$FLAGS)
                 MOVE    R0, R5
-                ADD     SLL$DATA_SIZE, R5
-                ADD     @R5, R5                 ; R5: start cluster high
-                MOVE    @R5, R6                 ; R6: start cluster high
-                MOVE    @--R5, R7               ; R7: start cluster low
-                MOVE    @--R5, R5               ; 0=file, 1=directory
+                ADD     SLL$DATA, R5            ; R5: data blob
+                MOVE    R5, R6
+                ADD     DIRBR$CLUS_HI, R6
+                MOVE    @R6, R6                 ; R6: start cluster high
+                MOVE    R5, R7
+                ADD     DIRBR$CLUS_LO, R7
+                MOVE    @R7, R7                 ; R7: start cluster low
+                ADD     DIRBR$FLAGS, R5
+                MOVE    @R5, R5
+                AND     DIRBR$FLAG_DIR, R5      ; directory?
                 RBRA    _DIRBR_NX_NEXT, !Z      ; skip directories
                 MOVE    R6, R5                  ; skip empty files: they all
                 OR      R7, R5                  ; have start cluster 0, which
@@ -224,6 +257,75 @@ _DIRBR_NX_WRAP  MOVE    R2, R0                  ; first file of the list..
 _DIRBR_NX_FOUND MOVE    R4, R9
                 MOVE    R0, R10
                 MOVE    R1, R11
+                DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; Name of a list element of DIRBROWSE_READ as a normal string with one
+; character per word (directory names keep their "<" and ">"). The name is
+; copied to the name buffer at the end of the heap of DIRBROWSE_READ, so it
+; stays valid until the next call of DIRBR$GETNAME or DIRBROWSE_READ.
+; Input:
+;   R8: list element
+; Output:
+;   R8: name (zero-terminated)
+;   R9: flags of the element (DIRBR$FLAG_DIR, DIRBR$FLAG_NUM)
+; ----------------------------------------------------------------------------
+
+DIRBR$GETNAME   INCRB
+                MOVE    R10, R0
+                MOVE    R8, R1
+                MOVE    _DIRBR_NAMEBUF, R9
+                MOVE    @R9, R9                 ; R9: name buffer
+                MOVE    DIRBR$NAMEBUF_SIZE, R10
+                SUB     1, R10                  ; R10: maximum length
+                RSUB    DIRBR$UNPACK, 1
+                MOVE    R9, R8                  ; R8: name
+                ADD     SLL$DATA, R1
+                ADD     DIRBR$FLAGS, R1
+                MOVE    @R1, R9                 ; R9: flags
+                MOVE    R0, R10
+                DECRB
+                RET
+
+; ----------------------------------------------------------------------------
+; Copy the name of a list element of DIRBROWSE_READ into a buffer as a normal
+; string with one character per word (directory names keep their "<" and
+; ">"). At most R10 characters are copied.
+; Input:
+;   R8: list element
+;   R9: buffer of at least R10 + 1 words
+;  R10: maximum amount of characters to copy (0 .. 0x7FFF)
+; Output:
+;   R8, R9: unchanged, the string in the buffer is zero-terminated
+;  R10: length of the whole name: larger than the input R10 if the name did
+;       not fit
+; ----------------------------------------------------------------------------
+
+DIRBR$UNPACK    INCRB
+                MOVE    R8, R0
+                ADD     SLL$DATA, R0
+                ADD     DIRBR$NAME, R0          ; R0: packed name
+                MOVE    R9, R1                  ; R1: target
+                MOVE    R10, R2                 ; R2: room left
+                XOR     R3, R3                  ; R3: length of the name
+_DIRBR_UP_LOOP  MOVE    @R0++, R4               ; R4: two characters
+                SWAP    R4, R5
+                AND     0x00FF, R5              ; R5: first character
+                RBRA    _DIRBR_UP_END, Z
+                ADD     1, R3
+                SUB     1, R2                   ; room for it?
+                RBRA    _DIRBR_UP_2ND, N        ; no
+                MOVE    R5, @R1++
+_DIRBR_UP_2ND   AND     0x00FF, R4              ; R4: second character
+                RBRA    _DIRBR_UP_END, Z
+                ADD     1, R3
+                SUB     1, R2                   ; room for it?
+                RBRA    _DIRBR_UP_LOOP, N       ; no
+                MOVE    R4, @R1++
+                RBRA    _DIRBR_UP_LOOP, 1
+_DIRBR_UP_END   MOVE    0, @R1                  ; zero terminator
+                MOVE    R3, R10
                 DECRB
                 RET
 
@@ -259,27 +361,28 @@ _DIRBR_NEWELM   INCRB
                 ADD     SLL$DATA, R3
 
                 ; determine the length of the file/directory name and
-                ; calculate the size of the data blob
+                ; calculate the size of the data blob (see DIRBR$FLAGS)
                 MOVE    _DIRBR_ENTRY, R7
                 ADD     FAT32$DE_NAME, R7
                 MOVE    R7, R8
-                SYSCALL(strlen, 1)
-                ADD     1, R9                   ; R9: length of file name str.
-                ADD     3, R9                   ; space for flag and cluster
+                SYSCALL(strlen, 1)              ; R9: length of the name
                 MOVE    _DIRBR_ENTRY, R7
                 ADD     FAT32$DE_ATTRIB, R7
-                AND     FAT32$FA_DIR, @R7       ; is it a directory?
+                MOVE    @R7, R7
+                AND     FAT32$FA_DIR, R7        ; is it a directory?
                 RBRA    _DIRBR_NEWELM2, Z       ; no
                 ADD     _DIRBR_DSDESIZE, R9     ; add size of "<" ">"
-                MOVE    1, R6                   ; R6: directory flag = 1
+                MOVE    DIRBR$FLAG_DIR, R6      ; R6: directory flag
 
-                ; R9 now contains the heap space needed: check if we still
-                ; have enough heap to accommodate R9: create the linked-list
-                ; data blob using this memory layout:
-                ; filename (+ "<" and ">" if directory)
-                ; dir-flag: 0: normal file, 1: directory
-                ; start cluster: low word, high word (see DIRBROWSE_NEXT)
-_DIRBR_NEWELM2  MOVE    R5, R7                  ; current heap memory
+                ; two characters per word plus the zero byte at the end:
+                ; length / 2 + 1 words
+_DIRBR_NEWELM2  AND     0xFFFB, SR              ; clear C: SHR shifts it in
+                SHR     1, R9
+                ADD     1, R9
+                ADD     DIRBR$NAME, R9          ; R9: size of the data blob
+
+                ; check if we still have enough heap to accommodate R9
+                MOVE    R5, R7                  ; current heap memory
                 ADD     R9, R7                  ; memory needed by new entry
                 MOVE    R7, R10                 ; return new heap memory
                 ADD     SLL$OVRHD_SIZE, R10
@@ -292,30 +395,25 @@ _DIRBR_NEWELM2  MOVE    R5, R7                  ; current heap memory
                 MOVE    0, @R0                  ; init NEXT with 0
                 MOVE    0, @R1                  ; init PREV with 0
                 MOVE    R9, @R2                 ; put data size in SLL struct.
-                CMP     1, R6                   ; is it a directory?
-                RBRA    _DIRBR_NEWELM3, !Z      ; no: continue
-                MOVE    _DIRBR_DS, @R3++        ; add "<" before name
-_DIRBR_NEWELM3  MOVE    _DIRBR_ENTRY, R7        ; copy file name
-                ADD     FAT32$DE_NAME, R7
-                MOVE    R7, R8
-                MOVE    R3, R9
-                SYSCALL(strcpy, 1)
-
-                SYSCALL(strlen, 1)              ; R9 contains len of filename
-                ADD     R9, R3                  ; R3 points to zero terminator
-                CMP     1, R6                   ; is it a directory?
-                RBRA    _DIRBR_NEWELM4, !Z      ; no: continue
-                MOVE    _DIRBR_DE, @R3++        ; add ">" after name
-                MOVE    0, @R3
-
-_DIRBR_NEWELM4  ADD     1, R3                   ; skip zero terminator
-                MOVE    R6, @R3++               ; add directory flag
-                MOVE    _DIRBR_ENTRY, R7        ; add start cluster
+                MOVE    _DIRBR_ENTRY, R7        ; start cluster
                 ADD     FAT32$DE_CLUS_LO, R7    ; (DE_CLUS_HI follows)
-                MOVE    @R7++, @R3++
-                MOVE    @R7, @R3++
+                MOVE    R3, R8
+                ADD     DIRBR$CLUS_LO, R8
+                MOVE    @R7++, @R8++            ; DIRBR$CLUS_HI follows
+                MOVE    @R7, @R8
+                MOVE    R10, R5                 ; R5: new current heap memory
+                MOVE    _DIRBR_ENTRY, R8        ; pack the name
+                ADD     FAT32$DE_NAME, R8
+                MOVE    R3, R9
+                ADD     DIRBR$NAME, R9
+                MOVE    R6, R10                 ; R10: add "<" and ">"?
+                RSUB    _DIRBR_PACK, 1          ; R8: behind the name
+                OR      R9, R6                  ; R9: DIRBR$FLAG_NUM or 0
+                MOVE    R3, R7
+                ADD     DIRBR$FLAGS, R7
+                MOVE    R6, @R7                 ; flags of the element
 
-                MOVE    R3, R8                  ; R8: adjusted head of heap
+                MOVE    R5, R10                 ; R10: new current heap memory
                 MOVE    R11, R9                 ; R9: pointer to new element
                 XOR     R11, R11                ; R11: no error
                 RBRA    _DIRBR_NERET, 1         ; return
@@ -330,146 +428,203 @@ _DIRBR_NEOOM    MOVE    R11, R8                 ; heap head did not change
 _DIRBR_NERET    DECRB
                 RET
 
+; Pack a name with two characters per word (the first one in the high byte)
+; and end it with a zero byte, see DIRBR$NAME
+; Input:
+;   R8: name (zero-terminated, one character per word)
+;   R9: target
+;  R10: 0 = name of a file, not 0 = name of a directory: enclose it in "<"
+;       and ">"
+; Output:
+;   R8: first word behind the packed name
+;   R9: DIRBR$FLAG_NUM if the name consists of digits only, otherwise 0
+;  R10: unchanged
+_DIRBR_PACK     INCRB
+                MOVE    R8, R0                  ; R0: name
+                MOVE    R9, R1                  ; R1: target
+                MOVE    R10, R2                 ; R2: "<" still to come?
+                MOVE    R10, R3                 ; R3: ">" still to come?
+                MOVE    DIRBR$FLAG_NUM, R7      ; R7: digits only so far
+_DIRBR_PK_LOOP  RSUB    _DIRBR_PK_CHR, 1        ; R4: next character
+                SWAP    R4, R5                  ; R5: it in the high byte
+                RBRA    _DIRBR_PK_END, Z        ; end of the name: 0x0000
+                RSUB    _DIRBR_PK_CHR, 1        ; R4: next character
+                OR      R4, R5
+                MOVE    R5, @R1++
+                CMP     0, R4                   ; end of the name?
+                RBRA    _DIRBR_PK_LOOP, !Z      ; no: next two characters
+                RBRA    _DIRBR_PK_RET, 1
+_DIRBR_PK_END   MOVE    R5, @R1++
+_DIRBR_PK_RET   MOVE    R1, R8
+                MOVE    R7, R9
+                DECRB
+                RET
+
+; Next character for _DIRBR_PACK in R4, 0 at the end of the name. Works on
+; the registers of _DIRBR_PACK, therefore no INCRB.
+_DIRBR_PK_CHR   CMP     0, R2                   ; "<" first?
+                RBRA    _DIRBR_PKC_NAME, Z      ; no
+                XOR     R2, R2
+                MOVE    _DIRBR_DS, R4
+                RET
+_DIRBR_PKC_NAME MOVE    @R0, R4                 ; next character of the name
+                RBRA    _DIRBR_PKC_END, Z
+                ADD     1, R0
+                CMP     '0', R4                 ; below "0"?
+                RBRA    _DIRBR_PKC_NAN, N
+                CMP     R4, '9'                 ; above "9"?
+                RBRA    _DIRBR_PKC_NAN, N
+                RET
+_DIRBR_PKC_NAN  XOR     R7, R7                  ; not a number
+                RET
+_DIRBR_PKC_END  CMP     0, R3                   ; ">" at the end?
+                RBRA    _DIRBR_PKC_RET, Z       ; no: R4 = 0
+                XOR     R3, R3
+                MOVE    _DIRBR_DE, R4
+_DIRBR_PKC_RET  RET
+
 ; SLL$SORT compare function that returns negative if (S0 < S1),
 ; zero if (S0 == S1), positive if (S0 > S1). These semantic are
 ; basically compatible with STR$CMP, but instead of expecting pointers
 ; to two strings, this compare function is expecting two pointers to
 ; SLL records, while the pointer to the first one is given in R8 and
 ; treated as "S0" and the second one in R9 and treated as "S1".
-; Also, this compare function compares case-insensitive.
 ;
-; MUST preserve R11 across the call.  SLL$SORT keeps the comparator
-; pointer in the unbanked R11 across every merge iteration, so writing to
-; R11 (or invoking a helper that does not preserve it) silently breaks
-; the sort after the first iteration.  Today this function never touches
-; R11, and all SYSCALL string helpers used here preserve it via their
-; register-bank discipline.
+; The order: case-insensitive (a..z equal A..Z), in a directory name the
+; "<" and ">" count as the characters 1 and 2 (directories come first and a
+; shorter directory name before a longer one that starts the same way), and
+; if both names consist of digits only, then the shorter name is the smaller
+; one, so that 1, 2, ..., 10, 11, ... are sorted by their value. The names
+; are compared directly in their packed form (two characters per word, see
+; DIRBR$NAME), without copying them.
+;
+; MUST preserve R8, R9 and R11 across the call. SLL$SORT keeps the
+; comparator pointer in the unbanked R11 across every merge iteration, so
+; writing to R11 silently breaks the sort after the first iteration. This
+; function only uses R0 to R7 of its own register bank and R10.
 
 _DIRBR_COMPARE  INCRB
-                MOVE    R8, R0 
-                MOVE    R9, R1
-                INCRB
+
                 MOVE    R8, R0
+                ADD     SLL$DATA, R0
+                MOVE    R0, R6
+                ADD     DIRBR$FLAGS, R6
+                MOVE    @R6, R6                 ; R6: flags of S0
+                ADD     DIRBR$NAME, R0          ; R0: name of S0
                 MOVE    R9, R1
+                ADD     SLL$DATA, R1
+                MOVE    R1, R7
+                ADD     DIRBR$FLAGS, R7
+                MOVE    @R7, R7                 ; R7: flags of S1
+                ADD     DIRBR$NAME, R1          ; R1: name of S1
 
-                ADD     SLL$DATA, R0            ; R0: pointer to first string
-                ADD     SLL$DATA, R1            ; R1: pointer to second string
+                ; both names consist of digits only: the shorter one is the
+                ; smaller one
+                AND     R7, R6
+                AND     DIRBR$FLAG_NUM, R6
+                RBRA    _DIRBR_CMP_CHR, Z
+                MOVE    R0, R2
+                RSUB    _DIRBR_PLEN, 1
+                MOVE    R3, R4                  ; R4: length of S0
+                MOVE    R1, R2
+                RSUB    _DIRBR_PLEN, 1          ; R3: length of S1
+                SUB     R3, R4
+                RBRA    _DIRBR_CMP_CHR, Z       ; same length: compare chars.
+                MOVE    R4, R10
+                RBRA    _DIRBR_CMP_RET, 1
 
-                ; copy R0 to the stack and make it upper case
-_DIRBR_CMP      MOVE    R0, R8                  ; copy string to stack
-                SYSCALL(strlen, 1)
-                ADD     1, R9               
-                SUB     R9, SP
-                MOVE    R9, R4                  ; R4: stack restore amount
-                MOVE    SP, R9
-                SYSCALL(strcpy, 1)
-                MOVE    R9, R8
-                SYSCALL(str2upper, 1)
-                MOVE    R8, R0
+                ; R6/R7: does S0/S1 start with "<" (directory name)?
+_DIRBR_CMP_CHR  XOR     R6, R6
+                MOVE    @R0, R2
+                SWAP    R2, R2
+                AND     0x00FF, R2
+                CMP     _DIRBR_DS, R2
+                RBRA    _DIRBR_CMP_D1, !Z
+                MOVE    1, R6
+_DIRBR_CMP_D1   XOR     R7, R7
+                MOVE    @R1, R2
+                SWAP    R2, R2
+                AND     0x00FF, R2
+                CMP     _DIRBR_DS, R2
+                RBRA    _DIRBR_CMP_LP, !Z
+                MOVE    1, R7
 
-                ; copy R1 to the stack and make it upper case
-                MOVE    R1, R8
-                SYSCALL(strlen, 1)
-                ADD     1, R9
-                SUB     R9, SP
-                ADD     R9, R4                  ; R4: update stack rest. amnt.
-                MOVE    SP, R9
-                SYSCALL(strcpy, 1)
-                MOVE    R9, R8
-                SYSCALL(str2upper, 1)
-                MOVE    R8, R1
+                ; equal words: two equal characters, go on until the end
+_DIRBR_CMP_LP   MOVE    @R0++, R2               ; R2: two characters of S0
+                MOVE    @R1++, R3               ; R3: two characters of S1
+                CMP     R2, R3
+                RBRA    _DIRBR_CMP_DIF, !Z
+                CMP     0x0100, R2              ; first character 0?
+                RBRA    _DIRBR_CMP_EQ, N        ; yes: both names end
+                MOVE    R2, R4
+                AND     0x00FF, R4              ; second character 0?
+                RBRA    _DIRBR_CMP_EQ, Z        ; yes: both names end
+                RBRA    _DIRBR_CMP_LP, 1
 
-                ; replace the brackets in directory names like <this> by
-                ; low ASCII characters to ensure they have sorting priority
-                CMP     _DIRBR_DS, @R0          ; performance optimization
-                RBRA    _DIRBR_NXTDS, !Z
-                MOVE    _DIRBR_DS, R8           ; replace < by 1 in R0
-                MOVE    1, R9
-                MOVE    R0, R10
-                SYSCALL(strrplchr, 1)
-                MOVE    _DIRBR_DE, R8           ; replace > by 2 in R0
-                MOVE    2, R9
-                SYSCALL(strrplchr, 1)
+                ; the words differ: compare their characters one by one
+_DIRBR_CMP_DIF  SWAP    R2, R4
+                AND     0x00FF, R4
+                MOVE    R6, R5
+                RSUB    _DIRBR_CMAP, 1
+                MOVE    R4, R10                 ; R10: 1st character of S0
+                SWAP    R3, R4
+                AND     0x00FF, R4
+                MOVE    R7, R5
+                RSUB    _DIRBR_CMAP, 1          ; R4: 1st character of S1
+                SUB     R4, R10
+                RBRA    _DIRBR_CMP_RET, !Z      ; they differ: done
+                CMP     0, R4                   ; both names end?
+                RBRA    _DIRBR_CMP_RET, Z       ; yes: R10 = 0
+                MOVE    R2, R4
+                AND     0x00FF, R4
+                MOVE    R6, R5
+                RSUB    _DIRBR_CMAP, 1
+                MOVE    R4, R10                 ; R10: 2nd character of S0
+                MOVE    R3, R4
+                AND     0x00FF, R4
+                MOVE    R7, R5
+                RSUB    _DIRBR_CMAP, 1          ; R4: 2nd character of S1
+                SUB     R4, R10
+                RBRA    _DIRBR_CMP_RET, !Z      ; they differ: done
+                CMP     0, R4                   ; both names end?
+                RBRA    _DIRBR_CMP_LP, !Z       ; no: next two characters
+_DIRBR_CMP_EQ   XOR     R10, R10
 
-_DIRBR_NXTDS    CMP     _DIRBR_DS, @R1
-                RBRA    _DIRBR_DOISANUM, !Z
-                MOVE    _DIRBR_DS, R8
-                MOVE    1, R9                   ; replace < by 1 in R1
-                MOVE    R1, R10
-                SYSCALL(strrplchr, 1)
-                MOVE    _DIRBR_DE, R8           ; replace > by 2 in R1
-                MOVE    2, R9
-                SYSCALL(strrplchr, 1)
-
-                ; special treatment for names that are numbers so that files
-                ; and folders like 1, 2, 3, ..., 10, 11, ..., 100, 101, ...
-                ; are sorted in ascending order: If a string that represents
-                ; a number is shorter than another string that represents a
-                ; number then the first string is "smaller" than the second
-                ; in the context of being a number
-_DIRBR_DOISANUM MOVE    R0, R8                  ; if R0 is NaN: norm. strcmp
-                RSUB    _DIRBR_ISANUM, 1
-                RBRA    _DIRBR_DOCMP, !C
-                MOVE    R1, R8                  ; if R1 is NaN: norm. strcmp
-                RSUB    _DIRBR_ISANUM, 1
-                RBRA    _DIRBR_DOCMP, !C
-
-                MOVE    R0, R8
-                SYSCALL(strlen, 1)
-                MOVE    R9, R7                  ; R7: strlen of R0
-                MOVE    R1, R8
-                SYSCALL(strlen, 1)              ; R9: strlen of R1
-                CMP     R7, R9
-                RBRA    _DIRBR_DOCMP, Z         ; R5=R6: normal strcmp works
-                RBRA    _DIRBR_R1, N            ; strlen(R0)>strlen(R1)
-                MOVE    -1, R10                 ; R0 < R1
-                RBRA    _DIRBR_RET, 1
-_DIRBR_R1       MOVE    1, R10                  ; R0 > R1
-                RBRA    _DIRBR_RET, 1
-
-                ; case-insensitive comparison (because we are comparing
-                ; upper case versions of the names)
-_DIRBR_DOCMP    MOVE    R0, R8
-                MOVE    R1, R9
-                SYSCALL(strcmp, 1)
-
-_DIRBR_RET      ADD     R4, SP                  ; restore stack pointer
-
-                DECRB                
-                MOVE    R0, R8
-                MOVE    R1, R9   
-                DECRB
+_DIRBR_CMP_RET  DECRB
                 RET
 
-; helper function to check if a string is actually a number
-; directory brackets like <this> are ignored, i.e. <123> is a number
-; R8: string
-; Carry flag C=1 if it is a number, C=0 otherwise
-_DIRBR_ISANUM   INCRB
-
-                MOVE    R8, R0                  ; zero-string is not a number
-                CMP     0, @R0
-                RBRA    _DIRBR_IAN_C0, Z
-
-_DIRBR_IAN_LP   MOVE    @R0++, R1               ; checked until the end..
-                RBRA    _DIRBR_IAN_C1, Z        ; ..so it is a number
-                CMP     1, R1                   ; ignore if <
-                RBRA    _DIRBR_IAN_LP, Z
-                CMP     2, R1                   ; ignore if >
-                RBRA    _DIRBR_IAN_LP, Z
-                CMP     R1, 47                  ; > ASCII 47 means 0...
-                RBRA    _DIRBR_IAN_C0, !N       ; no: not a number
-                CMP     R1, 57                  ; <= ASCII 57 means ...9
-                RBRA    _DIRBR_IAN_C0, N        ; no: not a number
-                RBRA    _DIRBR_IAN_LP, 1
-
-_DIRBR_IAN_C1   OR      0x0004, SR              ; is a num: set Carry
-                RBRA    _DIRBR_IAN_RET, 1
-
-_DIRBR_IAN_C0   AND     0xFFFB, SR              ; not a num: clear Carry
-
-_DIRBR_IAN_RET  DECRB
+; Character R4 as _DIRBR_COMPARE sees it: a..z become A..Z and, if R5 is not
+; 0 (directory name), "<" becomes 1 and ">" becomes 2. Works on the registers
+; of _DIRBR_COMPARE, therefore no INCRB.
+_DIRBR_CMAP     CMP     'a', R4                 ; below "a"?
+                RBRA    _DIRBR_CMAP_D, N
+                CMP     R4, 'z'                 ; above "z"?
+                RBRA    _DIRBR_CMAP_D, N
+                SUB     0x0020, R4              ; upper case
                 RET
+_DIRBR_CMAP_D   CMP     0, R5                   ; directory name?
+                RBRA    _DIRBR_CMAP_R, Z
+                CMP     _DIRBR_DS, R4
+                RBRA    _DIRBR_CMAP_1, !Z
+                MOVE    1, R4
+                RET
+_DIRBR_CMAP_1   CMP     _DIRBR_DE, R4
+                RBRA    _DIRBR_CMAP_R, !Z
+                MOVE    2, R4
+_DIRBR_CMAP_R   RET
+
+; Length of the packed name at R2 in R3 (uses R5). Works on the registers of
+; _DIRBR_COMPARE, therefore no INCRB.
+_DIRBR_PLEN     XOR     R3, R3
+_DIRBR_PLEN_L   MOVE    @R2++, R5
+                CMP     0x0100, R5              ; first character 0?
+                RBRA    _DIRBR_PLEN_R, N        ; yes: end of the name
+                ADD     1, R3
+                AND     0x00FF, R5              ; second character 0?
+                RBRA    _DIRBR_PLEN_R, Z        ; yes: end of the name
+                ADD     1, R3
+                RBRA    _DIRBR_PLEN_L, 1
+_DIRBR_PLEN_R   RET
 
 ; Runs the filter function given to DIRBROWSE_READ on the directory entry in
 ; _DIRBR_ENTRY before the entry takes any heap space, so that hidden entries

@@ -580,8 +580,9 @@ VD_DRV_WRITE    INCRB
 ;       In all cases but 0 the drive and its disk image did not change. The
 ;       file browser state may have changed (it is always consistent).
 ;   R9: If R8 = 0: File name of the new disk image (zero terminated); it
-;       points into the file browser heap and is valid until the next
-;       operation of the file browser or of VD_NEXT_DISK
+;       points into the name buffer of the file browser (DIRBR$GETNAME) and
+;       is valid until the next operation of the file browser or of
+;       VD_NEXT_DISK
 ;   R10..R12: Not preserved
 VD_NEXT_DISK    INCRB
 
@@ -689,8 +690,9 @@ _VDNX_CHK       MOVE    2, R6                   ; status: no other image
                 MOVE    R10, R4                 ; ..the end of the circle
 _VDNX_TRY       MOVE    R10, R2                 ; R2: candidate
                 MOVE    R11, R3                 ; R3: index of candidate
-                MOVE    R10, R1
-                ADD     SLL$DATA, R1            ; R1: file name
+                MOVE    R10, R8
+                RSUB    DIRBR$GETNAME, 1        ; R8: name in the name buffer
+                MOVE    R8, R1                  ; R1: file name
 
                 ; Check the candidate with PREP_LOAD_IMAGE before mounting it,
                 ; so that a rejected image is skipped: HANDLE_MOUNTING would
@@ -708,11 +710,12 @@ _VDNX_TRY       MOVE    R10, R2                 ; R2: candidate
                 MOVE    R8, R8
                 RBRA    _VDNX_LOAD, Z
 _VDNX_SKIP      MOVE    R2, R10                 ; continue after the candidate:
-                ADD     SLL$DATA_SIZE, R10      ; its start cluster is at the..
-                ADD     @R10, R10               ; ..end of its data blob
-                MOVE    @R10, R11
-                MOVE    @--R10, R9
-                MOVE    R11, R10
+                ADD     SLL$DATA, R10           ; its start cluster is in its..
+                MOVE    R10, R9                 ; ..data blob (DIRBR$CLUS_*)
+                ADD     DIRBR$CLUS_LO, R9
+                MOVE    @R9, R9                 ; R9: start cluster low
+                ADD     DIRBR$CLUS_HI, R10
+                MOVE    @R10, R10               ; R10: start cluster high
                 MOVE    R5, R8
                 RSUB    DIRBROWSE_NEXT, 1
                 RBRA    _VDNX_CHK, 1
