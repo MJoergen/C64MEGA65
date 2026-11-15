@@ -52,10 +52,9 @@ MOUNT_OK        MOVE    STARTPATH_STR, R8       ; user enters start path
 
                 ; Output sorted directory listing
 LOAD_OK         MOVE    R10, R0
-                ADD     SLL$NEXT, R0                
-                MOVE    R10, R1
-                ADD     SLL$DATA, R1
-                MOVE    R1, R8
+                ADD     SLL$NEXT, R0
+                MOVE    R10, R8                 ; R8: name of the element
+                RSUB    DIRBR$GETNAME, 1        ; (names are packed)
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
                 CMP     0, @R0
