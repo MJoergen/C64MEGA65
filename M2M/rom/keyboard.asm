@@ -16,11 +16,11 @@ KEYB$INIT       INCRB
                 MOVE    0xFFFF, @R0             ; low active, i.e. no keys
                 MOVE    KEYB_NEWKEYS, R0
                 MOVE    0, @R0                  ; high active, i.e. no keys
-                MOVE    KEYB_CDN_DELAY, R0
-                MOVE    0, @R0++
-                MOVE    0, @R0++
-                MOVE    0, @R0++
-                MOVE    0, @R0
+                MOVE    KEYB_CDN_DELAY, R0      ; clear the typematic vars.
+                MOVE    KEYB_TYPEM_WORDS, R1
+_KEYB_INIT_LOOP MOVE    0, @R0++
+                SUB     1, R1
+                RBRA    _KEYB_INIT_LOOP, !Z
                 DECRB
                 RET
 
@@ -47,19 +47,63 @@ KEYB$SCAN       INCRB
                 ; store currently pressed keys
                 MOVE    R0, @R1
 
-                ; typematic repeat for up/down cursor keys
-                ; (only inside QNICE as Game Boy does its own thing)
-                MOVE    M2M$KEY_DOWN, R8        ; handle cursor down
-                MOVE    R1, R9
+                ; typematic repeat for the four cursor keys (only inside
+                ; QNICE as Game Boy does its own thing): _KEYB_TYPEMATIC
+                ; handles a pressed key; a key that is not pressed only needs
+                ; its delay counter and trigger flag cleared, which is done
+                ; inline, so that a scan costs about as much as it did when
+                ; only up and down had a typematic repeat
+                MOVE    R1, R9                  ; R9: pointer to PRESSED
+
+                MOVE    R0, R4                  ; cursor down
+                AND     M2M$KEY_DOWN, R4
+                RBRA    _KEYB_SCAN_DN0, Z
+                MOVE    M2M$KEY_DOWN, R8
                 MOVE    KEYB_CDN_DELAY, R10
                 MOVE    KEYB_CDN_TRIG, R11
                 RSUB    _KEYB_TYPEMATIC, 1
-                MOVE    M2M$KEY_UP, R8          ; handle cursor up
+                RBRA    _KEYB_SCAN_UP, 1
+_KEYB_SCAN_DN0  MOVE    KEYB_CDN_DELAY, R4      ; not pressed: clear delay..
+                MOVE    0, @R4++                ; ..counter and trigger flag
+                MOVE    0, @R4
+
+_KEYB_SCAN_UP   MOVE    R0, R4                  ; cursor up
+                AND     M2M$KEY_UP, R4
+                RBRA    _KEYB_SCAN_UP0, Z
+                MOVE    M2M$KEY_UP, R8
                 MOVE    KEYB_CUP_DELAY, R10
                 MOVE    KEYB_CUP_TRIG, R11
                 RSUB    _KEYB_TYPEMATIC, 1
+                RBRA    _KEYB_SCAN_LF, 1
+_KEYB_SCAN_UP0  MOVE    KEYB_CUP_DELAY, R4
+                MOVE    0, @R4++
+                MOVE    0, @R4
 
-                DECRB
+_KEYB_SCAN_LF   MOVE    R0, R4                  ; cursor left
+                AND     M2M$KEY_LEFT, R4
+                RBRA    _KEYB_SCAN_LF0, Z
+                MOVE    M2M$KEY_LEFT, R8
+                MOVE    KEYB_CLF_DELAY, R10
+                MOVE    KEYB_CLF_TRIG, R11
+                RSUB    _KEYB_TYPEMATIC, 1
+                RBRA    _KEYB_SCAN_RT, 1
+_KEYB_SCAN_LF0  MOVE    KEYB_CLF_DELAY, R4
+                MOVE    0, @R4++
+                MOVE    0, @R4
+
+_KEYB_SCAN_RT   MOVE    R0, R4                  ; cursor right
+                AND     M2M$KEY_RIGHT, R4
+                RBRA    _KEYB_SCAN_RT0, Z
+                MOVE    M2M$KEY_RIGHT, R8
+                MOVE    KEYB_CRT_DELAY, R10
+                MOVE    KEYB_CRT_TRIG, R11
+                RSUB    _KEYB_TYPEMATIC, 1
+                RBRA    _KEYB_SCAN_END, 1
+_KEYB_SCAN_RT0  MOVE    KEYB_CRT_DELAY, R4
+                MOVE    0, @R4++
+                MOVE    0, @R4
+
+_KEYB_SCAN_END  DECRB
                 MOVE    R0, R8
                 MOVE    R1, R9
                 MOVE    R2, R10

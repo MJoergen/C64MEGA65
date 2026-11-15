@@ -12,9 +12,15 @@ KEYB_PRESSED    .BLOCK 1                        ; currently pressed
 KEYB_NEWKEYS    .BLOCK 1                        ; newly pressed since last..
                                                 ; ..call of KEYB_GETKEY
 
-; typematic delay variables (expected to be a consecutive block of for words
-; overall starting with KEYB_CDN_DELAY)
+; typematic delay variables of the cursor keys (expected to be a consecutive
+; block of KEYB_TYPEM_WORDS words starting with KEYB_CDN_DELAY, and the
+; trigger flag of a key directly behind its delay counter)
 KEYB_CDN_DELAY  .BLOCK 1
 KEYB_CDN_TRIG   .BLOCK 1
 KEYB_CUP_DELAY  .BLOCK 1
 KEYB_CUP_TRIG   .BLOCK 1
+KEYB_CLF_DELAY  .BLOCK 1
+KEYB_CLF_TRIG   .BLOCK 1
+KEYB_CRT_DELAY  .BLOCK 1
+KEYB_CRT_TRIG   .BLOCK 1
+KEYB_TYPEM_WORDS .EQU 8
