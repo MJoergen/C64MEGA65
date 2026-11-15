@@ -170,6 +170,7 @@ port (
    main_pot1_y_o           : out   std_logic_vector(7 downto 0);
    main_pot2_x_o           : out   std_logic_vector(7 downto 0);
    main_pot2_y_o           : out   std_logic_vector(7 downto 0);
+   main_mouse_amiga_i      : in    std_logic_vector(1 downto 0);   -- '1': Amiga mouse; 0 = port 1, 1 = port 2
    main_rtc_o              : out   std_logic_vector(64 downto 0);
    main_eth_rx_ready_i     : in    std_logic;
    main_eth_rx_valid_o     : out   std_logic;
@@ -216,6 +217,7 @@ port (
    qnice_ascal_polyphase_i : in    std_logic;
    qnice_ascal_triplebuf_i : in    std_logic;
    qnice_flip_joyports_i   : in    std_logic;
+   qnice_paddle_atari_i    : in    std_logic_vector(1 downto 0);   -- '1': Atari CX30 paddles; 0 = port 1, 1 = port 2
    qnice_osm_control_m_o   : out   std_logic_vector(511 downto 0);
    qnice_gp_reg_o          : out   std_logic_vector(255 downto 0);
 
@@ -383,6 +385,12 @@ signal qnice_pot1_x_n         : unsigned(7 downto 0);
 signal qnice_pot1_y_n         : unsigned(7 downto 0);
 signal qnice_pot2_x_n         : unsigned(7 downto 0);
 signal qnice_pot2_y_n         : unsigned(7 downto 0);
+
+-- Paddles in the core clock domain, before the Amiga mice (debouncer.vhd)
+signal main_pot1_x_n          : std_logic_vector(7 downto 0);
+signal main_pot1_y_n          : std_logic_vector(7 downto 0);
+signal main_pot2_x_n          : std_logic_vector(7 downto 0);
+signal main_pot2_y_n          : std_logic_vector(7 downto 0);
 
 signal qnice_avm_write         : std_logic;
 signal qnice_avm_read          : std_logic;
@@ -587,7 +595,18 @@ begin
          dbnce_joy2_down_n    => main_joy2_down_n_o,
          dbnce_joy2_left_n    => main_joy2_left_n_o,
          dbnce_joy2_right_n   => main_joy2_right_n_o,
-         dbnce_joy2_fire_n    => main_joy2_fire_n_o
+         dbnce_joy2_fire_n    => main_joy2_fire_n_o,
+
+         amiga_i              => main_mouse_amiga_i,
+
+         pot1_x_i             => main_pot1_x_n,
+         pot1_y_i             => main_pot1_y_n,
+         pot2_x_i             => main_pot2_x_n,
+         pot2_y_i             => main_pot2_y_n,
+         pot1_x_o             => main_pot1_x_o,
+         pot1_y_o             => main_pot1_y_o,
+         pot2_x_o             => main_pot2_x_o,
+         pot2_y_o             => main_pot2_y_o
       ); -- i_joy_debouncer
 
    -- Joystick outputs from the core are connected directly
@@ -673,6 +692,7 @@ begin
       qnice_ascal_polyphase_i   => qnice_ascal_polyphase_i,
       qnice_ascal_triplebuf_i   => qnice_ascal_triplebuf_i,
       qnice_flip_joyports_i     => qnice_flip_joyports_i,
+      qnice_paddle_atari_i      => qnice_paddle_atari_i,
       qnice_osm_control_m_o     => qnice_osm_control_m_o,
       qnice_gp_reg_o            => qnice_gp_reg_o,
       qnice_csr_reset_o         => qnice_csr_reset,
@@ -789,7 +809,7 @@ begin
    i_qnice2main: xpm_cdc_array_single
       generic map (
          DEST_SYNC_FF => 2,
-         WIDTH        => 871
+         WIDTH        => 839
       )
       port map (
          src_clk                    => qnice_clk,
@@ -801,11 +821,7 @@ begin
          src_in(5)                  => qnice_flip_joyports_i,
          src_in(517 downto 6)       => qnice_osm_control_m_o,
          src_in(773 downto 518)     => qnice_gp_reg_o,
-         src_in(781 downto 774)     => std_logic_vector(qnice_pot1_x_n),
-         src_in(789 downto 782)     => std_logic_vector(qnice_pot1_y_n),
-         src_in(797 downto 790)     => std_logic_vector(qnice_pot2_x_n),
-         src_in(805 downto 798)     => std_logic_vector(qnice_pot2_y_n),
-         src_in(870 downto 806)     => qnice_rtc,
+         src_in(838 downto 774)     => qnice_rtc,
          dest_clk                   => main_clk_i,
          dest_out(0)                => main_qnice_reset_o,
          dest_out(1)                => main_qnice_pause_o,
@@ -815,12 +831,29 @@ begin
          dest_out(5)                => main_flip_joyports,
          dest_out(517 downto 6)     => main_osm_control_m_o,
          dest_out(773 downto 518)   => main_qnice_gp_reg_o,
-         dest_out(781 downto 774)   => main_pot1_x_o,
-         dest_out(789 downto 782)   => main_pot1_y_o,
-         dest_out(797 downto 790)   => main_pot2_x_o,
-         dest_out(805 downto 798)   => main_pot2_y_o,
-         dest_out(870 downto 806)   => main_rtc_o
+         dest_out(838 downto 774)   => main_rtc_o
       ); -- i_qnice2main
+
+   -- Clock domain crossing: QNICE to CORE, the four paddle values (issue #193). They change together
+   -- once per measuring cycle; cdc_stable takes a value over only when two consecutive samples are
+   -- equal, so the core never sees a mix of bits from before and after a change.
+   i_qnice2main_paddles: entity work.cdc_stable
+      generic map (
+         G_REGISTER_SRC => true,
+         G_DATA_SIZE    => 32
+      )
+      port map (
+         src_clk_i                => qnice_clk,
+         src_data_i( 7 downto  0) => std_logic_vector(qnice_pot1_x_n),
+         src_data_i(15 downto  8) => std_logic_vector(qnice_pot1_y_n),
+         src_data_i(23 downto 16) => std_logic_vector(qnice_pot2_x_n),
+         src_data_i(31 downto 24) => std_logic_vector(qnice_pot2_y_n),
+         dst_clk_i                => main_clk_i,
+         dst_data_o( 7 downto  0) => main_pot1_x_n,
+         dst_data_o(15 downto  8) => main_pot1_y_n,
+         dst_data_o(23 downto 16) => main_pot2_x_n,
+         dst_data_o(31 downto 24) => main_pot2_y_n
+      ); -- i_qnice2main_paddles
 
    -- Clock domain crossing: QNICE to HR
    i_avm_fifo_qnice : entity work.avm_fifo

@@ -8,8 +8,8 @@
 #   mutants.py make <name> <src> <dst>   copy src to dst with the text of the mutant replaced;
 #                                    the old text must occur exactly once
 #
-# Each mutant is one exact text replacement in M2M/vhdl/amiga_mouse.vhd or M2M/vhdl/debouncer.vhd,
-# and names the bench run that has to reject it.
+# Each mutant is one exact text replacement in M2M/vhdl/amiga_mouse.vhd, M2M/vhdl/debouncer.vhd or
+# M2M/vhdl/cdc_stable.vhd, and names the bench run that has to reject it.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -126,10 +126,9 @@ MUTANTS = [
      "         enable_i       => amiga_i(1),", "         enable_i       => amiga_i(0),"),
     ("port_switcher_broken", "ports", "debouncer", TP, "-gG_PART=identity",
      "dbnce_joy1_up_n      <= s1_u when flip_joys_i = '0' else s2_u;", "dbnce_joy1_up_n      <= s1_u;"),
-    # used by the differential analysis of framework.vhd (run.sh, part ports), not by a simulation
-    ("amiga_i_no_default", "none", "debouncer", "", "",
-     "amiga_i            : in  std_logic_vector(1 downto 0) := \"00\";",
-     "amiga_i            : in  std_logic_vector(1 downto 0);"),
+    # wiring: the crossing of the paddle values (the other mutants of the wiring are in wiring.py)
+    ("cdc_without_stability_check", "wiring", "cdc_stable", "tb_amiga_cdc", "-gG_CHANGES=100000",
+     "if dst_data_d = dst_data_dd then", "if true then"),
 ]
 
 

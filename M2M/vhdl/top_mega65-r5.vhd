@@ -340,6 +340,7 @@ architecture synthesis of mega65_r5 is
    signal main_pot1_y            : std_logic_vector(7 downto 0);
    signal main_pot2_x            : std_logic_vector(7 downto 0);
    signal main_pot2_y            : std_logic_vector(7 downto 0);
+   signal main_mouse_amiga       : std_logic_vector(1 downto 0);
    signal main_rtc               : std_logic_vector(64 downto 0);
 
    signal iec_clk_en             : std_logic;
@@ -427,6 +428,9 @@ architecture synthesis of mega65_r5 is
 
    -- flip joystick ports
    signal qnice_flip_joyports    : std_logic;
+
+   -- Atari CX30 paddles per physical port (issue #193)
+   signal qnice_paddle_atari     : std_logic_vector(1 downto 0);
 
    -- QNICE On Screen Menu selections
    signal qnice_osm_control_m    : std_logic_vector(511 downto 0);
@@ -694,6 +698,7 @@ begin
       main_pot1_y_o           => main_pot1_y,
       main_pot2_x_o           => main_pot2_x,
       main_pot2_y_o           => main_pot2_y,
+      main_mouse_amiga_i      => main_mouse_amiga,
       main_rtc_o              => main_rtc,
       main_eth_rx_ready_i     => main_eth_rx_ready,
       main_eth_rx_valid_o     => main_eth_rx_valid,
@@ -740,6 +745,7 @@ begin
       qnice_ascal_polyphase_i => qnice_ascal_polyphase,
       qnice_ascal_triplebuf_i => qnice_ascal_triplebuf,
       qnice_flip_joyports_i   => qnice_flip_joyports,
+      qnice_paddle_atari_i    => qnice_paddle_atari,
       qnice_osm_control_m_o   => qnice_osm_control_m,
       qnice_gp_reg_o          => qnice_gp_reg,
       qnice_ramrom_dev_o      => qnice_ramrom_dev,
@@ -814,6 +820,9 @@ begin
 
          -- Flip joystick ports
          qnice_flip_joyports_o   => qnice_flip_joyports,
+
+         -- Paddle type per physical port (issue #193)
+         qnice_paddle_atari_o    => qnice_paddle_atari,
 
          -- On-Screen-Menu selections (in QNICE clock domain)
          qnice_osm_control_i     => qnice_osm_control_m,
@@ -910,6 +919,7 @@ begin
          main_pot1_y_i           => main_pot1_y,
          main_pot2_x_i           => main_pot2_x,
          main_pot2_y_i           => main_pot2_y,
+         main_mouse_amiga_o      => main_mouse_amiga,
          main_rtc_i              => main_rtc,
 
          --------------------------------------------------------------------------------------------------------

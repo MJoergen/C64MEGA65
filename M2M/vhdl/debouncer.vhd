@@ -75,14 +75,14 @@ port (
    dbnce_joy2_fire_n  : out std_logic;
 
    -- Amiga mice (issue #190)
-   amiga_i            : in  std_logic_vector(1 downto 0) := "00";              -- '1': the socket has an Amiga mouse
+   amiga_i            : in  std_logic_vector(1 downto 0);   -- '1': the socket has an Amiga mouse
 
    -- paddle values of the two C64 ports as the core expects them (inverted), behind the port switcher
-   pot1_x_i           : in  std_logic_vector(7 downto 0) := (others => '1');   -- measured
-   pot1_y_i           : in  std_logic_vector(7 downto 0) := (others => '1');
-   pot2_x_i           : in  std_logic_vector(7 downto 0) := (others => '1');
-   pot2_y_i           : in  std_logic_vector(7 downto 0) := (others => '1');
-   pot1_x_o           : out std_logic_vector(7 downto 0);                      -- measured, or the position of an Amiga mouse
+   pot1_x_i           : in  std_logic_vector(7 downto 0);   -- measured
+   pot1_y_i           : in  std_logic_vector(7 downto 0);
+   pot2_x_i           : in  std_logic_vector(7 downto 0);
+   pot2_y_i           : in  std_logic_vector(7 downto 0);
+   pot1_x_o           : out std_logic_vector(7 downto 0);   -- measured, or the position of an Amiga mouse
    pot1_y_o           : out std_logic_vector(7 downto 0);
    pot2_x_o           : out std_logic_vector(7 downto 0);
    pot2_y_o           : out std_logic_vector(7 downto 0)
@@ -153,7 +153,11 @@ begin
    end process;
 
    -- The true measured values of each socket: the values of the C64 port that the socket is
-   -- connected to, inverted
+   -- connected to, inverted. After a change of "Flip joystick ports", flip_joys_i and the switched
+   -- paddle values reach this clock domain through different crossings (framework.vhd), so for a
+   -- few clock cycles a mouse sees the measured values of the other socket; that cannot arm
+   -- anything, because the flag "pull-up seen" and every change of a button need the confirmation
+   -- time of amiga_mouse.vhd
    meas_x(0) <= not pot1_x_i when flip_joys_i = '0' else not pot2_x_i;
    meas_y(0) <= not pot1_y_i when flip_joys_i = '0' else not pot2_y_i;
    meas_x(1) <= not pot2_x_i when flip_joys_i = '0' else not pot1_x_i;

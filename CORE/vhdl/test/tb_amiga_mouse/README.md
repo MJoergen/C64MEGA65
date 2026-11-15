@@ -1,23 +1,22 @@
 # Amiga mouse benches (issue #190)
 
-`M2M/vhdl/amiga_mouse.vhd` turns the Amiga mouse of one joystick socket into a Commodore 1351 in proportional mode: a synchronizer and a glitch filter per line, a quadrature decoder per axis, a backlog with a rate limiter, the position as POT values with full units only, and the right and middle button derived from the measured paddle values. `M2M/vhdl/debouncer.vhd` conditions the two joystick ports: debouncing, two Amiga mice, the port switcher and the on/off switches of the Shell. The specification is `doc/dev-input/SPEC.md`, sections 4 and 5.
+`M2M/vhdl/amiga_mouse.vhd` turns the Amiga mouse of one joystick socket into a Commodore 1351 in proportional mode: a synchronizer and a glitch filter per line, a quadrature decoder per axis, a backlog with a rate limiter, the position as POT values with full units only, and the right and middle button derived from the measured paddle values. `M2M/vhdl/debouncer.vhd` conditions the two joystick ports: debouncing, two Amiga mice, the port switcher and the on/off switches of the Shell. The settings "Amiga" (mouse) and "Atari CX30" (paddles) of each port travel from `MEGA65_Core` through the four board files and `framework.vhd` to the debouncer and to `qnice_wrapper.vhd` (paddle measurement), and the four paddle values cross from the QNICE clock to the core clock through `cdc_stable`. The specification is `doc/dev-input/SPEC.md`, sections 3 to 5, 7 and 8.
 
 ## How to run
 
 ```
-CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|synth|all] [--keep] [--jobs N] [--no-mutants]
+CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|wiring|synth|all] [--keep] [--jobs N] [--no-mutants]
 ```
 
-* `decoder`: `amiga_mouse` alone (`tb_amiga_mouse.vhd`), the parts `dir`, `double`, `pulse`, `model`, `rate_follow`, `rate_sat`, `rate_tick`, `driver`, `enable` and `times` below, plus the mutants of the decoder.
+* `decoder`: `amiga_mouse` alone (`tb_amiga_mouse.vhd`), the parts `dir`, `double`, `pulse`, `model`, `rate_follow`, `rate_sat`, `rate_tick`, `driver`, `powerup`, `enable` and `times` below, plus the mutants of the decoder.
 * `buttons`: the parts `buttons` and `defaults`, plus the mutants of the button logic.
-
-The part `powerup` belongs to `decoder`.
-* `ports`: `debouncer` (`tb_amiga_ports.vhd`), the parts `identity` and `modes`; the differential analysis of `framework.vhd`; plus the mutants of the port conditioning.
+* `ports`: `debouncer` (`tb_amiga_ports.vhd`), the parts `identity` and `modes`, plus the mutants of the port conditioning.
+* `wiring`: the wiring of the settings and of the paddle values (`wiring.py`), the crossing of the paddle values in simulation (`tb_amiga_cdc.vhd`), plus the mutants of the wiring.
 * `synth`: `ghdl synth` of `amiga_mouse` and of `debouncer`.
 * `all` (default): everything.
 * `--keep`: keeps the build directory (with one log per simulation) and prints its path. `--jobs N`: number of parallel simulations (default 4, or the variable `JOBS`). `--no-mutants`: skips the mutants.
 
-The runner ends with `RESULT: PASS` (exit status 0) or `RESULT: FAIL ...`. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl`, or set `GHDL`), python3, git. Runtime about 9 minutes with 4 processes (20 minutes of processor time); every simulation has a timeout of 25 minutes.
+The runner ends with `RESULT: PASS` (exit status 0) or `RESULT: FAIL ...`. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl`, or set `GHDL`), python3, git. Runtime about 12 minutes with 4 processes; every simulation has a timeout of 25 minutes.
 
 ## The decoder and the buttons (`tb_amiga_mouse.vhd`)
 
@@ -52,7 +51,15 @@ Beside the DUT run `debouncer_ref`, the entity of commit `6845596` (before the A
 * `identity`: `amiga_i` at "00" and 300 ms of random activity on the ten lines (mostly long enough for the 1 ms debouncer), the port switcher, the on/off inputs, resets and the paddle values: the ten joystick outputs are identical to those of `debouncer_ref`, and the four paddle outputs equal the paddle inputs.
 * `modes`: all 32 combinations of `flip_joys_i`, `amiga_i(0)`, `amiga_i(1)`, `joy_1_on` and `joy_2_on` for 12 to 16 ms each, then 30 random switches during activity. A socket in Amiga mode gets quadrature on both pairs, the left button on fire and right and middle button presses as measured values; a socket in C64 mode gets random joystick lines and paddle values. For each C64 port: switched off, all five lines are '1'; connected to a socket in Amiga mode, left and right are '1', up is the right button and down the middle button of the reference mouse of that socket, fire is the debounced fire line and the paddle outputs are the inverted position of that mouse; connected to a socket in C64 mode, everything is as in `debouncer_ref`. The quadrature of an Amiga socket therefore never reaches a direction output. The reference mice have to change their buttons and positions often enough, or the bench fails.
 
-`run.sh ports` also analyzes the complete `framework.vhd` with the old and with the new debouncer in otherwise identical libraries: the diagnostics (entities that are not part of this bench) must be identical, so the existing instantiation still analyzes unchanged.
+## The wiring (`wiring.py`, `tb_amiga_cdc.vhd`)
+
+`wiring.py check` works on the files of the working tree and on those of the base commit `6845596`:
+
+* GHDL: the four board files analyze and elaborate against shells (the real entity declarations with empty architectures) of `framework`, `MEGA65_Core`, `audio`, `max10` and `pcm_to_pdm`. `framework.vhd`, `qnice_wrapper.vhd` and the four board files are analyzed in the version of the base commit and of the working tree, each in a library with what it instantiates (the real `debouncer`, `amiga_mouse`, `cdc_stable` and `mouse_input`, a shell of `qnice_wrapper`, shells for the board files); the working tree must not show a diagnostic that the base does not show. The entities that are not in the library give the same "not found" in both.
+* Static checks, because the crossings are components of the Xilinx library `xpm`, whose port maps GHDL cannot check: in `i_qnice2main` every `src_in` slice has a `dest_out` slice with the identical range, the slices are contiguous from 0, do not overlap and add up to `WIDTH`, and each source is paired with the destination it had in the base commit, except the four paddle values, which are gone. `i_qnice2main_paddles` is a `cdc_stable` with 32 bits and a source register from `qnice_clk` to `main_clk_i`; its byte k carries the k-th paddle value of the base, and its destination feeds the input of `i_joy_debouncer` whose output is the destination that value had in the base. `i_joy_debouncer` gets `main_mouse_amiga_i`, `main_pot1_x_o` to `main_pot2_y_o` have no other source, `i_qnice_wrapper` gets `qnice_paddle_atari_i`, `qnice_wrapper.vhd` passes bit 0 to `atari_paddles_a` and bit 1 to `atari_paddles_b`, and each board file connects the two outputs of `MEGA65_Core` to the two inputs of `framework` through two distinct signals.
+* Project files: every entity that `framework.vhd`, `qnice_wrapper.vhd`, `debouncer.vhd`, `amiga_mouse.vhd`, `mega65.vhd` and the board file instantiate (a VHDL entity or a Verilog module) is declared in a source file of each of `CORE/CORE-R3.xpr` to `CORE-R6.xpr`, unless it was missing there in the base commit already (`sdram` in `CORE-R3.xpr`, in the generate branch of `framework.vhd` that the R3 board does not elaborate).
+
+`tb_amiga_cdc.vhd` simulates the crossing with two unrelated clocks, 50 MHz and 31,527,778 Hz. A source register takes 100,000 random values for the four paddle bytes at random intervals of 160 ns to 1.5 us (the measuring cycle is 514 us; what matters for the crossing is that each value holds for more than a few clock periods of the destination); between the register and the destination every bit has its own routing delay of 0 to 3 ns. The path of `framework.vhd`, `cdc_stable` followed by `debouncer` with its two mice, must show every source value at the paddle outputs, in order, and never a value that the source did not hold. The same delayed bits pass a model of the per-bit synchronizers of `xpm_cdc_array_single` (two flip-flops per bit; a bit that changes within 0.2 ns before an edge is sampled with a random value), which must show torn values for the comparison.
 
 ## Synthesis
 
@@ -82,14 +89,33 @@ Each mutant is one exact text replacement in a copy of a source (`mutants.py`); 
 | `stuck_time_one_tick_short` | the stuck time one tick shorter | `defaults` |
 | `direction_masking_removed`, `buttons_exchanged`, `fire_masked`, `measured_values_not_unflipped`, `measured_values_not_inverted`, `paddle_output_not_inverted`, `paddle_output_wrong_socket`, `mouse_enable_wrong_socket` | the rules of SPEC.md section 5 | `modes` |
 | `port_switcher_broken` | the port switcher of one line | `identity` |
-| `amiga_i_no_default` | the new input `amiga_i` without a default value | the differential analysis of `framework.vhd` |
+| `cdc_without_stability_check` | `cdc_stable` takes every sample over | `tb_amiga_cdc`: a torn value at the paddle outputs |
+
+The mutants of the wiring are in `wiring.py`; each one has to fail a GHDL check or a static check:
+
+| Mutant | Change | Rejected by |
+|---|---|---|
+| `rN_framework_without_atari`, `rN_framework_without_amiga` (N = 3 to 6) | a board file without the connection of a new input of `framework` | GHDL analysis (the input has no default) and the static check |
+| `rN_core_without_atari`, `rN_core_without_amiga` | a board file without the connection of a new output of `MEGA65_Core` | the static check (an open output is legal VHDL) |
+| `rN_settings_exchanged` | the two settings exchanged at the inputs of `framework` | the static check (both are `std_logic_vector(1 downto 0)`) |
+| `framework_wrapper_without_atari` | `i_qnice_wrapper` without `qnice_paddle_atari_i` | the static check (the input has a default) |
+| `wrapper_bit0_to_port_b` | bit 0 of the setting also on `atari_paddles_b` | the static check |
+| `framework_debouncer_without_amiga`, `framework_debouncer_without_paddle` | `i_joy_debouncer` without `amiga_i`, without `pot2_y_i` | GHDL (the differential analysis of `framework.vhd`: the inputs have no default) and the static check |
+| `framework_debouncer_paddles_exchanged` | `pot1_x_i` and `pot1_y_i` of `i_joy_debouncer` exchanged | the static check |
+| `framework_pot_from_old_synchronizer` | `main_pot1_x_o` also from `i_qnice2main` | the static check |
+| `framework_paddle_order` | two destination bytes of `i_qnice2main_paddles` exchanged | the static check |
+| `framework_rtc_shifted` | the source slice of the RTC in `i_qnice2main` shifted by one bit | the static check |
+| `framework_width_not_adapted` | `WIDTH` of `i_qnice2main` still 871 | the static check |
+| `xpr_r6_without_amiga_mouse` | `CORE-R6.xpr` without `amiga_mouse.vhd` | the static check of the project files |
 
 ## Files
 
 | File | Content |
 |---|---|
-| `run.sh` | Runner: builds, simulations in parallel, mutants, differential analysis, synthesis |
-| `mutants.py` | The mutants |
+| `run.sh` | Runner: builds, simulations in parallel, mutants, wiring, synthesis |
+| `mutants.py` | The mutants of `amiga_mouse.vhd`, `debouncer.vhd` and `cdc_stable.vhd` |
+| `wiring.py` | The wiring checks and their mutants |
+| `tb_amiga_cdc.vhd` | Bench of the crossing of the paddle values with two clocks |
 | `tb_amiga_mouse_pkg.vhd` | Sequences of SPEC.md section 4.2, random numbers, the movement routine of the 1351 manual, helpers |
 | `tb_amiga_mouse.vhd` | Bench of `amiga_mouse`: mouse model, line drivers with chatter, checkers, driver model, the parts |
 | `tb_amiga_ports.vhd` | Bench of `debouncer` against `debouncer_ref` and two reference mice |

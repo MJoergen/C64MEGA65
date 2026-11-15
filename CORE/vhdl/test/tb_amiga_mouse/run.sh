@@ -2,7 +2,7 @@
 # --------------------------------------------------------------------------------------------------
 # Amiga mouse benches (GitHub issue #190), see README.md
 #
-#   CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|synth|all] [--keep] [--jobs N]
+#   CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|wiring|synth|all] [--keep] [--jobs N]
 #                                        [--no-mutants]
 #
 #   decoder  M2M/vhdl/amiga_mouse.vhd alone (tb_amiga_mouse.vhd): transitions, double transitions,
@@ -13,8 +13,12 @@
 #            plus the mutants of the button logic
 #   ports    M2M/vhdl/debouncer.vhd (tb_amiga_ports.vhd) against the entity of commit 6845596 and
 #            in all combinations of the port switcher, the Amiga settings and the on/off switches;
-#            differential analysis of framework.vhd with the old and the new debouncer; plus the
-#            mutants of the port conditioning
+#            plus the mutants of the port conditioning
+#   wiring   the settings from MEGA65_Core through the four board files, framework.vhd and
+#            qnice_wrapper.vhd (wiring.py: GHDL analysis and elaboration against the real entity
+#            declarations, differential analysis against 6845596, static check of the clock domain
+#            crossings), the crossing of the paddle values in simulation (tb_amiga_cdc.vhd); plus
+#            the mutants of the wiring
 #   synth    ghdl synth of amiga_mouse and of debouncer: no error, no latch, number of flip-flops
 #   all      everything (default)
 #
@@ -23,8 +27,8 @@
 # runs it with G_STOP (end at the first error) and must not report "TB: RESULT PASS".
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
-# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime about 9 minutes
-# with 4 processes (20 minutes of processor time).
+# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime about 12 minutes
+# with 4 processes.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -42,11 +46,11 @@ MUTANTS=1
 JOBS=${JOBS:-4}
 while [ $# -gt 0 ]; do
    case "$1" in
-      decoder|buttons|ports|synth|all) WHAT=$1 ;;
+      decoder|buttons|ports|wiring|synth|all) WHAT=$1 ;;
       --keep) KEEP=1 ;;
       --no-mutants) MUTANTS=0 ;;
       --jobs) shift; JOBS=$1 ;;
-      *) echo "usage: $0 [decoder|buttons|ports|synth|all] [--keep] [--jobs N] [--no-mutants]"; exit 2 ;;
+      *) echo "usage: $0 [decoder|buttons|ports|wiring|synth|all] [--keep] [--jobs N] [--no-mutants]"; exit 2 ;;
    esac
    shift
 done
@@ -94,11 +98,11 @@ SRC_M2M="$BUILD/src/m2m"
 SRC_TB="$BUILD/src/tb"
 mkdir -p "$SRC_M2M" "$SRC_TB"
 cp "$REPO/M2M/vhdl/debounce.vhd" "$REPO/M2M/vhdl/amiga_mouse.vhd" "$REPO/M2M/vhdl/debouncer.vhd" \
-   "$REPO/M2M/vhdl/framework.vhd" "$SRC_M2M/" &&
-cp "$HERE"/*.vhd "$HERE/mutants.py" "$SRC_TB/" || { echo "cannot copy the sources"; exit 1; }
-# sources of a library: debounce, amiga_mouse, debouncer, debouncer_ref, package, benches
-lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd>
-   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd $SRC_TB/tb_amiga_ports.vhd"
+   "$REPO/M2M/vhdl/cdc_stable.vhd" "$SRC_M2M/" &&
+cp "$HERE"/*.vhd "$HERE/mutants.py" "$HERE/wiring.py" "$SRC_TB/" || { echo "cannot copy the sources"; exit 1; }
+# sources of a library: debounce, amiga_mouse, debouncer, debouncer_ref, cdc_stable, package, benches
+lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd> <cdc_stable.vhd>
+   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $3 $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd $SRC_TB/tb_amiga_ports.vhd $SRC_TB/tb_amiga_cdc.vhd"
 }
 
 # --------------------------------------------------------------------------------------------------
@@ -111,12 +115,12 @@ job() { echo "$1|$2|$3|$4|$5" >> "$JOBFILE"; }
 
 M="$BUILD/main"
 BUILT=0
-if want decoder || want buttons || want ports; then
+if want decoder || want buttons || want ports || want wiring; then
    echo "=== build"
    if ref_entity "$BUILD/debouncer_ref.vhd" &&
-      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd") &&
-      elaborate "$M" tb_amiga_mouse tb_amiga_ports; then
-      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE) and the two benches analyzed and elaborated"
+      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" "$SRC_M2M/cdc_stable.vhd") &&
+      elaborate "$M" tb_amiga_mouse tb_amiga_ports tb_amiga_cdc; then
+      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE), cdc_stable and the three benches analyzed and elaborated"
       BUILT=1
    else
       note_fail build
@@ -158,10 +162,13 @@ if want ports; then
    job ports_identity  run "$M" tb_amiga_ports "-gG_PART=identity"
    job ports_modes     run "$M" tb_amiga_ports "-gG_PART=modes"
 fi
+if want wiring; then
+   job cdc             run "$M" tb_amiga_cdc   "-gG_CHANGES=100000"
+fi
 
 # --------------------------------------------------------------------------------------------------
 # mutants: name|part|file|bench run (args); the old and the new text are in mutants.py
-if [ $MUTANTS -eq 1 ] && [ $BUILT -eq 1 ]; then
+if [ $MUTANTS -eq 1 ] && [ $BUILT -eq 1 ] && [ "$WHAT" != synth ]; then
    echo "=== build mutants"
    python3 "$SRC_TB/mutants.py" list "$WHAT" > "$BUILD/mutants.txt" || note_fail mutant_table
    while IFS='|' read -r name kind file unit args; do
@@ -169,12 +176,14 @@ if [ $MUTANTS -eq 1 ] && [ $BUILT -eq 1 ]; then
       mkdir -p "$D"
       AM="$SRC_M2M/amiga_mouse.vhd"
       DB="$SRC_M2M/debouncer.vhd"
+      CS="$SRC_M2M/cdc_stable.vhd"
       case $file in
          amiga_mouse) AM="$D/amiga_mouse.vhd" ;;
          debouncer)   DB="$D/debouncer.vhd" ;;
+         cdc_stable)  CS="$D/cdc_stable.vhd" ;;
       esac
       if python3 "$SRC_TB/mutants.py" make "$name" "$SRC_M2M/$file.vhd" "$D/$file.vhd" &&
-         analyze "$D" $(lib_sources "$AM" "$DB") && elaborate "$D" "$unit"; then
+         analyze "$D" $(lib_sources "$AM" "$DB" "$CS") && elaborate "$D" "$unit"; then
          job "mutant_$name" "$kind" "$D" "$unit" "$args -gG_STOP=true"
       else
          note_fail "mutant_${name}_build"
@@ -250,53 +259,11 @@ PYEOF
 fi
 
 # --------------------------------------------------------------------------------------------------
-PKGS="$REPO/M2M/QNICE/vhdl/tools.vhd
-      $REPO/M2M/vhdl/av_pipeline/video_modes_pkg.vhd
-      $REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd
-      $REPO/CORE/vhdl/globals.vhd"
-
-# diags <lib> <file>: analyze file (Xilinx library clauses removed) and print its normalized
-# diagnostics (file names and positions stripped), one per line, sorted
-diags() {
-   local lib=$1 f=$2
-   grep -v -i -E "^\s*(library|use)\s+(xpm|unisim)\b" "$f" > "$lib/$(basename "$f").nox.vhd"
-   "$GHDL" -a $GF --workdir="$lib" "$lib/$(basename "$f").nox.vhd" 2>&1 |
-      sed -E 's/^[^:]*:[0-9]+:[0-9]+:[ ]*//' | sort
-}
-
-if want ports; then
-   echo "=== framework.vhd with the old and with the new debouncer"
-   D="$BUILD/frame"
-   if [ ! -f "$BUILD/debouncer_base.vhd" ]; then
-      git -C "$REPO" show "$BASE:M2M/vhdl/debouncer.vhd" > "$BUILD/debouncer_base.vhd"
-   fi
-   if analyze "$D/base" $PKGS "$SRC_M2M/debounce.vhd" "$BUILD/debouncer_base.vhd" &&
-      analyze "$D/new" $PKGS "$SRC_M2M/debounce.vhd" "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd"; then
-      diags "$D/base" "$SRC_M2M/framework.vhd" > "$D/base.txt"
-      diags "$D/new" "$SRC_M2M/framework.vhd" > "$D/new.txt"
-      if diff "$D/base.txt" "$D/new.txt" > "$D/diff.txt"; then
-         echo "  framework.vhd: $(wc -l < "$D/new.txt" | tr -d ' ') diagnostics (entities outside this bench), identical with the old and the new debouncer"
-      else
-         sed 's/^/    /' "$D/diff.txt" | head -10
-         note_fail framework_diff
-      fi
-      if [ $MUTANTS -eq 1 ]; then
-         # mutant: a new input without a default value must show up in the instantiation of framework.vhd
-         Q="$D/mut"
-         if python3 "$SRC_TB/mutants.py" make amiga_i_no_default "$SRC_M2M/debouncer.vhd" "$Q.vhd" &&
-            analyze "$D/mut" $PKGS "$SRC_M2M/debounce.vhd" "$SRC_M2M/amiga_mouse.vhd" "$Q.vhd"; then
-            diags "$D/mut" "$SRC_M2M/framework.vhd" > "$D/mut.txt"
-            if diff "$D/base.txt" "$D/mut.txt" > /dev/null; then
-               note_fail framework_mutant_not_detected
-            else
-               echo "  mutant amiga_i_no_default: rejected: $(diff "$D/base.txt" "$D/mut.txt" | grep -m1 '^> .*error' | cut -c3-)"
-            fi
-         else
-            note_fail framework_mutant_build
-         fi
-      fi
-   else
-      note_fail framework_libs
+if want wiring; then
+   echo "=== wiring (wiring.py)"
+   python3 "$SRC_TB/wiring.py" check "$REPO" "$BUILD/wiring" "$GHDL" "$BASE" || note_fail wiring
+   if [ $MUTANTS -eq 1 ]; then
+      python3 "$SRC_TB/wiring.py" mutants "$REPO" "$BUILD/wiring_mut" "$GHDL" "$BASE" "$JOBS" || note_fail wiring_mutants
    fi
 fi
 
