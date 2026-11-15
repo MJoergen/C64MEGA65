@@ -144,6 +144,8 @@ if want decoder; then
    job driver_pal      run "$M" $T "-gG_PART=driver -gG_PHASE_X=70 -gG_PHASE_Y=110 -gG_SEED=4"
    job driver_ntsc     run "$M" $T "-gG_PART=driver -gG_PHASE_X=110 -gG_PHASE_Y=70 -gG_SEED=5 -gG_FRAME_NS=16715000 $NTSC"
    job enable          run "$M" $T "-gG_PART=enable"
+   job powerup_enabled  run "$M" $T "-gG_PART=powerup -gG_ENABLED=true"
+   job powerup_disabled run "$M" $T "-gG_PART=powerup -gG_ENABLED=false"
    job times_pal       run "$M" $T "-gG_PART=times"
    job times_ntsc      run "$M" $T "-gG_PART=times $NTSC"
 fi

@@ -22,7 +22,8 @@
 --                16 line states, the backlog is emptied, the position is kept
 --   times        step time and confirmation time at the clock G_CLK_HZ (PAL or NTSC)
 --   buttons      the right and middle button on the paddle pins (small time generics)
---   defaults     the default times of the buttons at a slow clock (30 s stuck time)
+--   powerup      all outputs right after power-up, with enable_i at '1' or '0' from the first clock
+--   defaults     the default times of the buttons at a slow clock (5 s stuck time)
 --
 -- Every error is reported as "TB_ERROR: ..."; the last line is "TB: RESULT PASS" or
 -- "TB: RESULT FAIL ...". With G_STOP the bench ends at the first error (mutants).
@@ -46,7 +47,7 @@ entity tb_amiga_mouse is
       G_STEP_US    : natural  := 400;
       G_BACKLOG    : natural  := 127;
       G_CONFIRM_US : natural  := 4000;
-      G_STUCK_MS   : natural  := 30000;
+      G_STUCK_MS   : natural  := 5000;
       G_SEED       : positive := 1;
       G_PHASE_X    : natural  := 90;           -- phase between the two lines of X in degrees
       G_PHASE_Y    : natural  := 90;           -- ... of Y
@@ -55,6 +56,7 @@ entity tb_amiga_mouse is
                                                -- not see, so that the other half of the counts
                                                -- changes the POT value
       G_MON_CHECK  : boolean  := true;         -- false: the output checkers report nothing
+      G_ENABLED    : boolean  := true;         -- enable_i at power-up
       G_STOP       : boolean  := false         -- end at the first error
    );
 end entity tb_amiga_mouse;
@@ -100,7 +102,15 @@ architecture sim of tb_amiga_mouse is
    signal running      : boolean   := true;
 
    -- DUT ports
-   signal enable       : std_logic := '1';
+   function to_sl(b : boolean) return std_logic is
+   begin
+      if b then
+         return '1';
+      end if;
+      return '0';
+   end function to_sl;
+
+   signal enable       : std_logic := to_sl(G_ENABLED);
    signal pin          : std_logic_vector(3 downto 0) := "1111";
    signal meas_x       : std_logic_vector(7 downto 0) := x"FF";
    signal meas_y       : std_logic_vector(7 downto 0) := x"FF";
@@ -154,7 +164,7 @@ architecture sim of tb_amiga_mouse is
 
    -- driver model
    signal drv_on       : boolean := false;
-   signal drv_mode     : integer := 0;          -- 0: follow; +1 / -1: direction of X (Y opposite)
+   signal drv_mode     : integer := 0;          -- 0: follow; +1 / -1: direction of X (Y opposite); 2: exact
    signal drv_calls    : natural := 0;
 
    -- errors of all processes
@@ -548,6 +558,8 @@ begin
    -- at the start; this check does not use the output checker.
    -- drv_mode +1 / -1: X moves in that direction and Y in the opposite one; the driver never
    -- returns a movement against it.
+   -- drv_mode 2: the mouse reverses at full backlog above the rate limit; the output rightly keeps
+   -- stepping the old way until the backlog is drained, so only the exactness is checked.
    ---------------------------------------------------------------------------------------------
    driver : process
       variable r       : rng_t := rng_init(3000 + G_SEED);
@@ -584,6 +596,10 @@ begin
             tc := t0 + i * G_FRAME_NS * 1 ns + jit * 1 ms;
             wait until not drv_on for tc - now;
             exit when not drv_on;
+            -- a defined instant: 1 ps after a falling clock edge the checker has seen every change of
+            -- the POT values (they change only after rising edges)
+            wait until falling_edge(clk);
+            wait for 1 ps;
             for a in 0 to 1 loop
                if a = 0 then
                   p := pot_x;
@@ -610,7 +626,7 @@ begin
                               " from " & integer'image(n0(a)) & " counts, true positions " & integer'image(win_mn(a)) &
                               " .. " & integer'image(win_mx(a)) & " counts");
                   end if;
-               elsif res * dir < 0 then
+               elsif drv_mode /= 2 and res * dir < 0 then
                   tb_error("driver, axis " & integer'image(a) & ": movement " & integer'image(res) &
                            " against the direction of the mouse");
                end if;
@@ -1341,6 +1357,25 @@ begin
             note("driver above the rate limit (2500 to 20000 counts per second), X " & integer'image(1 - 2 * dir) &
                  ": no movement against the mouse, the sum of the results exactly the movement of the output");
          end loop;
+         -- above the rate limit with reversals at full backlog: segments of 40 to 80 ms at 8000 to
+         -- 20000 counts per second fill the backlog (127 counts in at most 23 ms) before each reversal
+         for a in 0 to 1 loop
+            pr(a).n := 12;
+            for k in 0 to 11 loop
+               rand_real(r, 40.0, 80.0, x);
+               t := x * 1 ms;
+               rand_real(r, log(8000.0), log(20000.0), x);
+               pr(a).seg(k) := (dur => t, cps => exp(x) * real(1 - 2 * ((k + a) mod 2)));
+            end loop;
+         end loop;
+         drv_mode <= 2;
+         drv_on   <= true;
+         run_prof;
+         wait for real(G_BACKLOG + 10) * C_TICK;
+         drv_on   <= false;
+         wait for 1 us;
+         note("driver above the rate limit with 11 reversals at full backlog per axis: in every call the sum of " &
+              "the results was exactly the movement of the output (no wrap, no unit lost or invented)");
       end procedure part_driver;
 
       --------------------------------------------------------------------------------------------
@@ -1467,8 +1502,8 @@ begin
       begin
          wait for 10 us;
          if G_FREQ = 31_527_778 and G_FILTER_NS = 2000 and G_STEP_US = 400 and G_CONFIRM_US = 4000 and
-            G_STUCK_MS = 30000 then
-            if C_FILTER /= 63 or C_STEP /= 12_610 or C_CONFIRM /= 10 or C_STUCK /= 75_000 then
+            G_STUCK_MS = 5000 then
+            if C_FILTER /= 63 or C_STEP /= 12_610 or C_CONFIRM /= 10 or C_STUCK /= 12_500 then
                err("derived numbers of the bench are not those of the specification");
             end if;
          end if;
@@ -1519,6 +1554,7 @@ begin
       -- the scenarios of SPEC.md section 4.5 for button b; the other button keeps a constant
       -- value (released with pull-up for b = 0, no pull-up for b = 1) and must not change
       procedure part_buttons_one(b : natural) is
+         constant C_EDGE : integer_vector(0 to 3) := (127, 128, 191, 192);
          variable o      : natural := 1 - b;
          variable c_o    : natural;
          variable dt     : time;
@@ -1740,6 +1776,52 @@ begin
          wait_btn(b, '1', 2 * hi, dt);
          note("button " & integer'image(b) & ": enable_i = '0' released it and cleared the flag");
 
+         -- 7. the thresholds: 127 is below 128, 128 to 191 change nothing, 192 is "nothing pulls the
+         -- pin up"; each value held for three confirmation times, while released with the flag,
+         -- while pressed, and without the flag (whether it arms the flag)
+         for k in C_EDGE'range loop
+            v := C_EDGE(k);
+            -- released, flag set: only 192 presses
+            set_meas(b, 12);
+            wait for 2 * tconf;
+            set_meas(b, v);
+            wait for 3 * tconf;
+            if (btn(b) = '0') /= (v >= 192) then
+               err("button " & integer'image(b) & ": value " & integer'image(v) & " while released gave " &
+                   std_logic'image(btn(b)));
+            end if;
+            set_meas(b, 12);
+            wait_btn(b, '1', 2 * hi, dt);
+            -- pressed: only 127 releases
+            set_meas(b, 255);
+            wait_btn(b, '0', 2 * hi, dt);
+            set_meas(b, v);
+            wait for 3 * tconf;
+            if (btn(b) = '1') /= (v < 128) then
+               err("button " & integer'image(b) & ": value " & integer'image(v) & " while pressed gave " &
+                   std_logic'image(btn(b)));
+            end if;
+            set_meas(b, 12);
+            wait_btn(b, '1', 2 * hi, dt);
+            -- no flag: only 127 arms it, so that a following 255 is a press
+            enable <= '0';
+            wait for 2 * C_PERIOD;
+            enable <= '1';
+            set_meas(b, v);
+            wait for 3 * tconf;
+            set_meas(b, 255);
+            wait for 3 * tconf;
+            if (btn(b) = '0') /= (v < 128) then
+               err("button " & integer'image(b) & ": value " & integer'image(v) & " without the flag, then 255, gave " &
+                   std_logic'image(btn(b)));
+            end if;
+            set_meas(b, 12);
+            wait_btn(b, '1', 2 * hi, dt);
+            wait for 2 * tconf;
+         end loop;
+         note("button " & integer'image(b) & ": 127, 128, 191 and 192 for three confirmation times each, released, " &
+              "pressed and without the flag: 127 releases and arms the flag, 192 presses, 128 and 191 change nothing");
+
          -- the other button: unchanged except for its own enable toggles (b = 0: pull-up, released)
          if bchg(o) /= c_o then
             err("button " & integer'image(o) & " changed while only button " & integer'image(b) & " was moved");
@@ -1753,6 +1835,29 @@ begin
          part_buttons_one(1);
          note("both buttons independent of each other");
       end procedure part_buttons;
+
+      --------------------------------------------------------------------------------------------
+      -- all outputs from the first clock cycle on, with enable_i at G_ENABLED since power-up, the
+      -- lines idle and the measured values those of a released button with pull-up
+      procedure part_powerup is
+      begin
+         meas_x <= x"0C";
+         meas_y <= x"0C";
+         for k in 1 to 200 loop
+            wait until falling_edge(clk);
+            if pot_x /= x"40" or pot_y /= x"40" or rbtn_n /= '1' or mbtn_n /= '1' then
+               err("cycle " & integer'image(k) & " after power-up: POT values " & to_hstring(pot_x) & " / " &
+                   to_hstring(pot_y) & ", buttons " & std_logic'image(rbtn_n) & std_logic'image(mbtn_n) &
+                   ", expected 40 / 40 and '1''1'");
+            end if;
+         end loop;
+         wait for 3 * C_CONFIRM * C_TICK;
+         if nchg /= (0, 0) or bchg /= (0, 0) or pot_x /= x"40" or pot_y /= x"40" then
+            err("the outputs changed after power-up");
+         end if;
+         note("enable_i " & std_logic'image(to_sl(G_ENABLED)) & " from the first clock: POT values 40 / 40 and " &
+              "both buttons released ('1') in every clock cycle, and nothing changed afterwards");
+      end procedure part_powerup;
 
       --------------------------------------------------------------------------------------------
       procedure part_defaults is
@@ -1781,9 +1886,9 @@ begin
          end if;
          note("defaults at " & integer'image(G_CLK_HZ) & " Hz: step 400 us, a press is reported " & rstr(to_us(dt) / 1000.0) &
               " ms after it began (4.0 .. 4.4 ms)");
-         wait_btn(0, '1', 31 sec, dt);
+         wait_btn(0, '1', 6 sec, dt);
          dt := dt + C_PERIOD;                   -- wait_btn of the press returned one period after it
-         if dt /= 30 sec then
+         if dt /= 5 sec then
             err("default stuck time: " & rstr(to_us(dt) / 1.0e6, 6) & " s");
          end if;
          note("defaults: a press without interruption is released after " & rstr(to_us(dt) / 1.0e6, 6) & " s");
@@ -1820,6 +1925,8 @@ begin
          part_buttons;
       elsif G_PART = "defaults" then
          part_defaults;
+      elsif G_PART = "powerup" then
+         part_powerup;
       else
          err("unknown part " & G_PART);
       end if;

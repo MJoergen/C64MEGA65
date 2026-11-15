@@ -77,15 +77,19 @@
 --
 -- The numbers for G_CLK_FREQ = 31,527,778 Hz (the PAL core clock) and the default
 -- generics, in clock cycles and real time:
---    filter     C_FILTER_CYCLES =     63 cycles = 1.998 us: a pulse at a pin of at
---               most 63 clock periods never passes, a level that holds for 64
---               periods (2.030 us) always does
+--    filter     C_FILTER_CYCLES =     63 cycles = 1.998 us: a pulse at a pin of up
+--               to 63 clock periods never passes, a level that holds for at least
+--               65 periods (2.062 us) always does (the first synchronizer stage
+--               may take its new value one clock cycle late)
 --    step tick  C_STEP_CYCLES   = 12,610 cycles = 399.96 us (2500.2 steps per second)
 --    confirm    C_CONFIRM_TICKS =     10 ticks: the condition has to hold for 10 to
 --               11 ticks (4.00 to 4.40 ms), because the first tick comes at any time
 --               within one tick after the condition starts
---    stuck      C_STUCK_TICKS   = 75,000 ticks = 29.997 s: a press always starts at
---               a tick, so this time is exact to the clock cycle
+--    stuck      C_STUCK_TICKS   = 12,500 ticks = 4.9996 s: a press always starts at
+--               a tick, so this time is exact to the clock cycle. A device that
+--               holds pin 9 or 5 high and is unplugged while the setting is "Amiga"
+--               leaves a pressed button behind for this time; on C64 port 1 the up
+--               and down lines are in parallel with the keyboard matrix.
 -- In NTSC mode the core clock is 32,727,273 Hz (3.8 % faster) while G_CLK_FREQ
 -- stays at the PAL value: all of these times are 3.7 % shorter.
 --
@@ -103,7 +107,7 @@ entity amiga_mouse is
       G_STEP_US     : natural := 400;      -- shortest time between two steps of the reported position
       G_BACKLOG     : natural := 127;      -- counts that may wait for the rate limiter; further ones are dropped
       G_CONFIRM_US  : natural := 4000;     -- a button on a paddle pin needs to be stable for this time
-      G_STUCK_MS    : natural := 30000     -- a button on a paddle pin that is pressed for longer is released
+      G_STUCK_MS    : natural := 5000      -- a button on a paddle pin that is pressed for longer is released
    );
    port (
       clk_i          : in  std_logic;
@@ -137,8 +141,9 @@ architecture synthesis of amiga_mouse is
       return n;
    end function at_least_one;
 
-   -- Derived counts; every intermediate product stays far below 2**31 for clock
-   -- frequencies up to 2 GHz and the ranges of the generics that make sense
+   -- Derived counts. The products (G_CLK_FREQ / 1000) * G_FILTER_NS and
+   -- (G_CLK_FREQ / 1000) * G_STEP_US have to stay below 2**31: with the default
+   -- generics up to a clock of 1.07 GHz (filter) and 5.3 GHz (step)
    constant C_STEP_US       : positive := at_least_one(G_STEP_US);
    constant C_FILTER_CYCLES : positive := at_least_one((G_CLK_FREQ / 1000) * G_FILTER_NS / 1_000_000);
    constant C_STEP_CYCLES   : positive := at_least_one((G_CLK_FREQ / 1000) * G_STEP_US / 1000);
@@ -177,8 +182,13 @@ architecture synthesis of amiga_mouse is
 
    -- The POT value of a position: its full units, presented as 64 + position with bit 0 cleared
    function pot_of(p : unsigned(6 downto 0)) return std_logic_vector is
+      variable r : std_logic_vector(7 downto 0);
    begin
-      return p(6) & not p(6) & std_logic_vector(p(5 downto 1)) & '0';
+      r(7)          := p(6);
+      r(6)          := not p(6);
+      r(5 downto 1) := std_logic_vector(p(5 downto 1));
+      r(0)          := '0';
+      return r;
    end function pot_of;
 
    -- synchronizer, filter and decoder state; the lines idle high
