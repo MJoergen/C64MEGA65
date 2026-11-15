@@ -5,6 +5,50 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A26 - TBD
+------------------------
+
+@TODO: Test the two new settings of the section `Input Devices` in `Advanced Settings` on R3/R3A and R6: `Mouse` with `C64` or `Amiga` per port (issue #190) and `Paddles` with `C64` or `Atari CX30` per port (issue #193). `Port 1` and `Port 2` in both submenus are the two sockets of the MEGA65; a setting describes the device that is plugged into that socket and travels with it when `Flip joystick ports` is on. Everything of WIP-V6-A25 below still applies. Background: `doc/dev-input/SPEC.md`.
+
+Tool for most steps: the input monitor `tests/input-devices/inputmon.prg` (copy it to the SD card and load it with the `PRG:` line of the menu; its `README.md` has the listing for typing it in). It shows for both ports the two paddle values X (pin 9) and Y (pin 5) and `LINES`, the sum of the digital lines that are low: 1 up, 2 down, 4 left, 8 right, 16 fire. The buttons of a paddle pair are 4 and 8; the left button of a mouse is 16, the right one 1 and the middle one 2. Do not touch the keyboard while it runs, except for Run/Stop to end it.
+
+Menu:
+
+* @TODO `Advanced Settings` shows the section `Input Devices` with `Keyboard Shortcuts`, `Mouse` and `Paddles`. All four settings are `C64` on the first start with the new config file. Change all four, close the menu, switch the MEGA65 off and on: the four settings are restored.
+* @TODO The keys F9 to F14 still do what the submenu `Keyboard Shortcuts` says, and the assignments can be changed as before (their menu lines moved).
+
+Amiga mouse (a tank mouse or any other Amiga mouse; `Mouse`: `Port 1: Amiga` with the mouse in port 1):
+
+* @TODO In the input monitor, X of port 1 rises while the mouse moves to the right and falls while it moves to the left; Y rises while the mouse moves away from you and falls while it moves towards you. Both values are even numbers from 64 to 190 and wrap around. `LINES` of port 1 is 16 while the left button is held and 0 otherwise, also while the mouse moves: the movement itself never shows up as 1, 2, 4 or 8.
+* @TODO End the monitor and type at the BASIC prompt while you move the mouse: no stray characters, and Run/Stop works. (With `Port 1: C64` and the Amiga mouse still plugged in, the keyboard is disturbed: that is the behavior of all earlier versions and the reason for the setting.)
+* @TODO GEOS with the input driver for the 1351: the pointer follows the mouse in every direction, slowly and fast; a fast flick never moves the pointer in the wrong direction and never makes it jump; click, double click and dragging with the left button work.
+* @TODO The same in port 2 with `Port 2: Amiga` and a program that expects its mouse in port 2. Then with the mouse in port 2, `Port 2: Amiga` and `Flip joystick ports` on: the C64 sees the mouse in port 1.
+* @TODO A joystick in the other port works while one port is set to `Amiga`.
+* @TODO Right and middle button: with an original Amiga mouse they do nothing (`LINES` never shows 1 or 2); this is a limit of the board, whose paddle pins have no pull-up resistors. With a device that holds pins 9 and 5 high while the buttons are released, `LINES` shows 1 while the right button is held and 2 while the middle button is held: an adapter or mouse with an active output stage, a mouSTer in Amiga mode with `activepotlines=true`, or a passive mouse behind a straight-through adapter with about 2 kOhm from pin 7 to pin 9 and from pin 7 to pin 5 (the same devices give the right button in the Amiga core). Report the paddle values X and Y of that port with the buttons released and pressed, read with the mouse setting `C64` (expected: 0 to 3 released, 255 pressed). Unplug such a device while the setting stays `Amiga` and plug in an original mouse: `LINES` shows 1 (and 2) for at most five seconds and is 0 afterwards.
+* @TODO USB adapters with a wheel (Micro Tom and similar) in Amiga mode: note whether the pointer twitches while the mouse lies still. If it does, the cure of the Amiga core applies: an extension cable with wire 5 cut.
+* @TODO Report the feel: the speed of the pointer compared with a 1351 in the same program, and whether a fast movement feels delayed.
+* @TODO If more Amiga mice are at hand (optical ones, adapters in Amiga mode): the same checks with each.
+
+Atari CX30 paddles (`Paddles`: `Port 1: Atari CX30` with the paddles in port 1):
+
+* @TODO First with all four settings at `C64`: note for each pair of paddles at hand (Commodore, Atari CX30, Atari CX30+) the value of X and Y at both end stops and how much of the rotation is needed from the stop that reads 0 until 255 is reached. Expected: a Commodore paddle reaches 255 after half to three quarters of its rotation, an Atari paddle after a quarter to a third.
+* @TODO The same measurement for the Atari paddles with `Port 1: Atari CX30`. Expected: 0 at the same end stop as before, 255 after about twice the rotation; the values rise evenly and without jumps; a paddle at rest flickers by one or two at most; the two buttons show up as 4 and 8.
+* @TODO Port 2 likewise, and with `Flip joystick ports` on (Atari paddles in port 2 with `Port 2: Atari CX30`: the C64 reads them on port 1, with the Atari scale).
+* @TODO Mixed: Commodore paddles in port 1 (`C64`) and Atari paddles in port 2 (`Atari CX30`): the Commodore paddles read the same values as with both settings at `C64`.
+* @TODO Games: in Arkanoid (paddle in port 1) and Pinball Spectacular the bat reaches both edges of the screen with a CX30 in the setting `Atari CX30`, with about twice the rotation that the setting `C64` needs.
+* @TODO Space Lords with four paddles in whatever mix of types is at hand, each port set to the type of its pair.
+* @TODO If 1 % resistors are at hand: connect 0 Ohm, 100 k, 220 k, 330 k, 470 k, 680 k and 1 M from pin 7 to pin 9 of a port and report the value of each in both paddle settings, on both boards. Expected: `Atari CX30` shows half of the `C64` value (rounded down) as long as the `C64` value is below 255. These numbers show how close the board is to a real C64, which reaches 255 between 250 k and 350 k.
+
+Regression with all four settings at `C64`:
+
+* @TODO Space Lords with four Commodore paddles, a 1351 in GEOS (movement, both buttons), joysticks in both ports with and without `Flip joystick ports`: all as in WIP-V6-A25.
+* @TODO A 1351 in port 1 (`C64` in both submenus for port 1) while port 2 is set to `Atari CX30`, with or without paddles in port 2: the pointer in GEOS moves as before. This is the one combination in which the 1351 sees a longer measuring cycle than the 512 µs of a C64 (769 µs).
+* @TODO A 1351 in a port whose paddle setting is `Atari CX30` does not work properly (the pointer moves at half speed and jumps): expected, the setting is only for paddles.
+
+Vivado build:
+
+* @TODO Timing is met on R3 and R6 in every clock domain. The new logic is small (a few hundred flip-flops in the core clock domain, a few dozen in the QNICE clock domain, no block RAM). The synthesis log reports no latch and no critical warning for `amiga_mouse.vhd`, `debouncer.vhd`, `mouse_input.vhdl` and `framework.vhd`.
+
 Version WIP-V6-A25 - TBD
 ------------------------
 
