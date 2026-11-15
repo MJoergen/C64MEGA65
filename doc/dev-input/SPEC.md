@@ -188,7 +188,9 @@ As long as both mode inputs are '0' at every latch tick, the outputs `pot_drain`
 
 ## 7. Crossing of the paddle values into the core clock domain
 
-The four results (32 bits) change together once per cycle and cross from the QNICE clock to the core clock. They cross through `cdc_stable` (the value is taken over when two consecutive samples are equal), not through the per-bit synchronizers of `xpm_cdc_array_single`: with those, the core clock can sample some bits of a value before and some after a change, and a C64 program that reads the SID register in that clock cycle gets a value that was never measured, for a 1351 a jump of up to 32 units. The other signals of `i_qnice2main` stay where they are. The constraint for `cdc_stable` in `M2M/common.xdc` covers the new instance.
+The four results (32 bits) change together once per cycle and cross from the QNICE clock to the core clock. They cross through `cdc_stable` (the value is taken over when two consecutive samples are equal), not through the per-bit synchronizers of `xpm_cdc_array_single`: with those, the core clock can sample some bits of a value before and some after a change, and a C64 program that reads the SID register in that clock cycle gets a value that was never measured, for a 1351 a jump of up to 32 units. The other signals of `i_qnice2main` stay where they are (the vector is 32 bits shorter: 839 bits).
+
+Timing: `CORE/CORE.xdc` declares the clock pair QNICE clock and core clock a false path in both directions, and a false path outranks the `set_max_delay` that `M2M/common.xdc` attaches to every `cdc_stable`. The 32 paths of this crossing are therefore not timed, like the per-bit synchronizers before them. `cdc_stable` delivers a consistent value as long as the 32 bits arrive within one core clock period (30 ns) of each other; the routes of a small bus between two neighboring registers differ by a few nanoseconds, and the source holds each value for half a millisecond. A `set_bus_skew` on these paths would turn this margin into a checked property.
 
 ## 8. Menu and ports of the core
 
