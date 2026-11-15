@@ -62,6 +62,23 @@ Version 6 - MONTH DAY, 2026
   you are back in the running program.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/142)
 
+* Amiga mouse: You can now use an Amiga mouse as a C64 mouse. Select
+  `Port 1: Amiga` or `Port 2: Amiga` in the new `Mouse` submenu of
+  `Advanced Settings` (section `Input Devices`). The core presents the mouse
+  to the C64 as a Commodore 1351, so every program with a 1351 driver works
+  with it, for example GEOS. An original Amiga mouse has its left button
+  only. The right and the middle button need a mouse or an adapter that
+  drives their lines or a small adapter with two pull-up resistors, exactly
+  as in the Amiga core for the MEGA65.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/190)
+
+* Atari CX30 paddles: Atari paddles have potentiometers of 1 MOhm instead of
+  the 470 kOhm of Commodore paddles, so a C64 only uses about a third of
+  their rotation. Select `Port 1: Atari CX30` or `Port 2: Atari CX30` in the
+  new `Paddles` submenu of `Advanced Settings` (section `Input Devices`) and
+  the usable part of the rotation doubles.
+  (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/193)
+
 * For simulated freezer cartridges (`*.crt`), the freezer button is now a
   keyboard shortcut, by default `F9` (before V6, it was the `Restore` key).
   The key only freezes with freezer cartridges (Action Replay, Final
@@ -225,6 +242,11 @@ Version 6 - MONTH DAY, 2026
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/206)
 
 ## Bugfixes
+
+* Paddles and the 1351 mouse: a program could read a paddle value or a mouse
+  position in the very moment it changed and get a number that was never
+  measured (a rare one-frame jump of a bat or a pointer). The values now
+  change consistently.
 
 * Simulated cartridges (`*.crt`) that work with many banks at once showed
   flickering lines where the game splits the screen, for example the

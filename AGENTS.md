@@ -133,14 +133,19 @@ guide are the authority; upstream wiki text is background at best.
 │   │   ├── vdrives.vhd     virtual disk drive / mount engine (RAM-cached image,
 │   │   │                  talks to MiSTer-style sd_lba/sd_buff/img_mounted iface)
 │   │   ├── tdp_ram.vhd, 2port2clk_ram*.vhd  shared dual-port RAM building blocks
-│   │   ├── cdc_*.vhd, debounce*.vhd, hdmi_flicker_free.vhd, axi_fifo*.vhd
+│   │   ├── cdc_*.vhd, debounce.vhd, hdmi_flicker_free.vhd, axi_fifo*.vhd
+│   │   ├── debouncer.vhd   conditioning of the two joystick ports: 1 ms
+│   │   │                  debouncing, Amiga mice, port switcher, on/off
+│   │   ├── amiga_mouse.vhd Amiga mouse of one socket as a 1351: quadrature
+│   │   │                  decoder on the raw pins (section 3.9)
 │   │   ├── av_pipeline/   ← video pipeline (read this dir for any video issue):
 │   │   │                  ascal.vhd (the MiSTer scaler — input → HyperRAM →
 │   │   │                  HDMI), analog_pipeline.vhd, digital_pipeline.vhd,
 │   │   │                  vga_controller.vhd, vga_osm.vhd, video_overlay.vhd,
 │   │   │                  video_modes_pkg.vhd, frame_buffer.vhd, crop.vhd
 │   │   ├── memory/        Avalon arbiters, caches, FIFOs (avm_*.vhd)
-│   │   ├── controllers/   HDMI/, M65/ (keyboard etc.), MiSTer/, SDRAM/, hyperram/
+│   │   ├── controllers/   HDMI/, M65/ (keyboard etc.; mouse_input.vhdl is the
+│   │   │                  paddle measurement), MiSTer/, SDRAM/, hyperram/
 │   │   ├── i2c/, democore/, QNICE/ (qnice.vhd, qnice_mmio.vhd, sdmux.vhd)
 │   ├── QNICE/             ← QNICE-FPGA submodule (https://github.com/sy2002/QNICE-FPGA)
 │   │   ├── monitor/       QNICE OS "Monitor" sources + monitor.rom
@@ -296,12 +301,14 @@ the SD card.
   are overwritten. See "Register bank depth" in section 7.
 - The general stack of the Shell has 768 words (`STACK_SIZE` minus
   `B_STACK_SIZE` in `CORE/m2m-rom/m2m-rom.asm`), and nothing checks its depth.
-  `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (301),
-  and the deepest call chains use about 655 words: a CRT or PRG load in the
-  visible menu (the menu is redrawn while `OPTM_RUN` is on the stack) and the
-  opening of a file in a keyboard shortcut session (FAT32 code of the Monitor
-  on top of `OPTM_RUN`). Every further menu line costs up to two words;
-  `doc/dev-a22x3/STATUS.md`, section 5.4, has the measured numbers.
+  `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (323),
+  and the deepest call chain uses 697 words: a CRT or PRG load in the visible
+  menu (the menu is redrawn while `OPTM_RUN` is on the stack). The opening of
+  a file in a keyboard shortcut session (FAT32 code of the Monitor on top of
+  `OPTM_RUN`) comes next. Every further menu line costs two words in the
+  first chain and one in the second; `doc/dev-input/STATUS.md`, section 3,
+  has the numbers measured with 323 lines and `doc/dev-a22x3/STATUS.md`,
+  section 5.4, the call chains.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
   as kind of the "operating system". Here is an overview of the
@@ -386,14 +393,43 @@ core, but backs storage with an in-FPGA RAM disk-image cache (device
 `C_VDNUM` in `globals.vhd`. Anti-thrashing delay and write-back of dirty
 caches to SD are handled by the Shell.
 
-### 3.9 Inside the MiSTer C64 core (CORE/C64_MiSTerMEGA65/rtl)
+### 3.9 Joystick ports: joysticks, paddles, mice
+
+`doc/dev-input/SPEC.md` is the description; this is the map.
+
+- **Digital lines** (up, down, left, right, fire of both ports): raw pins into
+  `M2M/vhdl/debouncer.vhd` in the core clock domain: 1 ms debouncing, the port
+  switcher ("Flip joystick ports") and the on/off switches of the Shell, then
+  `keyboard.vhd` merges them into the ports of CIA 1. The core never drives
+  these lines.
+- **Paddle pins** (pins 9 and 5 of both ports): the board has a capacitor, a
+  discharge transistor and a comparator per pin. `mouse_input.vhdl`
+  (QNICE clock, instantiated in `qnice_wrapper.vhd`) measures the charge time
+  with a tick of 1 µs, as the SID does: this serves paddles and the 1351. The
+  four results are inverted and port-switched in `qnice_wrapper.vhd`, cross
+  into the core clock domain through `cdc_stable` (`i_qnice2main_paddles` in
+  `framework.vhd`), pass `debouncer.vhd` and are inverted again in
+  `fpga64_sid_iec.vhd`, where bits 6 and 7 of CIA 1 port A select the port.
+- **Settings per socket** (submenus "Mouse" and "Paddles" of "Advanced
+  Settings", `main_mouse_amiga_o` and `qnice_paddle_atari_o` of
+  `MEGA65_Core`; index 0 is the MEGA65's port 1, before the port switcher):
+  "Amiga" lets `amiga_mouse.vhd` (two instances in `debouncer.vhd`) decode the
+  quadrature of the raw pins and deliver the position as the two paddle
+  values of a 1351, hides the direction lines from the C64 and derives the
+  right and middle button from the measured paddle values. "Atari CX30" lets
+  `mouse_input.vhdl` count twice as long and halve the result.
+- The board can only tell a paddle pin that is pulled up from one that is
+  not: buttons that ground a paddle pin (Amiga right and middle button) are
+  invisible unless the device holds the pin high while released.
+
+### 3.10 Inside the MiSTer C64 core (CORE/C64_MiSTerMEGA65/rtl)
 
 This is the actual C64 emulation. Originally Peter Wendrich's FPGA64,
 heavily modified by Dar (2014), Alexey Melnikov (2021), and **patched by
 sy2002/MJoergen** for the MEGA65 port. Don't refactor without reason —
 match upstream conventions wherever possible.
 
-#### 3.9.1 `fpga64_sid_iec.vhd` — the C64 top
+#### 3.10.1 `fpga64_sid_iec.vhd` — the C64 top
 
 The whole machine in one file. Runs on a **32 MHz `clk32`** (in our port
 fed by `clk_main_i` ≈ 31.527778 MHz). Around it everything is generated
@@ -424,7 +460,7 @@ chip.
   - `dotclk`, `phi2`, `UMAXnomap` outputs, plus `ramCE` fix that respects
     `romL`/`romH`/`UMAXromH`/`UMAXnomap` for hardware-cartridge accuracy.
 
-#### 3.9.2 `fpga64_buslogic.vhd` — PLA + ROMs + memmap
+#### 3.10.2 `fpga64_buslogic.vhd` — PLA + ROMs + memmap
 
 Pure combinational decoder (with a clocked ROM data register). Inputs:
 
@@ -450,7 +486,7 @@ fix; Ultimax unmapped-region (`$1000-$7FFF`, `$C000-$CFFF`) handling for
 IDE64 (issue #176). If a cartridge "almost works", the bug is usually
 here.
 
-#### 3.9.3 `cpu_6510.vhd` — the CPU
+#### 3.10.3 `cpu_6510.vhd` — the CPU
 
 Thin wrapper around the **T65** core (`rtl/t65/`). Adds the 6510-specific
 **8-bit I/O port at `$0000/$0001`**: data direction at $00, data at $01.
@@ -463,7 +499,7 @@ T65 itself is the well-known generic 65xx core (modes 6502/65C02/6510 via
 `Mode`). Note the comment about renamed `din`/`dout` ports — be aware if
 you ever update T65 from upstream.
 
-#### 3.9.4 `video_vicii_656x.vhd` — VIC-II
+#### 3.10.4 `video_vicii_656x.vhd` — VIC-II
 
 Cycle-accurate VIC-II covering multiple variants:
 
@@ -479,7 +515,7 @@ Drives `ba` (BA line — pulled low to halt CPU during bad lines / sprite
 fetches), produces 14-bit `vicAddr`, 4-bit `colorIndex`, `hSync`/`vSync`,
 and the raster IRQ. **`PIX_DELAY = 6`** pixels of pipeline latency.
 
-#### 3.9.5 `iec_drive/` — simulated 1541 / 1581
+#### 3.10.5 `iec_drive/` — simulated 1541 / 1581
 
 SystemVerilog (Melnikov 2021). Cleanly partitioned:
 
@@ -1205,6 +1241,8 @@ hardware saw the code.
 | Cart won't autostart / can't be exited  | `main.vhd` `cpu_data_in_proc` ($8xxx mask), `cold_start_done` flag |
 | `.crt` unload (Space on `CRT:`) misbehaves | `UNLOAD_CRTROM` + `OSM_SEL_PRE` (`m2m-rom.asm`), `CRTROM_M_UNLD` (`crts-and-roms.asm`), `HANDLE_MOUNTING` (`shell.asm`), `req_eject` in `sw_cartridge_csr.vhd` / `crt_parser.vhd`; benches `CORE/vhdl/test/tb_crt_eject/run.sh` and `M2M/rom/tests/crt_unload_test.py` (issue #153) |
 | Keyboard                  | `keyboard.vhd`, `M2M/vhdl/m2m_keyb.vhd`                   |
+| Amiga mouse (setting "Amiga"): the pointer does not move or moves the wrong way, the keyboard is disturbed, a button is missing or stuck | `M2M/vhdl/amiga_mouse.vhd` (decoder, rate limiter, buttons on the paddle pins), `M2M/vhdl/debouncer.vhd` (masking of the direction lines, port switcher), `mega65.vhd` (`main_mouse_amiga_o`), section 3.9, `doc/dev-input/SPEC.md` sections 1 and 4; bench `CORE/vhdl/test/tb_amiga_mouse/`; on the hardware `tests/input-devices/inputmon.prg` shows what the C64 reads. Right and middle button need a device that holds pins 9 and 5 high while released; a USB adapter with a wheel can make the pointer twitch (the paddle discharge on pin 5 polls it) |
+| Paddles read wrong values, Atari CX30 paddles, a 1351 that jumps | `M2M/vhdl/controllers/M65/mouse_input.vhdl` (measurement, Atari mode, synchronizer of the comparator inputs), `qnice_wrapper.vhd` (inversion, port switcher), `framework.vhd` (`i_qnice2main_paddles`), `fpga64_sid_iec.vhd` (port selection), `mega65.vhd` (`qnice_paddle_atari_o`), `doc/dev-input/SPEC.md` section 6; bench `CORE/vhdl/test/tb_paddles/`. A 1351 needs the paddle setting "C64" of its port |
 | Reset / data corruption   | `main.vhd` RESET SEMANTICS block, `vdrives.vhd` (cache_dirty / prevent_reset) |
 | QNICE Shell behavior      | `M2M/rom/shell.asm` + neighbors; callbacks in `CORE/m2m-rom/m2m-rom.asm` |
 | Shell misbehaves on hardware only, after a deep call chain (wrong values after a file browser or mount action, menu stays invisible) | register bank overflow: `python3 M2M/rom/tests/bankdepth_test.py --report`, `SHADOW_REGFILE_SIZE` in `M2M/vhdl/QNICE/qnice_globals.vhd` |
