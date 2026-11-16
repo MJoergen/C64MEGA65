@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Headless test of the cursor keys of the file browser, the browse loop of
-SELECT_FILE in M2M/rom/selectfile.asm:
+Headless test of the cursor keys and of the redraw of the file browser, the
+browse loop of SELECT_FILE in M2M/rom/selectfile.asm:
 
   * Cursor Up and Cursor Down move the cursor by one entry; at the upper and
     the lower edge of the screen the list scrolls by one entry. On the first
@@ -13,27 +13,44 @@ SELECT_FILE in M2M/rom/selectfile.asm:
     Left selects the first entry, on the last page Cursor Right the last
     one; they do not wrap around.
   * The browser starts at a remembered position (the absolute index of an
-    entry, which it gets on the stack), as when it comes back to a folder.
+    entry, which it gets on the stack), as when it comes back to a folder,
+    and clears the screen before it draws the list.
+  * Scrolling redraws the list over the old one without clearing the screen
+    first, which flickers: the list fills the screen when it scrolls, the
+    new lines of SHOW_DIR clear the rest of each line (SCR$NL_CLRX up to the
+    right side of the frame, reset after the redraw) and the cursor line
+    keeps its highlight.
 
-The script cuts the browse loop out of selectfile.asm on every run (from
+Part 1 cuts the browse loop out of selectfile.asm on every run (from
 _S_BROWSE_START up to the Run/Stop handler) and assembles it with the real
 llist.asm and with stubs: SCR$CLRINNER, SHOW_DIR and SELECT_LINE print what
-they would draw, KEYB$GETKEY prints the state of the browser (first entry on
-the screen, cursor line, entries up to the end of the screen, absolute index
-of the cursor) and returns the next key of a script: Up, Up, Down, Down,
-Down, Up and then runs of 1 to 16 random cursor keys. Run/Stop ends a case.
-A screen model replays the trace: after every key the screen has to show the
-right entries, exactly the cursor line has to be highlighted, the state has
-to match an independent Python model of the browser, and the number of
-redraws has to be the one of the model. The cases: lists of 1 to 1,927
-entries on screens of 3, 7 and 27 lines, starting on the first entry, on the
-last one, in the middle and around the end of the first screen.
+they would draw (SHOW_DIR also the cursor position and SCR$NL_CLRX, and it
+moves the cursor like the real one), SCR$GOTOXY sets the cursor, and
+KEYB$GETKEY prints the state of the browser (first entry on the screen,
+cursor line, entries up to the end of the screen, absolute index of the
+cursor, SCR$NL_CLRX) and returns the next key of a script: Up, Up, Down,
+Down, Down, Up and then runs of 1 to 16 random cursor keys. Run/Stop ends a
+case. A screen model replays the trace: it keeps the entry that every line
+shows and the highlighted lines. After every key every line has to show the
+right entry (and the lines below a short list nothing), exactly the cursor
+line has to be highlighted, the state has to match an independent Python
+model of the browser, and the redraws have to be the ones of the model:
+none, or one without clearing for a key that scrolls, or one after clearing
+at the start. The cases: lists of 1 to 1,927 entries on screens of 3, 7 and
+27 lines, starting on the first entry, on the last one, in the middle and
+around the end of the first screen.
 
-Then the script applies mutants to the extracted code, each of which has to
-be caught, and runs the testbed once more without the trace to count the
-instructions per key: the cut code and llist.asm, plus the calls of the
-stubs (about 10 instructions per key), without the drawing of the real
-SHOW_DIR and SELECT_LINE.
+Part 2 cuts SCR$CALC_VRAM, SCR$PRINTSTR, _PS_PRE and _PS_POST out of
+M2M/rom/screen.asm and prints strings with and without SCR$NL_CLRX into a
+screen filled with a marker; the screen memory (the emulator has RAM at the
+4K window of the devices) has to match a model of SCR$PRINTSTR: new lines
+clear the rest of the line up to SCR$NL_CLRX and nothing else.
+
+Then the script applies mutants to the extracted code of both parts, each
+of which has to be caught, and runs part 1 once more without the trace to
+count the instructions per key: the cut code and llist.asm, plus the calls
+of the stubs (about 10 instructions per key), without the drawing of the
+real SHOW_DIR and SELECT_LINE.
 
 Run it from anywhere:
     python3 browse_nav_test.py
@@ -59,6 +76,7 @@ ASM = os.path.join(QNICE, "assembler", "asm")
 EMU = os.path.join(QNICE, "emulator", "qnice")
 MON = os.path.join(QNICE, "monitor", "monitor.out")
 SELECTFILE = os.path.join(REPO, "M2M", "rom", "selectfile.asm")
+SCREEN = os.path.join(REPO, "M2M", "rom", "screen.asm")
 LLIST = os.path.join(REPO, "M2M", "rom", "llist.asm")
 M2MSYSDEF = os.path.join(REPO, "M2M", "rom", "sysdef.asm")
 QSYSDEF = os.path.join(QNICE, "dist_kit", "sysdef.asm")
@@ -77,7 +95,14 @@ UP, DOWN, LEFT, RIGHT = (equ(M2MSYSDEF, "M2M$KEY_" + k) for k in ("UP", "DOWN", 
 RUNSTOP = equ(M2MSYSDEF, "M2M$KEY_RUNSTOP")
 COL_STD = equ(M2MSYSDEF, "M2M$SA_COL_STD")
 COL_INV = equ(M2MSYSDEF, "M2M$SA_COL_STD_INV")
+DIR_L = equ(M2MSYSDEF, "M2M$DIR_L")
+DIR_R = equ(M2MSYSDEF, "M2M$DIR_R")
 KEYNAME = {UP: "Up", DOWN: "Down", LEFT: "Left", RIGHT: "Right", RUNSTOP: "Run/Stop", 0: "start"}
+
+# the window of the browser in the testbed: x = 0, 45 columns, so a redraw
+# without clearing has to clear the lines up to column 44 (the frame)
+WIN_X, WIN_DX = 0, 45
+CLRX = WIN_X + WIN_DX - 1
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +125,12 @@ def browse_loop(path):
     return cut(path, r"^_S_BROWSE_START\s", r"^\s+; browsing interrupted by Run/Stop")
 
 
+def print_routines():
+    return cut(SCREEN, r"^SCR\$CALC_VRAM\s", r"^; Print the string using SCR\$PRINTSTR")
+
+
 # ---------------------------------------------------------------------------
-# Testbed
+# Part 1: testbed of the browse loop
 # ---------------------------------------------------------------------------
 TESTBED = r"""
 #include "@QSYSDEF@"
@@ -159,6 +188,12 @@ TB_NEXT_CASE    MOVE    TB_CASEPTR, R0
                 MOVE    0, @R0
                 MOVE    TB_LASTKEY, R0
                 MOVE    0, @R0
+                MOVE    SCR$NL_CLRX, R0
+                MOVE    0, @R0
+                MOVE    SCR$CUR_X, R0           ; somewhere: the browse loop
+                MOVE    0x0033, @R0             ; has to position the cursor
+                MOVE    SCR$CUR_Y, R0
+                MOVE    0x0022, @R0
 
                 MOVE    R2, R8                  ; build the list
                 RSUB    TB_BUILD, 1
@@ -287,6 +322,7 @@ KEYB$SCAN       RET
 #ifdef TB_PERF
 
 SCR$CLRINNER    RET
+SCR$GOTOXY      RET
 SELECT_LINE     RET
 SHOW_DIR        MOVE    R9, R10                 ; the lists of the perf run..
                 RET                             ; ..are longer than a screen
@@ -355,12 +391,25 @@ _TBRS_DONE      MOVE    TB_E_STR, R8
 
 #else
 
-; "C"
+; "C"; the cursor goes to the upper/left corner inside the frame
 SCR$CLRINNER    MOVE    R8, @--SP
                 MOVE    TB_C_STR, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
+                MOVE    SCR$CUR_X, R8
+                MOVE    1, @R8
+                MOVE    SCR$CUR_Y, R8
+                MOVE    1, @R8
                 MOVE    @SP++, R8
+                RET
+
+; the cursor goes to x|y = R8|R9
+SCR$GOTOXY      MOVE    R10, @--SP
+                MOVE    SCR$CUR_X, R10
+                MOVE    R8, @R10
+                MOVE    SCR$CUR_Y, R10
+                MOVE    R9, @R10
+                MOVE    @SP++, R10
                 RET
 
 ; "L line color"
@@ -376,8 +425,9 @@ SELECT_LINE     MOVE    R8, @--SP
                 MOVE    @SP++, R8
                 RET
 
-; "D index-of-first-entry entries-shown lines", returns the entries shown
-; in R10 like the real SHOW_DIR
+; "D index-of-first-entry entries-shown lines SCR$NL_CLRX cursor-x cursor-y",
+; then the cursor moves below the last line like after the real SHOW_DIR;
+; returns the entries shown in R10 like the real SHOW_DIR
 SHOW_DIR        INCRB
                 MOVE    R8, R0
                 XOR     R1, R1                  ; R1: entries shown
@@ -399,16 +449,29 @@ _TBSD_DONE      MOVE    R8, R3                  ; keep R8 and R9
                 MOVE    R1, R8
                 RSUB    TB_HEXSP, 1
                 MOVE    R4, R8
+                RSUB    TB_HEXSP, 1
+                MOVE    SCR$NL_CLRX, R8
+                MOVE    @R8, R8
+                RSUB    TB_HEXSP, 1
+                MOVE    SCR$CUR_X, R8
+                MOVE    @R8, R8
+                RSUB    TB_HEXSP, 1
+                MOVE    SCR$CUR_Y, R8
+                MOVE    @R8, R8
                 SYSCALL(puthex, 1)
                 SYSCALL(crlf, 1)
+                MOVE    SCR$CUR_X, R8
+                MOVE    1, @R8
+                MOVE    SCR$CUR_Y, R8
+                ADD     R1, @R8
                 MOVE    R3, R8
                 MOVE    R4, R9
                 MOVE    R1, R10
                 DECRB
                 RET
 
-; "S first-entry cursor-line shown absolute-index", then "K key"; R3 to R6
-; are the registers of the browse loop
+; "S first-entry cursor-line shown absolute-index SCR$NL_CLRX", then "K key";
+; R3 to R6 are the registers of the browse loop
 KEYB$GETKEY     MOVE    R9, @--SP
                 MOVE    TB_S_STR, R8
                 SYSCALL(puts, 1)
@@ -421,6 +484,9 @@ KEYB$GETKEY     MOVE    R9, @--SP
                 MOVE    R5, R8
                 RSUB    TB_HEXSP, 1
                 MOVE    R6, R8
+                RSUB    TB_HEXSP, 1
+                MOVE    SCR$NL_CLRX, R8
+                MOVE    @R8, R8
                 SYSCALL(puthex, 1)
                 SYSCALL(crlf, 1)
                 RSUB    TB_NEXTKEY, 1
@@ -472,7 +538,12 @@ TB_BAD          SYSCALL(puts, 1)
 ; Data
 ; ----------------------------------------------------------------------------
 
+SCR$OSM_M_X     .DW     @WIN_X@
+SCR$OSM_M_DX    .DW     @WIN_DX@
 SCR$OSM_M_DY    .BLOCK  1
+SCR$NL_CLRX     .DW     0
+SCR$CUR_X       .BLOCK  1
+SCR$CUR_Y       .BLOCK  1
 SD_CHANGED      .DW     0
 TB_CASEPTR      .BLOCK  1
 TB_SP           .BLOCK  1
@@ -517,35 +588,44 @@ TB_CASES        @CASES@
 PROLOGUE = (UP, UP, DOWN, DOWN, DOWN, UP)
 
 
+def fill(template, values):
+    for k, v in values.items():
+        template = template.replace("@%s@" % k, str(v))
+    return template
+
+
 def testbed(code, cases, perf):
     rows = "\n                ".join(".DW     %d, %d, %d, 0x%04X, %d" % c for c in cases)
-    t = TESTBED
-    for k, v in (("@QSYSDEF@", QSYSDEF), ("@MONDEF@", MONDEF), ("@M2MSYSDEF@", M2MSYSDEF),
-                 ("@LLIST@", LLIST), ("@PERF@", "#define TB_PERF" if perf else ""),
-                 ("@CASES@", rows), ("@BROWSE@", code)):
-        t = t.replace(k, v)
-    return t
+    return fill(TESTBED, dict(QSYSDEF=QSYSDEF, MONDEF=MONDEF, M2MSYSDEF=M2MSYSDEF, LLIST=LLIST,
+                              PERF="#define TB_PERF" if perf else "", CASES=rows, BROWSE=code,
+                              WIN_X=WIN_X, WIN_DX=WIN_DX))
 
 
-def run(code, cases, perf, work):
-    open(os.path.join(work, "browse_nav_tb.asm"), "w").write(testbed(code, cases, perf))
-    out = os.path.join(work, "browse_nav_tb.out")
+def assemble_and_run(src, name, work, timeout=600):
+    open(os.path.join(work, name + ".asm"), "w").write(src)
+    out = os.path.join(work, name + ".out")
     if os.path.exists(out):
         os.remove(out)
-    r = subprocess.run([ASM, "browse_nav_tb.asm"], cwd=work, capture_output=True, text=True,
-                       timeout=120)
+    r = subprocess.run([ASM, name + ".asm"], cwd=work, capture_output=True, text=True, timeout=120)
     if r.returncode != 0 or not os.path.exists(out) or "rror" in r.stdout:
         return None, "assembly failed: " + (r.stdout + r.stderr)[-3000:]
     try:
         r = subprocess.run([EMU, "-b", "0x8000", MON, out], stdin=subprocess.DEVNULL,
-                           capture_output=True, text=True, timeout=600)
+                           capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, "emulator timeout"
     lines = [l.strip() for l in r.stdout.replace("\r", "").split("\n") if l.strip()]
     if "DONE" not in lines:
         return None, "the testbed did not finish: " + "\n".join(lines[-20:])
+    return lines[:lines.index("DONE")], ""
+
+
+def run(code, cases, perf, work):
+    lines, err = assemble_and_run(testbed(code, cases, perf), "browse_nav_tb", work)
+    if lines is None:
+        return None, err
     first = next((i for i, l in enumerate(lines) if l.startswith("CASE ")), 0)
-    return lines[first:lines.index("DONE")], ""
+    return lines[first:], ""
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +647,7 @@ def model_start(n, rows, start):
 
 def model_key(st, key, n, rows):
     """New state and kind of the key; the kinds with "scroll" in the name
-    redraw the screen once, the others do not redraw it"""
+    redraw the screen once, without clearing it, the others do not redraw"""
     top, row, a = st
     vis = min(n, rows)
     if key == UP:
@@ -606,7 +686,7 @@ def model_key(st, key, n, rows):
 
 
 # ---------------------------------------------------------------------------
-# Replay of the trace
+# Replay of the trace with a screen model
 # ---------------------------------------------------------------------------
 def hexs(line, count):
     parts = line.split()
@@ -626,23 +706,33 @@ def check_trace(lines):
         name = "%d entries, %d lines, start %d" % (n, rows, start)
         i += 1
         st, vis, key, kind = model_start(n, rows, start), min(n, rows), 0, "start"
-        top_shown, count_shown, hl, history = None, 0, set(), []
-        redraws, failed = 0, False
+        shown = ["junk"] * rows                 # entry that every line shows
+        hl, history, clears, draws, failed = set(), [], 0, 0, False
         while i < len(lines):
             l = lines[i]
             i += 1
             try:
                 if l == "C":
-                    top_shown, count_shown, hl = None, 0, set()
+                    shown, hl = [None] * rows, set()
+                    clears += 1
                 elif l.startswith("D "):
-                    top_shown, count_shown, r = hexs(l, 3)
-                    redraws += 1
+                    head, count, r, clrx, cx, cy = hexs(l, 6)
+                    draws += 1
                     if r != rows:
                         raise ValueError("SHOW_DIR for %d lines" % r)
+                    if (cx, cy) != (1, 1):
+                        raise ValueError("SHOW_DIR starts at %d|%d" % (cx, cy))
+                    if clears == 0 and clrx != CLRX:
+                        raise ValueError("redraw without clearing, but SCR$NL_CLRX is %d" % clrx)
+                    for k in range(count):
+                        if clrx == CLRX or shown[k] is None:
+                            shown[k] = head + k
+                        else:                   # the rest of an old name stays
+                            shown[k] = "mixed"
                 elif l.startswith("L "):
                     line, col = hexs(l, 2)
-                    if top_shown is None or not 0 <= line < count_shown:
-                        raise ValueError("SELECT_LINE of line %d of %d" % (line, count_shown))
+                    if not 0 <= line < rows:
+                        raise ValueError("SELECT_LINE of line %d" % line)
                     if col == COL_INV:
                         hl.add(line)
                     elif col == COL_STD:
@@ -653,20 +743,23 @@ def check_trace(lines):
                     if hexs(l, 1)[0] != n:
                         raise ValueError("the browser counted %d entries" % hexs(l, 1)[0])
                 elif l.startswith("S "):
-                    got = hexs(l, 4)
-                    want = [st[0], st[1], st[0] + vis, st[2]]
+                    got = hexs(l, 5)
+                    want = [st[0], st[1], st[0] + vis, st[2], 0]
                     if got != want:
-                        raise ValueError("state %s, model %s" % (got, want))
-                    if top_shown != st[0] or count_shown != vis:
-                        raise ValueError("the screen shows %d entries from %s, model %d from %d"
-                                         % (count_shown, top_shown, vis, st[0]))
+                        raise ValueError("state %s, model %s (top, line, shown, index, "
+                                         "SCR$NL_CLRX)" % (got, want))
+                    want_shown = [st[0] + k if k < vis else None for k in range(rows)]
+                    if shown != want_shown:
+                        bad = next(k for k in range(rows) if shown[k] != want_shown[k])
+                        raise ValueError("line %d shows %r, model %r"
+                                         % (bad, shown[bad], want_shown[bad]))
                     if hl != {st[1]}:
                         raise ValueError("highlighted lines %s, model line %d" % (sorted(hl), st[1]))
-                    want_redraws = 1 if (kind == "start" or "scroll" in kind) else 0
-                    if redraws != want_redraws:
-                        raise ValueError("%d redraws for %s (%s), model %d"
-                                         % (redraws, KEYNAME[key], kind, want_redraws))
-                    redraws = 0
+                    want = (1, 1) if kind == "start" else (0, 1) if "scroll" in kind else (0, 0)
+                    if (clears, draws) != want:
+                        raise ValueError("%d clears and %d redraws for %s (%s), model %d and %d"
+                                         % (clears, draws, KEYNAME[key], kind, want[0], want[1]))
+                    clears = draws = 0
                 elif l.startswith("K "):
                     key = hexs(l, 1)[0]
                     history.append(KEYNAME.get(key, hex(key)))
@@ -679,7 +772,7 @@ def check_trace(lines):
                     keys += 1
                 else:
                     raise ValueError("unexpected line: " + l)
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError, StopIteration) as e:
                 errors.append("%s, after the keys %s: %s"
                               % (name, " ".join(history[-8:]) or "(none)", e))
                 failed = True
@@ -727,6 +820,182 @@ def perf_counts(lines):
 
 
 # ---------------------------------------------------------------------------
+# Part 2: SCR$PRINTSTR and SCR$NL_CLRX
+# ---------------------------------------------------------------------------
+PRINT_TESTBED = r"""
+#include "@QSYSDEF@"
+#include "@MONDEF@"
+#include "@M2MSYSDEF@"
+
+TB_DUMP_ROWS    .EQU    6
+TB_MARK         .EQU    0x0058                  ; "X"
+
+                .ORG    0x8000
+
+; one case per row of TB_PCASES (string, x, y, SCR$NL_CLRX; 0 ends it):
+; fill the first rows of the screen with the marker, print the string and
+; dump the rows and the cursor
+                MOVE    TB_PCASES, R0
+_TBP_NEXT       MOVE    @R0++, R1               ; R1: string
+                RBRA    _TBP_END, Z
+                MOVE    M2M$RAMROM_DATA, R5
+                MOVE    @SYSDX@, R6
+                MOVE    TB_DUMP_ROWS, R7
+_TBP_FILLR      MOVE    @SYSDX@, R6
+_TBP_FILL       MOVE    TB_MARK, @R5++
+                SUB     1, R6
+                RBRA    _TBP_FILL, !Z
+                SUB     1, R7
+                RBRA    _TBP_FILLR, !Z
+                MOVE    SCR$CUR_X, R5
+                MOVE    @R0++, @R5
+                MOVE    SCR$CUR_Y, R5
+                MOVE    @R0++, @R5
+                MOVE    SCR$NL_CLRX, R5
+                MOVE    @R0++, @R5
+                MOVE    R1, R8
+                RSUB    SCR$PRINTSTR, 1
+
+                MOVE    TB_P_STR, R8            ; "P" and the rows
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                MOVE    M2M$RAMROM_DATA, R5
+                MOVE    TB_DUMP_ROWS, R7
+_TBP_ROW        MOVE    @SYSDX@, R6
+_TBP_CELL       MOVE    @R5++, R8
+                SYSCALL(puthex, 1)
+                SUB     1, R6
+                RBRA    _TBP_CELL, !Z
+                SYSCALL(crlf, 1)
+                SUB     1, R7
+                RBRA    _TBP_ROW, !Z
+                MOVE    TB_Q_STR, R8            ; "Q cursor-x cursor-y"
+                SYSCALL(puts, 1)
+                MOVE    SCR$CUR_X, R8
+                MOVE    @R8, R8
+                SYSCALL(puthex, 1)
+                MOVE    0x0020, R8
+                SYSCALL(putc, 1)
+                MOVE    SCR$CUR_Y, R8
+                MOVE    @R8, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+                RBRA    _TBP_NEXT, 1
+
+_TBP_END        MOVE    TB_DONE_STR, R8
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                SYSCALL(exit, 1)
+
+; stubs: the strings of the testbed are in RAM, and the emulator has no
+; device selectors
+STRROM$OPEN     RET
+STRROM$CLOSE    RET
+SAVE_DEVSEL     RET
+RESTORE_DEVSEL  RET
+
+; ----------------------------------------------------------------------------
+; SCR$CALC_VRAM, SCR$PRINTSTR, _PS_PRE and _PS_POST, cut out of screen.asm
+; ----------------------------------------------------------------------------
+
+@PRINT@
+
+SCR$CUR_X       .BLOCK  1
+SCR$CUR_Y       .BLOCK  1
+SCR$SYS_DX      .DW     @SYSDX@
+SCR$ILX         .DW     1
+SCR$NL_CLRX     .BLOCK  1
+TEMP_2W         .BLOCK  2
+TB_P_STR        .ASCII_W "P"
+TB_Q_STR        .ASCII_W "Q "
+TB_DONE_STR     .ASCII_W "DONE"
+
+@STRINGS@
+TB_PCASES       @PCASES@
+                .DW     0
+"""
+
+SYSDX, DUMP_ROWS, MARK = 45, 6, 0x58
+NL = [0x5C, ord("n")]                           # backslash and n
+CRLF = [0x0D, 0x0A]
+
+
+def s(text):
+    return [ord(c) for c in text]
+
+
+# (characters, x, y, SCR$NL_CLRX)
+PRINT_CASES = [
+    (s("Hello") + NL, 1, 1, CLRX),              # the rest of the line is cleared
+    (s("A" * 43) + NL, 1, 1, CLRX),             # fills the line: nothing to clear
+    (s("<DIR>") + NL, 1, 2, CLRX),              # directory markers
+    (s("ab") + CRLF + s("cd") + NL, 1, 1, CLRX),  # CR LF and backslash-n
+    (NL, 1, 3, CLRX),                           # an empty line is cleared completely
+    (s("abc"), 1, 1, CLRX),                     # no new line: nothing is cleared
+    (s("abc") + NL, 1, 1, 0),                   # SCR$NL_CLRX = 0: nothing is cleared
+    (s("abcdef") + NL, 1, 1, 3),                # beyond SCR$NL_CLRX: nothing is cleared
+    (s("a") + NL + s("bb") + NL + s("ccc") + NL + s("dddd") + NL, 1, 0, CLRX),
+    (s("zz") + NL, 5, 2, CLRX),                 # starts in the middle of a line
+    (s("x" * 10) + NL, 1, 1, 20),               # clears up to column 19 only
+]
+
+
+def print_testbed(code):
+    strings, rows = [], []
+    for k, (chars, x, y, clrx) in enumerate(PRINT_CASES):
+        words = chars + [0]
+        for j in range(0, len(words), 12):
+            strings.append(("TB_STR%-9d .DW     " % k if j == 0 else "                .DW     ")
+                           + ", ".join("0x%04X" % w for w in words[j:j + 12]))
+        rows.append(".DW     TB_STR%d, %d, %d, %d" % (k, x, y, clrx))
+    return fill(PRINT_TESTBED, dict(QSYSDEF=QSYSDEF, MONDEF=MONDEF, M2MSYSDEF=M2MSYSDEF,
+                                    PRINT=code, SYSDX=SYSDX, STRINGS="\n".join(strings),
+                                    PCASES="\n                ".join(rows)))
+
+
+def model_print(chars, x, y, clrx):
+    """The screen rows and the cursor after SCR$PRINTSTR"""
+    scr = [[MARK] * SYSDX for _ in range(DUMP_ROWS)]
+    i = 0
+    while i < len(chars):
+        c = chars[i]
+        if c in (0x0D, 0x5C) and i + 1 < len(chars) and chars[i + 1] in (0x0A, ord("n")):
+            if clrx and clrx > x:
+                for cx in range(x, clrx):
+                    scr[y][cx] = 0
+            x, y, i = 1, y + 1, i + 2
+            continue
+        scr[y][x] = DIR_L if c == ord("<") else DIR_R if c == ord(">") else c
+        x, i = x + 1, i + 1
+    return scr, (x, y)
+
+
+def check_print(lines):
+    errors, i = [], 0
+    for k, (chars, x, y, clrx) in enumerate(PRINT_CASES):
+        want, cur = model_print(chars, x, y, clrx)
+        try:
+            if lines[i] != "P":
+                raise ValueError("expected P, got %r" % lines[i])
+            got = [[int(lines[i + 1 + r][4 * c:4 * c + 4], 16) for c in range(SYSDX)]
+                   for r in range(DUMP_ROWS)]
+            gcur = tuple(hexs(lines[i + 1 + DUMP_ROWS], 2))
+        except (ValueError, IndexError) as e:
+            errors.append("print case %d: %s" % (k, e))
+            break
+        i += 2 + DUMP_ROWS
+        for r in range(DUMP_ROWS):
+            if got[r] != want[r]:
+                c = next(c for c in range(SYSDX) if got[r][c] != want[r][c])
+                errors.append("print case %d: row %d column %d is 0x%04X, model 0x%04X"
+                              % (k, r, c, got[r][c], want[r][c]))
+                break
+        if gcur != cur:
+            errors.append("print case %d: cursor %s, model %s" % (k, gcur, cur))
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Cases and mutants
 # ---------------------------------------------------------------------------
 def cases():
@@ -744,6 +1013,7 @@ def cases():
 PERF_CASES = [(n, 27, start, 0x1234 + start, 40) for n in (100, 1927)
               for start in (0, n // 2, n - 1)]
 
+# mutants of the browse loop: (name, text, replacement)
 MUTANTS = [
     ("Cursor Up on the first entry is ignored",
      "RBRA    _IL_WRAP_BTTM, !N", "RBRA    _S_INPUT_LOOP, !N"),
@@ -771,6 +1041,37 @@ MUTANTS = [
      "_IL_PAGE_DEFUP  MOVE    R2, R10                 ; R10: one page up\n",
      "_IL_PAGE_DEFUP  MOVE    R2, R10                 ; R10: one page up\n"
      "                SUB     1, R10\n"),
+    ("the wrap to the last entry keeps the old highlight",
+     "                MOVE    R4, R8                  ; no: deselect the first line\n"
+     "                MOVE    M2M$SA_COL_STD, R9\n"
+     "                RSUB    SELECT_LINE, 1\n", ""),
+    ("the wrap to the first entry keeps the old highlight",
+     "                MOVE    R4, R8                  ; yes: deselect the last line\n"
+     "                MOVE    M2M$SA_COL_STD, R9\n"
+     "                RSUB    SELECT_LINE, 1\n", ""),
+    ("scrolling clears the screen before the redraw (flickers)",
+     "                ADD     R10, R5                 ; R10 more/less visible files\n",
+     "                ADD     R10, R5                 ; R10 more/less visible files\n"
+     "                RBRA    _S_DRAW_DIRLIST, 1\n"),
+    ("the redraw does not clear the rest of the lines",
+     "                MOVE    R8, @R9\n                MOVE    1, R8 ",
+     "                MOVE    1, R8 "),
+    ("the redraw leaves SCR$NL_CLRX set",
+     "                MOVE    0, @R8                  ; ..any more\n", ""),
+    ("the redraw starts where the last one ended",
+     "                RSUB    SCR$GOTOXY, 1           ; ..SCR$CLRINNER\n", ""),
+]
+
+# mutants of the print routines (part 2)
+PRINT_MUTANTS = [
+    ("a new line does not clear",
+     "_PS_L3A         MOVE    0, @R8++", "_PS_L3A         MOVE    @R8, @R8++"),
+    ("a new line clears one column too far",
+     "                SUB     @R1, R3                 ; R3: columns to clear\n",
+     "                SUB     @R1, R3                 ; R3: columns to clear\n"
+     "                ADD     1, R3\n"),
+    ("a new line clears behind SCR$NL_CLRX",
+     "                RBRA    _PS_L3B, N              ; none\n", ""),
 ]
 
 
@@ -789,6 +1090,12 @@ def summary(res):
     return "\n".join(out)
 
 
+def mutant_caught(code, old, new, run_check):
+    if code.count(old) != 1:
+        return None
+    return run_check(code.replace(old, new))
+
+
 def main():
     for f in (ASM, EMU, MON):
         if not os.path.exists(f):
@@ -803,35 +1110,61 @@ def main():
             print(summary(perf_counts(lines)))
             return 0
 
+        # part 1
         code = browse_loop(SELECTFILE)
         all_cases = cases()
-        lines, err = run(code, all_cases, False, work)
-        if lines is None:
-            print("FAIL: " + err)
+
+        def check_nav(c):
+            lines, err = run(c, all_cases, False, work)
+            if lines is None:
+                return [err]
+            keys, errors = check_trace(lines)
+            ran = len([l for l in lines if l.startswith("CASE ")])
+            if ran != len(all_cases):
+                errors.append("only %d of %d cases ran" % (ran, len(all_cases)))
+            return errors or keys
+
+        res = check_nav(code)
+        if isinstance(res, list):
+            print("FAIL: %d errors, the first ones:" % len(res))
+            print("\n".join("  " + e for e in res[:10]))
             return 1
-        keys, errors = check_trace(lines)
-        if len([l for l in lines if l.startswith("CASE ")]) != len(all_cases):
-            errors.append("only %d of %d cases ran"
-                          % (len([l for l in lines if l.startswith("CASE ")]), len(all_cases)))
+        print("OK: %d cases, %d keys, the trace matches the model" % (len(all_cases), res))
+
+        # part 2
+        pcode = print_routines()
+
+        def check_pr(c):
+            lines, err = assemble_and_run(print_testbed(c), "browse_nav_print_tb", work, 60)
+            return [err] if lines is None else check_print(lines)
+
+        errors = check_pr(pcode)
         if errors:
-            print("FAIL: %d errors, the first ones:" % len(errors))
+            print("FAIL: SCR$PRINTSTR: %d errors, the first ones:" % len(errors))
             print("\n".join("  " + e for e in errors[:10]))
             return 1
-        print("OK: %d cases, %d keys, the trace matches the model" % (len(all_cases), keys))
+        print("OK: %d print cases, SCR$PRINTSTR matches the model" % len(PRINT_CASES))
 
         caught = 0
         for name, old, new in MUTANTS:
-            if code.count(old) != 1:
-                print("FAIL: the mutant %r does not apply (%d matches)" % (name, code.count(old)))
+            r = mutant_caught(code, old, new, check_nav)
+            if r is None:
+                print("FAIL: the mutant %r does not apply" % name)
                 return 1
-            mlines, err = run(code.replace(old, new), all_cases, False, work)
-            if mlines is not None:
-                k, merr = check_trace(mlines)
-                if not merr and len([l for l in mlines if l.startswith("CASE ")]) == len(all_cases):
-                    print("FAIL: mutant not caught: " + name)
-                    return 1
+            if not isinstance(r, list):
+                print("FAIL: mutant not caught: " + name)
+                return 1
             caught += 1
-        print("OK: %d of %d mutants caught" % (caught, len(MUTANTS)))
+        for name, old, new in PRINT_MUTANTS:
+            r = mutant_caught(pcode, old, new, check_pr)
+            if r is None:
+                print("FAIL: the mutant %r does not apply" % name)
+                return 1
+            if not r:
+                print("FAIL: mutant not caught: " + name)
+                return 1
+            caught += 1
+        print("OK: %d of %d mutants caught" % (caught, len(MUTANTS) + len(PRINT_MUTANTS)))
 
         lines, err = run(code, PERF_CASES, True, work)
         if lines is None:
