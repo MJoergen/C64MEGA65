@@ -273,7 +273,7 @@ _IL_CUR_UP      CMP     R4, 0                   ; > 0?
                 SUB     1, R6
                 RBRA    _S_SELECT_LOOP, 1       ; select new line and continue
 _IL_CUR_UP_CHK  CMP     R5, R2                  ; # shown > max rows on scr.?
-                RBRA    _S_INPUT_LOOP, !N       ; no: do not scroll; ign. key
+                RBRA    _IL_WRAP_BTTM, !N       ; no: first entry: wrap around
                 MOVE    -1, R9                  ; R9: iterate backward
                 MOVE    1, R10                  ; R10: scroll by one element
                 RBRA    _SCROLL, 1              ; scroll, then input loop
@@ -282,7 +282,7 @@ _IL_CUR_UP_CHK  CMP     R5, R2                  ; # shown > max rows on scr.?
 _IL_CUR_DOWN    MOVE    R1, R8                  ; R1: amount of items in dir..
                 SUB     1, R8                   ; ..-1 as we count from zero
                 CMP     R4, R8                  ; R4 = R1 (bottom reached?)
-                RBRA    _S_INPUT_LOOP, Z        ; yes: ignore key press
+                RBRA    _IL_WRAP_TOP, Z         ; yes: wrap around to the top
                 MOVE    R2, R8                  ; R2: max rows on screen..
                 SUB     1, R8                   ; ..-1 as we count from zero
                 CMP     R4, R8                  ; R4 = R1: scrolling needed?
@@ -295,13 +295,44 @@ _IL_CUR_DOWN    MOVE    R1, R8                  ; R1: amount of items in dir..
                 RBRA    _S_SELECT_LOOP, 1       ; select new line and continue
 
                 ; scroll down by iterating the currently visible head of the
-                ; SLL by 1 step; if this is not possible: do not scroll,
-                ; because we reached the end of the list
+                ; SLL by 1 step; if this is not possible, then the cursor is
+                ; on the last entry of the list: wrap around to the top
 _IL_SCRL_DN     CMP     R5, R1                  ; all items already shown?
-                RBRA    _S_INPUT_LOOP, Z        ; yes: ignore key press
+                RBRA    _IL_WRAP_TOP, Z         ; yes: wrap around to the top
                 MOVE    1, R9                   ; R9: iterate forward
                 MOVE    1, R10                  ; R10: scroll by one element
                 RBRA    _SCROLL, 1              ; scroll, then input loop
+
+                ; wrap-around, like in the on-screen menu: CURSOR UP on the
+                ; first entry selects the last entry and CURSOR DOWN on the
+                ; last entry selects the first one; if the target entry is
+                ; not on the screen, then the list scrolls there in one step
+                ;
+                ; first entry (R4 = R6 = 0): if the last entry is on the
+                ; screen, then select it, else scroll forward by the amount
+                ; of entries below the screen with the cursor on the last
+                ; line of the screen
+_IL_WRAP_BTTM   CMP     R5, R1                  ; last entry on the screen?
+                RBRA    _IL_GOTO_BOTTOM, Z      ; yes: select it
+                MOVE    R2, R4                  ; no: cursor to the last line
+                SUB     1, R4                   ; ..of the screen and R6 to..
+                MOVE    R4, R6                  ; ..the abs. index of the line
+                MOVE    1, R9                   ; R9: iterate forward
+                MOVE    R1, R10                 ; R10: amount of entries..
+                SUB     R5, R10                 ; ..below the screen
+                RBRA    _SCROLL, 1              ; scroll, then input loop
+
+                ; last entry: if the first entry is on the screen, then
+                ; select it, else scroll backward by the amount of entries
+                ; above the screen with the cursor on the first line
+_IL_WRAP_TOP    CMP     R5, R2                  ; # shown > max rows on scr.?
+                RBRA    _IL_GOTO_TOP, !N        ; no: first entry is visible
+                MOVE    R5, R6                  ; yes: R6 = abs. index of the..
+                SUB     R2, R6                  ; ..first line of the screen..
+                XOR     R4, R4                  ; ..where the cursor goes
+                MOVE    -1, R9                  ; R9: iterate backward
+                MOVE    R6, R10                 ; R10: amount of entries..
+                RBRA    _SCROLL, 1              ; ..above the screen
 
                 ; CURSOR LEFT has been pressed: previous page
                 ; check if amount of entries shown minus the amount
