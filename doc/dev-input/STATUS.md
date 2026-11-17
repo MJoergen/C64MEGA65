@@ -111,6 +111,14 @@ The test steps are the section "Version WIP-V6-A26" of `tests/README.md`; the ba
 * **A 1351 on one port while the other port is set to "Atari CX30"** sees a measuring cycle of 769 µs instead of 514 µs; by the description of its controller that is harmless, but it is untested.
 * **The scale of the Amiga mouse** (two counts per position unit) and the rate limit are generics of `amiga_mouse.vhd`; the hardware test decides whether they feel right.
 
-## 9. How the work was organized
+## 9. Next: right click with the MEGA key (decided by the owner on 2026-11-17, not implemented)
+
+* **Behavior:** for a port that is set to "Amiga" and has the option on: while the MEGA key is held, the left button of the mouse is reported as the right button (the up line of that port) and not as the left one (the fire line stays released). A right button that the device itself delivers (section 4.5 of `SPEC.md`) keeps working in parallel. The C64 still sees the MEGA key as its Commodore key. The option has no effect on a port that is set to "C64".
+* **Menu:** two single-select items in the submenu "Mouse", default off, each visible only while its port is set to "Amiga" (dependency on the item "Port n: Amiga"): ` #1: MEGA+left = right` and ` #2: MEGA+left = right`. Placement: each behind the two items of its port.
+* **Where:** the keyboard driver (`m2m_keyb.vhd`) and the port conditioning (`debouncer.vhd`) are both in `framework.vhd` in the core clock domain; the state of the MEGA key has to be derived there, and two more menu bits have to travel like `main_mouse_amiga_o`.
+* **Budgets:** two more menu lines: every constant behind them moves, the menu heap grows by the two lines, and the deepest stack chain goes from 697 to 701 of 768 words. `menu_test.py` checks the heap; the stack needs the numbers of section 3 updated.
+* **Proposed with it, waiting for the owner's word:** a `set_bus_skew` of 10 ns for the 32 paths of `i_qnice2main_paddles` as a commit of its own, with `report_bus_skew` in the build script and a check in `signoff_gates.tcl` (a violation does not show in WNS or WHS and does not fail a build by itself); read `signoff_gates.tcl` first for gates that react to a new constraint.
+
+## 10. How the work was organized
 
 A controller wrote the specification from two research reports (all links of both issues, the sources of the MEGA65 core and of the Amiga core, the board schematics) and from the code, and one implementing agent per part worked on a private clone: menu and firmware, the Amiga mouse with the wiring, the paddle measurement, the program for the hardware test, and the full-system simulation. Every design change was then reviewed by an independent agent on a clone of its own, which got the specification and the commits and nobody's conclusions, wrote mutants of its own and reported; its findings went back to the implementing agent. The controller integrated the commits and ran all suites on the integrated tree.
