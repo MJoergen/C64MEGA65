@@ -5,7 +5,7 @@
 --
 -- Runs in the clock domain of the core.
 --
--- There are three purposes of this controller:
+-- There are five purposes of this controller:
 --
 -- 1) Serve key_num and key_status to the core's keyboard.vhd, so that there the
 --    core specific keyboard mapping can take place.
@@ -21,6 +21,13 @@
 --    neither read nor set the LED, but the keyboard sends the very state that
 --    drives it on a dedicated line. C64MEGA65 uses it as a turbo switch
 --    (GitHub issue #261).
+--
+-- 5) Serve the state of the MEGA key (mega_key_n_o): a register that takes
+--    over the debounced state of key number 61 whenever the key scan is at
+--    that key. framework.vhd passes it to the conditioning of the joystick
+--    ports (debouncer.vhd), where the MEGA key turns a press of the left
+--    button of an Amiga mouse into a right click (GitHub issue #190). The core
+--    still gets the key through key_num and key_status as its Commodore key.
 --
 -- MiSTer2MEGA65 done by sy2002 and MJoergen in 2022 and licensed under GPL v3
 ----------------------------------------------------------------------------------
@@ -52,6 +59,10 @@ entity m2m_keyb is
       -- (e.g. while the on-screen menu is open). '1' until the keyboard has reported a stable state.
       capslock_n_o         : out std_logic;
 
+      -- MEGA key state, low active: '0' while the MEGA key (key number 61) is pressed. Independent of
+      -- enable_core_i, like capslock_n_o. '1' until the key scan has visited the key for the first time.
+      mega_key_n_o         : out std_logic;
+
       -- control the drive led on the MEGA65 keyboard
       power_led_i          : in std_logic;
       power_led_col_i      : in std_logic_vector(23 downto 0); -- RGB color of power led      
@@ -80,6 +91,9 @@ signal capslock_raw_n      : std_logic;
 signal capslock_n          : std_logic := '1';
 signal capslock_cnt        : natural range 0 to 2**20 - 1 := 0;
 
+-- MEGA key (low active)
+signal mega_key_n          : std_logic := '1';
+
 begin
    -- output the keyboard interface for the core
    key_num_o         <= key_num;
@@ -90,7 +104,10 @@ begin
 
    -- output the Caps Lock state
    capslock_n_o      <= capslock_n;
-   
+
+   -- output the MEGA key state
+   mega_key_n_o      <= mega_key_n;
+
    m65driver : entity work.mega65kbd_to_matrix
    port map
    (
@@ -164,6 +181,17 @@ begin
             capslock_cnt <= 0;
          else
             capslock_cnt <= capslock_cnt + 1;
+         end if;
+      end if;
+   end process;
+
+   -- MEGA key: matrix_to_keynum presents each key number together with the debounced state of that key
+   -- and holds both until the next key; the register takes the state over whenever the scan is at key 61
+   handle_mega_key : process(clk_main_i)
+   begin
+      if rising_edge(clk_main_i) then
+         if key_num = 61 then
+            mega_key_n <= key_status_n;
          end if;
       end if;
    end process;

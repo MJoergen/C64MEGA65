@@ -341,6 +341,7 @@ architecture synthesis of mega65_r6 is
    signal main_pot2_x            : std_logic_vector(7 downto 0);
    signal main_pot2_y            : std_logic_vector(7 downto 0);
    signal main_mouse_amiga       : std_logic_vector(1 downto 0);
+   signal main_mouse_rclick      : std_logic_vector(1 downto 0);
    signal main_rtc               : std_logic_vector(64 downto 0);
 
    signal iec_clk_en             : std_logic;
@@ -699,6 +700,7 @@ begin
       main_pot2_x_o           => main_pot2_x,
       main_pot2_y_o           => main_pot2_y,
       main_mouse_amiga_i      => main_mouse_amiga,
+      main_mouse_rclick_i     => main_mouse_rclick,
       main_rtc_o              => main_rtc,
       main_eth_rx_ready_i     => main_eth_rx_ready,
       main_eth_rx_valid_o     => main_eth_rx_valid,
@@ -920,6 +922,7 @@ begin
          main_pot2_x_i           => main_pot2_x,
          main_pot2_y_i           => main_pot2_y,
          main_mouse_amiga_o      => main_mouse_amiga,
+         main_mouse_rclick_o     => main_mouse_rclick,
          main_rtc_i              => main_rtc,
 
          --------------------------------------------------------------------------------------------------------

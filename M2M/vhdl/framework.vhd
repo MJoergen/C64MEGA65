@@ -171,6 +171,7 @@ port (
    main_pot2_x_o           : out   std_logic_vector(7 downto 0);
    main_pot2_y_o           : out   std_logic_vector(7 downto 0);
    main_mouse_amiga_i      : in    std_logic_vector(1 downto 0);   -- '1': Amiga mouse; 0 = port 1, 1 = port 2
+   main_mouse_rclick_i     : in    std_logic_vector(1 downto 0);   -- '1': MEGA+left = right; 0 = port 1, 1 = port 2
    main_rtc_o              : out   std_logic_vector(64 downto 0);
    main_eth_rx_ready_i     : in    std_logic;
    main_eth_rx_valid_o     : out   std_logic;
@@ -328,6 +329,7 @@ signal main_csr_joy2_on       : std_logic;
 
 -- keyboard handling
 signal main_qnice_keys_n      : std_logic_vector(15 downto 0);
+signal main_mega_key_n        : std_logic;   -- MEGA key (low active), for the right click of Amiga mice
 
 --- control signals from QNICE in main's clock domain
 signal main_flip_joyports     : std_logic;
@@ -598,6 +600,8 @@ begin
          dbnce_joy2_fire_n    => main_joy2_fire_n_o,
 
          amiga_i              => main_mouse_amiga_i,
+         amiga_rclick_i       => main_mouse_rclick_i,
+         mega_key_n_i         => main_mega_key_n,
 
          pot1_x_i             => main_pot1_x_n,
          pot1_y_i             => main_pot1_y_n,
@@ -638,6 +642,7 @@ begin
          key_num_o            => main_key_num_o,
          key_pressed_n_o      => main_key_pressed_n_o,
          capslock_n_o         => main_capslock_n_o,
+         mega_key_n_o         => main_mega_key_n,
 
          -- control the drive led on the MEGA65 keyboard
          power_led_i          => main_power_led_i,

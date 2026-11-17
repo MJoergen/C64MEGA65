@@ -154,6 +154,8 @@ begin
          dbnce_joy2_right_n => port_j(1)(3),
          dbnce_joy2_fire_n  => port_j(1)(4),
          amiga_i            => amiga,
+         amiga_rclick_i     => "00",
+         mega_key_n_i       => '1',
          pot1_x_i           => main_pots( 7 downto  0),
          pot1_y_i           => main_pots(15 downto  8),
          pot2_x_i           => main_pots(23 downto 16),

@@ -127,6 +127,8 @@ begin
          dbnce_joy2_right_n => dut_j(1)(3),
          dbnce_joy2_fire_n  => dut_j(1)(4),
          amiga_i            => amiga,
+         amiga_rclick_i     => "00",
+         mega_key_n_i       => '1',
          pot1_x_i           => pin_x(0),
          pot1_y_i           => pin_y(0),
          pot2_x_i           => pin_x(1),

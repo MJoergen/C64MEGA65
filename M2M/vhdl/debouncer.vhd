@@ -13,12 +13,31 @@
 --    direction lines of that socket are replaced before the port switcher: up is
 --    the right button, down is the middle button, left and right are released,
 --    so that the quadrature signals never reach the C64. The fire line stays the
---    debounced fire line (the left button). The paddle values of the C64 port
---    that the socket is connected to are the position of the mouse.
+--    debounced fire line (the left button), except during a right click (3).
+--    The paddle values of the C64 port that the socket is connected to are the
+--    position of the mouse.
 --
--- 3) Port switcher: flip_joys_i exchanges the two ports for the C64.
+-- 3) Right click with the MEGA key (issue #190): for a socket in Amiga mode
+--    whose bit of amiga_rclick_i is '1', a press of the left button that begins
+--    while the MEGA key is held (mega_key_n_i = '0') is a right click: for the
+--    whole press the fire line stays released and the up line is pressed, as
+--    the right button of a 1351. A flip-flop per socket (rclick_q, initial
+--    value '0', no reset) takes over "Amiga mode and switch on and MEGA key
+--    held" at every clock edge at which the debounced fire line is released,
+--    and keeps its value while the line is pressed; so the key at the moment
+--    the button goes down decides, and in the clock cycle in which the fire
+--    line goes low the flip-flop already holds the decision for this press.
+--    A press is a right click while that flip-flop is '1' and the socket is
+--    still in Amiga mode with the switch on (rclick). Then the fire line is the
+--    debounced fire line or rclick, and the up line is the right button of the
+--    mouse and (the debounced fire line or not rclick); the right button that
+--    the mouse delivers keeps working. Both lines are combinational functions
+--    of the debounced fire line, the flip-flop and the settings: they pass no
+--    additional register.
 --
--- 4) On/off: joy_1_on and joy_2_on switch the five lines of a C64 port off ('1').
+-- 4) Port switcher: flip_joys_i exchanges the two ports for the C64.
+--
+-- 5) On/off: joy_1_on and joy_2_on switch the five lines of a C64 port off ('1').
 --
 -- The paddle values arrive already switched to C64 ports and inverted, as the
 -- core expects them. A mouse needs the true values of its own socket for its
@@ -29,7 +48,11 @@
 -- All vectors with two elements are indexed by socket: 0 is the MEGA65's port 1,
 -- 1 is port 2. With amiga_i at "00" the ten joystick outputs are exactly what
 -- they were before the Amiga mice existed, and the four paddle outputs are the
--- four paddle inputs.
+-- four paddle inputs. A socket whose bit of amiga_i or of amiga_rclick_i is '0'
+-- has rclick at '0' in every clock cycle: then none of its lines depends on
+-- mega_key_n_i or on rclick_q, and with amiga_rclick_i at "00" the fourteen
+-- outputs do not depend on them at all. The two sockets share the MEGA key and
+-- nothing else.
 --
 -- MiSTer2MEGA65 done by sy2002 and MJoergen in 2022 and licensed under GPL v3
 ----------------------------------------------------------------------------------
@@ -77,6 +100,10 @@ port (
    -- Amiga mice (issue #190)
    amiga_i            : in  std_logic_vector(1 downto 0);   -- '1': the socket has an Amiga mouse
 
+   -- right click with the left button of an Amiga mouse while the MEGA key is held
+   amiga_rclick_i     : in  std_logic_vector(1 downto 0);   -- '1': the switch of the socket is on
+   mega_key_n_i       : in  std_logic;                      -- low active: the MEGA key is pressed
+
    -- paddle values of the two C64 ports as the core expects them (inverted), behind the port switcher
    pot1_x_i           : in  std_logic_vector(7 downto 0);   -- measured
    pot1_y_i           : in  std_logic_vector(7 downto 0);
@@ -105,20 +132,49 @@ signal mouse_x, mouse_y       : pot_t;    -- position as a 1351 delivers it
 signal mouse_right_n          : std_logic_vector(1 downto 0);
 signal mouse_middle_n         : std_logic_vector(1 downto 0);
 
+-- right click with the MEGA key, indexed by socket
+signal rclick_q               : std_logic_vector(1 downto 0) := "00";   -- decision for the current press
+signal rclick                 : std_logic_vector(1 downto 0);           -- '1': the current press is a right click
+signal mouse_up_n             : std_logic_vector(1 downto 0);           -- up line of a socket in Amiga mode
+
 begin
 
-   -- Amiga mice: up is the right button, down is the middle button, left and right are released
-   s1_u <= mouse_right_n(0)  when amiga_i(0) = '1' else j1_u;
+   -- Right click with the MEGA key: while the debounced fire line (the left button) of a socket is
+   -- released, rclick_q takes over whether a press would be a right click; while the line is pressed,
+   -- rclick_q keeps the decision of the clock edge at which the press began
+   handle_rclick : process(clk)
+   begin
+      if rising_edge(clk) then
+         if j1_f = '1' then
+            rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;
+         end if;
+         if j2_f = '1' then
+            rclick_q(1) <= amiga_i(1) and amiga_rclick_i(1) and not mega_key_n_i;
+         end if;
+      end if;
+   end process;
+
+   -- a press is a right click while the socket is still in Amiga mode with the switch on
+   rclick(0)     <= rclick_q(0) and amiga_i(0) and amiga_rclick_i(0);
+   rclick(1)     <= rclick_q(1) and amiga_i(1) and amiga_rclick_i(1);
+
+   -- up is pressed by the right button of the mouse or by a press that is a right click
+   mouse_up_n(0) <= mouse_right_n(0) and (j1_f or not rclick(0));
+   mouse_up_n(1) <= mouse_right_n(1) and (j2_f or not rclick(1));
+
+   -- Amiga mice: up is the right button, down is the middle button, left and right are released;
+   -- fire is the left button, released during a right click
+   s1_u <= mouse_up_n(0)     when amiga_i(0) = '1' else j1_u;
    s1_d <= mouse_middle_n(0) when amiga_i(0) = '1' else j1_d;
    s1_l <= '1'               when amiga_i(0) = '1' else j1_l;
    s1_r <= '1'               when amiga_i(0) = '1' else j1_r;
-   s1_f <= j1_f;
+   s1_f <= j1_f or rclick(0);
 
-   s2_u <= mouse_right_n(1)  when amiga_i(1) = '1' else j2_u;
+   s2_u <= mouse_up_n(1)     when amiga_i(1) = '1' else j2_u;
    s2_d <= mouse_middle_n(1) when amiga_i(1) = '1' else j2_d;
    s2_l <= '1'               when amiga_i(1) = '1' else j2_l;
    s2_r <= '1'               when amiga_i(1) = '1' else j2_r;
-   s2_f <= j2_f;
+   s2_f <= j2_f or rclick(1);
 
    -- assign output signals and support the flip joystick ports feature and the on/off switches
    handle_outputs: process(all)

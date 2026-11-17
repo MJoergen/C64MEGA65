@@ -211,6 +211,8 @@ begin
          dbnce_joy2_right_n => open,
          dbnce_joy2_fire_n  => open,
          amiga_i            => "00",
+         amiga_rclick_i     => "00",
+         mega_key_n_i       => '1',
          pot1_x_i           => cdc_out( 7 downto  0),
          pot1_y_i           => cdc_out(15 downto  8),
          pot2_x_i           => cdc_out(23 downto 16),
