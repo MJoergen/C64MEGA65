@@ -11,22 +11,27 @@ The submenu "Advanced Settings" has a section "Input Devices" with three submenu
  ──────────────────           ──────────────────
  Port 1: C64                  Port 1: C64
  Port 1: Amiga                Port 1: Atari CX30
- ──────────────────           ──────────────────
- Port 2: C64                  Port 2: C64
- Port 2: Amiga                Port 2: Atari CX30
- ──────────────────           ──────────────────
- Back                         Back
+ #1: MEGA+left = right        ──────────────────
+ ──────────────────           Port 2: C64
+ Port 2: C64                  Port 2: Atari CX30
+ Port 2: Amiga                ──────────────────
+ #2: MEGA+left = right        Back
+ ──────────────────
+ Back
 ```
+
+The lines "#1: MEGA+left = right" and "#2: MEGA+left = right" are only shown while the mouse setting of their port is "Amiga".
 
 * "Port 1" and "Port 2" are the two sockets of the MEGA65. The setting describes the device that is plugged into that socket and travels with it when "Flip joystick ports" swaps the ports for the C64.
 * "C64" is the default for all four settings and behaves exactly as every version before: joysticks, Commodore paddles, the 1351 and compatible mice and adapters.
 * "Amiga" (Mouse): the port has an Amiga mouse. The core turns it into a Commodore 1351 in proportional mode, so every program with a 1351 driver works with it (GEOS, for example). The left button is the fire line, as on a 1351. The four direction lines of that port are hidden from the C64 while the setting is active, so the mouse cannot disturb the keyboard.
+* "#1: MEGA+left = right" and "#2: MEGA+left = right" (Mouse): a switch per port, off by default. It is the substitute for the right button of the mice whose right button the board cannot read (see the limits below). While it is on, a press of the left mouse button that begins while the MEGA key is held is a right click: for as long as the button stays pressed, the C64 sees the right button of a 1351 (the up line of that port) and not the left one. The key at the moment the button goes down decides; it may be released before the button. The C64 still sees the MEGA key as its Commodore key. A right button that the device itself delivers keeps working. The switch keeps its state while it is hidden and has no effect on a port that is set to "C64".
 * "Atari CX30" (Paddles): the port has paddles with 1 MOhm potentiometers (Atari CX30 and CX30+) instead of the 470 kOhm of Commodore paddles. A C64 reaches the highest value 255 at about 250 to 350 kOhm, so a Commodore paddle uses half to three quarters of its rotation and an Atari paddle only a quarter to a third. With this setting the core measures with half the sensitivity: a 1 MOhm paddle then behaves like a 500 kOhm paddle, and the usable part of its rotation doubles.
 * The two settings of a port are independent menu items but not independent devices: with "Amiga" selected, the paddle setting of that port has no effect on what the C64 reads.
 
 Limits that come from the hardware:
 
-* The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled or driven up to +5 V from one that is not (section 2), so an original Amiga mouse has only its left button. Both buttons work with everything that holds the two pins high while the buttons are released: mice and adapters with an active output stage, a mouSTer in Amiga mode with firmware 3.23.5313 or newer and `activepotlines=true`, or any passive mouse behind a straight-through adapter with two resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7 to pin 5. The right button is the up line as on a 1351, the middle button the down line as in the Micromys protocol. This is the experience and the mechanism of the Amiga core for the MEGA65 (AExp), whose documentation lists the devices.
+* The right and the middle button of an Amiga mouse are switches to ground on pins 9 and 5, which are the paddle inputs. The board can only tell a pin that is pulled or driven up to +5 V from one that is not (section 2), so an original Amiga mouse has only its left button (the switch "MEGA+left = right" gives it a right click). Both buttons work with everything that holds the two pins high while the buttons are released: mice and adapters with an active output stage, a mouSTer in Amiga mode with firmware 3.23.5313 or newer and `activepotlines=true`, or any passive mouse behind a straight-through adapter with two resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7 to pin 5. The right button is the up line as on a 1351, the middle button the down line as in the Micromys protocol. This is the experience and the mechanism of the Amiga core for the MEGA65 (AExp), whose documentation lists the devices.
 * USB adapters with a polled wheel protocol (Micro Tom, for example) take every discharge of the paddle pins as a request and answer it with a short code on the movement lines. The decoder counts such a code forwards and backwards again, so the position does not drift, but the pointer can twitch. The cure is the one of the Amiga core: an extension cable with wire 5 cut, which costs the middle button and the wheel.
 * After a mouse or adapter that provides the right and middle button is unplugged from a port that is set to "Amiga", the C64 sees both buttons pressed for up to five seconds (on port 1 that looks like held keys).
 * Everything that is not an Atari paddle needs the paddle setting "C64" for its port: a 1351 (its position is encoded in steps of 2 µs), a KoalaPad, Commodore paddles.
@@ -51,16 +56,19 @@ Schematics of the Trenz boards TE0765-03 (R3) and TE0765-06 (R6), sheets `JOY.Sc
                         │                                          ▼
  qnice_paddle_atari ────┘        joystick pins (raw) ────────► debouncer ──► main_pot1_x .. main_pot2_y ──► SID
  (menu, per socket)              main_mouse_amiga ───────────►  2 x amiga_mouse
+                                 main_mouse_rclick ──────────►  right click with the MEGA key
                                  (menu, per socket)             flip, on/off ──► main_joy1 / main_joy2 lines ──► CIA1
+                                 keyboard ──► m2m_keyb ──────►  (state of the MEGA key)
 ```
 
 | File | Role |
 |---|---|
 | `M2M/vhdl/amiga_mouse.vhd` | new: Amiga mouse of one socket as a 1351 (section 4) |
-| `M2M/vhdl/debouncer.vhd` | conditioning of the two ports: debouncing, Amiga mice, port switcher, on/off (section 5) |
+| `M2M/vhdl/debouncer.vhd` | conditioning of the two ports: debouncing, Amiga mice, right click with the MEGA key, port switcher, on/off (section 5) |
+| `M2M/vhdl/m2m_keyb.vhd` | keyboard driver; delivers the state of the MEGA key (section 5.1) |
 | `M2M/vhdl/controllers/M65/mouse_input.vhdl` | paddle measurement, with the Atari mode (section 6) |
 | `M2M/vhdl/qnice_wrapper.vhd`, `M2M/vhdl/framework.vhd`, `M2M/vhdl/top_mega65-r{3,4,5,6}.vhd` | wiring; `framework.vhd` also holds the clock domain crossing of the paddle values (section 7) |
-| `CORE/vhdl/mega65.vhd`, `CORE/vhdl/config.vhd` | menu items and the two ports that carry the four settings (section 8) |
+| `CORE/vhdl/mega65.vhd`, `CORE/vhdl/config.vhd` | menu items and the three ports that carry the six settings (section 8) |
 
 ## 4. The Amiga mouse: `amiga_mouse.vhd`
 
@@ -150,6 +158,10 @@ The entity keeps its name and its existing ports and gets new ones. All vectors 
    -- Amiga mice (issue #190)
    amiga_i     : in  std_logic_vector(1 downto 0);   -- '1': the socket has an Amiga mouse
 
+   -- right click with the left button of an Amiga mouse while the MEGA key is held (section 5.1)
+   amiga_rclick_i : in  std_logic_vector(1 downto 0);   -- '1': the switch of the socket is on
+   mega_key_n_i   : in  std_logic;                      -- low active: the MEGA key is pressed
+
    -- paddle values of the two C64 ports as the core expects them (inverted), behind the port switcher
    pot1_x_i    : in  std_logic_vector(7 downto 0);   -- measured
    pot1_y_i    : in  std_logic_vector(7 downto 0);
@@ -162,10 +174,31 @@ The entity keeps its name and its existing ports and gets new ones. All vectors 
 ```
 
 * Two instances of `amiga_mouse`, one per socket, on the raw pins, `enable_i` from `amiga_i`. Its `meas_x_i` and `meas_y_i` are the true measured values of that socket: the measured values arrive already switched to C64 ports and inverted, so socket s takes the values of C64 port s when the ports are not flipped and of the other port when they are, and inverts them.
-* For a socket in Amiga mode, the four debounced direction lines are replaced before the port switcher: up is `right_btn_n_o`, down is `middle_btn_n_o`, left and right are '1'. The fire line is the debounced fire line as before (the left button). The port switcher and the on/off switches of the Shell then work on these lines as on those of a joystick.
+* For a socket in Amiga mode, the four debounced direction lines are replaced before the port switcher: up is `right_btn_n_o`, down is `middle_btn_n_o`, left and right are '1'. The fire line is the debounced fire line as before (the left button). Section 5.1 turns a press of the left button into a right click on these two lines. The port switcher and the on/off switches of the Shell then work on these lines as on those of a joystick.
 * `potN_x_o` and `potN_y_o` of a C64 port are the inverted `pot_x_o` and `pot_y_o` of the `amiga_mouse` of the socket that is connected to that C64 port, if that socket is in Amiga mode; otherwise they are `potN_x_i` and `potN_y_i`, unchanged.
 * The paddle outputs do not depend on the on/off switches of the Shell (as before), and `reset_n` resets the debouncers only, not the mice.
 * With `amiga_i` at "00" the ten joystick outputs and the four paddle outputs are exactly what they were without the new ports.
+
+### 5.1 Right click with the MEGA key
+
+The key: `m2m_keyb.vhd` has the output `mega_key_n_o` (low active), a register that takes over the state of key number 61, the MEGA key, whenever the scan of the keyboard is at that key (the scan visits every key 1000 times per second and debounces it). It is '1' from power-up until the first visit. Like `capslock_n_o` it does not depend on `enable_core_i`. `framework.vhd` connects it to `mega_key_n_i` of the debouncer; both are in the core clock domain. What the core gets from the keyboard (`key_num_o`, `key_pressed_n_o`) does not change: the C64 keeps seeing the key as its Commodore key.
+
+The rule, per socket s: let f be the debounced fire line of the socket (low active, the left button) and q a flip-flop of the socket that starts at '0' and has no reset.
+
+* At every clock edge at which f is '1' (the button is released), q takes the value of `amiga_i(s) and amiga_rclick_i(s) and not mega_key_n_i`. While f is '0', q keeps its value. During a press, q therefore says whether the key was held, with the switch on and the socket in Amiga mode, when the button went down.
+* r = `q and amiga_i(s) and amiga_rclick_i(s)`: this press is a right click.
+* The fire line of the socket in front of the port switcher is `f or r`.
+* The up line of a socket in Amiga mode in front of the port switcher is `right_btn_n_o and (f or not r)`: pressed by the right button of the device or by a press that is a right click.
+
+These are combinational functions of f, q and the settings, so the two lines pass no additional register.
+
+What follows from the rule:
+
+* The key at the moment the button goes down decides for the whole press. Releasing the key before the button does not end the right click with a left click, and pressing the key during a left click does not turn it into a right click.
+* In the clock cycle in which f turns '0', q already has the value for this press. The fire line is therefore never low in any clock cycle of a right click, and the up line is never pulled low by a left click; a program that polls the CIA in a loop would catch a pulse of a single clock cycle.
+* While `amiga_rclick_i(s)` or `amiga_i(s)` is '0', r is '0' in every clock cycle, and all lines of the socket are exactly what they are without this section, whatever the key does. With `amiga_rclick_i` at "00" the ten joystick outputs and the four paddle outputs are identical, clock cycle by clock cycle, to those of the entity without the two ports.
+* The two sockets share the key and nothing else.
+* The middle button, the paddle values and the direction lines left and right are not involved.
 
 ## 6. Paddles: `mouse_input.vhdl`
 
@@ -194,22 +227,26 @@ Timing: `CORE/CORE.xdc` declares the clock pair QNICE clock and core clock a fal
 
 ## 8. Menu and ports of the core
 
-`CORE/vhdl/config.vhd`: the section "Input Devices" and the submenus "Mouse" and "Paddles" (22 menu lines), four radio groups with two items each: `OPTM_G_MOUSE_P1` (43), `OPTM_G_MOUSE_P2` (44), `OPTM_G_PADDLES_P1` (45), `OPTM_G_PADDLES_P2` (46). "C64" is the default of each group.
+`CORE/vhdl/config.vhd`: the section "Input Devices" and the submenus "Mouse" and "Paddles" (24 menu lines).
 
-`CORE/vhdl/mega65.vhd`: the constants `C_MENU_MOUSE_P1_AMIGA`, `C_MENU_MOUSE_P2_AMIGA`, `C_MENU_PADDLES_P1_ATARI` and `C_MENU_PADDLES_P2_ATARI` are the menu bits of the four items that are not the default, and two ports of `MEGA65_Core` carry them (index 0 is the MEGA65's port 1, index 1 is port 2):
+* Four radio groups with two items each: `OPTM_G_MOUSE_P1` (43), `OPTM_G_MOUSE_P2` (44), `OPTM_G_PADDLES_P1` (45), `OPTM_G_PADDLES_P2` (46). "C64" is the default of each group.
+* Two single-select items that are off by default: `OPTM_G_MOUSE_P1_RCLICK` (47) with the text ` #1: MEGA+left = right`, directly behind "Port 1: Amiga", and `OPTM_G_MOUSE_P2_RCLICK` (48) with the text ` #2: MEGA+left = right`, directly behind "Port 2: Amiga". Each is a dependent line that is only visible while the Amiga item of its port is selected: `OPTM_DEP(OPTM_G_MOUSE_P1, 1)` and `OPTM_DEP(OPTM_G_MOUSE_P2, 1)`. A hidden item keeps its state, in the menu and in the config file.
+
+`CORE/vhdl/mega65.vhd`: the constants `C_MENU_MOUSE_P1_AMIGA`, `C_MENU_MOUSE_P2_AMIGA`, `C_MENU_PADDLES_P1_ATARI` and `C_MENU_PADDLES_P2_ATARI` are the menu bits of the four items that are not the default, `C_MENU_MOUSE_P1_RCLICK` and `C_MENU_MOUSE_P2_RCLICK` those of the two switches, and three ports of `MEGA65_Core` carry them (index 0 is the MEGA65's port 1, index 1 is port 2):
 
 | Port | Clock domain | '1' means | Goes to |
 |---|---|---|---|
 | `qnice_paddle_atari_o(1 downto 0)` | QNICE | Atari CX30 paddles | `framework.vhd`, `qnice_wrapper.vhd`, `mouse_input.vhdl` |
 | `main_mouse_amiga_o(1 downto 0)` | core | Amiga mouse | `framework.vhd`, `debouncer.vhd` |
+| `main_mouse_rclick_o(1 downto 0)` | core | the switch "MEGA+left = right" is on | `framework.vhd` (`main_mouse_rclick_i`), `debouncer.vhd` (`amiga_rclick_i`) |
 
-Each bit is the menu bit of the item that is not the default. The Shell writes the bits of a radio group one after the other; while neither bit of a group is set, the setting therefore reads as "C64".
+Each bit of the first two ports is the menu bit of the item that is not the default. The Shell writes the bits of a radio group one after the other; while neither bit of a group is set, the setting therefore reads as "C64". `main_mouse_rclick_o` is the plain menu bit of the switch, also while the switch is hidden; the debouncer combines it with the Amiga setting (section 5.1).
 
 ## 9. Verification
 
 Benches under `CORE/vhdl/test/`, each with a `run.sh` that ends with `RESULT: PASS` and with mutants that have to fail:
 
-* `tb_amiga_mouse`: the decoder against a model of the mouse (speeds from single steps to 20,000 counts per second, both directions, both axes, chatter on every edge, pulses shorter than the filter, double transitions) and against the driver of the 1351 manual, called once per PAL frame and once per NTSC frame with jitter: the sum of the driver's results always equals the movement of the reported position, also above the rate limit and when the mouse reverses with a full backlog: no unit is lost or invented and no difference is misread. The buttons on the paddle pins with and without pull-up. The conditioning of the ports in all combinations of the port switcher, the Amiga settings and the on/off switches, and against the entity before the change for the setting "00".
+* `tb_amiga_mouse`: the decoder against a model of the mouse (speeds from single steps to 20,000 counts per second, both directions, both axes, chatter on every edge, pulses shorter than the filter, double transitions) and against the driver of the 1351 manual, called once per PAL frame and once per NTSC frame with jitter: the sum of the driver's results always equals the movement of the reported position, also above the rate limit and when the mouse reverses with a full backlog: no unit is lost or invented and no difference is misread. The buttons on the paddle pins with and without pull-up. The conditioning of the ports in all combinations of the port switcher, the Amiga settings and the on/off switches, and against the entity before the change for the setting "00". The right click with the MEGA key: the key and the button in every order, the key changing during a press and in the clock cycles around its start, both sockets, the right button of the device in parallel, through the port switcher and the on/off switches; a check in every clock cycle that the fire line is never low during a right click and that a left click never pulls the up line low; identity with the entity without the two ports while both switches are off, whatever the key does. The keyboard driver with a model of the keyboard: `mega_key_n_o` follows the MEGA key and no other key, also while the core is decoupled from the keyboard.
 * `tb_paddles`: the paddle measurement against a model of the board circuit: identity with the file before the change in C64 mode for random and for non-monotonic comparator signals, the results and the cycle length in Atari mode and in mixed mode, changes of the modes at any time.
 * The wiring of the new ports through `framework.vhd`, `qnice_wrapper.vhd` and the four board files, by analysis and elaboration against the real entity declarations as in `tb_capslock`.
-* `M2M/rom/tests/menu_test.py`: the menu, the menu bits and the navigation into the two submenus.
+* `M2M/rom/tests/menu_test.py`: the menu, the menu bits and the navigation into the two submenus; the two switches of the Mouse submenu are hidden while their port is set to "C64", appear directly behind the Amiga item otherwise and keep their state while they are hidden.
