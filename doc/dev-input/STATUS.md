@@ -117,7 +117,8 @@ The test steps are the section "Version WIP-V6-A26" of `tests/README.md`; the ba
 * **Menu:** two single-select items in the submenu "Mouse", default off, each visible only while its port is set to "Amiga" (dependency on the item "Port n: Amiga"): ` #1: MEGA+left = right` and ` #2: MEGA+left = right`. Placement: each behind the two items of its port.
 * **Where:** the keyboard driver (`m2m_keyb.vhd`) and the port conditioning (`debouncer.vhd`) are both in `framework.vhd` in the core clock domain; the state of the MEGA key has to be derived there, and two more menu bits have to travel like `main_mouse_amiga_o`.
 * **Budgets:** two more menu lines: every constant behind them moves, the menu heap grows by the two lines, and the deepest stack chain goes from 697 to 701 of 768 words. `menu_test.py` checks the heap; the stack needs the numbers of section 3 updated.
-* **Proposed with it, waiting for the owner's word:** a `set_bus_skew` of 10 ns for the 32 paths of `i_qnice2main_paddles` as a commit of its own, with `report_bus_skew` in the build script and a check in `signoff_gates.tcl` (a violation does not show in WNS or WHS and does not fail a build by itself); read `signoff_gates.tcl` first for gates that react to a new constraint.
+* **Agreed with the owner, to be done after his first test build of the branch:** a `set_bus_skew` of 10 ns for the 32 paths of `i_qnice2main_paddles` as a commit of its own, with `report_bus_skew` in the build script and a check in `signoff_gates.tcl` (a violation does not show in WNS or WHS and does not fail a build by itself); read `signoff_gates.tcl` first for gates that react to a new constraint. He then builds once more to test it.
+* **Documentation still to come:** the owner wants the combination "a 1351 in one port while the other port is set to Atari CX30" described in the documentation; he will say where.
 
 ## 10. How the work was organized
 
