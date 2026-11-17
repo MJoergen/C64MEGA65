@@ -14,13 +14,22 @@
 ; OPTM_SELECT, like the vdrive status redraws in options.asm) before
 ; returning the key.
 ;
-; Scenario 4 switches the screen trace on: OPTM_FP_PRINT prints
-;     D <flat index of every line it draws>
-; OPTM_FP_PRINTXY prints  X X=<column> Y=<row> [<string>]  and the selection
-; callback prints  M <flat index of every selected item>  behind its S line.
-; The marker of a selected radio item is r, the marker of a selected
-; single-select item is s (the firmware uses M2M$OPT_SEL_MULTI and
-; M2M$OPT_SEL_SINGLE, two different characters as well).
+; Scenario 4 switches the screen trace on, and every screen function of the
+; init record prints what it is asked to draw:
+;     C                                      OPTM_FP_CLEAR
+;     FR X=<x> Y=<y> W=<dx> H=<dy>           OPTM_FP_FRAME
+;     D <flat index of every line it draws>  OPTM_FP_PRINT
+;     X X=<column> Y=<row> [<string>]        OPTM_FP_PRINTXY
+;     L Y=<row>                              OPTM_FP_LINE
+;     B P=<position in the view> M=<mode>    OPTM_FP_SELECT
+; and the selection callback prints  M <flat index of every selected item>
+; behind its S line. The marker of a selected radio item is r, the marker of
+; a selected single-select item is s (the firmware uses M2M$OPT_SEL_MULTI and
+; M2M$OPT_SEL_SINGLE, two different characters as well). Scenario 4 also
+; passes the separator flags of the V6 menu (NAV4_LINES) as the lines array;
+; the other scenarios pass an empty one. Scenario 4 places the menu at the
+; column NAV4_X (the Shell places it at the right edge of the screen) and,
+; like the Shell, at row 0; the other scenarios place it at column 0.
 ;
 ; This covers: entering nested submenus (depth 2), leaving them via the
 ; closer line and via Run/Stop (one level per press), the enter cursor
@@ -212,9 +221,12 @@ _NT_SCEN4       MOVE    NT_S_N4, R8            ; print the scenario marker
                 SYSCALL(crlf, 1)
 
                 MOVE    NAV_STDSEL_DEF, R0      ; selected-state defaults
-                MOVE    NT_STDSEL, R1
+                MOVE    NT_STDSEL, R1           ; and the separator flags
+                MOVE    NAV4_LINES, R2
+                MOVE    NT_LINES, R4
                 MOVE    NAV_N, R3
 _NT_CPY4        MOVE    @R0++, @R1++
+                MOVE    @R2++, @R4++
                 SUB     1, R3
                 RBRA    _NT_CPY4, !Z
 
@@ -241,9 +253,9 @@ _NT_CPY4        MOVE    @R0++, @R1++
                 MOVE    NT_SCR, R8              ; screen trace on
                 MOVE    1, @R8
 
-                MOVE    NT_REC, R8              ; re-initialize like a boot
-                MOVE    0, R9
-                MOVE    0, R10
+                MOVE    NT_REC, R8              ; re-initialize like a boot,
+                MOVE    NAV4_X, R9              ; with the menu away from the
+                MOVE    0, R10                  ; left edge like in the Shell
                 MOVE    30, R11
                 MOVE    30, R12
                 RSUB    OPTM_INIT, 1
@@ -261,8 +273,8 @@ _NT_DONE        MOVE    NT_S_DONE, R8
 ; Initialization record: stubbed screen functions, scripted key feed
 ; ----------------------------------------------------------------------------
 
-NT_REC          .DW     NT_STUB, NT_STUB, NT_PRINT, NT_PRINTXY
-                .DW     NT_STUB, NT_STUB, NT_GETKEY
+NT_REC          .DW     NT_CLEAR, NT_FRAME, NT_PRINT, NT_PRINTXY
+                .DW     NT_LINE, NT_SELECT, NT_GETKEY
                 .DW     NT_CB_SEL, NT_CB_SHOW, NT_FATAL
                 .DW     0x0072, 0, 0x0073, 0    ; sel. chars (inline strings):
                                                 ; r = radio, s = single-select
@@ -270,9 +282,91 @@ NT_REC          .DW     NT_STUB, NT_STUB, NT_PRINT, NT_PRINTXY
                                                 ; last word = OPTM_IR_DEPS: 0 =
                                                 ; dependency feature off here
 
-                ; all other visual functions: do nothing, preserve all
-                ; registers
-NT_STUB         RET
+                ; The screen functions: with the screen trace off they do
+                ; nothing; all of them preserve all registers
+
+                ; OPTM_FP_CLEAR: with the screen trace on, print C
+NT_CLEAR        INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_CL_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    NT_S_CL, R8             ; "C"
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_CL_RET      DECRB
+                RET
+
+                ; OPTM_FP_FRAME: R8 = x, R9 = y, R10 = dx, R11 = dy. With the
+                ; screen trace on, print all four
+NT_FRAME        INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_FR_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    R8, R0                  ; R0 to R3: x, y, dx, dy
+                MOVE    R9, R1
+                MOVE    R10, R2
+                MOVE    R11, R3
+                MOVE    NT_S_FR, R8             ; "FR X="
+                SYSCALL(puts, 1)
+                MOVE    R0, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_XY, R8             ; " Y="
+                SYSCALL(puts, 1)
+                MOVE    R1, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_FW, R8             ; " W="
+                SYSCALL(puts, 1)
+                MOVE    R2, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_FH, R8             ; " H="
+                SYSCALL(puts, 1)
+                MOVE    R3, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_FR_RET      DECRB
+                RET
+
+                ; OPTM_FP_LINE: R8 = row of the separator. With the screen
+                ; trace on, print the row
+NT_LINE         INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_LN_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    NT_S_LN, R8             ; "L Y="
+                SYSCALL(puts, 1)
+                MOVE    R6, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_LN_RET      DECRB
+                RET
+
+                ; OPTM_FP_SELECT: R8 = position in the current view, R9 =
+                ; mode (OPTM_SEL_STD, _SEL, _TLL, _TLLSEL). With the screen
+                ; trace on, print both
+NT_SELECT       INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_SL_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    R9, R1                  ; R1: mode
+                MOVE    NT_S_BP, R8             ; "B P="
+                SYSCALL(puts, 1)
+                MOVE    R6, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_BM, R8             ; " M="
+                SYSCALL(puts, 1)
+                MOVE    R1, R8
+                SYSCALL(puthex, 1)
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_SL_RET      DECRB
+                RET
 
                 ; OPTM_FP_PRINT: R8 = string, R9 = mask array (size, then
                 ; one word per line, bit 15 = drawn). With the screen trace
@@ -486,6 +580,13 @@ NT_S_N3         .ASCII_W "N3"
 NT_S_N4         .ASCII_W "N4"
 NT_S_D          .ASCII_W "D"
 NT_S_XX         .ASCII_W "X X="
+NT_S_CL         .ASCII_W "C"
+NT_S_FR         .ASCII_W "FR X="
+NT_S_FW         .ASCII_W " W="
+NT_S_FH         .ASCII_W " H="
+NT_S_LN         .ASCII_W "L Y="
+NT_S_BP         .ASCII_W "B P="
+NT_S_BM         .ASCII_W " M="
 NT_S_XY         .ASCII_W " Y="
 NT_S_LB         .ASCII_W " ["
 NT_S_RB         .ASCII_W "]"

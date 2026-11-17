@@ -545,6 +545,11 @@ def menu_stdsel(menu):
     return [1 if "STDSEL" in flags else 0 for _, _, flags in menu]
 
 
+def menu_lines(menu):
+    """The separator flags (OPTM_G_LINE), as SEL_OPTM_LINES serves them"""
+    return [1 if "LINE" in flags else 0 for _, _, flags in menu]
+
+
 def menu_special(menu):
     """The special-line array that HELP_MENU_INIT hands to OPTM_DEPS_VAL:
     since dependency format 2 only HELP and LOAD_ROM lines are special
@@ -1313,18 +1318,26 @@ def deps_minhid_fixtures():
 KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5, 6
 KEY_FIRST, KEY_LAST = 7, 8      # Cursor left / Cursor right (issue #258)
 
-# The screen of the nav testbed (screen trace of scenario 4): OPTM_X is 0, so
-# the marker column, which is also the first column of a %s string, is 1
-# (behind the frame). The record NT_REC of the testbed draws the marker of a
-# selected radio item as r and the marker of a selected single-select item as
-# s: two different characters, like M2M$OPT_SEL_MULTI and M2M$OPT_SEL_SINGLE
-NAV_COL = 1
+# The screen of the nav testbed (screen trace of scenario 4): scenario 4
+# places the menu at the column NAV4_X and the row 0 (the Shell places it at
+# the right edge of the screen and at row 0, see SCR$OSM_O_X and SCR$OSM_O_Y
+# in screen.asm), so the marker column, which is also the first column of a
+# %s string, is NAV4_X + 1 (behind the frame). The record NT_REC of the
+# testbed draws the marker of a selected radio item as r and the marker of a
+# selected single-select item as s: two different characters, like
+# M2M$OPT_SEL_MULTI and M2M$OPT_SEL_SINGLE
+NAV4_X = 7
+NAV_COL = NAV4_X + 1
 NAV_MARK_RADIO, NAV_MARK_SINGLE = "r", "s"
+# OPTM_INIT of scenario 4: x, y, dx and dy of the menu (the frame)
+NAV_FRAME = (NAV4_X, 0, 30, 30)
+# the modes of OPTM_FP_SELECT (OPTM_SEL_* in menu.asm)
+SEL_STD, SEL_SEL, SEL_TLL = 0, 1, 2
 
 
 class NavSim:
     def __init__(self, groups, stdsel, start, labels=None, raw_deps=None,
-                 screen=False):
+                 screen=False, lines=None):
         self.g = list(groups)
         self.sel = list(stdsel)
         self.n = len(groups)
@@ -1334,15 +1347,19 @@ class NavSim:
         self.trace = []
         self.keys = []
         self.resolved = resolve_deps(self.g, raw_deps) if raw_deps else None
-        # screen trace (scenario 4): the testbed prints a D line for every
-        # OPTM_FP_PRINT (the flat indices of the lines it draws), an X line
-        # for every OPTM_FP_PRINTXY (column, row and string) and an M line
-        # behind every S line (the flat indices of all selected items). The
-        # model keeps what the screen shows: the drawn lines and the first
-        # character of every string at its column and row
+        # the separator flags that the testbed passes as the lines array of
+        # the init record (all 0 except in scenario 4)
+        self.lines = list(lines) if lines else [0] * self.n
+        # screen trace (scenario 4): the testbed prints a line for every call
+        # of a screen function (C clear, FR frame, D print, X printxy, L line,
+        # B select) and an M line behind every S line (the flat indices of
+        # all selected items). The model keeps the screen as these calls
+        # leave it: whether a frame was drawn since the last clear, the drawn
+        # lines, the first character of every printed string at its row, the
+        # rows of the separators and the mode of every position that
+        # OPTM_FP_SELECT set to a mode other than OPTM_SEL_STD
         self.screen = screen
-        self.scr_vis = None
-        self.scr_mark = {}
+        self._clear_screen()
 
     def _struct(self):
         return build_new(self.g, self.level, self.resolved, self.sel)
@@ -1358,9 +1375,42 @@ class NavSim:
         assert i in vis, "row of the hidden line %d" % i
         return vis.index(i) + 1
 
+    def _clear_screen(self):
+        self.scr_frame = False
+        self.scr_vis = None
+        self.scr_mark = {}
+        self.scr_seps = set()
+        self.scr_attr = {}
+
+    def _pos(self, i):
+        """position of line i in the current view, counted from 0 (what
+        _OPTM_R_F2M returns and OPTM_FP_SELECT gets)"""
+        vis = self._vis()
+        assert i in vis, "position of the hidden line %d" % i
+        return vis.index(i)
+
     def _printxy(self, row, text, col=NAV_COL):
         self.trace.append("X X=%04X Y=%04X [%s]" % (col, row, text))
         self.scr_mark[(row, col)] = text[:1]
+
+    def _bar(self, pos, mode):
+        """OPTM_FP_SELECT: the cursor bar (OPTM_SEL_SEL), its removal
+        (OPTM_SEL_STD) or a highlighted headline (OPTM_SEL_TLL)"""
+        self.trace.append("B P=%04X M=%04X" % (pos, mode))
+        if mode == SEL_STD:
+            self.scr_attr.pop(pos, None)
+        else:
+            self.scr_attr[pos] = mode
+
+    def _line(self, row):
+        self.trace.append("L Y=%04X" % row)
+        self.scr_seps.add(row)
+
+    def _loop_sel(self):
+        """the top of the main loop of OPTM_RUN draws the cursor bar on the
+        current line before it asks for the next key"""
+        if self.screen:
+            self._bar(self._pos(self.cursor), SEL_SEL)
 
     def _marker(self, i):
         """the marker of line i when it is selected: OPTM_SHOW and OPTM_RUN
@@ -1374,24 +1424,45 @@ class NavSim:
                                             enumerate(self.sel) if v))
 
     def _check_screen(self):
-        """What the screen shows after a key: exactly the visible lines of
-        the current view; in the marker column the marker of its type (radio
-        or single-select) in the row of every visible selected line and in no
-        other row; nothing printed in another column; and the cursor on a
-        visible line"""
+        """What the screen shows after a key, derived from the state of the
+        model: a frame drawn after the last clear; exactly the visible lines
+        of the current view; in the marker column the marker of its type
+        (radio or single-select) in the row of every visible selected line
+        and in no other row; a separator in the row of every visible line
+        with the separator flag that is not selected and, in a submenu, in
+        the row below the last line if that row is at least two rows above
+        the bottom of the frame, and in no other row; the cursor bar on the
+        position of the cursor, the headline highlight on the position of
+        every visible headline and no other position in another mode than
+        OPTM_SEL_STD; and the cursor on a visible line. The column of the
+        strings is not part of this check: the model prints in NAV_COL only,
+        and the comparison of its X lines with the trace of the testbed is
+        what checks the column of the firmware."""
         vis = self._vis()
+        assert self.scr_frame, "no frame since the last clear"
         assert self.scr_vis == vis, (
             "stale screen at level %d: drawn %r, visible %r"
             % (self.level, self.scr_vis, vis))
-        cols = sorted({c for _, c in self.scr_mark if c != NAV_COL})
-        assert not cols, "printed in the columns %r" % cols
+        seps = {row for row, i in enumerate(vis, 1)
+                if self.lines[i] and not self.sel[i]}
+        if self.level != 0 and \
+                len(vis) + 1 <= NAV_FRAME[1] + NAV_FRAME[3] - 3:
+            seps.add(len(vis) + 1)
+        assert self.scr_seps == seps, (
+            "separators in the rows %r, expected %r"
+            % (sorted(self.scr_seps), sorted(seps)))
+        attr = {p: SEL_TLL for p, i in enumerate(vis) if self.g[i] & 0x1000}
+        assert self.cursor in vis, "cursor on the hidden line %d" % self.cursor
+        attr[vis.index(self.cursor)] = SEL_SEL
+        assert self.scr_attr == attr, (
+            "cursor bar and highlights %r, expected %r"
+            % (sorted(self.scr_attr.items()), sorted(attr.items())))
         for row, i in enumerate(vis, 1):
             want = self._marker(i) if self.sel[i] else " "
             got = self.scr_mark.get((row, NAV_COL), " ")
             assert got == want, (
                 "row %d (line %d) shows %r, expected %r"
                 % (row, i, got, want))
-        assert self.cursor in vis, "cursor on the hidden line %d" % self.cursor
 
     def _affects(self, w):
         """Port of OPTM_DEPS_AFFECTS: does group word w control a dependent?"""
@@ -1423,18 +1494,29 @@ class NavSim:
         arr = self._struct()["arr"]
         vis = [i for i, w in enumerate(arr) if w & 0x8000]
         if self.screen:
+            self.trace.append("C")              # OPTM_FP_CLEAR
+            self._clear_screen()
+            self.trace.append("FR X=%04X Y=%04X W=%04X H=%04X" % NAV_FRAME)
+            self.scr_frame = True
             self.trace.append("D" + "".join(" %04X" % i for i in vis))
             self.scr_vis = vis
-            self.scr_mark = {}                  # OPTM_FP_CLEAR
+            for p, i in enumerate(vis):         # highlight the headlines
+                if self.g[i] & 0x1000:
+                    self._bar(p, SEL_TLL)
         for i, t in enumerate(self.labels):
             if "%s" in t and (arr[i] & 0x8000):
                 self.trace.append("W I=%04X" % i)
                 if self.screen:
                     self._printxy(vis.index(i) + 1, t)
         if self.screen:
-            for row, i in enumerate(vis, 1):
+            for row, i in enumerate(vis, 1):    # markers and separators
                 if self.sel[i]:
                     self._printxy(row, self._marker(i))
+                elif self.lines[i]:
+                    self._line(row)
+            row = len(vis) + 1                  # the line below a submenu
+            if self.level != 0 and row <= NAV_FRAME[1] + NAV_FRAME[3] - 3:
+                self._line(row)
 
     def _normalize(self):
         """Port of the _OPTM_RUN_INI* entry normalization that OPTM_RUN runs
@@ -1486,6 +1568,7 @@ class NavSim:
         self._emit_w()
         self._normalize()
         if self.screen:
+            self._loop_sel()
             self._check_screen()
 
     def _move(self, step):
@@ -1585,8 +1668,10 @@ class NavSim:
         self._emit_k()                              # GETKEY trace happens
         self.keys.append(key)                       # before the key acts
         if key & 0x8000:                            # background redraw:
-            self._emit_w()                          # OPTM_SHOW runs first
+            self._emit_w()                          # OPTM_SHOW runs first,
+            self._loop_sel()                        # then OPTM_SELECT
         k = key & 0x7FFF
+        old = self.cursor
         if k == KEY_UP:
             self._move(-1)
         elif k == KEY_DOWN:
@@ -1609,6 +1694,9 @@ class NavSim:
                 self.trace.append("R C=%04X" % self.cursor)
                 return "close"
         if self.screen:
+            if k in (KEY_UP, KEY_DOWN, KEY_FIRST, KEY_LAST):
+                self._bar(self._pos(old), SEL_STD)  # remove the old bar
+            self._loop_sel()
             self._check_screen()
         return None
 
@@ -2433,7 +2521,7 @@ def nav4_script():
     labels = [t for t, _, _ in V6_MENU]
     s = NavSim(menu_masked(V6_MENU), menu_stdsel(V6_MENU), nav_start(),
                labels=labels, raw_deps=menu_deps_raw(V6_MENU, V6_DEPS),
-               screen=True)
+               screen=True, lines=menu_lines(V6_MENU))
     adv = flat_index(" Advanced Settings")
     mo = flat_index(" Mouse")
     pa = flat_index(" Paddles")
@@ -2697,6 +2785,9 @@ def emit_nav_asm(path):
     L.append("; on and the screen trace on, see nav4_script() in menu_test.py")
     L.append("NAV4_DEPS")                    # resolved dependency array
     L += dw_lines(resolve_deps(g, menu_deps_raw(V6_MENU, V6_DEPS)))
+    L.append("NAV4_LINES")                   # separator flags
+    L += dw_lines(menu_lines(V6_MENU))
+    L.append("NAV4_X          .EQU %d" % NAV4_X)
     L.append("NAV4_SCRIPT_CNT .EQU %d" % len(keys4))
     L.append("NAV4_SCRIPT")
     L += dw_lines(keys4)
@@ -4041,6 +4132,91 @@ RCLICK_MUTANTS = [
          + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9"),
         ("OPTM_SHOW prints the strings of the %s lines one column to the left",
          "ADD     1, R9                   ; add 1 to x because of frame\n", ""),
+    )
+]
+
+# the redraw: clear, frame, separators, the line below a submenu, the cursor
+# bar and the headline highlight; only the screen trace of scenario 4 sees
+# them, the other scenarios do not trace these screen functions
+_SH_CLEAR = (_I16 + "MOVE    OPTM_FP_CLEAR, R7       ; clear VRAM\n"
+             + _I16 + "RSUB    _OPTM_CALL, 1\n")
+_SH_FRAME = (_I16 + "MOVE    OPTM_FP_FRAME, R7       ; draw frame\n"
+             + _I16 + "RSUB    _OPTM_CALL, 1\n")
+_SH_SEP = (_I16 + "MOVE    R6, R8                  ; yes: R8: y-pos of line\n"
+           + _I16 + "SUB     R12, R8                 ; adjust for skipped items\n")
+_SH_END = (_I16 + "MOVE    R6, R8                  ; R8: y-pos of line\n"
+           + _I16 + "SUB     R12, R8                 ; adjust for skipped items\n")
+_RUN_BAR = (_I16 + "RBRA    _OPTM_R_FATAL, C        ; failed? fatal!\n"
+            + _I16 + "MOVE    OPTM_SEL_SEL, R9\n")
+_RUN_STD = (_I16 + "MOVE    OPTM_SEL_STD, R9\n" + _I16 + "RSUB    _OPTM_CALL, 1\n"
+            + _I16 + "MOVE    R2, R3                  ; remember current item as old")
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("N1  OPTM_SHOW does not clear the screen", _SH_CLEAR, ""),
+        ("N2  separators drawn without the skip counter", _SH_SEP,
+         _SH_SEP.replace(_I16 + "SUB     R12, R8                 ; adjust for skipped items\n", "")),
+        ("N3  the cursor bar drawn one row too low", _RUN_BAR,
+         _RUN_BAR.replace("MOVE    OPTM_SEL_SEL", "ADD     1, R8\n" + _I16 + "MOVE    OPTM_SEL_SEL")),
+        ("N4  the cursor bar of the old line not removed", _RUN_STD,
+         _RUN_STD.replace(_I16 + "RSUB    _OPTM_CALL, 1\n", "")),
+        ("N7  headlines highlighted without the skip counter",
+         _I16 + "SUB     R4, R8                  ; deduct skip counter\n", ""),
+        ("N9  the line below a submenu drawn without the skip counter", _SH_END,
+         _SH_END.replace(_I16 + "SUB     R12, R8                 ; adjust for skipped items\n", "")),
+        ("N5  OPTM_SHOW clears the screen after it drew the frame",
+         (_SH_CLEAR, _SH_FRAME), ("", _SH_FRAME + _SH_CLEAR)),
+        ("N6  OPTM_SHOW draws no frame", _SH_FRAME, ""),
+        ("N8  separators drawn one row too low", _SH_SEP,
+         _SH_SEP + _I16 + "ADD     1, R8\n"),
+        ("N10 the line below a submenu drawn one row too low", _SH_END,
+         _SH_END + _I16 + "ADD     1, R8\n"),
+        ("N11 the line below a submenu never drawn",
+         _I16 + "RBRA    _OPTM_SHOW_RET, N       ; no",
+         _I16 + "RBRA    _OPTM_SHOW_RET, 1       ; no"),
+        ("N12 the cursor bar removed from the new line instead of the old one",
+         "_OPTM_RUN_2     MOVE    OPTM_FP_SELECT, R7      ; unselect old item\n"
+         + _I16 + "MOVE    R3, R8",
+         "_OPTM_RUN_2     MOVE    OPTM_FP_SELECT, R7      ; unselect old item\n"
+         + _I16 + "MOVE    R2, R8"),
+        ("N13 the cursor bar of the old line replaced by a headline highlight",
+         _RUN_STD, _RUN_STD.replace("OPTM_SEL_STD", "OPTM_SEL_TLL")),
+        ("N14 the cursor bar drawn as a headline highlight", _RUN_BAR,
+         _RUN_BAR.replace("OPTM_SEL_SEL", "OPTM_SEL_TLL")),
+        ("N15 headlines highlighted as the cursor bar",
+         _I16 + "MOVE    OPTM_SEL_TLL, R9\n", _I16 + "MOVE    OPTM_SEL_SEL, R9\n"),
+        ("N16 no headline highlighted",
+         _I16 + "RBRA    _OPTM_TT_1B, Z          ; flag not set: continue",
+         _I16 + "RBRA    _OPTM_TT_1B, 1          ; flag not set: continue"),
+        ("N17 every line highlighted as a headline",
+         _I16 + "AND     OPTM_HEADLINE, R3\n", _I16 + "OR      OPTM_HEADLINE, R3\n"),
+    )
+]
+
+# the column of the menu: scenario 4 places the menu away from the left edge
+# (NAV4_X), so a path that ignores OPTM_X prints in the wrong column
+_X_COL = _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9"
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("X1  OPTM_SHOW draws the markers without the column of the menu",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n" + _X_COL,
+         "_OPTM_SHOW_1B   MOVE    1, R9                   ; R9: current x-pos"),
+        ("X2  OPTM_SHOW prints the %s strings without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9\n" + _X_COL + "                   ; add 1 to x because of frame",
+         _I16 + "MOVE    1, R9                   ; add 1 to x because of frame"),
+        ("X3  the marker of a single-select item switched on without the column of the menu",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _X_COL + "                \n",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    1, R9\n"),
+        ("X4  the marker of a single-select item switched off deleted without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n" + _X_COL + "\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord",
+         _I16 + "MOVE    1, R9\n" + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord"),
+        ("X5  the markers of a radio group deleted without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n" + _X_COL + "\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos",
+         _I16 + "MOVE    1, R9\n" + _I16 + "XOR     R10, R10                ; R10: flat list item pos"),
     )
 ]
 
