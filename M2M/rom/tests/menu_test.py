@@ -82,6 +82,7 @@ G = dict(
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
     SC_F9=37, SC_F10=38, SC_F11=39, SC_F12=40, SC_F13=41, SC_F14=42,
     MOUSE_P1=43, MOUSE_P2=44, PADDLES_P1=45, PADDLES_P2=46,
+    MOUSE_P1_RCLICK=47, MOUSE_P2_RCLICK=48,
 )
 
 OPEN = ("SUBMENU",)
@@ -392,9 +393,11 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Port 1: C64",             "MOUSE_P1", ["STDSEL"]),
     (" Port 1: Amiga",           "MOUSE_P1", []),
+    (" #1: MEGA+left = right",   "MOUSE_P1_RCLICK", ["SINGLESEL"]),   # dependent, #190
     ("",                         None, ["LINE"]),
     (" Port 2: C64",             "MOUSE_P2", ["STDSEL"]),
     (" Port 2: Amiga",           "MOUSE_P2", []),
+    (" #2: MEGA+left = right",   "MOUSE_P2_RCLICK", ["SINGLESEL"]),   # dependent, #190
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 19
     (" Paddles",                 None, OPEN),            # region 20 (in 10), #193
@@ -439,7 +442,9 @@ def dep_value(gid, mask):
 # the V6 menu: the per-drive mount lines + internal-1581 status lines (#93)
 # and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229), plus
 # the "Turbo speed" block (separator, headline, 2x/3x/4x) that is only visible
-# while the turbo mode is C128 or Smart (#87): a mother in the same submenu
+# while the turbo mode is C128 or Smart (#87): a mother in the same submenu;
+# and the switch "MEGA+left = right" of each port in the Mouse submenu, only
+# visible while its port is set to Amiga, item 1 of its radio mother (#190)
 V6_DEPS = {
     2:  ("DRV8_MODE", 0b0011), 3: ("DRV8_MODE", 0b0100),
     4:  ("DRV9_MODE", 0b0011), 5: ("DRV9_MODE", 0b0100),
@@ -451,6 +456,7 @@ V6_DEPS = {
     61: ("MACHINE_MODE", 0b0001), 62: ("MACHINE_MODE", 0b0010),
     64: ("MACHINE_MODE", 0b0001), 65: ("MACHINE_MODE", 0b0010),
     81: ("MACHINE_MODE", 0b0001),
+    302: ("MOUSE_P1", 0b0010), 306: ("MOUSE_P2", 0b0010),
 }
 
 
@@ -1908,6 +1914,8 @@ def nav_script():
                      and submenu_path(V6_MENU, i) == [" Advanced Settings"])
     m1c, m1a = group_members(V6_MENU, "MOUSE_P1")
     m2c, m2a = group_members(V6_MENU, "MOUSE_P2")
+    m1r, = group_members(V6_MENU, "MOUSE_P1_RCLICK")
+    m2r, = group_members(V6_MENU, "MOUSE_P2_RCLICK")
     p1c, p1a = group_members(V6_MENU, "PADDLES_P1")
     p2c, p2a = group_members(V6_MENU, "PADDLES_P2")
 
@@ -1923,6 +1931,8 @@ def nav_script():
     s.feed(KEY_DOWN)                # " Port 1: Amiga"
     s.feed(KEY_SELECT)              # radio-select it via Return
     assert radio(m1a, m1c) and radio(m2c, m2a)   # port 2 stays C64
+    s.feed(KEY_DOWN)                # the switch of port 1: dependencies are
+    assert s.cursor == m1r          # off here, so it is always visible
     s.feed(KEY_DOWN)                # skips the separator: " Port 2: C64"
     assert s.cursor == m2c
     s.feed(KEY_DOWN)                # " Port 2: Amiga"
@@ -1934,7 +1944,7 @@ def nav_script():
     s.feed(KEY_SELECT)              # port 2 back to C64, port 1 unchanged
     assert radio(m2c, m2a) and radio(m1a, m1c)
     s.feed(KEY_LAST)                # last item of the view: " Back"
-    assert (s.level, s.cursor) == (19, m2a + 2)
+    assert (s.level, s.cursor) == (19, m2r + 2)
     s.feed(KEY_SELECT)              # leave via the closer: Advanced Settings,
     assert (s.level, s.cursor) == (10, mo)       # cursor on the opener
     s.feed(KEY_DOWN)                # " Paddles"
@@ -2512,6 +2522,8 @@ C_MENU = [
     # pinned to its label and submenu by input_devices_errors() below
     ("C_MENU_MOUSE_P1_AMIGA",   "MOUSE_P1", 1),     # Amiga mouse at port 1
     ("C_MENU_MOUSE_P2_AMIGA",   "MOUSE_P2", 1),     # Amiga mouse at port 2
+    ("C_MENU_MOUSE_P1_RCLICK",  "MOUSE_P1_RCLICK", 0),  # MEGA+left = right, port 1
+    ("C_MENU_MOUSE_P2_RCLICK",  "MOUSE_P2_RCLICK", 0),  # MEGA+left = right, port 2
     ("C_MENU_PADDLES_P1_ATARI", "PADDLES_P1", 1),   # Atari CX30 paddles at port 1
     ("C_MENU_PADDLES_P2_ATARI", "PADDLES_P2", 1),   # Atari CX30 paddles at port 2
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd

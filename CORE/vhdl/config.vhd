@@ -394,7 +394,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 323; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 325; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -737,9 +737,11 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &  -- "Flip joystick ports"
    " Port 1: C64\n"             &  -- Commodore 1351 (or a compatible mouse); default
    " Port 1: Amiga\n"           &
+   " #1: MEGA+left = right\n"   &  -- right click with the MEGA key; only shown while port 1 is "Amiga"
    "\n"                         &
    " Port 2: C64\n"             &  -- default
    " Port 2: Amiga\n"           &
+   " #2: MEGA+left = right\n"   &  -- right click with the MEGA key; only shown while port 2 is "Amiga"
    "\n"                         &
    " Back\n"                    &  -- returns to Advanced Settings
 
@@ -811,6 +813,8 @@ constant OPTM_G_MOUSE_P1      : integer := 43;  -- mouse type at the MEGA65 port
 constant OPTM_G_MOUSE_P2      : integer := 44;  -- mouse type at the MEGA65 port 2: C64 (1351) or Amiga (#190)
 constant OPTM_G_PADDLES_P1    : integer := 45;  -- paddle type at the MEGA65 port 1: C64 or Atari CX30 with 1 MOhm potentiometers (#193)
 constant OPTM_G_PADDLES_P2    : integer := 46;  -- paddle type at the MEGA65 port 2: C64 or Atari CX30 with 1 MOhm potentiometers (#193)
+constant OPTM_G_MOUSE_P1_RCLICK : integer := 47;  -- port 1, Amiga mouse: MEGA key + left button = right button; off by default (#190)
+constant OPTM_G_MOUSE_P2_RCLICK : integer := 48;  -- port 2, Amiga mouse: MEGA key + left button = right button; off by default (#190)
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
 -- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
@@ -1159,9 +1163,11 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_LINE,
                                              OPTM_G_MOUSE_P1      + OPTM_G_STDSEL,    -- Port 1: C64
                                              OPTM_G_MOUSE_P1,                         -- Port 1: Amiga
+                                             OPTM_G_MOUSE_P1_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P1, 1), -- #1: MEGA+left = right (only with Amiga)
                                              OPTM_G_LINE,
                                              OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: C64
                                              OPTM_G_MOUSE_P2,                         -- Port 2: Amiga
+                                             OPTM_G_MOUSE_P2_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P2, 1), -- #2: MEGA+left = right (only with Amiga)
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Mouse"
 

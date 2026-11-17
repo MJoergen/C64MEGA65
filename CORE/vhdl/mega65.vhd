@@ -170,6 +170,10 @@ port (
    -- Mouse type per physical port of the MEGA65 (independent of "Flip joystick ports"), issue #190:
    -- index 0 = port 1, index 1 = port 2; '1' = Amiga mouse, '0' = C64 mouse (1351)
    main_mouse_amiga_o      : out std_logic_vector(1 downto 0);
+   -- Right click with the MEGA key per physical port of the MEGA65, issue #190: index 0 = port 1,
+   -- index 1 = port 2; '1' = the switch "MEGA+left = right" of that port is on. This is the plain
+   -- menu bit, also while the switch is hidden because the port is not set to "Amiga"
+   main_mouse_rclick_o     : out std_logic_vector(1 downto 0);
    main_rtc_i              : in  std_logic_vector(64 downto 0);
 
    -- CBM-488/IEC serial port
@@ -543,13 +547,18 @@ constant C_MENU_SC_F14        : natural := 282;
 constant C_SC_FREEZE          : natural := 1;
 -- Mouse and Paddles submenus (GitHub issues #190 and #193): each submenu has one radio group of two
 -- items per port, "C64" (default) and the other device. "Port 1" and "Port 2" are the physical
--- sockets of the MEGA65, independent of "Flip joystick ports". The constants below are the flat
--- indices of the non-default items; only these bits are decoded (see qnice_paddle_atari_o and
--- main_mouse_amiga_o)
+-- sockets of the MEGA65, independent of "Flip joystick ports". The four constants C_MENU_MOUSE_*_AMIGA
+-- and C_MENU_PADDLES_*_ATARI are the flat indices of the non-default items; only these bits are
+-- decoded (see qnice_paddle_atari_o and main_mouse_amiga_o). The Mouse submenu also has one
+-- single-select item per port, "MEGA+left = right" (off by default), directly behind the Amiga item
+-- of its port and only shown while that item is selected: C_MENU_MOUSE_P1_RCLICK and
+-- C_MENU_MOUSE_P2_RCLICK are their flat indices (see main_mouse_rclick_o)
 constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;
-constant C_MENU_MOUSE_P2_AMIGA   : natural := 304;
-constant C_MENU_PADDLES_P1_ATARI : natural := 311;
-constant C_MENU_PADDLES_P2_ATARI : natural := 314;
+constant C_MENU_MOUSE_P1_RCLICK  : natural := 302;
+constant C_MENU_MOUSE_P2_AMIGA   : natural := 305;
+constant C_MENU_MOUSE_P2_RCLICK  : natural := 306;
+constant C_MENU_PADDLES_P1_ATARI : natural := 313;
+constant C_MENU_PADDLES_P2_ATARI : natural := 316;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -756,6 +765,11 @@ begin
    -- one reads as a C64 mouse
    main_mouse_amiga_o(0) <= main_osm_control_i(C_MENU_MOUSE_P1_AMIGA);
    main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);
+
+   -- Right click with the MEGA key (issue #190): the plain menu bit of the switch of each port, also
+   -- while the switch is hidden; the port conditioning combines it with the Amiga setting
+   main_mouse_rclick_o(0) <= main_osm_control_i(C_MENU_MOUSE_P1_RCLICK);
+   main_mouse_rclick_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_RCLICK);
 
    -- Select C64's ROM: 0=Custom, 1=Standard, 2=GS, 3=Japan
    c64_rom <= "00" when main_osm_control_i(C_MENU_KERNAL_JIFFY)   else
