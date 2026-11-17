@@ -5,7 +5,7 @@ Amiga mouse and Atari CX30 paddles, selectable per port in the on-screen menu, a
 ## 0. State
 
 * Branch `mh_implement_190_193`, branched from `develop` at `6845596` (WIP-V6-A25). The version of this work is WIP-V6-A26. Pushed, not merged into `develop`.
-* Everything is implemented, simulated and reviewed. Nothing of it has run on hardware, and no Vivado build has been made from the branch: sections 6 and 7 say what the build and the hardware test need to show.
+* Everything is implemented, simulated and reviewed, and the Vivado build of R3 and R6 from `69d0f51` passed (section 6). Nothing of it has run on hardware: section 7 says what the hardware test needs to show.
 
 | Part | Files | State |
 |---|---|---|
@@ -117,6 +117,18 @@ For R3 and R6 at least:
 * No net without a driver in the new parts (`grep` the synthesis log for "does not have driver").
 * Timing is met in every clock domain. The new logic is small: about 285 flip-flops more in the core clock domain, about 100 fewer in the QNICE clock domain, no block RAM, no new clock. The paddle values pass two or three more LUT levels on their way from a register to the data bus of the CPU, and the up line and the fire line of each port one more.
 * `report_cdc` (if run) shows the new crossing `i_framework/i_qnice2main_paddles` as a 32-bit bus between the QNICE clock and the core clock that is covered by the false path of `CORE.xdc`; section 8 says what that means.
+
+The build of 2026-11-17 from `69d0f51` (R3 and R6, `build_all.sh`) shows it:
+
+| | R3 | R6 |
+|---|---|---|
+| Result line of the build script | `RESULT R3 OK` | `RESULT R6 OK` |
+| WNS / WHS | 0.074 ns / 0.036 ns | 0.052 ns / 0.026 ns |
+| Re-roll | none | none |
+| Errors and critical warnings of synthesis and implementation | 0 | 0 |
+| Design rule check | 211 warnings, no error | 215 warnings, no error |
+
+Both builds print the two firmware lines above. The synthesis logs have no inferred latch, no multi-driven net and no warning that names one of the listed files or the instances `i_joy_debouncer` and `i_m2m_keyb`. The nets without a driver are those of the boards that every build has (`i_ldrm` of the scaler, the JTAG pins of the keyboard, and on R3 the pins of the SDRAM that this board does not have). The registers of the right click (`rclick_q`, `mega_key_n`) are in both synthesized netlists. All user timing constraints are met; `report_cdc` was not run.
 
 ## 7. What only the hardware can show
 
