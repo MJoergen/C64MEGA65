@@ -36,10 +36,12 @@
 -- G_PART = "rule": G_EPISODES episodes with random settings, of four kinds in turn: a press of
 -- socket 0, a press of socket 1, presses of both sockets a few clock cycles apart (both orders of
 -- pressing and of releasing), and one socket held for a whole press of the other (each socket in
--- turn); key changes and changes of the settings in the clock cycles around every edge of f (from
--- three before to two after, by rotation), random key and settings changes while buttons are held,
--- the port switcher, the on/off switches, rare resets; the right buttons of the reference mice
--- toggle on their own. The run fails if the observed coverage stays below C_MIN_COV.
+-- turn); in every second turn the single presses are pressed again as early as the debouncer
+-- allows; key changes and changes of the settings in the clock cycles around every edge of f that
+-- a press or a release causes (from three before to two after, by rotation), random key and
+-- settings changes while buttons are held, the port switcher, the on/off switches, rare resets; the
+-- right buttons of the reference mice toggle on their own. The run fails if the observed coverage
+-- stays below floors that grow with G_EPISODES (cov_floor).
 -- G_PART = "directed": the cases of SPEC.md section 5.1 one by one, each with explicit checks.
 --
 -- G_MODEL and G_IDENT switch the comparisons off, so that a mutant can show what the remaining checks
@@ -80,9 +82,7 @@ architecture sim of tb_amiga_ports is
    constant C_DB_LAT : time     := C_HALF + (C_DB + 2) * C_PERIOD;
 
    constant C_OWN_FIRE : boolean := G_PART = "rule" or G_PART = "directed";  -- stim drives the fire lines
-   -- part rule: each of the clock cycles c(-1), c(0) and c(1) around the edges of f needs this many
-   -- changes of the key and of the settings at a fall and at a rise of f, per socket; and as many right
-   -- clicks, left clicks, presses of each socket first, releases of each socket first and long presses
+   -- part rule: the coverage counts have to reach G_EPISODES / div, and never less than C_MIN_COV
    constant C_MIN_COV  : natural := 4;
    constant C_BG       : boolean := G_PART = "identity" or G_PART = "modes"; -- random key in the background
 
@@ -146,6 +146,12 @@ architecture sim of tb_amiga_ports is
    type hists_t is array (0 to 1) of hist4_t;
    signal cov        : hists_t := (others => (others => (others => 0)));
    signal fe_t       : time_vector(0 to 1) := (others => 0 fs);   -- time of the last fall of f
+   signal re_t       : time_vector(0 to 1) := (others => 0 fs);   -- time of the last rise of f
+   -- the shortest time that f stayed '1' before a fall, and the number of falls after exactly the
+   -- shortest time that the debouncer allows (C_DB + 2 clock cycles: the raw line goes low at the
+   -- falling clock edge before the rising edge at which f rises)
+   signal min_gap    : time_vector(0 to 1) := (others => 1 sec);
+   signal n_min_gap  : integer_vector(0 to 1) := (0, 0);
 
    shared variable errcnt : counter_pt;
    signal checks      : natural := 0;
@@ -167,6 +173,14 @@ architecture sim of tb_amiga_ports is
          finish;
       end if;
    end procedure tb_error;
+
+   function cov_floor(div : positive) return natural is
+   begin
+      if G_EPISODES / div > C_MIN_COV then
+         return G_EPISODES / div;
+      end if;
+      return C_MIN_COV;
+   end function cov_floor;
 
    -- the four coverage counts of the part rule
    function cov_name(h : natural) return string is
@@ -523,6 +537,10 @@ begin
          variable tf     : time    := 0 fs;    -- the last edge of f
          variable fk     : natural := 0;       -- 0: it was a fall, 1: a rise
          variable have_f : boolean := false;
+         variable tr     : time    := 0 fs;    -- the last rise of f
+         variable have_r : boolean := false;
+         variable gap    : time    := 1 sec;
+         variable nmin   : natural := 0;
          variable tk     : time    := 0 fs;    -- the last change of the key
          variable have_k : boolean := false;
          variable ts     : time    := 0 fs;    -- the last change of a setting of this socket
@@ -538,8 +556,21 @@ begin
             if sk(s)(4) = '0' then
                fk := 0;
                fe_t(s) <= now;
+               if have_r then
+                  if now - tr < gap then
+                     gap := now - tr;
+                  end if;
+                  if now - tr = (C_DB + 2) * C_PERIOD then
+                     nmin := nmin + 1;
+                  end if;
+                  min_gap(s)   <= gap;
+                  n_min_gap(s) <= nmin;
+               end if;
             else
-               fk := 1;
+               fk     := 1;
+               tr     := now;
+               have_r := true;
+               re_t(s) <= now;
             end if;
             if have_k then
                d := cyc(tk - tf);
@@ -777,6 +808,7 @@ begin
       variable nlong : integer_vector(0 to 1) := (0, 0);   -- part rule: episodes with socket s held
       variable nboth : integer_vector(0 to 1) := (0, 0);   -- part rule: both pressed, socket s first
       variable nrelf : integer_vector(0 to 1) := (0, 0);   -- part rule: both pressed, socket s released first
+      variable nrep  : integer_vector(0 to 1) := (0, 0);   -- part rule: pressed again as early as possible
       variable ncase : natural := 0;
       variable nexp  : natural := 0;
       variable te    : time_vector(0 to 1) := (others => 0 fs);   -- predicted fall of f per socket
@@ -1076,6 +1108,105 @@ begin
          expect(1, '1', '1', "all released");
       end procedure held_then_other;
 
+      -- part directed: a press of socket s (a right click if right, else a left click), the key changed
+      -- while the button is held, then the button released and pressed again as early as the debouncer
+      -- allows: the raw line goes low at the falling clock edge before the rising edge at which f rises,
+      -- so f stays '1' for C_DB + 2 clock cycles; the new press follows the key
+      procedure min_repress(s : natural; right : boolean) is
+         variable t1 : time;
+      begin
+         if right then
+            key_st <= '0';
+         else
+            key_st <= '1';
+         end if;
+         wait for 0.3 * C_MS;
+         press_fire(s);
+         wait_f(s, '0');
+         if right then
+            expect(s, '0', '1', "first press: right click");
+         else
+            expect(s, '1', '0', "first press: left click");
+         end if;
+         key_st <= not key_st;
+         wait for 0.3 * C_MS;
+         release_fire(s);
+         t1 := now;
+         wait for (C_DB + 1) * C_PERIOD + C_HALF / 2;
+         press_fire(s);
+         if now /= t1 + (C_DB + 2) * C_PERIOD then
+            tb_error("the bench did not press again at the shortest distance");
+         end if;
+         wait for C_HALF + (C_DB / 2) * C_PERIOD;
+         expect(s, '1', '1', "between the two presses");
+         wait for te(s) + C_HALF / 2 - now;     -- c(0) of the new press
+         if right then
+            expect(s, '1', '0', "pressed again as early as possible without the key: left click in c(0)");
+         else
+            expect(s, '0', '1', "pressed again as early as possible with the key: right click in c(0)");
+         end if;
+         wait_f(s, '0');
+         if re_t(s) /= t1 + C_DB_LAT or fe_t(s) - re_t(s) /= (C_DB + 2) * C_PERIOD then
+            tb_error("socket " & integer'image(s) & ": f was not '1' for exactly " & integer'image(C_DB + 2) &
+                     " clock cycles between the presses");
+         end if;
+         wait for 0.3 * C_MS;
+         if right then
+            expect(s, '1', '0', "pressed again as early as possible without the key: left click");
+         else
+            expect(s, '0', '1', "pressed again as early as possible with the key: right click");
+         end if;
+         release_fire(s);
+         key_st <= '1';
+         wait_f(s, '1');
+         wait for 0.3 * C_MS;
+      end procedure min_repress;
+
+      -- part directed: a reset of the debouncers during a right click of socket s, with the button held
+      -- throughout. The reset forces f to '1' at once (debounce.vhd), so the press ends: no line pressed.
+      -- While f is '1', the flip-flop takes the key at every clock edge. After the reset the debouncer sees
+      -- the held button as a new press, f falls 1 ms later, and that press follows the key at its start:
+      -- a left click if the key was released during the reset, a right click if it stayed pressed.
+      procedure reset_in_rclick(s : natural; release_key : boolean) is
+      begin
+         key_st <= '0';
+         wait for 0.3 * C_MS;
+         press_fire(s);
+         wait_f(s, '0');
+         expect(s, '0', '1', "right click before the reset");
+         wait for 0.2 * C_MS;
+         wait until falling_edge(clk);
+         reset_n <= '0';
+         wait for 3 * C_PERIOD;
+         expect(s, '1', '1', "during the reset: no press");
+         if release_key then
+            key_st <= '1';
+         end if;
+         wait for 10 * C_PERIOD;
+         wait until falling_edge(clk);
+         reset_n <= '1';
+         te(s) := now + C_DB_LAT;
+         wait for 0.5 * C_MS;
+         expect(s, '1', '1', "after the reset, before the debouncer reports the held button again");
+         wait for te(s) + C_HALF / 2 - now;
+         if release_key then
+            expect(s, '1', '0', "key released during the reset, button held: left click in c(0)");
+         else
+            expect(s, '0', '1', "key held through the reset, button held: right click in c(0)");
+         end if;
+         wait_f(s, '0');
+         wait for 0.3 * C_MS;
+         if release_key then
+            expect(s, '1', '0', "key released during the reset, button held: left click");
+         else
+            expect(s, '0', '1', "key held through the reset, button held: right click");
+         end if;
+         release_fire(s);
+         key_st <= '1';
+         wait_f(s, '1');
+         wait for 0.3 * C_MS;
+      end procedure reset_in_rclick;
+
       variable k, d, m, dd : integer;
       variable sa          : natural;
       variable sb          : natural;
@@ -1204,20 +1335,40 @@ begin
                   around(1 - m, t1 + dd * C_PERIOD + C_DB_LAT, 1);
                   ev_run;
                else
+                  if ((ep - 1) / 4) mod 2 = 1 then
+                     -- release and press again as early as the debouncer allows, with the changes
+                     -- around that rise and that fall of f
+                     release_fire(sa);
+                     t1 := now;
+                     around(sa, t1 + C_DB_LAT, 1);
+                     ev_add(t1 + (C_DB + 2) * C_PERIOD, 3, sa);
+                     te(sa) := t1 + (C_DB + 2) * C_PERIOD + C_DB_LAT;
+                     around(sa, te(sa), 0);
+                     ev_run;
+                     if te(sa) + 4 * C_PERIOD > now then
+                        wait for te(sa) + 4 * C_PERIOD - now;
+                     end if;
+                     wait_f(sa, '0');
+                     nrep(sa) := nrep(sa) + 1;
+                     hold(0.2, 1.5, true);
+                  end if;
                   rule_release(sa);
                end if;
             else
                -- socket sa held for a whole press of socket sb
+               m := nrst;
                rule_press(sa);
-               hold(0.1, 0.6, false);
+               hold(0.1, 0.6, true);
                key_st <= not key_st;
                wait for 0.05 * C_MS;
                rule_press(sb);
-               hold(0.2, 1.5, false);
+               hold(0.2, 1.5, true);
                rule_release(sb);
-               hold(1.2, 2.0, false);
+               hold(1.2, 2.0, true);
                rule_release(sa);
-               nlong(sa) := nlong(sa) + 1;
+               if nrst = m then                -- a reset ends the press of the held socket
+                  nlong(sa) := nlong(sa) + 1;
+               end if;
             end if;
             if both then
                nboth(sa) := nboth(sa) + 1;
@@ -1246,23 +1397,28 @@ begin
                    integer'image(cov(s)(3)(3)) severity note;
             for h in 0 to 3 loop
                for dk in -1 to 1 loop
-                  if cov(s)(h)(dk) < C_MIN_COV then
+                  if (h <= 1 and cov(s)(h)(dk) < cov_floor(10)) or (h >= 2 and cov(s)(h)(dk) < cov_floor(16)) then
                      tb_error("socket " & integer'image(s) & ": " & integer'image(cov(s)(h)(dk)) & " changes of the " &
-                              cov_name(h) & " in c(" & integer'image(dk) & "), at least " &
-                              integer'image(C_MIN_COV) & " required");
+                              cov_name(h) & " in c(" & integer'image(dk) & "), too few");
                   end if;
                end loop;
             end loop;
-            if n_rc_press(s) < C_MIN_COV or n_lc_press(s) < C_MIN_COV or nboth(s) < C_MIN_COV or
-               nrelf(s) < C_MIN_COV or nlong(s) < C_MIN_COV then
+            report "TB: socket " & integer'image(s) & ": pressed again as early as the debouncer allows " &
+                   integer'image(nrep(s)) & " times; the shortest time that f stayed '1' before a fall: " &
+                   to_string(min_gap(s), 1 ns) & " (" & integer'image(min_gap(s) / C_PERIOD) & " clock cycles), " &
+                   integer'image(n_min_gap(s)) & " falls after exactly " & integer'image(C_DB + 2) & " clock cycles"
+               severity note;
+            if n_rc_press(s) < cov_floor(16) or n_lc_press(s) < cov_floor(4) or nboth(s) < cov_floor(10) or
+               nrelf(s) < cov_floor(10) or nlong(s) < cov_floor(16) or nrep(s) < cov_floor(10) or
+               n_min_gap(s) < cov_floor(10) or min_gap(s) /= (C_DB + 2) * C_PERIOD then
                tb_error("socket " & integer'image(s) & ": too few right clicks, left clicks, first presses, first " &
-                        "releases or long presses (at least " & integer'image(C_MIN_COV) & " each)");
+                        "releases, long presses, presses again at the shortest distance, or that distance not reached");
             end if;
          end loop;
          report "TB: " & integer'image(G_EPISODES) & " episodes with " & integer'image(nrst) & " resets; both sockets " &
                 "pressed: socket 0 first " & integer'image(nboth(0)) & " times, socket 1 first " & integer'image(nboth(1)) &
                 " times, socket 0 released first " & integer'image(nrelf(0)) & " times, socket 1 first " &
-                integer'image(nrelf(1)) & " times; socket 0 held for a whole press of socket 1 " & integer'image(nlong(0)) &
+                integer'image(nrelf(1)) & " times; socket 0 held for a whole press of socket 1 (without a reset) " & integer'image(nlong(0)) &
                 " times, the other way round " & integer'image(nlong(1)) & " times" severity note;
       elsif G_PART = "directed" then
          -- both sockets in Amiga mode with the switch on from power-up: nothing happens before a press
@@ -1407,6 +1563,21 @@ begin
          held_then_other(1, 0);
          held_then_other(0, 1);
 
+         begin_case("pressed again as early as the debouncer allows (f '1' for " & integer'image(C_DB + 2) &
+                    " clock cycles): a right click, the key released, a left click; a left click, the key " &
+                    "pressed, a right click; both sockets");
+         for sk_i in 0 to 1 loop
+            min_repress(sk_i, true);
+            min_repress(sk_i, false);
+         end loop;
+
+         begin_case("a reset of the debouncers during a right click with the button held: the key released " &
+                    "during the reset gives a left click after it, the key held a right click; both sockets");
+         for sk_i in 0 to 1 loop
+            reset_in_rclick(sk_i, true);
+            reset_in_rclick(sk_i, false);
+         end loop;
+
          begin_case("a socket in C64 mode with the switch on: a joystick fire stays a fire");
          settings("01", "11", '0', '1', '1');
          key_st <= '0';
@@ -1521,6 +1692,9 @@ begin
       report "TB: identity with debouncer_ref checked " & integer'image(id1_checks) & " times, with debouncer_prev " &
              integer'image(id2_checks) & " times; the properties in " & integer'image(rc_checks) &
              " checks during right clicks and " & integer'image(lc_checks) & " during left clicks" severity note;
+      report "TB: the shortest time that f stayed '1' before a fall: socket 0 " & to_string(min_gap(0), 1 ns) &
+             ", socket 1 " & to_string(min_gap(1), 1 ns) & " (" & integer'image(C_DB + 2) & " clock cycles: " &
+             to_string((C_DB + 2) * C_PERIOD, 1 ns) & ")" severity note;
       if G_PART = "modes" and (btn_changes < 20 or pos_changes < 100) then
          tb_error("the bench did not exercise the Amiga mice");
       end if;

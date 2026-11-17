@@ -33,6 +33,9 @@ R1 = "rclick(1)     <= rclick_q(1) and amiga_i(1) and amiga_rclick_i(1);"
 # r registered: every decision takes effect one clock cycle late; "now = 0 fs" gives the register the
 # start value '0', so that only the delay can be caught
 LATE = "rclick(0)     <= rclick_q(0) and amiga_i(0) and amiga_rclick_i(0) when rising_edge(clk) or now = 0 fs;"
+HOLD_OLD = "   handle_rclick : process(clk)\n   begin\n      if rising_edge(clk) then\n         if j1_f = '1' then\n            rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;\n         end if;\n         if j2_f = '1' then\n            rclick_q(1) <= amiga_i(1) and amiga_rclick_i(1) and not mega_key_n_i;\n         end if;\n      end if;\n   end process;"
+HOLD_0 = "   handle_rclick : process(clk)\n      variable holdoff : natural := 0;\n      variable f_d     : std_logic := '1';\n   begin\n      if rising_edge(clk) then\n         if f_d = '0' and j1_f = '1' then\n            holdoff := CLK_FREQ * 13 / 10000;\n         elsif holdoff > 0 then\n            holdoff := holdoff - 1;\n         end if;\n         f_d := j1_f;\n         if j1_f = '1' and holdoff = 0 then\n            rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;\n         end if;\n         if j2_f = '1' then\n            rclick_q(1) <= amiga_i(1) and amiga_rclick_i(1) and not mega_key_n_i;\n         end if;\n      end if;\n   end process;"
+HOLD_1 = "   handle_rclick : process(clk)\n      variable holdoff : natural := 0;\n      variable f_d     : std_logic := '1';\n   begin\n      if rising_edge(clk) then\n         if f_d = '0' and j2_f = '1' then\n            holdoff := CLK_FREQ * 13 / 10000;\n         elsif holdoff > 0 then\n            holdoff := holdoff - 1;\n         end if;\n         f_d := j2_f;\n         if j1_f = '1' then\n            rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;\n         end if;\n         if j2_f = '1' and holdoff = 0 then\n            rclick_q(1) <= amiga_i(1) and amiga_rclick_i(1) and not mega_key_n_i;\n         end if;\n      end if;\n   end process;"
 UP0 = "mouse_up_n(0) <= mouse_right_n(0) and (j1_f or not rclick(0));"
 
 X_LINE = "count := quad_count(lines_old(C_RIGHT), lines_old(C_DOWN), lines_flt(C_RIGHT), lines_flt(C_DOWN));"
@@ -199,6 +202,13 @@ MUTANTS = [
      "if j2_f = '1' then\n            rclick_q(1)", "if j2_f = '1' and j1_f = '1' then\n            rclick_q(1)"),
     ("rc_socket_1_frozen_while_0_pressed_directed", "ports", "debouncer", TP, DIRECTED,
      "if j2_f = '1' then\n            rclick_q(1)", "if j2_f = '1' and j1_f = '1' then\n            rclick_q(1)"),
+    # the flip-flop ignores the key for 1.3 ms after every release of its fire line, so that a press that
+    # starts within 1.3 ms keeps the decision of the press before (the debouncer allows a new press
+    # 1.0 ms after a release)
+    ("rc_socket_0_holdoff_after_release", "ports", "debouncer", TP, RULE, HOLD_OLD, HOLD_0),
+    ("rc_socket_0_holdoff_after_release_directed", "ports", "debouncer", TP, DIRECTED, HOLD_OLD, HOLD_0),
+    ("rc_socket_1_holdoff_after_release", "ports", "debouncer", TP, RULE, HOLD_OLD, HOLD_1),
+    ("rc_socket_1_holdoff_after_release_directed", "ports", "debouncer", TP, DIRECTED, HOLD_OLD, HOLD_1),
     ("rc_flip_flop_starts_at_one", "ports", "debouncer", TP, DIRECTED,
      "signal rclick_q               : std_logic_vector(1 downto 0) := \"00\";",
      "signal rclick_q               : std_logic_vector(1 downto 0) := \"11\";"),
