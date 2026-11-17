@@ -2514,7 +2514,9 @@ def nav4_script():
     toggled by Return and Space, each changing exactly its own menu bit,
     independent of each other and of the four radio groups of the Mouse and
     Paddles submenus, keeping their bit while hidden and showing it again;
-    the cursor movement in all four visibility states; Back and Run/Stop.
+    the cursor movement in all four visibility states; background redraws
+    with the cursor on a switch, on the lines above and below it and while
+    a switch is hidden; Back and Run/Stop.
     The testbed starts from the factory defaults (no config file), so both
     switches are off. Every key is checked against the screen model by
     NavSim._check_screen(); the emulator trace has to match the model."""
@@ -2586,6 +2588,17 @@ def nav4_script():
     flip(KEY_SELALT, [m2c, m2a])        # Port 2: Amiga
     assert s.sel[m1r] == 1
     walk(1, 1)                          # both switches shown
+    # background redraws (OPTM_SHOW and OPTM_SELECT, as when the status of a
+    # drive changes while the menu is open), each before the key acts: with
+    # the cursor on the line above a switch, on the switch and on the line
+    # below it, for both switches
+    s.until(KEY_DOWN, m1a)
+    for key, after in ((KEY_DOWN, m1r), (KEY_DOWN, m2c), (KEY_UP, m1r),
+                       (KEY_DOWN, m2c), (KEY_DOWN, m2a), (KEY_DOWN, m2r),
+                       (KEY_DOWN, back), (KEY_UP, m2r)):
+        s.feed(0x8000 | key)
+        assert s.cursor == after, "redraw + key went to %d" % s.cursor
+    view(1, 1)
     s.until(KEY_UP, m2r)
     flip(KEY_SELECT, [m2r])             # #2 on, #1 stays on
     flip(KEY_SELALT, [m2r])             # #2 off
@@ -2597,7 +2610,13 @@ def nav4_script():
     flip(KEY_SELECT, [m1c, m1a])        # Port 1: C64 hides #1, keeps its bit
     assert s.sel[m1r] == 1 and s.sel[m2r] == 1
     walk(0, 1)
-    s.until(KEY_DOWN, m2c)
+    # background redraws while #1 is hidden: the redraw does not bring it
+    # back, and the cursor still passes over its place
+    s.until(KEY_DOWN, m1a)
+    for key, after in ((KEY_DOWN, m2c), (KEY_UP, m1a), (KEY_DOWN, m2c)):
+        s.feed(0x8000 | key)
+        assert s.cursor == after, "redraw + key went to %d" % s.cursor
+    view(0, 1)
     flip(KEY_SELALT, [m2c, m2a])        # Port 2: C64 hides #2, keeps its bit
     assert s.sel[m1r] == 1 and s.sel[m2r] == 1
     walk(0, 0)                          # both hidden and on
@@ -4217,6 +4236,21 @@ RCLICK_MUTANTS += [
          _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n" + _X_COL + "\n"
          + _I16 + "XOR     R10, R10                ; R10: flat list item pos",
          _I16 + "MOVE    1, R9\n" + _I16 + "XOR     R10, R10                ; R10: flat list item pos"),
+    )
+]
+
+# OPTM_SELECT, which draws the cursor bar again after a background redraw
+# (scenario 4 sends keys with bit 15 around the switches)
+_SELECT_SEL = _I16 + "MOVE    OPTM_SEL_SEL, R9        ; R8 contains screen coords.\n"
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("R7  OPTM_SELECT draws the cursor bar one row too low", _SELECT_SEL,
+         _I16 + "ADD     1, R8\n" + _SELECT_SEL),
+        ("R8  OPTM_SELECT draws a headline highlight instead of the cursor bar",
+         _SELECT_SEL, _SELECT_SEL.replace("OPTM_SEL_SEL", "OPTM_SEL_TLL")),
+        ("R14 OPTM_SELECT draws no cursor bar",
+         _SELECT_SEL + _I16 + "RSUB    _OPTM_CALL, 1\n", _SELECT_SEL),
     )
 ]
 
