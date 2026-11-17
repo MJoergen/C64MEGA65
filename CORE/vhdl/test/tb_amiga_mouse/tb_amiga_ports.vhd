@@ -33,10 +33,13 @@
 -- G_PART = "identity": amiga_i = "00", random activity on all inputs, also on the two new ones.
 -- G_PART = "modes": all 32 combinations of flip_joys_i, amiga_i(0), amiga_i(1), joy_1_on and
 -- joy_2_on, switched while everything runs; amiga_rclick_i = "00" while mega_key_n_i toggles.
--- G_PART = "rule": G_EPISODES presses of the raw fire lines with random settings, key changes and
--- changes of the settings in the clock cycles around the edges of f (from three before to two
--- after), random key and settings changes during the presses, the port switcher, the on/off
--- switches, rare resets; the right buttons of the reference mice toggle on their own.
+-- G_PART = "rule": G_EPISODES episodes with random settings, of four kinds in turn: a press of
+-- socket 0, a press of socket 1, presses of both sockets a few clock cycles apart (both orders of
+-- pressing and of releasing), and one socket held for a whole press of the other (each socket in
+-- turn); key changes and changes of the settings in the clock cycles around every edge of f (from
+-- three before to two after, by rotation), random key and settings changes while buttons are held,
+-- the port switcher, the on/off switches, rare resets; the right buttons of the reference mice
+-- toggle on their own. The run fails if the observed coverage stays below C_MIN_COV.
 -- G_PART = "directed": the cases of SPEC.md section 5.1 one by one, each with explicit checks.
 --
 -- G_MODEL and G_IDENT switch the comparisons off, so that a mutant can show what the remaining checks
@@ -77,6 +80,10 @@ architecture sim of tb_amiga_ports is
    constant C_DB_LAT : time     := C_HALF + (C_DB + 2) * C_PERIOD;
 
    constant C_OWN_FIRE : boolean := G_PART = "rule" or G_PART = "directed";  -- stim drives the fire lines
+   -- part rule: each of the clock cycles c(-1), c(0) and c(1) around the edges of f needs this many
+   -- changes of the key and of the settings at a fall and at a rise of f, per socket; and as many right
+   -- clicks, left clicks, presses of each socket first, releases of each socket first and long presses
+   constant C_MIN_COV  : natural := 4;
    constant C_BG       : boolean := G_PART = "identity" or G_PART = "modes"; -- random key in the background
 
    signal clk        : std_logic := '0';
@@ -160,6 +167,17 @@ architecture sim of tb_amiga_ports is
          finish;
       end if;
    end procedure tb_error;
+
+   -- the four coverage counts of the part rule
+   function cov_name(h : natural) return string is
+   begin
+      case h is
+         when 0      => return "key at a fall of f";
+         when 1      => return "key at a rise of f";
+         when 2      => return "settings at a fall of f";
+         when others => return "settings at a rise of f";
+      end case;
+   end function cov_name;
 
    -- floor(dt / C_PERIOD)
    function cyc(dt : time) return integer is
@@ -756,6 +774,9 @@ begin
       variable nerr  : natural;
       variable nsw   : natural := 0;
       variable nrst  : natural := 0;
+      variable nlong : integer_vector(0 to 1) := (0, 0);   -- part rule: episodes with socket s held
+      variable nboth : integer_vector(0 to 1) := (0, 0);   -- part rule: both pressed, socket s first
+      variable nrelf : integer_vector(0 to 1) := (0, 0);   -- part rule: both pressed, socket s released first
       variable ncase : natural := 0;
       variable nexp  : natural := 0;
       variable te    : time_vector(0 to 1) := (others => 0 fs);   -- predicted fall of f per socket
@@ -922,8 +943,142 @@ begin
          expect(0, '1', '1', "after the press");
       end procedure key_at;
 
+      -- part rule: rotations per socket (index 4 * socket + kind; kinds 0 and 1: the key at a fall
+      -- and at a rise of f, 2 and 3: a setting at a fall and at a rise)
+      variable rot : integer_vector(0 to 7) := (others => 0);
+
+      -- part rule: changes around an edge of f of socket s at t_e (e = 0: fall, e = 1: rise): the key in
+      -- the clock cycle c(-3) .. c(2) that the rotation of the socket chooses, so that every one of
+      -- them is hit in turn, with a probability of 0.5 a second key change in a random one of these
+      -- cycles, and a change of the switch (with a probability of 0.2 of the Amiga setting instead) of
+      -- socket s in the clock cycle of a second rotation that runs the other way round
+      procedure around(s : natural; t_e : time; e : natural) is
+         variable dk : integer;
+         variable qq : real;
+      begin
+         dk := -3 + rot(4 * s + e) mod 6;
+         rot(4 * s + e) := rot(4 * s + e) + 1;
+         rand_real(r, 0.1, 0.9, qq);
+         ev_add(t_e + dk * C_PERIOD + qq * C_PERIOD, 0, 0);
+         rand(r, qq);
+         if qq < 0.5 then
+            rand_int(r, -3, 2, dk);
+            rand_real(r, 0.1, 0.9, qq);
+            ev_add(t_e + dk * C_PERIOD + qq * C_PERIOD, 0, 0);
+         end if;
+         dk := -3 + (5 * rot(4 * s + 2 + e)) mod 6;
+         rot(4 * s + 2 + e) := rot(4 * s + 2 + e) + 1;
+         rand(r, qq);
+         if qq < 0.8 then
+            ev_add(t_e + dk * C_PERIOD + C_HALF, 1, s);
+         else
+            ev_add(t_e + dk * C_PERIOD + C_HALF, 2, s);
+         end if;
+      end procedure around;
+
+      -- part rule: activity while buttons are held, for lo to hi milliseconds of the instances: the
+      -- key, rarely a setting, the port switcher, on/off, and if allowed a short reset
+      procedure hold(lo, hi : real; allow_reset : boolean) is
+         variable qq : real;
+         variable mm : integer;
+         variable te_hold : time;
+      begin
+         rand_real(r, lo, hi, qq);
+         te_hold := now + qq * C_MS;
+         while now < te_hold loop
+            rand_real(r, 0.05, 0.6, qq);
+            wait for qq * C_MS + qq * 1 ns;
+            rand(r, qq);
+            if qq < 0.6 then
+               key_st <= not key_st;
+            elsif qq < 0.7 then
+               rand_int(r, 0, 1, mm);
+               rclick_st(mm) <= not rclick_st(mm);
+            elsif qq < 0.75 then
+               rand_int(r, 0, 1, mm);
+               amiga(mm) <= not amiga(mm);
+            elsif qq < 0.78 then
+               flip <= not flip;
+            elsif qq < 0.81 then
+               on1 <= not on1;
+            elsif qq < 0.84 then
+               on2 <= not on2;
+            elsif qq < 0.85 and allow_reset then
+               reset_n <= '0';
+               rand_int(r, 2, 50, mm);
+               wait for mm * C_PERIOD;
+               reset_n <= '1';
+               nrst := nrst + 1;
+            end if;
+         end loop;
+      end procedure hold;
+
+      -- part rule: press the fire line of socket s with the changes around the fall of f
+      procedure rule_press(s : natural) is
+      begin
+         press_fire(s);
+         around(s, te(s), 0);
+         ev_run;
+         if te(s) + 4 * C_PERIOD > now then
+            wait for te(s) + 4 * C_PERIOD - now;
+         end if;
+         wait_f(s, '0');
+      end procedure rule_press;
+
+      -- part rule: release the fire line of socket s with the changes around the rise of f
+      procedure rule_release(s : natural) is
+      begin
+         release_fire(s);
+         around(s, now + C_DB_LAT, 1);
+         ev_run;
+      end procedure rule_release;
+
+      -- part directed: socket h is held while the key changes, then socket o is pressed; the decision for
+      -- o follows the key at its own press, whatever h does (flip_joys_i at '0': C64 port p is socket p)
+      procedure held_then_other(h, o : natural) is
+      begin
+         key_st <= '1';
+         wait for 0.3 * C_MS;
+         press_fire(h);
+         wait_f(h, '0');
+         expect(h, '1', '0', "socket " & integer'image(h) & " pressed without the key: left click");
+         key_st <= '0';
+         wait for 0.3 * C_MS;
+         press_fire(o);
+         wait_f(o, '0');
+         expect(o, '0', '1', "socket " & integer'image(o) & " pressed with the key while socket " &
+                integer'image(h) & " is held: right click");
+         expect(h, '1', '0', "socket " & integer'image(h) & " still a left click");
+         key_st <= '1';
+         wait for 0.3 * C_MS;
+         release_fire(o);
+         wait_f(o, '1');
+         release_fire(h);
+         wait_f(h, '1');
+         key_st <= '0';
+         wait for 0.3 * C_MS;
+         press_fire(h);
+         wait_f(h, '0');
+         expect(h, '0', '1', "socket " & integer'image(h) & " pressed with the key: right click");
+         key_st <= '1';
+         wait for 0.3 * C_MS;
+         press_fire(o);
+         wait_f(o, '0');
+         expect(o, '1', '0', "socket " & integer'image(o) & " pressed without the key while socket " &
+                integer'image(h) & " is held: left click");
+         expect(h, '0', '1', "socket " & integer'image(h) & " still a right click");
+         release_fire(o);
+         wait_f(o, '1');
+         release_fire(h);
+         wait_f(h, '1');
+         wait for 0.3 * C_MS;
+         expect(0, '1', '1', "all released");
+         expect(1, '1', '1', "all released");
+      end procedure held_then_other;
+
       variable k, d, m, dd : integer;
       variable sa          : natural;
+      variable sb          : natural;
       variable both        : boolean;
       variable tl          : time;
       variable t1          : time;
@@ -1002,109 +1157,71 @@ begin
             rand_real(r, 0.3, 1.0, q);
             wait for q * C_MS + q * 1 ns;
 
-            -- the press: socket 0, socket 1, or both (the second 0 to 4 clock cycles later)
-            rand_int(r, 0, 2, k);
+            -- the four kinds of episode in turn: k = 0 or 1: a press of socket k alone; k = 2: both
+            -- sockets, pressed 0 to 4 clock cycles apart and released 0 to 4 clock cycles apart, the
+            -- socket pressed first and the one released first in all four combinations in turn; k = 3:
+            -- one socket held for a whole press of the other, with the key changing in between, the held
+            -- socket alternating
+            k := (ep - 1) mod 4;
+            if k <= 1 then
+               sa := k;
+            else
+               sa := ((ep - 1) / 4) mod 2;     -- the socket that is pressed first, or held
+            end if;
+            sb   := 1 - sa;
             both := k = 2;
-            sa   := k mod 2;
-            rand_int(r, 0, 4, dd);
-            press_fire(sa);
-            if both then
-               ev_add(now + dd * C_PERIOD, 3, 1 - sa);
-               te(1 - sa) := te(sa) + dd * C_PERIOD;
-            end if;
-            -- one or two key changes in c(-3) .. c(2) of the first socket, one around the second
-            rand_int(r, 1, 2, m);
-            for i in 1 to m loop
-               rand_int(r, -3, 2, d);
-               rand_real(r, 0.1, 0.9, q);
-               ev_add(te(sa) + d * C_PERIOD + q * C_PERIOD, 0, 0);
-            end loop;
-            if both then
-               rand_int(r, -3, 2, d);
-               rand_real(r, 0.1, 0.9, q);
-               ev_add(te(1 - sa) + d * C_PERIOD + q * C_PERIOD, 0, 0);
-            end if;
-            -- a change of a switch or of an Amiga setting around the fall of f
-            rand(r, q);
-            if q < 0.4 then
-               rand_int(r, -3, 2, d);
-               m := sa;
-               rand(r, q);
-               if both and q < 0.5 then
-                  m := 1 - sa;
-               end if;
-               rand(r, q);
-               if q < 0.7 then
-                  ev_add(te(m) + d * C_PERIOD + C_HALF, 1, m);
-               else
-                  ev_add(te(m) + d * C_PERIOD + C_HALF, 2, m);
-               end if;
-            end if;
-            ev_run;
-            tl := te(sa);
-            if both and te(1 - sa) > tl then
-               tl := te(1 - sa);
-            end if;
-            if tl + 4 * C_PERIOD > now then
-               wait for tl + 4 * C_PERIOD - now;
-            end if;
-            wait_f(sa, '0');
-            if both then
-               wait_f(1 - sa, '0');
-            end if;
-
-            -- during the press: the key, rarely a setting, the port switcher, on/off, a reset
-            rand_real(r, 0.2, 3.0, q);
-            tl := now + q * C_MS;
-            while now < tl loop
-               rand_real(r, 0.05, 0.6, q);
-               wait for q * C_MS + q * 1 ns;
-               rand(r, q);
-               if q < 0.6 then
-                  key_st <= not key_st;
-               elsif q < 0.7 then
-                  rand_int(r, 0, 1, m);
-                  rclick_st(m) <= not rclick_st(m);
-               elsif q < 0.75 then
-                  rand_int(r, 0, 1, m);
-                  amiga(m) <= not amiga(m);
-               elsif q < 0.78 then
-                  flip <= not flip;
-               elsif q < 0.81 then
-                  on1 <= not on1;
-               elsif q < 0.84 then
-                  on2 <= not on2;
-               elsif q < 0.85 then
-                  reset_n <= '0';
-                  rand_int(r, 2, 50, m);
-                  wait for m * C_PERIOD;
-                  reset_n <= '1';
-                  nrst := nrst + 1;
-               end if;
-            end loop;
-
-            -- the release, with key and setting changes around the rise of f
-            release_fire(sa);
-            t1 := now;
-            if both then
+            if k <= 2 then
                rand_int(r, 0, 4, dd);
-               ev_add(now + dd * C_PERIOD, 4, 1 - sa);
-            end if;
-            rand_int(r, -3, 2, d);
-            rand_real(r, 0.1, 0.9, q);
-            ev_add(t1 + C_DB_LAT + d * C_PERIOD + q * C_PERIOD, 0, 0);
-            rand(r, q);
-            if q < 0.4 then
-               rand_int(r, -3, 2, d);
-               m := sa;
-               rand(r, q);
-               if q < 0.7 then
-                  ev_add(t1 + C_DB_LAT + d * C_PERIOD + C_HALF, 1, m);
-               else
-                  ev_add(t1 + C_DB_LAT + d * C_PERIOD + C_HALF, 2, m);
+               press_fire(sa);
+               around(sa, te(sa), 0);
+               if both then
+                  ev_add(now + dd * C_PERIOD, 3, sb);
+                  te(sb) := te(sa) + dd * C_PERIOD;
+                  around(sb, te(sb), 0);
                end if;
+               ev_run;
+               tl := te(sa);
+               if both and te(sb) > tl then
+                  tl := te(sb);
+               end if;
+               if tl + 4 * C_PERIOD > now then
+                  wait for tl + 4 * C_PERIOD - now;
+               end if;
+               wait_f(sa, '0');
+               if both then
+                  wait_f(sb, '0');
+               end if;
+               hold(0.2, 3.0, true);
+               -- the release, with changes around the rise of f
+               if both then
+                  m := ((ep - 1) / 8) mod 2;      -- the socket that is released first
+                  rand_int(r, 0, 4, dd);
+                  nrelf(m) := nrelf(m) + 1;
+                  release_fire(m);
+                  t1 := now;
+                  around(m, t1 + C_DB_LAT, 1);
+                  ev_add(t1 + dd * C_PERIOD, 4, 1 - m);
+                  around(1 - m, t1 + dd * C_PERIOD + C_DB_LAT, 1);
+                  ev_run;
+               else
+                  rule_release(sa);
+               end if;
+            else
+               -- socket sa held for a whole press of socket sb
+               rule_press(sa);
+               hold(0.1, 0.6, false);
+               key_st <= not key_st;
+               wait for 0.05 * C_MS;
+               rule_press(sb);
+               hold(0.2, 1.5, false);
+               rule_release(sb);
+               hold(1.2, 2.0, false);
+               rule_release(sa);
+               nlong(sa) := nlong(sa) + 1;
             end if;
-            ev_run;
+            if both then
+               nboth(sa) := nboth(sa) + 1;
+            end if;
             rand_real(r, 1.3, 2.5, q);
             wait for q * C_MS + q * 1 ns;
             rfire <= "11";
@@ -1127,17 +1244,26 @@ begin
                    integer'image(cov(s)(3)(-3)) & " " & integer'image(cov(s)(3)(-2)) & " " & integer'image(cov(s)(3)(-1)) & " " &
                    integer'image(cov(s)(3)(0)) & " " & integer'image(cov(s)(3)(1)) & " " & integer'image(cov(s)(3)(2)) & " " &
                    integer'image(cov(s)(3)(3)) severity note;
-            for dk in -1 to 1 loop
-               if cov(s)(0)(dk) < G_EPISODES / 25 or cov(s)(1)(dk) < G_EPISODES / 50 or
-                  cov(s)(2)(dk) < G_EPISODES / 100 then
-                  tb_error("socket " & integer'image(s) & ": too few changes in c(" & integer'image(dk) & ")");
-               end if;
+            for h in 0 to 3 loop
+               for dk in -1 to 1 loop
+                  if cov(s)(h)(dk) < C_MIN_COV then
+                     tb_error("socket " & integer'image(s) & ": " & integer'image(cov(s)(h)(dk)) & " changes of the " &
+                              cov_name(h) & " in c(" & integer'image(dk) & "), at least " &
+                              integer'image(C_MIN_COV) & " required");
+                  end if;
+               end loop;
             end loop;
-            if n_rc_press(s) < G_EPISODES / 8 or n_lc_press(s) < G_EPISODES / 8 then
-               tb_error("socket " & integer'image(s) & ": too few right or left clicks");
+            if n_rc_press(s) < C_MIN_COV or n_lc_press(s) < C_MIN_COV or nboth(s) < C_MIN_COV or
+               nrelf(s) < C_MIN_COV or nlong(s) < C_MIN_COV then
+               tb_error("socket " & integer'image(s) & ": too few right clicks, left clicks, first presses, first " &
+                        "releases or long presses (at least " & integer'image(C_MIN_COV) & " each)");
             end if;
          end loop;
-         report "TB: " & integer'image(G_EPISODES) & " episodes with " & integer'image(nrst) & " resets" severity note;
+         report "TB: " & integer'image(G_EPISODES) & " episodes with " & integer'image(nrst) & " resets; both sockets " &
+                "pressed: socket 0 first " & integer'image(nboth(0)) & " times, socket 1 first " & integer'image(nboth(1)) &
+                " times, socket 0 released first " & integer'image(nrelf(0)) & " times, socket 1 first " &
+                integer'image(nrelf(1)) & " times; socket 0 held for a whole press of socket 1 " & integer'image(nlong(0)) &
+                " times, the other way round " & integer'image(nlong(1)) & " times" severity note;
       elsif G_PART = "directed" then
          -- both sockets in Amiga mode with the switch on from power-up: nothing happens before a press
          settings("11", "11", '0', '1', '1');
@@ -1275,6 +1401,11 @@ begin
          key_st <= '1';
          wait_f(0, '1');
          wait_f(1, '1');
+
+         begin_case("socket 1 held, the key changed, then socket 0 pressed; and the other way round");
+         settings("11", "11", '0', '1', '1');
+         held_then_other(1, 0);
+         held_then_other(0, 1);
 
          begin_case("a socket in C64 mode with the switch on: a joystick fire stays a fire");
          settings("01", "11", '0', '1', '1');

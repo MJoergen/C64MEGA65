@@ -14,7 +14,8 @@
 --   key_pressed_n_o, capslock_n_o and qnice_keys_n_o of the DUT are those of m2m_keyb_prev
 -- * at every rising clock edge: mega_key_n_o is '0' or '1'; it changes only at an edge that ends a
 --   clock cycle in which key_num_o is 61; at such an edge with enable_core_i at '1' it takes the
---   value of key_pressed_n_o of that cycle; before the first such edge it is '1'
+--   value of key_pressed_n_o of that cycle; before the first such edge it is '1'; while
+--   enable_core_i is '0', key_pressed_n_o is '1'
 -- * the MEGA key in the model, pressed and released at random phases, with enable_core_i at '1'
 --   and at '0': mega_key_n_o follows within C_MAX_PRESS and C_MAX_RELEASE (the delays are measured
 --   and reported);
@@ -301,6 +302,9 @@ begin
                   std_logic'image(kp));
       elsif not seen and kn /= C_MEGA and mega_n /= '1' then
          tb_error("mega_key_n_o is not '1' before the first visit of the scan at key 61");
+      end if;
+      if en = '0' and kp /= '1' then
+         tb_error("key_pressed_n_o is " & std_logic'image(kp) & " while the core is decoupled");
       end if;
       if kn = C_MEGA then
          if not seen then

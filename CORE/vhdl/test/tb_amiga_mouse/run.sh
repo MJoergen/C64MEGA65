@@ -37,7 +37,7 @@
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
 # Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime of "all" about
-# 32 minutes with 2 processes (--jobs 2).
+# 35 minutes with 2 processes (--jobs 2).
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -210,7 +210,10 @@ if want ports; then
    job ports_modes     run "$M" tb_amiga_ports "-gG_PART=modes"
    job ports_rule_1    run "$M" tb_amiga_ports "-gG_PART=rule $TENTH -gG_SEED=1"
    job ports_rule_2    run "$M" tb_amiga_ports "-gG_PART=rule $TENTH -gG_SEED=2"
-   job ports_rule_pal  run "$M" tb_amiga_ports "-gG_PART=rule -gG_SEED=3 -gG_EPISODES=50"
+   job ports_rule_pal  run "$M" tb_amiga_ports "-gG_PART=rule -gG_SEED=3 -gG_EPISODES=80"
+   # the coverage check of the part rule has to fail when the run is too short
+   [ $MUTANTS -eq 1 ] &&
+      job mutant_rule_starved mutant "$M" tb_amiga_ports "-gG_PART=rule $TENTH -gG_EPISODES=6 -gG_STOP=true"
    job ports_directed  run "$M" tb_amiga_ports "-gG_PART=directed $TENTH"
    job ports_directed_pal run "$M" tb_amiga_ports "-gG_PART=directed"
 fi

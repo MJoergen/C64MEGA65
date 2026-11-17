@@ -626,7 +626,8 @@ begin
    joy_2_fire_n_o  <= main_joy2_fire_n_i;
 
 
-   -- M2M keyboard driver that outputs two distinct keyboard states: key_* for being used by the core and qnice_* for the firmware/Shell
+   -- M2M keyboard driver: key_* for the core's keyboard mapping and capslock_n_o for the core, qnice_* for the firmware/Shell,
+   -- and mega_key_n_o (the MEGA key) for the right click of Amiga mice in i_joy_debouncer
    i_m2m_keyb : entity work.m2m_keyb
       port map (
          clk_main_i           => main_clk_i,
