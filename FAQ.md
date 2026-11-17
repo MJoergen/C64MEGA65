@@ -143,6 +143,10 @@ button need a mouse or an adapter that drives their lines, or a small adapter
 with two pull-up resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7
 to pin 5 (the same devices that give you the right button in the Amiga core
 for the MEGA65).
+If you need a right click and have no such device, switch on the menu item
+"#1: MEGA+left = right" for port 1 or "#2: MEGA+left = right" for port 2
+(the "Mouse" submenu shows them while the port is set to "Amiga"): a click
+with the left mouse button while you hold the MEGA key is then a right click.
 With the setting "C64" an AMIGA mouse does not move the pointer and disturbs
 the keyboard, and with the setting "Amiga" a C64 mouse does not work.
 

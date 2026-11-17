@@ -34,9 +34,9 @@ The display is updated about four times per second (one pass of the loop takes a
 
 ## Do not touch the keyboard
 
-Touch no key while the program runs, except STOP. The keyboard shares its lines with the control ports: while port 1 is read, `$DC00` = 64 drives column 7 of the keyboard low (its bit 7 is 0), and a key of that column shows up as a line of port 1 (SPACE as 16, the key 1 as 1, the key 2 as 8, CTRL as 4, the left arrow as 2).
+Touch no key while the program runs, except STOP. The keyboard shares its lines with the control ports: while port 1 is read, `$DC00` = 64 drives column 7 of the keyboard low (its bit 7 is 0), and a key of that column shows up as a line of port 1 (SPACE as 16, the key 1 as 1, the key 2 as 8, CTRL as 4, the left arrow as 2). The Commodore key (the MEGA key of the MEGA65) is in that column too, but on a line that is not one of the five lines of a control port, so it does not show up: the test of the core's switch "MEGA+left = right" (Advanced Settings, Input Devices, Mouse) holds it on purpose.
 
-To end the program, press STOP and hold it until `BREAK` appears, which takes at most a quarter of a second. The KERNAL does not see STOP while a line of port 1 is low (it takes that for a second key in the same column), so release the joystick or the buttons of port 1 first. After STOP the keyboard works as usual; RUN starts the program again.
+To end the program, press STOP and hold it until `BREAK` appears, which takes at most a quarter of a second. The KERNAL does not see STOP while a line of port 1 is low (it takes that for a second key in the same column), so release the joystick or the buttons of port 1 first, and the Commodore key too (it is a key of that column). After STOP the keyboard works as usual; RUN starts the program again.
 
 ## Loading it
 

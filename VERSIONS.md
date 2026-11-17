@@ -69,7 +69,11 @@ Version 6 - MONTH DAY, 2026
   with it, for example GEOS. An original Amiga mouse has its left button
   only. The right and the middle button need a mouse or an adapter that
   drives their lines or a small adapter with two pull-up resistors, exactly
-  as in the Amiga core for the MEGA65.
+  as in the Amiga core for the MEGA65. If you need a right click without
+  such a device, switch on `#1: MEGA+left = right` for port 1 or
+  `#2: MEGA+left = right` for port 2 (the `Mouse` submenu shows these items
+  while the port is set to `Amiga`): a click with the left mouse button
+  while you hold the MEGA key is then a right click.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/190)
 
 * Atari CX30 paddles: Atari paddles have potentiometers of 1 MOhm instead of

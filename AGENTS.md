@@ -135,7 +135,8 @@ guide are the authority; upstream wiki text is background at best.
 │   │   ├── tdp_ram.vhd, 2port2clk_ram*.vhd  shared dual-port RAM building blocks
 │   │   ├── cdc_*.vhd, debounce.vhd, hdmi_flicker_free.vhd, axi_fifo*.vhd
 │   │   ├── debouncer.vhd   conditioning of the two joystick ports: 1 ms
-│   │   │                  debouncing, Amiga mice, port switcher, on/off
+│   │   │                  debouncing, Amiga mice (with the right click by
+│   │   │                  MEGA key + left button), port switcher, on/off
 │   │   ├── amiga_mouse.vhd Amiga mouse of one socket as a 1351: quadrature
 │   │   │                  decoder on the raw pins (section 3.9)
 │   │   ├── av_pipeline/   ← video pipeline (read this dir for any video issue):
@@ -301,13 +302,13 @@ the SD card.
   are overwritten. See "Register bank depth" in section 7.
 - The general stack of the Shell has 768 words (`STACK_SIZE` minus
   `B_STACK_SIZE` in `CORE/m2m-rom/m2m-rom.asm`), and nothing checks its depth.
-  `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (323),
-  and the deepest call chain uses 697 words: a CRT or PRG load in the visible
+  `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (325),
+  and the deepest call chain uses 701 words: a CRT or PRG load in the visible
   menu (the menu is redrawn while `OPTM_RUN` is on the stack). The opening of
   a file in a keyboard shortcut session (FAT32 code of the Monitor on top of
   `OPTM_RUN`) comes next. Every further menu line costs two words in the
   first chain and one in the second; `doc/dev-input/STATUS.md`, section 3,
-  has the numbers measured with 323 lines and `doc/dev-a22x3/STATUS.md`,
+  has the numbers measured with 325 lines and `doc/dev-a22x3/STATUS.md`,
   section 5.4, the call chains.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
@@ -418,6 +419,14 @@ caches to SD are handled by the Shell.
   values of a 1351, hides the direction lines from the C64 and derives the
   right and middle button from the measured paddle values. "Atari CX30" lets
   `mouse_input.vhdl` count twice as long and halve the result.
+- **Right click with the MEGA key** (the switches "#1: MEGA+left = right" and
+  "#2: MEGA+left = right" of the submenu "Mouse", shown while the port is set
+  to "Amiga"; `main_mouse_rclick_o` of `MEGA65_Core`): `m2m_keyb.vhd` delivers
+  the state of the MEGA key (`mega_key_n_o`), and `debouncer.vhd` reports a
+  press of the left button that begins while the key is held as the right
+  button (the up line) instead of the left one, with one flip-flop per socket
+  that holds the decision for the whole press (section 5.1 of the
+  specification). The C64 still sees the MEGA key as its Commodore key.
 - The board can only tell a paddle pin that is pulled up from one that is
   not: buttons that ground a paddle pin (Amiga right and middle button) are
   invisible unless the device holds the pin high while released.
@@ -1241,7 +1250,7 @@ hardware saw the code.
 | Cart won't autostart / can't be exited  | `main.vhd` `cpu_data_in_proc` ($8xxx mask), `cold_start_done` flag |
 | `.crt` unload (Space on `CRT:`) misbehaves | `UNLOAD_CRTROM` + `OSM_SEL_PRE` (`m2m-rom.asm`), `CRTROM_M_UNLD` (`crts-and-roms.asm`), `HANDLE_MOUNTING` (`shell.asm`), `req_eject` in `sw_cartridge_csr.vhd` / `crt_parser.vhd`; benches `CORE/vhdl/test/tb_crt_eject/run.sh` and `M2M/rom/tests/crt_unload_test.py` (issue #153) |
 | Keyboard                  | `keyboard.vhd`, `M2M/vhdl/m2m_keyb.vhd`                   |
-| Amiga mouse (setting "Amiga"): the pointer does not move or moves the wrong way, the keyboard is disturbed, a button is missing or stuck | `M2M/vhdl/amiga_mouse.vhd` (decoder, rate limiter, buttons on the paddle pins), `M2M/vhdl/debouncer.vhd` (masking of the direction lines, port switcher), `mega65.vhd` (`main_mouse_amiga_o`), section 3.9, `doc/dev-input/SPEC.md` sections 1 and 4; bench `CORE/vhdl/test/tb_amiga_mouse/`; on the hardware `tests/input-devices/inputmon.prg` shows what the C64 reads. Right and middle button need a device that holds pins 9 and 5 high while released; a USB adapter with a wheel can make the pointer twitch (the paddle discharge on pin 5 polls it) |
+| Amiga mouse (setting "Amiga"): the pointer does not move or moves the wrong way, the keyboard is disturbed, a button is missing or stuck, a left click with the MEGA key held is not a right click | `M2M/vhdl/amiga_mouse.vhd` (decoder, rate limiter, buttons on the paddle pins), `M2M/vhdl/debouncer.vhd` (masking of the direction lines, the right click with the MEGA key, port switcher), `M2M/vhdl/m2m_keyb.vhd` (`mega_key_n_o`), `mega65.vhd` (`main_mouse_amiga_o`, `main_mouse_rclick_o`), section 3.9, `doc/dev-input/SPEC.md` sections 1, 4 and 5.1; bench `CORE/vhdl/test/tb_amiga_mouse/`; on the hardware `tests/input-devices/inputmon.prg` shows what the C64 reads. Right and middle button need a device that holds pins 9 and 5 high while released; a USB adapter with a wheel can make the pointer twitch (the paddle discharge on pin 5 polls it) |
 | Paddles read wrong values, Atari CX30 paddles, a 1351 that jumps | `M2M/vhdl/controllers/M65/mouse_input.vhdl` (measurement, Atari mode, synchronizer of the comparator inputs), `qnice_wrapper.vhd` (inversion, port switcher), `framework.vhd` (`i_qnice2main_paddles`), `fpga64_sid_iec.vhd` (port selection), `mega65.vhd` (`qnice_paddle_atari_o`), `doc/dev-input/SPEC.md` section 6; bench `CORE/vhdl/test/tb_paddles/`. A 1351 needs the paddle setting "C64" of its port |
 | Reset / data corruption   | `main.vhd` RESET SEMANTICS block, `vdrives.vhd` (cache_dirty / prevent_reset) |
 | QNICE Shell behavior      | `M2M/rom/shell.asm` + neighbors; callbacks in `CORE/m2m-rom/m2m-rom.asm` |
