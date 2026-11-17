@@ -181,7 +181,7 @@ The entity keeps its name and its existing ports and gets new ones. All vectors 
 
 ### 5.1 Right click with the MEGA key
 
-The key: `m2m_keyb.vhd` has the output `mega_key_n_o` (low active), a register that takes over the state of key number 61, the MEGA key, whenever the scan of the keyboard is at that key (the scan visits every key 1000 times per second and debounces it). It is '1' from power-up until the first visit. Like `capslock_n_o` it does not depend on `enable_core_i`. `framework.vhd` connects it to `mega_key_n_i` of the debouncer; both are in the core clock domain. What the core gets from the keyboard (`key_num_o`, `key_pressed_n_o`) does not change: the C64 keeps seeing the key as its Commodore key.
+The key: `m2m_keyb.vhd` has the output `mega_key_n_o` (low active), a register that takes over the state of key number 61, the MEGA key, whenever the scan of the keyboard is at that key (the scan visits every key once per 1.11 ms, about 900 times per second, and debounces it). It is '1' from power-up until the first visit. The output follows a press of the key within 1.6 ms and a release within 2.7 ms: one frame of the serial keyboard link (0.46 ms) plus one scan, and for a release one more scan, because the scanner reports a release only after a whole scan without the key. Like `capslock_n_o` it does not depend on `enable_core_i`. `framework.vhd` connects it to `mega_key_n_i` of the debouncer; both are in the core clock domain. What the core gets from the keyboard (`key_num_o`, `key_pressed_n_o`) does not change: the C64 keeps seeing the key as its Commodore key.
 
 The rule, per socket s: let f be the debounced fire line of the socket (low active, the left button) and q a flip-flop of the socket that starts at '0' and has no reset.
 
