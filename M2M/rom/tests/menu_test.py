@@ -18,7 +18,9 @@ Usage:
                                   cross-check them against the golden model
     python3 menu_test.py mutate   inject behavior-changing edits into the
                                   dependency assembly and confirm the suite
-                                  catches every one (coverage proof for #229)
+                                  catches every one (coverage proof for #229);
+                                  edits of config.vhd / mega65.vhd must be
+                                  caught by verify
     python3 menu_test.py ghdl     drive the real config.vhd SEL_OPTM_DEPS
                                   decoder through ghdl and check the raw word
                                   against the model (skips if ghdl is absent;
@@ -79,6 +81,8 @@ G = dict(
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
     SC_F9=37, SC_F10=38, SC_F11=39, SC_F12=40, SC_F13=41, SC_F14=42,
+    MOUSE_P1=43, MOUSE_P2=44, PADDLES_P1=45, PADDLES_P2=46,
+    MOUSE_P1_RCLICK=47, MOUSE_P2_RCLICK=48,
 )
 
 OPEN = ("SUBMENU",)
@@ -281,6 +285,8 @@ V6_MENU = [
     (" On: MK3 & Std ROM",       "SIM_RRNET", []),
     (" On: MK3 & Custom ROM",    "SIM_RRNET", []),
     ("",                         None, ["LINE"]),
+    (" Input Devices",           None, ["HEADLINE"]),    # #142, #190, #193
+    ("",                         None, ["LINE"]),
     (" Keyboard Shortcuts",     None, OPEN),            # region 12 (in 10), #142
     (" Keyboard Shortcuts",     None, ["HEADLINE"]),
     ("",                        None, ["LINE"]),
@@ -382,6 +388,28 @@ V6_MENU = [
     (" Back",                   None, CLOSE),           # close region 18
     ("",                        None, ["LINE"]),
     (" Back",                   None, CLOSE),           # close region 12
+    (" Mouse",                   None, OPEN),            # region 19 (in 10), #190
+    (" Mouse",                   None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Port 1: C64",             "MOUSE_P1", ["STDSEL"]),
+    (" Port 1: Amiga",           "MOUSE_P1", []),
+    (" #1: MEGA+left = right",   "MOUSE_P1_RCLICK", ["SINGLESEL"]),   # dependent, #190
+    ("",                         None, ["LINE"]),
+    (" Port 2: C64",             "MOUSE_P2", ["STDSEL"]),
+    (" Port 2: Amiga",           "MOUSE_P2", []),
+    (" #2: MEGA+left = right",   "MOUSE_P2_RCLICK", ["SINGLESEL"]),   # dependent, #190
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 19
+    (" Paddles",                 None, OPEN),            # region 20 (in 10), #193
+    (" Paddles",                 None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
+    (" Port 1: C64",             "PADDLES_P1", ["STDSEL"]),
+    (" Port 1: Atari CX30",      "PADDLES_P1", []),
+    ("",                         None, ["LINE"]),
+    (" Port 2: C64",             "PADDLES_P2", ["STDSEL"]),
+    (" Port 2: Atari CX30",      "PADDLES_P2", []),
+    ("",                         None, ["LINE"]),
+    (" Back",                    None, CLOSE),           # close region 20
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 10
     ("",                         None, ["LINE"]),
@@ -414,7 +442,9 @@ def dep_value(gid, mask):
 # the V6 menu: the per-drive mount lines + internal-1581 status lines (#93)
 # and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229), plus
 # the "Turbo speed" block (separator, headline, 2x/3x/4x) that is only visible
-# while the turbo mode is C128 or Smart (#87): a mother in the same submenu
+# while the turbo mode is C128 or Smart (#87): a mother in the same submenu;
+# and the switch "MEGA+left = right" of each port in the Mouse submenu, only
+# visible while its port is set to Amiga, item 1 of its radio mother (#190)
 V6_DEPS = {
     2:  ("DRV8_MODE", 0b0011), 3: ("DRV8_MODE", 0b0100),
     4:  ("DRV9_MODE", 0b0011), 5: ("DRV9_MODE", 0b0100),
@@ -426,6 +456,7 @@ V6_DEPS = {
     61: ("MACHINE_MODE", 0b0001), 62: ("MACHINE_MODE", 0b0010),
     64: ("MACHINE_MODE", 0b0001), 65: ("MACHINE_MODE", 0b0010),
     81: ("MACHINE_MODE", 0b0001),
+    302: ("MOUSE_P1", 0b0010), 306: ("MOUSE_P2", 0b0010),
 }
 
 
@@ -512,6 +543,11 @@ def menu_masked(menu):
 
 def menu_stdsel(menu):
     return [1 if "STDSEL" in flags else 0 for _, _, flags in menu]
+
+
+def menu_lines(menu):
+    """The separator flags (OPTM_G_LINE), as SEL_OPTM_LINES serves them"""
+    return [1 if "LINE" in flags else 0 for _, _, flags in menu]
 
 
 def menu_special(menu):
@@ -1282,9 +1318,26 @@ def deps_minhid_fixtures():
 KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5, 6
 KEY_FIRST, KEY_LAST = 7, 8      # Cursor left / Cursor right (issue #258)
 
+# The screen of the nav testbed (screen trace of scenario 4): scenario 4
+# places the menu at the column NAV4_X and the row 0 (the Shell places it at
+# the right edge of the screen and at row 0, see SCR$OSM_O_X and SCR$OSM_O_Y
+# in screen.asm), so the marker column, which is also the first column of a
+# %s string, is NAV4_X + 1 (behind the frame). The record NT_REC of the
+# testbed draws the marker of a selected radio item as r and the marker of a
+# selected single-select item as s: two different characters, like
+# M2M$OPT_SEL_MULTI and M2M$OPT_SEL_SINGLE
+NAV4_X = 7
+NAV_COL = NAV4_X + 1
+NAV_MARK_RADIO, NAV_MARK_SINGLE = "r", "s"
+# OPTM_INIT of scenario 4: x, y, dx and dy of the menu (the frame)
+NAV_FRAME = (NAV4_X, 0, 30, 30)
+# the modes of OPTM_FP_SELECT (OPTM_SEL_* in menu.asm)
+SEL_STD, SEL_SEL, SEL_TLL = 0, 1, 2
+
 
 class NavSim:
-    def __init__(self, groups, stdsel, start, labels=None, raw_deps=None):
+    def __init__(self, groups, stdsel, start, labels=None, raw_deps=None,
+                 screen=False, lines=None):
         self.g = list(groups)
         self.sel = list(stdsel)
         self.n = len(groups)
@@ -1294,9 +1347,122 @@ class NavSim:
         self.trace = []
         self.keys = []
         self.resolved = resolve_deps(self.g, raw_deps) if raw_deps else None
+        # the separator flags that the testbed passes as the lines array of
+        # the init record (all 0 except in scenario 4)
+        self.lines = list(lines) if lines else [0] * self.n
+        # screen trace (scenario 4): the testbed prints a line for every call
+        # of a screen function (C clear, FR frame, D print, X printxy, L line,
+        # B select) and an M line behind every S line (the flat indices of
+        # all selected items). The model keeps the screen as these calls
+        # leave it: whether a frame was drawn since the last clear, the drawn
+        # lines, the first character of every printed string at its row, the
+        # rows of the separators and the mode of every position that
+        # OPTM_FP_SELECT set to a mode other than OPTM_SEL_STD
+        self.screen = screen
+        self._clear_screen()
 
     def _struct(self):
         return build_new(self.g, self.level, self.resolved, self.sel)
+
+    def _vis(self):
+        return [i for i, w in enumerate(self._struct()["arr"]) if w & 0x8000]
+
+    def _row(self, i):
+        """Screen row of line i in the current view, as _OPTM_R_F2M + 1 and
+        the y counter of OPTM_SHOW compute it (OPTM_Y is 0 in the testbed);
+        a hidden line has no row, the firmware ends in OPTM_F_F2M"""
+        vis = self._vis()
+        assert i in vis, "row of the hidden line %d" % i
+        return vis.index(i) + 1
+
+    def _clear_screen(self):
+        self.scr_frame = False
+        self.scr_vis = None
+        self.scr_mark = {}
+        self.scr_seps = set()
+        self.scr_attr = {}
+
+    def _pos(self, i):
+        """position of line i in the current view, counted from 0 (what
+        _OPTM_R_F2M returns and OPTM_FP_SELECT gets)"""
+        vis = self._vis()
+        assert i in vis, "position of the hidden line %d" % i
+        return vis.index(i)
+
+    def _printxy(self, row, text, col=NAV_COL):
+        self.trace.append("X X=%04X Y=%04X [%s]" % (col, row, text))
+        self.scr_mark[(row, col)] = text[:1]
+
+    def _bar(self, pos, mode):
+        """OPTM_FP_SELECT: the cursor bar (OPTM_SEL_SEL), its removal
+        (OPTM_SEL_STD) or a highlighted headline (OPTM_SEL_TLL)"""
+        self.trace.append("B P=%04X M=%04X" % (pos, mode))
+        if mode == SEL_STD:
+            self.scr_attr.pop(pos, None)
+        else:
+            self.scr_attr[pos] = mode
+
+    def _line(self, row):
+        self.trace.append("L Y=%04X" % row)
+        self.scr_seps.add(row)
+
+    def _loop_sel(self):
+        """the top of the main loop of OPTM_RUN draws the cursor bar on the
+        current line before it asks for the next key"""
+        if self.screen:
+            self._bar(self._pos(self.cursor), SEL_SEL)
+
+    def _marker(self, i):
+        """the marker of line i when it is selected: OPTM_SHOW and OPTM_RUN
+        take the single-select string for a line with the single-select
+        flag and the radio string otherwise"""
+        return NAV_MARK_SINGLE if self.g[i] & 0x8000 else NAV_MARK_RADIO
+
+    def _emit_m(self):
+        if self.screen:
+            self.trace.append("M" + "".join(" %04X" % i for i, v in
+                                            enumerate(self.sel) if v))
+
+    def _check_screen(self):
+        """What the screen shows after a key, derived from the state of the
+        model: a frame drawn after the last clear; exactly the visible lines
+        of the current view; in the marker column the marker of its type
+        (radio or single-select) in the row of every visible selected line
+        and in no other row; a separator in the row of every visible line
+        with the separator flag that is not selected and, in a submenu, in
+        the row below the last line if that row is at least two rows above
+        the bottom of the frame, and in no other row; the cursor bar on the
+        position of the cursor, the headline highlight on the position of
+        every visible headline and no other position in another mode than
+        OPTM_SEL_STD; and the cursor on a visible line. The column of the
+        strings is not part of this check: the model prints in NAV_COL only,
+        and the comparison of its X lines with the trace of the testbed is
+        what checks the column of the firmware."""
+        vis = self._vis()
+        assert self.scr_frame, "no frame since the last clear"
+        assert self.scr_vis == vis, (
+            "stale screen at level %d: drawn %r, visible %r"
+            % (self.level, self.scr_vis, vis))
+        seps = {row for row, i in enumerate(vis, 1)
+                if self.lines[i] and not self.sel[i]}
+        if self.level != 0 and \
+                len(vis) + 1 <= NAV_FRAME[1] + NAV_FRAME[3] - 3:
+            seps.add(len(vis) + 1)
+        assert self.scr_seps == seps, (
+            "separators in the rows %r, expected %r"
+            % (sorted(self.scr_seps), sorted(seps)))
+        attr = {p: SEL_TLL for p, i in enumerate(vis) if self.g[i] & 0x1000}
+        assert self.cursor in vis, "cursor on the hidden line %d" % self.cursor
+        attr[vis.index(self.cursor)] = SEL_SEL
+        assert self.scr_attr == attr, (
+            "cursor bar and highlights %r, expected %r"
+            % (sorted(self.scr_attr.items()), sorted(attr.items())))
+        for row, i in enumerate(vis, 1):
+            want = self._marker(i) if self.sel[i] else " "
+            got = self.scr_mark.get((row, NAV_COL), " ")
+            assert got == want, (
+                "row %d (line %d) shows %r, expected %r"
+                % (row, i, got, want))
 
     def _affects(self, w):
         """Port of OPTM_DEPS_AFFECTS: does group word w control a dependent?"""
@@ -1320,11 +1486,37 @@ class NavSim:
         %s and that is visible at the current level, the OPTM_CLBK_SHOW
         callback fires with the flat line index - the testbed stub prints
         one W line per call. This is the regression gate for the
-        percent-terminated-label desync bug in the OPTM_SHOW scanner."""
+        percent-terminated-label desync bug in the OPTM_SHOW scanner.
+        With the screen trace, OPTM_SHOW first draws the visible lines (D),
+        prints the string of each %s callback in its row (X) and then the
+        marker of every visible selected line (X), the single-select or the
+        radio marker by the type of the line."""
         arr = self._struct()["arr"]
+        vis = [i for i, w in enumerate(arr) if w & 0x8000]
+        if self.screen:
+            self.trace.append("C")              # OPTM_FP_CLEAR
+            self._clear_screen()
+            self.trace.append("FR X=%04X Y=%04X W=%04X H=%04X" % NAV_FRAME)
+            self.scr_frame = True
+            self.trace.append("D" + "".join(" %04X" % i for i in vis))
+            self.scr_vis = vis
+            for p, i in enumerate(vis):         # highlight the headlines
+                if self.g[i] & 0x1000:
+                    self._bar(p, SEL_TLL)
         for i, t in enumerate(self.labels):
             if "%s" in t and (arr[i] & 0x8000):
                 self.trace.append("W I=%04X" % i)
+                if self.screen:
+                    self._printxy(vis.index(i) + 1, t)
+        if self.screen:
+            for row, i in enumerate(vis, 1):    # markers and separators
+                if self.sel[i]:
+                    self._printxy(row, self._marker(i))
+                elif self.lines[i]:
+                    self._line(row)
+            row = len(vis) + 1                  # the line below a submenu
+            if self.level != 0 and row <= NAV_FRAME[1] + NAV_FRAME[3] - 3:
+                self._line(row)
 
     def _normalize(self):
         """Port of the _OPTM_RUN_INI* entry normalization that OPTM_RUN runs
@@ -1375,6 +1567,9 @@ class NavSim:
         does in production; OPTM_RUN then normalizes the entry cursor."""
         self._emit_w()
         self._normalize()
+        if self.screen:
+            self._loop_sel()
+            self._check_screen()
 
     def _move(self, step):
         c = self.cursor
@@ -1436,22 +1631,32 @@ class NavSim:
         if self.sel[self.cursor]:
             if w & 0x8000:                          # single-select: flip off
                 self.sel[self.cursor] = 0
+                if self.screen:                     # delete the marker
+                    self._printxy(self._row(self.cursor), " ")
                 self.trace.append("S G=%04X I=%04X K=%04X" % (w, 0, key))
+                self._emit_m()
                 if self._affects(w):                # toggled a mother: redraw
                     self._redraw()
             return None                             # multi already set: ignore
         if w & 0x8000:
+            if self.screen:                         # draw the marker
+                self._printxy(self._row(self.cursor), NAV_MARK_SINGLE)
             self.sel[self.cursor] = 1
             item = 1
         else:
             for j in range(self.n):                 # radio: clear whole group
                 if self.g[j] == w:
                     self.sel[j] = 0
+                    if self.screen:                 # delete each marker
+                        self._printxy(self._row(j), " ")
+            if self.screen:                         # draw the new one
+                self._printxy(self._row(self.cursor), NAV_MARK_RADIO)
             self.sel[self.cursor] = 1
             first = self.g.index(w)
             item = sum(1 for j in range(first, self.cursor)
                        if self.g[j] == w)
         self.trace.append("S G=%04X I=%04X K=%04X" % (w, item, key))
+        self._emit_m()
         if w == 0x00FF:
             return "close"
         if self._affects(w):                        # changed a mother: redraw
@@ -1463,8 +1668,10 @@ class NavSim:
         self._emit_k()                              # GETKEY trace happens
         self.keys.append(key)                       # before the key acts
         if key & 0x8000:                            # background redraw:
-            self._emit_w()                          # OPTM_SHOW runs first
+            self._emit_w()                          # OPTM_SHOW runs first,
+            self._loop_sel()                        # then OPTM_SELECT
         k = key & 0x7FFF
+        old = self.cursor
         if k == KEY_UP:
             self._move(-1)
         elif k == KEY_DOWN:
@@ -1486,6 +1693,11 @@ class NavSim:
             if self._select(k) == "close":
                 self.trace.append("R C=%04X" % self.cursor)
                 return "close"
+        if self.screen:
+            if k in (KEY_UP, KEY_DOWN, KEY_FIRST, KEY_LAST):
+                self._bar(self._pos(old), SEL_STD)  # remove the old bar
+            self._loop_sel()
+            self._check_screen()
         return None
 
     def until(self, key, target):
@@ -1870,8 +2082,74 @@ def nav_script():
     assert (s.level, s.cursor) == (12, f12)
     s.feed(KEY_MENUUP)              # pop to region 10
     assert (s.level, s.cursor) == (10, ks)
-    s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 167)
+    # Input Devices (#190, #193): the submenus Mouse and Paddles follow the
+    # Keyboard Shortcuts submenu in Advanced Settings. Each holds two radio
+    # groups of two items (port 1, port 2) that must not influence each
+    # other. Selecting an item that is already selected is silent (no S line
+    # in the trace), so a selection that wrongly cleared the other group would
+    # show up in the emulator trace as an extra S line.
+    mo = flat_index(" Mouse")                    # opener of region 19
+    pa = flat_index(" Paddles")                  # opener of region 20
+    adv_close = next(i for i in range(pa + 1, len(V6_MENU))
+                     if V6_MENU[i][0] == " Back"
+                     and submenu_path(V6_MENU, i) == [" Advanced Settings"])
+    m1c, m1a = group_members(V6_MENU, "MOUSE_P1")
+    m2c, m2a = group_members(V6_MENU, "MOUSE_P2")
+    m1r, = group_members(V6_MENU, "MOUSE_P1_RCLICK")
+    m2r, = group_members(V6_MENU, "MOUSE_P2_RCLICK")
+    p1c, p1a = group_members(V6_MENU, "PADDLES_P1")
+    p2c, p2a = group_members(V6_MENU, "PADDLES_P2")
+
+    def radio(on, off):
+        return s.sel[on] == 1 and s.sel[off] == 0
+
+    assert radio(m1c, m1a) and radio(m2c, m2a)   # factory defaults: C64
+    assert radio(p1c, p1a) and radio(p2c, p2a)
+    s.feed(KEY_DOWN)                # Keyboard Shortcuts -> Mouse
+    assert (s.level, s.cursor) == (10, mo)
+    s.feed(KEY_SELECT)              # enter region 19 (depth 2)
+    assert (s.level, s.cursor) == (19, m1c)      # " Port 1: C64"
+    s.feed(KEY_DOWN)                # " Port 1: Amiga"
+    s.feed(KEY_SELECT)              # radio-select it via Return
+    assert radio(m1a, m1c) and radio(m2c, m2a)   # port 2 stays C64
+    s.feed(KEY_DOWN)                # the switch of port 1: dependencies are
+    assert s.cursor == m1r          # off here, so it is always visible
+    s.feed(KEY_DOWN)                # skips the separator: " Port 2: C64"
+    assert s.cursor == m2c
+    s.feed(KEY_DOWN)                # " Port 2: Amiga"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert radio(m2a, m2c) and radio(m1a, m1c)   # port 1 stays Amiga
+    s.until(KEY_UP, m1a)            # back to " Port 1: Amiga"
+    s.feed(KEY_SELECT)              # still selected: silent
+    s.until(KEY_DOWN, m2c)          # " Port 2: C64"
+    s.feed(KEY_SELECT)              # port 2 back to C64, port 1 unchanged
+    assert radio(m2c, m2a) and radio(m1a, m1c)
+    s.feed(KEY_LAST)                # last item of the view: " Back"
+    assert (s.level, s.cursor) == (19, m2r + 2)
+    s.feed(KEY_SELECT)              # leave via the closer: Advanced Settings,
+    assert (s.level, s.cursor) == (10, mo)       # cursor on the opener
+    s.feed(KEY_DOWN)                # " Paddles"
+    assert s.cursor == pa
+    s.feed(KEY_SELECT)              # enter region 20 (depth 2)
+    assert (s.level, s.cursor) == (20, p1c)      # " Port 1: C64"
+    s.feed(KEY_LAST)                # " Back"
+    assert (s.level, s.cursor) == (20, p2a + 2)
+    s.feed(KEY_UP)                  # " Port 2: Atari CX30"
+    assert s.cursor == p2a
+    s.feed(KEY_SELECT)              # radio-select it via Return
+    assert radio(p2a, p2c) and radio(p1c, p1a)   # port 1 stays C64
+    s.until(KEY_UP, p1a)            # " Port 1: Atari CX30"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert radio(p1a, p1c) and radio(p2a, p2c)   # port 2 stays Atari
+    assert radio(m1a, m1c) and radio(m2c, m2a)   # the mouse groups unchanged
+    s.until(KEY_DOWN, p2a)          # " Port 2: Atari CX30"
+    s.feed(KEY_SELALT)              # still selected: silent
+    s.feed(KEY_MENUUP)              # Run/Stop: back to Advanced Settings,
+    assert (s.level, s.cursor) == (10, pa)       # cursor on the opener
+    s.feed(KEY_DOWN)                # the closer of Advanced Settings
+    assert s.cursor == adv_close
+    s.feed(KEY_SELECT)              # leave via the closer: main menu,
+    assert (s.level, s.cursor) == (0, 167)       # cursor on the opener
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -2031,6 +2309,7 @@ def menu_layout_errors():
         nav_turbo_v6_model()
     except AssertionError as e:
         errors.append("turbo toggle walk on the V6 menu: %s" % e)
+    errors += input_devices_errors()
     return errors
 
 
@@ -2204,12 +2483,195 @@ def nav3_script():
     return groups, stdsel, raw, s.keys, s.trace
 
 
+def mouse_view_lines(a1, a2):
+    """The lines of the V6 Mouse submenu view (headline to Back) while port 1
+    (a1) and port 2 (a2) are set to Amiga (1) or C64 (0): the switch
+    "MEGA+left = right" of a port directly behind its Amiga item, only while
+    that item is selected (#190)"""
+    mo = flat_index(" Mouse")
+    m1c, m1a = group_members(V6_MENU, "MOUSE_P1")
+    m2c, m2a = group_members(V6_MENU, "MOUSE_P2")
+    m1r, = group_members(V6_MENU, "MOUSE_P1_RCLICK")
+    m2r, = group_members(V6_MENU, "MOUSE_P2_RCLICK")
+    back = mouse_back()
+    return ([mo + 1, mo + 2, m1c, m1a] + ([m1r] if a1 else []) + [m1r + 1,
+            m2c, m2a] + ([m2r] if a2 else []) + [m2r + 1, back])
+
+
+def mouse_back():
+    """Flat index of the closer (" Back") of the V6 Mouse submenu"""
+    mo = flat_index(" Mouse")
+    return next(i for i in range(mo + 1, len(V6_MENU))
+                if tuple(V6_MENU[i][2]) == CLOSE
+                and submenu_path(V6_MENU, i) == [" Advanced Settings", " Mouse"])
+
+
+def nav4_script():
+    """Scenario 4: the complete V6 menu with the dependency feature on and
+    the screen trace on (see NavSim). It walks into the Mouse submenu and
+    proves the two switches "MEGA+left = right" (#190): hidden while their
+    port is C64, shown directly behind the Amiga item of their own port,
+    toggled by Return and Space, each changing exactly its own menu bit,
+    independent of each other and of the four radio groups of the Mouse and
+    Paddles submenus, keeping their bit while hidden and showing it again;
+    the cursor movement in all four visibility states; background redraws
+    with the cursor on a switch, on the lines above and below it and while
+    a switch is hidden; Back and Run/Stop.
+    The testbed starts from the factory defaults (no config file), so both
+    switches are off. Every key is checked against the screen model by
+    NavSim._check_screen(); the emulator trace has to match the model."""
+    labels = [t for t, _, _ in V6_MENU]
+    s = NavSim(menu_masked(V6_MENU), menu_stdsel(V6_MENU), nav_start(),
+               labels=labels, raw_deps=menu_deps_raw(V6_MENU, V6_DEPS),
+               screen=True, lines=menu_lines(V6_MENU))
+    adv = flat_index(" Advanced Settings")
+    mo = flat_index(" Mouse")
+    pa = flat_index(" Paddles")
+    m1c, m1a = group_members(V6_MENU, "MOUSE_P1")
+    m2c, m2a = group_members(V6_MENU, "MOUSE_P2")
+    m1r, = group_members(V6_MENU, "MOUSE_P1_RCLICK")
+    m2r, = group_members(V6_MENU, "MOUSE_P2_RCLICK")
+    p1c, p1a = group_members(V6_MENU, "PADDLES_P1")
+    back = mouse_back()
+
+    def flip(key, changed):
+        """press key and check that exactly the items in changed flip"""
+        before = list(s.sel)
+        assert s.feed(key) is None
+        diff = [i for i in range(s.n) if s.sel[i] != before[i]]
+        assert diff == sorted(changed), "key %d changed %r, expected %r" % (
+            key, diff, sorted(changed))
+
+    def view(a1, a2):
+        vis = s._vis()
+        assert vis == mouse_view_lines(a1, a2), (
+            "Mouse view %d/%d shows %r" % (a1, a2, vis))
+        if not a1:                      # behind " Port 1: Amiga": separator
+            assert labels[vis[vis.index(m1a) + 1]] == ""
+        return [i for i in vis if s.g[i] & 0x4000 or s.g[i] & 0xFF]
+
+    def walk(a1, a2):
+        """first and last item (#258), a full cycle down and up with the
+        wrap-around, over the place of every hidden line; ends on Back"""
+        order = view(a1, a2)
+        assert order[-1] == back
+        s.feed(KEY_FIRST)
+        assert s.cursor == order[0]
+        for c in order[1:] + order[:1]:
+            s.feed(KEY_DOWN)
+            assert s.cursor == c, "DOWN went to %d, expected %d" % (s.cursor, c)
+        s.feed(KEY_LAST)
+        assert s.cursor == back
+        for c in order[-2::-1] + order[-1:]:
+            s.feed(KEY_UP)
+            assert s.cursor == c, "UP went to %d, expected %d" % (s.cursor, c)
+
+    s.run_start()
+    assert s.sel[m1r] == 0 and s.sel[m2r] == 0  # factory defaults: off
+    s.until(KEY_DOWN, adv)
+    s.feed(KEY_SELECT)                  # enter Advanced Settings
+    adv_level = s.level
+    s.until(KEY_DOWN, mo)
+    s.feed(KEY_SELECT)                  # enter Mouse
+    level = s.level
+    assert s.cursor == m1c
+    walk(0, 0)                          # both C64: no switch shown
+    s.until(KEY_DOWN, m1a)              # wraps from Back
+    flip(KEY_SELECT, [m1c, m1a])        # Port 1: Amiga
+    walk(1, 0)                          # #1 directly behind it, #2 hidden
+    s.until(KEY_DOWN, m1r)
+    for key, on in ((KEY_SELECT, 1), (KEY_SELALT, 0), (KEY_SELALT, 1),
+                    (KEY_SELECT, 0), (KEY_SELALT, 1)):
+        flip(key, [m1r])                # Return and Space toggle #1 alone
+        assert s.sel[m1r] == on
+    s.until(KEY_DOWN, m2a)
+    flip(KEY_SELALT, [m2c, m2a])        # Port 2: Amiga
+    assert s.sel[m1r] == 1
+    walk(1, 1)                          # both switches shown
+    # background redraws (OPTM_SHOW and OPTM_SELECT, as when the status of a
+    # drive changes while the menu is open), each before the key acts: with
+    # the cursor on the line above a switch, on the switch and on the line
+    # below it, for both switches
+    s.until(KEY_DOWN, m1a)
+    for key, after in ((KEY_DOWN, m1r), (KEY_DOWN, m2c), (KEY_UP, m1r),
+                       (KEY_DOWN, m2c), (KEY_DOWN, m2a), (KEY_DOWN, m2r),
+                       (KEY_DOWN, back), (KEY_UP, m2r)):
+        s.feed(0x8000 | key)
+        assert s.cursor == after, "redraw + key went to %d" % s.cursor
+    view(1, 1)
+    s.until(KEY_UP, m2r)
+    flip(KEY_SELECT, [m2r])             # #2 on, #1 stays on
+    flip(KEY_SELALT, [m2r])             # #2 off
+    flip(KEY_SELECT, [m2r])             # #2 on
+    s.until(KEY_UP, m1r)
+    flip(KEY_SELALT, [m1r])             # #1 off, #2 stays on
+    flip(KEY_SELECT, [m1r])             # #1 on
+    s.until(KEY_UP, m1c)
+    flip(KEY_SELECT, [m1c, m1a])        # Port 1: C64 hides #1, keeps its bit
+    assert s.sel[m1r] == 1 and s.sel[m2r] == 1
+    walk(0, 1)
+    # background redraws while #1 is hidden: the redraw does not bring it
+    # back, and the cursor still passes over its place
+    s.until(KEY_DOWN, m1a)
+    for key, after in ((KEY_DOWN, m2c), (KEY_UP, m1a), (KEY_DOWN, m2c)):
+        s.feed(0x8000 | key)
+        assert s.cursor == after, "redraw + key went to %d" % s.cursor
+    view(0, 1)
+    flip(KEY_SELALT, [m2c, m2a])        # Port 2: C64 hides #2, keeps its bit
+    assert s.sel[m1r] == 1 and s.sel[m2r] == 1
+    walk(0, 0)                          # both hidden and on
+    s.until(KEY_DOWN, m1a)
+    flip(KEY_SELECT, [m1c, m1a])        # Port 1: Amiga: #1 shown, still on
+    view(1, 0)
+    s.feed(KEY_DOWN)
+    assert s.cursor == m1r
+    flip(KEY_SELECT, [m1r])             # off: the firmware had it on
+    assert s.sel[m1r] == 0
+    s.until(KEY_DOWN, m2a)
+    flip(KEY_SELECT, [m2c, m2a])        # Port 2: Amiga: #2 shown, still on
+    view(1, 1)
+    s.feed(KEY_DOWN)
+    assert s.cursor == m2r
+    flip(KEY_SELALT, [m2r])             # off: the firmware had it on
+    assert s.sel[m2r] == 0
+    flip(KEY_SELALT, [m2r])             # and on again
+    s.feed(KEY_LAST)
+    assert s.cursor == back
+    s.feed(KEY_SELECT)                  # leave via Back
+    assert (s.level, s.cursor) == (adv_level, mo)
+    s.feed(KEY_SELECT)                  # enter again: the state persists
+    assert (s.level, s.cursor) == (level, m1c)
+    view(1, 1)
+    s.until(KEY_DOWN, m2a)
+    s.feed(KEY_MENUUP)                  # Run/Stop: back to Advanced Settings
+    assert (s.level, s.cursor) == (adv_level, mo)
+    s.feed(KEY_DOWN)
+    assert s.cursor == pa
+    s.feed(KEY_SELECT)                  # enter Paddles
+    assert s.cursor == p1c
+    s.feed(KEY_DOWN)
+    flip(KEY_SELECT, [p1c, p1a])        # the paddle groups leave the
+    flip(KEY_SELECT, [])                # switches alone (already selected)
+    s.feed(KEY_UP)
+    flip(KEY_SELALT, [p1c, p1a])
+    s.feed(KEY_MENUUP)
+    assert (s.level, s.cursor) == (adv_level, pa)
+    s.feed(KEY_MENUUP)
+    assert (s.level, s.cursor) == (0, adv)
+    assert s.sel[m1r] == 0 and s.sel[m2r] == 1
+    r = s.feed(KEY_MENUUP)              # Run/Stop at main: close
+    assert r == "close"
+    return s.keys, s.trace
+
+
 def expect_nav():
     _, trace = nav_script()
     _, _, _, trace2 = nav2_script()
     _, _, _, _, trace3 = nav3_script()
+    _, trace4 = nav4_script()
     return ("\n".join(trace) + "\nN2\n" + "\n".join(trace2)
-            + "\nN3\n" + "\n".join(trace3) + "\nDONE\n")
+            + "\nN3\n" + "\n".join(trace3)
+            + "\nN4\n" + "\n".join(trace4) + "\nDONE\n")
 
 
 # ---------------------------------------------------------------------------
@@ -2336,6 +2798,18 @@ def emit_nav_asm(path):
     L.append("NAV3_SCRIPT_CNT .EQU %d" % len(keys3))
     L.append("NAV3_SCRIPT")
     L += dw_lines(keys3)
+    keys4, _ = nav4_script()
+    L.append("")
+    L.append("; scenario 4: the V6 menu of scenario 1 with the dependency feature")
+    L.append("; on and the screen trace on, see nav4_script() in menu_test.py")
+    L.append("NAV4_DEPS")                    # resolved dependency array
+    L += dw_lines(resolve_deps(g, menu_deps_raw(V6_MENU, V6_DEPS)))
+    L.append("NAV4_LINES")                   # separator flags
+    L += dw_lines(menu_lines(V6_MENU))
+    L.append("NAV4_X          .EQU %d" % NAV4_X)
+    L.append("NAV4_SCRIPT_CNT .EQU %d" % len(keys4))
+    L.append("NAV4_SCRIPT")
+    L += dw_lines(keys4)
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
 
@@ -2420,6 +2894,14 @@ C_MENU = [
     ("C_MENU_SC_F13",     "SC_F13", 0),   # first item ("Off") of the F13 picker (#142)
     ("C_MENU_SC_F14",     "SC_F14", 0),   # first item ("Off") of the F14 picker (#142)
     ("C_MENU_VOLUME_100",   "VOLUME", 0),   # 100%: first item of the volume radio group
+    # Input Devices (#190, #193): the non-default item of each radio group,
+    # pinned to its label and submenu by input_devices_errors() below
+    ("C_MENU_MOUSE_P1_AMIGA",   "MOUSE_P1", 1),     # Amiga mouse at port 1
+    ("C_MENU_MOUSE_P2_AMIGA",   "MOUSE_P2", 1),     # Amiga mouse at port 2
+    ("C_MENU_MOUSE_P1_RCLICK",  "MOUSE_P1_RCLICK", 0),  # MEGA+left = right, port 1
+    ("C_MENU_MOUSE_P2_RCLICK",  "MOUSE_P2_RCLICK", 0),  # MEGA+left = right, port 2
+    ("C_MENU_PADDLES_P1_ATARI", "PADDLES_P1", 1),   # Atari CX30 paddles at port 1
+    ("C_MENU_PADDLES_P2_ATARI", "PADDLES_P2", 1),   # Atari CX30 paddles at port 2
     # the simulated RR-Net is not a list of single C_MENU_* constants: mega65.vhd
     # decodes its three "On" items as one slice, see rrnet_range() below
 ]
@@ -2431,12 +2913,26 @@ def group_members(menu, gname):
 
 def c_menu_values():
     """name -> flat index in the V6 menu, derived independently from labels
-    and group ordinals."""
+    and group ordinals. An entry whose group has no member with its ordinal
+    is left out; c_menu_errors() reports it."""
     out = {}
     for name, gname, ordinal in C_MENU:
         members = group_members(V6_MENU, gname)
-        out[name] = members[ordinal]
+        if 0 <= ordinal < len(members):
+            out[name] = members[ordinal]
     return out
+
+
+def c_menu_errors():
+    """The C_MENU entries that c_menu_values() cannot resolve."""
+    errors = []
+    for name, gname, ordinal in C_MENU:
+        members = group_members(V6_MENU, gname)
+        if not 0 <= ordinal < len(members):
+            errors.append("%s: group %s has %d member(s) in the golden model, "
+                          "there is no item with the ordinal %d"
+                          % (name, gname, len(members), ordinal))
+    return errors
 
 
 def volume_indices():
@@ -2470,18 +2966,189 @@ def rrnet_range():
     return (m[-1], m[1])
 
 
+# The Input Devices section of Advanced Settings (#190, #193): each constant is
+# the flat index of the non-default item of a radio group of two. mega65.vhd
+# decodes only that bit, so a constant that points to the C64 item or to the
+# other port silently inverts or swaps a device. Pin each constant to its
+# label, its group, its submenu and its default partner directly in front of it.
+INPUT_DEVICES = [
+    # (constant, submenu, item label, group, label of the default item)
+    ("C_MENU_MOUSE_P1_AMIGA",   " Mouse",   " Port 1: Amiga",      "MOUSE_P1",   " Port 1: C64"),
+    ("C_MENU_MOUSE_P2_AMIGA",   " Mouse",   " Port 2: Amiga",      "MOUSE_P2",   " Port 2: C64"),
+    ("C_MENU_PADDLES_P1_ATARI", " Paddles", " Port 1: Atari CX30", "PADDLES_P1", " Port 1: C64"),
+    ("C_MENU_PADDLES_P2_ATARI", " Paddles", " Port 2: Atari CX30", "PADDLES_P2", " Port 2: C64"),
+]
+
+# the lines of the Advanced Settings view from the Input Devices headline on
+INPUT_DEVICES_VIEW = [" Input Devices", "", " Keyboard Shortcuts", " Mouse",
+                      " Paddles", "", " Back"]
+
+# The switches "MEGA+left = right" of the Mouse submenu (#190): each constant
+# is the flat index of a single-select item that is off by default, the only
+# member of its group, directly behind the Amiga item of its own port, and a
+# dependent line of the radio group of its own port that is visible only
+# while item 1 of that group (Amiga) is selected. mega65.vhd decodes the bit
+# as it is, so a constant that points to another line, a default that is on
+# or a dependency on the wrong port silently changes the mouse of a port.
+INPUT_RCLICK = [
+    # (constant, item label, group, constant of the Amiga item, mother group)
+    ("C_MENU_MOUSE_P1_RCLICK", " #1: MEGA+left = right", "MOUSE_P1_RCLICK",
+     "C_MENU_MOUSE_P1_AMIGA", "MOUSE_P1"),
+    ("C_MENU_MOUSE_P2_RCLICK", " #2: MEGA+left = right", "MOUSE_P2_RCLICK",
+     "C_MENU_MOUSE_P2_AMIGA", "MOUSE_P2"),
+]
+
+
+def submenu_path(menu, idx):
+    """Labels of the submenu openers that enclose line idx, outermost first
+    (an opener is not part of its own path, a closer is)."""
+    stack = []
+    for i in range(idx):
+        f = tuple(menu[i][2])
+        if f == OPEN:
+            stack.append(menu[i][0])
+        elif f == CLOSE:
+            stack.pop()
+    return stack
+
+
+def input_devices_errors():
+    """Structural checks of the Input Devices section on the golden model.
+    Returns a list of error strings."""
+    errors = []
+    menu = V6_MENU
+    vals = c_menu_values()
+    adv = " Advanced Settings"
+    for name, sub, label, gname, dlabel in INPUT_DEVICES:
+        if name not in vals:
+            errors.append("%s cannot be resolved in the golden model (see the "
+                          "C_MENU errors)" % name)
+            continue
+        v = vals[name]
+        t, g, f = menu[v]
+        if (t, g) != (label, gname) or "STDSEL" in f:
+            errors.append("%s = %d points to %r (group %s, flags %r), expected "
+                          "the non-default %r of %s" % (name, v, t, g, f, label, gname))
+        if submenu_path(menu, v) != [adv, sub]:
+            errors.append("%s = %d is in the submenu path %r, expected %r"
+                          % (name, v, submenu_path(menu, v), [adv, sub]))
+        mem = group_members(menu, gname)
+        if mem != [v - 1, v]:
+            errors.append("group %s has the members %r, expected the default "
+                          "directly followed by %s = %d" % (gname, mem, name, v))
+        elif menu[v - 1][0] != dlabel or "STDSEL" not in menu[v - 1][2]:
+            errors.append("group %s: line %d is %r %r, expected the default %r"
+                          % (gname, v - 1, menu[v - 1][0], menu[v - 1][2], dlabel))
+    for sub in (" Mouse", " Paddles"):
+        op = [i for i, (t, _, f) in enumerate(menu) if t == sub and tuple(f) == OPEN]
+        if len(op) != 1:
+            errors.append("%d openers %r, expected one" % (len(op), sub))
+        elif submenu_path(menu, op[0]) != [adv]:
+            errors.append("opener %r is in %r, expected %r"
+                          % (sub, submenu_path(menu, op[0]), [adv]))
+    g = menu_masked(menu)
+    opener = flat_index(adv)
+    level = build_new(g, 0)["arr"][opener] & 0x7FFF
+    vis = visible_lines(g, level, None, menu_stdsel(menu))
+    labels = [menu[i][0] for i in vis]
+    if " Input Devices" not in labels:
+        errors.append("no Input Devices headline in the Advanced Settings view")
+    else:
+        tail = labels[labels.index(" Input Devices"):]
+        if tail != INPUT_DEVICES_VIEW:
+            errors.append("Advanced Settings view from Input Devices on: %r, "
+                          "expected %r" % (tail, INPUT_DEVICES_VIEW))
+    errors += input_rclick_errors()
+    return errors
+
+
+def input_rclick_errors():
+    """Checks of the two switches "MEGA+left = right" on the golden model
+    (see INPUT_RCLICK): the items themselves, their dependency, the Mouse
+    view in every state of the two mothers and the two switches, and the
+    walk of scenario 4 (nav4_script). Returns a list of error strings."""
+    import itertools
+    errors = []
+    menu = V6_MENU
+    vals = c_menu_values()
+    path = [" Advanced Settings", " Mouse"]
+    for name, label, gname, amiga, mother in INPUT_RCLICK:
+        if name not in vals or amiga not in vals:
+            errors.append("%s or %s cannot be resolved in the golden model "
+                          "(see the C_MENU errors)" % (name, amiga))
+            continue
+        v = vals[name]
+        t, grp, f = menu[v]
+        if (t, grp, list(f)) != (label, gname, ["SINGLESEL"]):
+            errors.append("%s = %d is %r (group %s, flags %r), expected the "
+                          "single-select item %r of %s that is off by default"
+                          % (name, v, t, grp, list(f), label, gname))
+        if group_members(menu, gname) != [v]:
+            errors.append("group %s has the members %r, expected only %s = %d"
+                          % (gname, group_members(menu, gname), name, v))
+        if submenu_path(menu, v) != path:
+            errors.append("%s = %d is in the submenu path %r, expected %r"
+                          % (name, v, submenu_path(menu, v), path))
+        if vals[amiga] != v - 1:
+            errors.append("%s = %d is not directly behind %s = %d"
+                          % (name, v, amiga, vals[amiga]))
+        mem = group_members(menu, mother)
+        if V6_DEPS.get(v) != (mother, 0b0010) or len(mem) != 2 \
+                or mem[1] != vals[amiga]:
+            errors.append("%s = %d depends on %r, expected item 1 (%s = %d) "
+                          "of %s only, mask 0b0010"
+                          % (name, v, V6_DEPS.get(v), amiga, vals[amiga], mother))
+    if errors:
+        return errors
+    # the Mouse view in all states of the two mothers and the two switches:
+    # a switch is shown exactly while its own port is set to Amiga
+    g = menu_masked(menu)
+    res = resolve_deps(g, menu_deps_raw(menu, V6_DEPS))
+    mo = flat_index(" Mouse")
+    level = build_new(g, 0)["arr"][flat_index(" Advanced Settings")] & 0x7FFF
+    level = build_new(g, level)["arr"][mo] & 0x7FFF
+    m1 = group_members(menu, "MOUSE_P1")
+    m2 = group_members(menu, "MOUSE_P2")
+    r1, r2 = vals["C_MENU_MOUSE_P1_RCLICK"], vals["C_MENU_MOUSE_P2_RCLICK"]
+    for a1, a2, s1, s2 in itertools.product((0, 1), repeat=4):
+        s = menu_stdsel(menu)
+        s[m1[0]], s[m1[1]] = 1 - a1, a1
+        s[m2[0]], s[m2[1]] = 1 - a2, a2
+        s[r1], s[r2] = s1, s2
+        vis = visible_lines(g, level, res, s)
+        if vis != mouse_view_lines(a1, a2):
+            errors.append("Mouse view with port 1 %s, port 2 %s, switches "
+                          "%d/%d: lines %r, expected %r"
+                          % ("Amiga" if a1 else "C64", "Amiga" if a2 else "C64",
+                             s1, s2, vis, mouse_view_lines(a1, a2)))
+    try:
+        nav4_script()
+    except (AssertionError, ValueError, IndexError, StopIteration) as e:
+        errors.append("walk through the Mouse submenu (scenario 4): %s: %s"
+                      % (type(e).__name__, e))
+    return errors
+
+
 def vhdl_tb_vectors():
     """(28-bit address, expected 16-bit data) pairs for the SEL_OPTM_DEPS
     decoder, derived from the golden model. Closes the VHDL->QNICE raw-word
     contract that verify()/run() otherwise never exercise (#2). Every line
     of the menu is probed, not only the V6_DEPS lines: a dependency that
     config.vhd declares but the model does not track reads back as a
-    non-zero word where the model expects 0x0000."""
+    non-zero word where the model expects 0x0000. Every line is also probed
+    through SEL_OPTM_GROUPS, SEL_OPTM_STDSEL and SEL_OPTM_SINGLESEL."""
     raw = menu_deps_raw(V6_MENU, V6_DEPS)
     SEL = 0x0313
     vecs = []
     for idx in range(len(V6_MENU)):               # every line: dependent or 0
         vecs.append((SEL << 12 | idx, raw[idx]))
+    # every line through SEL_OPTM_GROUPS (the 16-bit view of the firmware),
+    # SEL_OPTM_STDSEL (the factory default that the Shell uses without a
+    # config file) and SEL_OPTM_SINGLESEL
+    for idx, w in enumerate(menu_words(V6_MENU, V6_DEPS)):
+        vecs.append((0x0301 << 12 | idx, masked(w)))
+        vecs.append((0x0302 << 12 | idx, (w >> 8) & 1))
+        vecs.append((0x0307 << 12 | idx, (w >> 15) & 1))
     vecs.append((SEL << 12 | 0xFFF, 0x2DEF))      # feature probe: dep format 2
     vecs.append((0x0305 << 12 | 0, len(V6_MENU))) # SEL_OPTM_ICOUNT: full 16 bits
     vecs.append((0x0999 << 12 | 0, 0xEEEE))       # unknown selector -> default
@@ -2589,8 +3256,8 @@ def vhdl_check():
             return 1
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    print("VHDL DECODER TB: OK (config.vhd SEL_OPTM_DEPS decoder matches model,"
-          " %d vectors)" % len(vhdl_tb_vectors()))
+    print("VHDL DECODER TB: OK (config.vhd SEL_OPTM_DEPS, GROUPS, STDSEL and "
+          "SINGLESEL decoders match the model, %d vectors)" % len(vhdl_tb_vectors()))
     return 0
 
 
@@ -2613,7 +3280,12 @@ def vhdl_blocks():
     out.append("constant %-33s: natural := %d;"
                % ("C_MENU_DRV9_1581_LN", flat_index(" 9:Internal 1581        ")))
     for name, gname, ordinal in C_MENU:
-        out.append("constant %-33s: natural := %d;" % (name, vals[name]))
+        if name in vals:
+            out.append("constant %-33s: natural := %d;" % (name, vals[name]))
+        else:
+            out.append("-- %s: no line in the golden model" % name)
+    for e in c_menu_errors():
+        out.append("-- ERROR: " + e)
     lo, hi = osm_scaling_range()[1], osm_scaling_range()[0]
     out.append("subtype C_MENU_OSM_SCALING is natural range %d downto %d;"
                % (hi, lo))
@@ -2691,6 +3363,223 @@ def config_deps_errors(entries, vals):
     return errors, found
 
 
+def config_groups(cfg):
+    """The OPTM_GROUPS array of config.vhd (cfg without comments): returns
+    (source expression per line, evaluated value per line, errors), or
+    (None, None, []) if the array is not found."""
+    m = re.search(r"constant\s+OPTM_GROUPS\s*:\s*OPTM_GTYPE\s*:=\s*\((.*?)\);",
+                  cfg, re.S)
+    if not m:
+        return None, None, []
+    errors = []
+    body = re.sub(r"--[^\n]*", "", m.group(1))
+    # split on top-level commas only: an entry may contain commas inside
+    # an OPTM_DEP(mother, item) / OPTM_DEP2(mother, a, b) call
+    entries, depth, cur = [], 0, ""
+    for ch in body:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            if cur.strip():
+                entries.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        entries.append(cur.strip())
+    env = dict(parse_vhdl_constants(cfg, "OPTM_G_"))
+    env.update(parse_vhdl_constants(cfg, "OPTM_G"))
+    # dependency format 2 helpers: a 4-bit item MASK in bits 28..25
+    env["OPTM_DEP"] = lambda m, i: dep_value(m, 2 ** i)
+    env["OPTM_DEP2"] = lambda m, a, b: dep_value(m, 2 ** a + 2 ** b)
+    vals = []
+    for e in entries:
+        try:
+            # parenthesize: an entry may span multiple source lines
+            vals.append(eval("(" + e.replace("16#", "0x").replace("#", "")
+                             + ")", {}, env))
+        except Exception:
+            errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
+            vals.append(-1)
+    return entries, vals, errors
+
+
+def config_items(cfg):
+    """The OPTM_ITEMS string of config.vhd (cfg without comments) as the
+    Shell reads it through the config window: VHDL has no escapes in string
+    literals, so every "\\n" is two characters. None if it is not found."""
+    m = re.search(r"constant\s+OPTM_ITEMS\s*:\s*string\s*:=(.*?);", cfg, re.S)
+    if not m:
+        return None
+    parts = re.findall(r'"((?:[^"]|"")*)"', m.group(1))
+    return "".join(p.replace('""', '"') for p in parts)
+
+
+# ---------------------------------------------------------------------------
+# The menu heap of the Shell (MENU_HEAP_SIZE and HEAP_SIZE in
+# CORE/m2m-rom/m2m-rom.asm), computed from the real menu of config.vhd and
+# globals.vhd exactly as HELP_MENU in M2M/rom/options.asm allocates it:
+#   structure: OPTM_STRUCTSIZE (record) + OPTM_ITEMS + 1 (zero terminator)
+#              + 4 x OPTM_SIZE (groups, stdsel, lines, dependencies) + 1
+#   slots:     (2 x C_VDNUM + submenu openers + C_CRTROMS_MAN_NUM) x
+#              (OPTM_DX + 2), for the "%s" texts and one parking slot per drive
+# A MENU_HEAP_SIZE that is too small ends in ERR_FATAL_HEAP1 or
+# ERR_FATAL_HEAP2 at the first press of Help; a HEAP_SIZE that is too large
+# lets the heap of the file browser run into the stack.
+# ---------------------------------------------------------------------------
+
+MENU_HEAP_HEADROOM = 180        # words that MENU_HEAP_SIZE keeps free at peak
+# MENU_HEAP_SIZE + HEAP_SIZE in each branch of m2m-rom.asm (see the comments
+# at HEAP_SIZE and at the stack there): firmware in ROM (RELEASE) or in RAM
+HEAP_TOTAL = {"RELEASE": 30208, "not RELEASE": 7168}
+
+
+def heap_branches(asm):
+    """The HEAP_SIZE definitions of m2m-rom.asm per preprocessor branch:
+    {"RELEASE": [(value, line)], "not RELEASE": [...], "unconditional": [...]}"""
+    out = {"RELEASE": [], "not RELEASE": [], "unconditional": []}
+    stack = []
+    for line in asm.split("\n"):
+        t = line.strip()
+        m = re.match(r"#(ifdef|ifndef)\s+(\w+)", t)
+        if m:
+            stack.append((m.group(2), m.group(1) == "ifdef"))
+            continue
+        if re.match(r"#if\b", t):
+            stack.append((None, True))
+            continue
+        if re.match(r"#else\b", t) and stack:
+            name, pos = stack.pop()
+            stack.append((name, not pos))
+            continue
+        if re.match(r"#endif\b", t) and stack:
+            stack.pop()
+            continue
+        m = re.match(r"HEAP_SIZE\s+\.EQU\s+(\d+)", line)
+        if m:
+            rel = [pos for name, pos in stack if name == "RELEASE"]
+            key = ("unconditional" if not rel else
+                   "RELEASE" if rel[-1] else "not RELEASE")
+            out[key].append((int(m.group(1)), line))
+    return out
+
+
+def heap_check():
+    """Returns (errors, numbers) of the menu heap check, see above."""
+    errors = []
+    cfg = re.sub(r"--[^\n]*", "", open(os.path.join(REPO, "CORE/vhdl/config.vhd")).read())
+    glb = re.sub(r"--[^\n]*", "", open(os.path.join(REPO, "CORE/vhdl/globals.vhd")).read())
+    asm = open(os.path.join(REPO, "CORE/m2m-rom/m2m-rom.asm")).read()
+    masm = open(os.path.join(REPO, "M2M/rom/menu.asm")).read()
+
+    def one(rx, text, what):
+        found = re.findall(rx, text, re.M)
+        if len(found) != 1:
+            errors.append("%s: found %d times, expected once" % (what, len(found)))
+            return None
+        return found[0]
+
+    oc = parse_vhdl_constants(cfg, "OPTM_")
+    gc = parse_vhdl_constants(glb, "C_")
+    n, dx = oc.get("OPTM_SIZE"), oc.get("OPTM_DX")
+    vd, crt = gc.get("C_VDNUM"), gc.get("C_CRTROMS_MAN_NUM")
+    rec = one(r"^OPTM_STRUCTSIZE\s+\.EQU\s+(\d+)", masm, "M2M/rom/menu.asm: OPTM_STRUCTSIZE")
+    items = config_items(cfg)
+    entries, vals, _ = config_groups(cfg)
+    mhs = one(r"^MENU_HEAP_SIZE\s+\.EQU\s+(\d+)", asm, "m2m-rom.asm: MENU_HEAP_SIZE")
+    if None in (n, dx, vd, crt, rec, items, entries, mhs):
+        errors.append("menu heap: cannot read OPTM_SIZE, OPTM_DX, OPTM_ITEMS, "
+                      "OPTM_GROUPS, C_VDNUM, C_CRTROMS_MAN_NUM, OPTM_STRUCTSIZE "
+                      "or MENU_HEAP_SIZE")
+        return errors, {}
+    rec, mhs = int(rec), int(mhs)
+    if len(vals) != n:
+        errors.append("menu heap: OPTM_GROUPS has %d entries, OPTM_SIZE is %d"
+                      % (len(vals), n))
+    strlen = len(items)
+    openers = sum(1 for v in vals if v >= 0 and (v & SUBMENU) and not (v & 0xFF))
+    structure = rec + strlen + 1 + 4 * n + 1
+    slots = 2 * vd + openers + crt
+    width = dx + 2
+    budget2 = slots * width
+    peak = structure + budget2
+    num = dict(items=n, submenus=openers, chars=strlen, record=rec + 2,
+               structure=structure, slots=slots, width=width, budget2=budget2,
+               peak=peak, menu_heap=mhs, headroom=mhs - peak, heap={})
+
+    # (a) the peak fits with the required headroom
+    if peak + MENU_HEAP_HEADROOM > mhs:
+        errors.append("menu heap: peak %d (structure %d + slots %d) leaves %d "
+                      "words of MENU_HEAP_SIZE %d, at least %d are required"
+                      % (peak, structure, budget2, mhs - peak, mhs,
+                         MENU_HEAP_HEADROOM))
+    # (b) MENU_HEAP_SIZE + HEAP_SIZE in each branch
+    br = heap_branches(asm)
+    if br["unconditional"]:
+        errors.append("m2m-rom.asm: HEAP_SIZE outside of the RELEASE branches")
+    for key, total in HEAP_TOTAL.items():
+        if len(br[key]) != 1:
+            errors.append("m2m-rom.asm: %d HEAP_SIZE definitions in the %s "
+                          "branch, expected one" % (len(br[key]), key))
+            continue
+        hs, line = br[key][0]
+        num["heap"][key] = hs
+        if mhs + hs != total:
+            errors.append("m2m-rom.asm (%s): MENU_HEAP_SIZE %d + HEAP_SIZE %d = "
+                          "%d, expected %d" % (key, mhs, hs, mhs + hs, total))
+        m = re.search(r";\s*(\d+)\s*-\s*(\d+)\s*=\s*(\d+)", line)
+        if not m or tuple(map(int, m.groups())) != (total, mhs, hs):
+            errors.append("m2m-rom.asm (%s): the comment of HEAP_SIZE is %r, "
+                          "expected \"%d - %d = %d\"" % (key, line.split(";", 1)[-1].strip(),
+                                                         total, mhs, hs))
+    # (c) the numbers in the comment above MENU_HEAP_SIZE and at the stack
+    lines = asm.split("\n")
+    at = [i for i, l in enumerate(lines) if re.match(r"MENU_HEAP_SIZE\s+\.EQU", l)][0]
+    k = at
+    while k > 0 and lines[k - 1].lstrip().startswith(";"):
+        k -= 1
+    text = " ".join(l.strip().lstrip(";").strip() for l in lines[k:at])
+    total = HEAP_TOTAL["RELEASE"]
+    sentences = [
+        ("the example", r"Example: If your HEAP_SIZE would be (\d+), then you "
+         r"write (\d+)-(\d+)=(\d+)", (total, total, mhs, total - mhs)),
+        ("the menu and budget 1", r"(\d+) words comfortably fit the current menu: "
+         r"(\d+) items, (\d+) submenus and a (\d+)-character OPTM_ITEMS string "
+         r"give budget 1 = (\d+) \+ (\d+) \+ 4\s*\*\s*(\d+) = (\d+)",
+         (mhs, n, openers, strlen, rec + 2, strlen, n, structure)),
+        ("budget 2", r"OSM width = (\d+) x (\d+) = (\d+) words", (slots, width, budget2)),
+        ("peak and headroom", r"Peak use is (\d+) \+ (\d+) = (\d+), leaving (\d+) "
+         r"words of headroom", (structure, budget2, peak, mhs - peak)),
+        ("the length of OPTM_ITEMS", r"below 4096 characters \((\d+) now\)", (strlen,)),
+    ]
+    for what, rx, exp in sentences:
+        found = re.findall(rx, text)
+        if len(found) != 1:
+            errors.append("comment above MENU_HEAP_SIZE: %s found %d times, "
+                          "expected once" % (what, len(found)))
+            continue
+        got = tuple(int(x) for x in (found[0] if isinstance(found[0], tuple)
+                                     else (found[0],)))
+        if got != exp:
+            errors.append("comment above MENU_HEAP_SIZE, %s: %r, the menu gives %r"
+                          % (what, got, exp))
+    today = one(r"\((\d+) lines today\)", asm, "m2m-rom.asm: \"(N lines today)\" at the stack")
+    if today is not None and int(today) != n:
+        errors.append("m2m-rom.asm, comment at the stack: %s lines today, the "
+                      "menu has %d" % (today, n))
+    return errors, num
+
+
+def heap_summary(num):
+    return ("menu heap: structure %d + slots %d x %d = %d words at peak of "
+            "MENU_HEAP_SIZE %d (headroom %d, at least %d), HEAP_SIZE %s"
+            % (num["structure"], num["slots"], num["width"], num["peak"],
+               num["menu_heap"], num["headroom"], MENU_HEAP_HEADROOM,
+               " / ".join("%d (%s)" % (v, k) for k, v in num["heap"].items())))
+
+
 def verify():
     errors = []
     cfg_deps = {}
@@ -2726,42 +3615,11 @@ def verify():
                           % (cn, gconsts.get(cn), gid))
 
     # --- config.vhd: OPTM_GROUPS array entries
-    m = re.search(r"constant\s+OPTM_GROUPS\s*:\s*OPTM_GTYPE\s*:=\s*\((.*?)\);",
-                  cfg, re.S)
-    if not m:
+    entries, vals, gerrors = config_groups(cfg)
+    if entries is None:
         errors.append("OPTM_GROUPS array not found")
     else:
-        body = re.sub(r"--[^\n]*", "", m.group(1))
-        # split on top-level commas only: an entry may contain commas inside
-        # an OPTM_DEP(mother, item) / OPTM_DEP2(mother, a, b) call
-        entries, depth, cur = [], 0, ""
-        for ch in body:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-            if ch == "," and depth == 0:
-                if cur.strip():
-                    entries.append(cur.strip())
-                cur = ""
-            else:
-                cur += ch
-        if cur.strip():
-            entries.append(cur.strip())
-        env = dict(gconsts)
-        env.update(parse_vhdl_constants(cfg, "OPTM_G"))
-        # dependency format 2 helpers: a 4-bit item MASK in bits 28..25
-        env["OPTM_DEP"] = lambda m, i: dep_value(m, 2 ** i)
-        env["OPTM_DEP2"] = lambda m, a, b: dep_value(m, 2 ** a + 2 ** b)
-        vals = []
-        for e in entries:
-            try:
-                # parenthesize: an entry may span multiple source lines
-                vals.append(eval("(" + e.replace("16#", "0x").replace("#", "")
-                                 + ")", {}, env))
-            except Exception:
-                errors.append("cannot evaluate OPTM_GROUPS entry %r" % e)
-                vals.append(-1)
+        errors += gerrors
         model_words = menu_words(V6_MENU, V6_DEPS)
         if len(vals) != len(model_words):
             errors.append("OPTM_GROUPS has %d entries, model says %d"
@@ -2798,6 +3656,7 @@ def verify():
 
     # --- mega65.vhd: C_MENU_* values
     mconsts = parse_vhdl_constants(mega, "C_MENU_")
+    errors += c_menu_errors()
     for name, val in c_menu_values().items():
         if mconsts.get(name) != val:
             errors.append("%s = %s, model says %d"
@@ -2860,10 +3719,56 @@ def verify():
     if not m or (int(m.group(1)), int(m.group(2))) != (hi, lo):
         errors.append("R_MENU_RRNET range mismatch: model says "
                       "%d downto %d" % (hi, lo))
+    # --- mega65.vhd: the ports of the Input Devices section (#190, #193).
+    # Index 0 is the physical port 1, index 1 port 2; each bit has exactly one
+    # driver, the assignment from the non-default item of its own port (from
+    # the switch "MEGA+left = right" of its own port for main_mouse_rclick_o),
+    # out of the menu vector of the clock domain of the port. Drivers are
+    # counted per statement (comments are stripped above, statements end at
+    # ";"): every "<port>(k) <=", "<port> <=" or "<port>(a downto b) <="
+    # anywhere in a statement, and every "=> <port>" (an actual in a port map)
+    stmts = [" ".join(s.split()) for s in mega.split(";")]
+    for port, vec, names in (
+            ("qnice_paddle_atari_o", "qnice_osm_control_i",
+             ("C_MENU_PADDLES_P1_ATARI", "C_MENU_PADDLES_P2_ATARI")),
+            ("main_mouse_amiga_o", "main_osm_control_i",
+             ("C_MENU_MOUSE_P1_AMIGA", "C_MENU_MOUSE_P2_AMIGA")),
+            ("main_mouse_rclick_o", "main_osm_control_i",
+             ("C_MENU_MOUSE_P1_RCLICK", "C_MENU_MOUSE_P2_RCLICK"))):
+        if not re.search(r"\b%s\s*:\s*out\s+std_logic_vector\s*\(\s*1\s+downto"
+                         r"\s+0\s*\)" % port, mega):
+            errors.append("mega65.vhd: no port %s : out std_logic_vector(1 "
+                          "downto 0)" % port)
+        rx_target = re.compile(r"\b%s\s*(\(\s*(\d+)\s*\)|\([^()]*\))?\s*<=" % port)
+        rx_actual = re.compile(r"=>\s*%s\b\s*(\(\s*(\d+)\s*\))?" % port)
+        drivers = {k: [] for k in range(len(names))}
+        for s in stmts:
+            for rx in (rx_target, rx_actual):
+                for m in rx.finditer(s):
+                    bits = ([int(m.group(2))] if m.group(2) is not None
+                            else list(drivers))
+                    for b in bits:
+                        drivers.setdefault(b, []).append(s)
+        for k, cname in enumerate(names):
+            want = r"%s\s*\(\s*%d\s*\)\s*<=\s*%s\s*\(\s*%s\s*\)" % (port, k, vec, cname)
+            got = drivers[k]
+            if len(got) != 1 or not re.fullmatch(want, got[0]):
+                errors.append("mega65.vhd: %s(%d) must have exactly one driver, "
+                              "%s <= %s(%s); found %d: %r"
+                              % (port, k, port + "(%d)" % k, vec, cname,
+                                 len(got), [g[:80] for g in got]))
+        for b in sorted(set(drivers) - set(range(len(names)))):
+            errors.append("mega65.vhd: %s(%d) is driven, the port has 2 bits"
+                          % (port, b))
 
     # --- the intended layout of the golden model itself (Model submenu line
     # counts, no double separators in any view and state, turbo toggle walk)
     errors += menu_layout_errors()
+
+    # --- m2m-rom.asm: the menu heap fits the real menu, the heap sizes add
+    # up and the numbers in their comments are the real ones
+    herrors, hnum = heap_check()
+    errors += herrors
 
     if errors:
         print("VERIFY FAIL (%d errors):" % len(errors))
@@ -2877,6 +3782,10 @@ def verify():
           "tracked in V6_DEPS)" % len(cfg_deps))
     print("  layout: Model submenu %s visible lines, no double separators"
           % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
+    print("  switches MEGA+left = right: %s, Mouse view in 16 states, "
+          "walk of scenario 4"
+          % " ".join("%s=%d" % (r[0], c_menu_values()[r[0]]) for r in INPUT_RCLICK))
+    print("  " + heap_summary(hnum))
     # additionally drive the real SEL_OPTM_DEPS decoder through ghdl, if present
     return vhdl_check()
 
@@ -2922,6 +3831,14 @@ def run():
         print("PASS: menu layout (Model submenu %s visible lines, no double "
               "separators, turbo toggle walk)"
               % "/".join("%s=%d" % kv for kv in MODEL_VISIBLE.items()))
+    herrors, hnum = heap_check()        # real menu against m2m-rom.asm
+    if herrors:
+        print("FAIL: menu heap")
+        for e in herrors:
+            print("  -", e)
+        fails += 1
+    else:
+        print("PASS: " + heap_summary(hnum))
     wide = wide_menu_errors()           # golden model at 512 items
     if wide:
         print("FAIL: wide menu")
@@ -2986,7 +3903,356 @@ def run():
 # correct test suite must catch (kill) every one. A surviving mutant marks a
 # blind spot. The golden model (this file) is left untouched, so the mutated
 # assembly is checked against the correct expectation.
+# A mutant is (description, file, old, new[, gates]). old and new are one
+# string or tuples of strings (several replacements in the same file, each
+# old string must occur exactly once). file can also be a tuple of files;
+# old and new then hold one such entry per file (a defect that is consistent
+# across config.vhd, mega65.vhd and the golden model, which only the checks
+# of the intended layout can catch). gates names the gate or the tuple of
+# gates that must all catch it, "run" if it is missing: "run" runs the suite
+# in this process, "verify" runs verify in a fresh process (so it also sees a
+# mutant of this file) and counts only a reported VERIFY FAIL, not a crash.
 # ---------------------------------------------------------------------------
+
+# the lines of m2m-rom.asm that the heap mutants below edit
+_MHS = "MENU_HEAP_SIZE  .EQU 5696"
+_HS_DBG = "HEAP_SIZE       .EQU 1472                       ; 7168 - 5696 = 1472"
+_HS_REL = "HEAP_SIZE       .EQU 24512                      ; 30208 - 5696 = 24512"
+
+
+def _heap_sizes(mhs):
+    """the three lines of m2m-rom.asm for MENU_HEAP_SIZE mhs"""
+    return ("MENU_HEAP_SIZE  .EQU %d" % mhs,
+            "HEAP_SIZE       .EQU %-4d                       ; 7168 - %d = %d"
+            % (7168 - mhs, mhs, 7168 - mhs),
+            "HEAP_SIZE       .EQU %-5d                      ; 30208 - %d = %d"
+            % (30208 - mhs, mhs, 30208 - mhs))
+
+# The switches "MEGA+left = right" of the Mouse submenu (#190): the lines of
+# config.vhd, mega65.vhd and the golden model that the mutants below edit.
+# The strings of the golden model are split so that they occur only once in
+# this file (in V6_MENU and V6_DEPS)
+_CFG_R1 = ("OPTM_G_MOUSE_P1_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P1, 1), "
+           "-- #1: MEGA+left = right (only with Amiga)")
+_CFG_R2 = ("OPTM_G_MOUSE_P2_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P2, 1), "
+           "-- #2: MEGA+left = right (only with Amiga)")
+_CFG_IND = "\n" + " " * 45
+_CFG_ITM_A1 = '   " Port 1: Amiga\\n"           &'
+_CFG_ITM_R1 = ('   " #1: MEGA+left = right\\n"   &  -- right click with the MEGA key; '
+               'only shown while port 1 is "Amiga"')
+_CFG_ITM_A2 = '   " Port 2: Amiga\\n"           &'
+_CFG_ITM_R2 = ('   " #2: MEGA+left = right\\n"   &  -- right click with the MEGA key; '
+               'only shown while port 2 is "Amiga"')
+_CFG_GRP_A1 = "OPTM_G_MOUSE_P1,                         -- Port 1: Amiga"
+_CFG_GRP_A2 = "OPTM_G_MOUSE_P2,                         -- Port 2: Amiga"
+_MEGA_R1 = "constant C_MENU_MOUSE_P1_RCLICK  : natural := 302;"
+_MEGA_R2 = "constant C_MENU_MOUSE_P2_RCLICK  : natural := 306;"
+_MEGA_A1 = "constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;"
+_MEGA_A2 = "constant C_MENU_MOUSE_P2_AMIGA   : natural := 305;"
+_MEGA_PA1 = "constant C_MENU_PADDLES_P1_ATARI : natural := 313;"
+_MEGA_PA2 = "constant C_MENU_PADDLES_P2_ATARI : natural := 316;"
+_MEGA_D0 = "main_mouse_rclick_o(0) <= main_osm_control_i(C_MENU_MOUSE_P1_RCLICK);"
+_MEGA_D1 = "main_mouse_rclick_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_RCLICK);"
+_MDL_A1 = '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P1", []),'
+_MDL_R1 = ('(" #1: MEGA+left' + ' = right",   "MOUSE_P1_RCLICK", ["SINGLE'
+           'SEL"]),   # dependent, #190')
+_MDL_D1 = '302: ("MOUSE_P1", 0b' + '0010)'
+_MDL_D2 = '306: ("MOUSE_P2", 0b' + '0010)'
+_MDL_F1 = '"MOUSE_P1_RCLICK", ["SINGLE' + 'SEL"])'
+_MDL_F2 = '"MOUSE_P2_RCLICK", ["SINGLE' + 'SEL"])'
+_I16 = " " * 16                 # the indentation of an instruction
+_CFG, _MEGA, _MDL = ("CORE/vhdl/config.vhd", "CORE/vhdl/mega65.vhd",
+                     "M2M/rom/tests/menu_test.py")
+
+RCLICK_MUTANTS = [
+    # mega65.vhd: every new and every moved constant one line off or stale
+    ("mega65.vhd  C_MENU_MOUSE_P1_RCLICK points to Port 1: Amiga", _MEGA,
+     _MEGA_R1, _MEGA_R1.replace("302", "301"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P1_RCLICK points to the separator behind it", _MEGA,
+     _MEGA_R1, _MEGA_R1.replace("302", "303"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P2_RCLICK points to Port 2: Amiga", _MEGA,
+     _MEGA_R2, _MEGA_R2.replace("306", "305"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P2_RCLICK points to the switch of port 1", _MEGA,
+     _MEGA_R2, _MEGA_R2.replace("306", "302"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P1_AMIGA points to the switch behind it", _MEGA,
+     _MEGA_A1, _MEGA_A1.replace("301", "302"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P2_AMIGA keeps its old value 304 (Port 2: C64)", _MEGA,
+     _MEGA_A2, _MEGA_A2.replace("305", "304"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P2_AMIGA points to the switch behind it", _MEGA,
+     _MEGA_A2, _MEGA_A2.replace("305", "306"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P1_ATARI keeps its old value 311 (a separator)", _MEGA,
+     _MEGA_PA1, _MEGA_PA1.replace("313", "311"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P1_ATARI points to Port 1: C64", _MEGA,
+     _MEGA_PA1, _MEGA_PA1.replace("313", "312"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI keeps its old value 314 (a separator)", _MEGA,
+     _MEGA_PA2, _MEGA_PA2.replace("316", "314"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to Port 2: C64", _MEGA,
+     _MEGA_PA2, _MEGA_PA2.replace("316", "315"), "verify"),
+    # mega65.vhd: the decoding and the drivers of main_mouse_rclick_o
+    ("mega65.vhd  main_mouse_rclick_o(0) decodes the switch of port 2", _MEGA,
+     _MEGA_D0, _MEGA_D0.replace("P1_RCLICK", "P2_RCLICK"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(1) decodes the switch of port 1", _MEGA,
+     _MEGA_D1, _MEGA_D1.replace("P2_RCLICK", "P1_RCLICK"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(0) decodes Port 1: Amiga", _MEGA,
+     _MEGA_D0, _MEGA_D0.replace("P1_RCLICK", "P1_AMIGA"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(1) decodes Port 2: Amiga", _MEGA,
+     _MEGA_D1, _MEGA_D1.replace("P2_RCLICK", "P2_AMIGA"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(0) from the menu vector of the QNICE clock", _MEGA,
+     _MEGA_D0, _MEGA_D0.replace("main_osm", "qnice_osm"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(1) from the menu vector of the QNICE clock", _MEGA,
+     _MEGA_D1, _MEGA_D1.replace("main_osm", "qnice_osm"), "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(1) not driven", _MEGA,
+     "\n   " + _MEGA_D1, "", "verify"),
+    ("mega65.vhd  a second driver of main_mouse_rclick_o(1) behind another statement",
+     _MEGA, _MEGA_D0, _MEGA_D0 + " main_mouse_rclick_o(1) <= '0';", "verify"),
+    ("mega65.vhd  main_mouse_rclick_o also driven as a whole vector", _MEGA,
+     _MEGA_D1, _MEGA_D1 + "\n   main_mouse_rclick_o <= \"00\";", "verify"),
+    ("mega65.vhd  main_mouse_rclick_o(0) also driven as the actual of a port map",
+     _MEGA,
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),",
+     "         mouse_rclick_o         => main_mouse_rclick_o(0),\n"
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),", "verify"),
+    ("mega65.vhd  the port main_mouse_rclick_o has one bit", _MEGA,
+     "main_mouse_rclick_o     : out std_logic_vector(1 downto 0);",
+     "main_mouse_rclick_o     : out std_logic_vector(0 downto 0);", "verify"),
+    # config.vhd alone: verify compares it with the golden model
+    ("config.vhd  #1 without its dependency", _CFG,
+     _CFG_R1, _CFG_R1.replace(" + OPTM_DEP(OPTM_G_MOUSE_P1, 1)", ""), "verify"),
+    ("config.vhd  #1 depends on Port 1: C64 (item 0)", _CFG,
+     _CFG_R1, _CFG_R1.replace("P1, 1)", "P1, 0)"), "verify"),
+    ("config.vhd  #1 depends on the mouse of port 2", _CFG,
+     _CFG_R1, _CFG_R1.replace("DEP(OPTM_G_MOUSE_P1", "DEP(OPTM_G_MOUSE_P2"), "verify"),
+    ("config.vhd  #2 depends on both items of its port", _CFG,
+     _CFG_R2, _CFG_R2.replace("OPTM_DEP(OPTM_G_MOUSE_P2, 1)",
+                              "OPTM_DEP2(OPTM_G_MOUSE_P2, 0, 1)"), "verify"),
+    ("config.vhd  #2 on by default", _CFG,
+     _CFG_R2, _CFG_R2.replace("SINGLESEL +", "SINGLESEL + OPTM_G_STDSEL +"), "verify"),
+    ("config.vhd  #2 without OPTM_G_SINGLESEL", _CFG,
+     _CFG_R2, _CFG_R2.replace(" + OPTM_G_SINGLESEL", ""), "verify"),
+    ("config.vhd  #2 in the group of #1", _CFG,
+     _CFG_R2, _CFG_R2.replace("OPTM_G_MOUSE_P2_RCLICK", "OPTM_G_MOUSE_P1_RCLICK"), "verify"),
+    ("config.vhd  both switches with the group id 47", _CFG,
+     "constant OPTM_G_MOUSE_P2_RCLICK : integer := 48;",
+     "constant OPTM_G_MOUSE_P2_RCLICK : integer := 47;", "verify"),
+    ("config.vhd  #2 in front of Port 2: Amiga", _CFG,
+     (_CFG_ITM_A2 + "\n" + _CFG_ITM_R2, _CFG_GRP_A2 + _CFG_IND + _CFG_R2),
+     (_CFG_ITM_R2 + "\n" + _CFG_ITM_A2, _CFG_R2 + _CFG_IND + _CFG_GRP_A2), "verify"),
+    ("config.vhd  the text of #2 says #1", _CFG,
+     _CFG_ITM_R2, _CFG_ITM_R2.replace("#2: MEGA", "#1: MEGA"), "verify"),
+    ("config.vhd  OPTM_SIZE stays 323", _CFG,
+     "constant OPTM_SIZE         : natural := 325;",
+     "constant OPTM_SIZE         : natural := 323;", "verify"),
+    # the same defects consistently in config.vhd, mega65.vhd and the golden
+    # model: only the checks of the intended layout (INPUT_DEVICES,
+    # INPUT_RCLICK, the Mouse views and the walk of scenario 4) can catch them
+    ("consistent  #1 depends on Port 1: C64 (item 0)", (_CFG, _MDL),
+     (_CFG_R1, _MDL_D1), (_CFG_R1.replace("P1, 1)", "P1, 0)"),
+                          _MDL_D1.replace("0b0010", "0b0001")), "verify"),
+    ("consistent  #2 depends on the mouse of port 1", (_CFG, _MDL),
+     (_CFG_R2, _MDL_D2),
+     (_CFG_R2.replace("DEP(OPTM_G_MOUSE_P2", "DEP(OPTM_G_MOUSE_P1"),
+      _MDL_D2.replace("MOUSE_P2", "MOUSE_P1")), "verify"),
+    ("consistent  #1 without its dependency", (_CFG, _MDL),
+     (_CFG_R1, _MDL_D1 + ", "),
+     (_CFG_R1.replace(" + OPTM_DEP(OPTM_G_MOUSE_P1, 1)", ""), ""), "verify"),
+    ("consistent  #2 on by default", (_CFG, _MDL),
+     (_CFG_R2, _MDL_F2),
+     (_CFG_R2.replace("SINGLESEL +", "SINGLESEL + OPTM_G_STDSEL +"),
+      _MDL_F2.replace('"])', '", "STDSEL"])')), "verify"),
+    ("consistent  #1 without OPTM_G_SINGLESEL", (_CFG, _MDL),
+     (_CFG_R1, _MDL_F1),
+     (_CFG_R1.replace(" + OPTM_G_SINGLESEL", ""),
+      _MDL_F1.replace('["SINGLESEL"])', '[])')), "verify"),
+    ("consistent  #1 in the group of #2", (_CFG, _MDL),
+     (_CFG_R1, _MDL_F1),
+     (_CFG_R1.replace("OPTM_G_MOUSE_P1_RCLICK", "OPTM_G_MOUSE_P2_RCLICK"),
+      _MDL_F1.replace("P1_RCLICK", "P2_RCLICK")), "verify"),
+    ("consistent  #1 in front of Port 1: Amiga", (_CFG, _MEGA, _MDL),
+     ((_CFG_ITM_A1 + "\n" + _CFG_ITM_R1, _CFG_GRP_A1 + _CFG_IND + _CFG_R1),
+      (_MEGA_A1, _MEGA_R1),
+      (_MDL_A1 + "\n    " + _MDL_R1, _MDL_D1)),
+     ((_CFG_ITM_R1 + "\n" + _CFG_ITM_A1, _CFG_R1 + _CFG_IND + _CFG_GRP_A1),
+      (_MEGA_A1.replace("301", "302"), _MEGA_R1.replace("302", "301")),
+      (_MDL_R1 + "\n    " + _MDL_A1, _MDL_D1.replace("302", "301"))), "verify"),
+    # the decoders of config.vhd: only the ghdl testbench reads them
+    ("config.vhd  SEL_OPTM_STDSEL reads the line flag (bit 9)", _CFG,
+     "when SEL_OPTM_STDSEL       => data_o <= x\"000\" & \"000\" & "
+     "std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(8));",
+     "when SEL_OPTM_STDSEL       => data_o <= x\"000\" & \"000\" & "
+     "std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(9));", "ghdl"),
+    ("config.vhd  SEL_OPTM_SINGLESEL reads bit 14", _CFG,
+     "when SEL_OPTM_SINGLESEL    => data_o <= x\"000\" & \"000\" & "
+     "std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(15));",
+     "when SEL_OPTM_SINGLESEL    => data_o <= x\"000\" & \"000\" & "
+     "std_logic(to_unsigned(OPTM_GROUPS(index), OPTM_GTC)(14));", "ghdl"),
+    ("config.vhd  SEL_OPTM_GROUPS reads the headline flag from bit 13", _CFG,
+     "OPTM_GTC)(12)) & \"0000\" &", "OPTM_GTC)(13)) & \"0000\" &", "ghdl"),
+    # the screen of the menu: only the screen trace of scenario 4 sees it
+    ("menu.asm  OPTM_SHOW draws a marker in front of every line",
+     "M2M/rom/menu.asm",
+     "_OPTM_SHOW_1A   CMP     0, @R2                  ; show select. at this point?",
+     "_OPTM_SHOW_1A   CMP     2, @R2                  ; show select. at this point?"),
+    ("menu.asm  the marker of a single-select item switched off is deleted one row too high",
+     "M2M/rom/menu.asm",
+     "                ADD     R8, R10\n                ADD     1, R10\n"
+     "                MOVE    R11, @--SP              ; save R11\n"
+     "                MOVE    OPTM_MENULEVEL, R11     ; R11: (sub)menu level, 0=main",
+     "                ADD     R8, R10\n"
+     "                MOVE    R11, @--SP              ; save R11\n"
+     "                MOVE    OPTM_MENULEVEL, R11     ; R11: (sub)menu level, 0=main"),
+    ("menu.asm  the markers of a radio group are deleted one row too high",
+     "M2M/rom/menu.asm",
+     "                ADD     1, R8                   ; add 1 because of top frame\n",
+     ""),
+    ("menu.asm  the marker of a selected item is drawn one row too high",
+     "M2M/rom/menu.asm",
+     "_OPTM_RUN_9     MOVE    OPTM_Y, R10\n                MOVE    @R10, R10\n"
+     "                ADD     1, R10\n",
+     "_OPTM_RUN_9     MOVE    OPTM_Y, R10\n                MOVE    @R10, R10\n"),
+] + [
+    # the type and the column of the markers: only the screen trace of
+    # scenario 4 sees them (the testbed draws r for a radio item and s for a
+    # single-select item, like the two different characters of the firmware)
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("OPTM_SHOW draws the radio marker for single-select lines",
+         _I16 + "ADD     2, R8                   ; single-select\n", ""),
+        ("switching a single-select item on draws the radio marker",
+         _I16 + "MOVE    OPTM_SSMS, R7           ; single select flag\n"
+         + _I16 + "ADD     @R7, R8\n",
+         _I16 + "MOVE    OPTM_SSMS, R7           ; single select flag\n"),
+        ("selecting a radio item draws the single-select marker",
+         "_OPTM_RUN_16    MOVE    OPTM_SSMS, R12          ; Flag on stack: multi-select\n"
+         + _I16 + "MOVE    0, @R12",
+         "_OPTM_RUN_16    MOVE    OPTM_SSMS, R12          ; Flag on stack: multi-select\n"
+         + _I16 + "MOVE    2, @R12"),
+        ("OPTM_SHOW swaps the radio and the single-select marker",
+         _I16 + "RBRA    _OPTM_SHOW_1B, Z        ; multi-select",
+         _I16 + "RBRA    _OPTM_SHOW_1B, !Z       ; multi-select"),
+        ("the marker of a single-select item switched on one column to the right",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9                \n",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9                \n"),
+        ("the marker of a single-select item switched off deleted one column to the right",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord"),
+        ("the markers of a radio group deleted one column to the right",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos"),
+        ("OPTM_SHOW draws the markers one column to the right",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9"),
+        ("OPTM_SHOW prints the strings of the %s lines one column to the left",
+         "ADD     1, R9                   ; add 1 to x because of frame\n", ""),
+    )
+]
+
+# the redraw: clear, frame, separators, the line below a submenu, the cursor
+# bar and the headline highlight; only the screen trace of scenario 4 sees
+# them, the other scenarios do not trace these screen functions
+_SH_CLEAR = (_I16 + "MOVE    OPTM_FP_CLEAR, R7       ; clear VRAM\n"
+             + _I16 + "RSUB    _OPTM_CALL, 1\n")
+_SH_FRAME = (_I16 + "MOVE    OPTM_FP_FRAME, R7       ; draw frame\n"
+             + _I16 + "RSUB    _OPTM_CALL, 1\n")
+_SH_SEP = (_I16 + "MOVE    R6, R8                  ; yes: R8: y-pos of line\n"
+           + _I16 + "SUB     R12, R8                 ; adjust for skipped items\n")
+_SH_END = (_I16 + "MOVE    R6, R8                  ; R8: y-pos of line\n"
+           + _I16 + "SUB     R12, R8                 ; adjust for skipped items\n")
+_RUN_BAR = (_I16 + "RBRA    _OPTM_R_FATAL, C        ; failed? fatal!\n"
+            + _I16 + "MOVE    OPTM_SEL_SEL, R9\n")
+_RUN_STD = (_I16 + "MOVE    OPTM_SEL_STD, R9\n" + _I16 + "RSUB    _OPTM_CALL, 1\n"
+            + _I16 + "MOVE    R2, R3                  ; remember current item as old")
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("N1  OPTM_SHOW does not clear the screen", _SH_CLEAR, ""),
+        ("N2  separators drawn without the skip counter", _SH_SEP,
+         _SH_SEP.replace(_I16 + "SUB     R12, R8                 ; adjust for skipped items\n", "")),
+        ("N3  the cursor bar drawn one row too low", _RUN_BAR,
+         _RUN_BAR.replace("MOVE    OPTM_SEL_SEL", "ADD     1, R8\n" + _I16 + "MOVE    OPTM_SEL_SEL")),
+        ("N4  the cursor bar of the old line not removed", _RUN_STD,
+         _RUN_STD.replace(_I16 + "RSUB    _OPTM_CALL, 1\n", "")),
+        ("N7  headlines highlighted without the skip counter",
+         _I16 + "SUB     R4, R8                  ; deduct skip counter\n", ""),
+        ("N9  the line below a submenu drawn without the skip counter", _SH_END,
+         _SH_END.replace(_I16 + "SUB     R12, R8                 ; adjust for skipped items\n", "")),
+        ("N5  OPTM_SHOW clears the screen after it drew the frame",
+         (_SH_CLEAR, _SH_FRAME), ("", _SH_FRAME + _SH_CLEAR)),
+        ("N6  OPTM_SHOW draws no frame", _SH_FRAME, ""),
+        ("N8  separators drawn one row too low", _SH_SEP,
+         _SH_SEP + _I16 + "ADD     1, R8\n"),
+        ("N10 the line below a submenu drawn one row too low", _SH_END,
+         _SH_END + _I16 + "ADD     1, R8\n"),
+        ("N11 the line below a submenu never drawn",
+         _I16 + "RBRA    _OPTM_SHOW_RET, N       ; no",
+         _I16 + "RBRA    _OPTM_SHOW_RET, 1       ; no"),
+        ("N12 the cursor bar removed from the new line instead of the old one",
+         "_OPTM_RUN_2     MOVE    OPTM_FP_SELECT, R7      ; unselect old item\n"
+         + _I16 + "MOVE    R3, R8",
+         "_OPTM_RUN_2     MOVE    OPTM_FP_SELECT, R7      ; unselect old item\n"
+         + _I16 + "MOVE    R2, R8"),
+        ("N13 the cursor bar of the old line replaced by a headline highlight",
+         _RUN_STD, _RUN_STD.replace("OPTM_SEL_STD", "OPTM_SEL_TLL")),
+        ("N14 the cursor bar drawn as a headline highlight", _RUN_BAR,
+         _RUN_BAR.replace("OPTM_SEL_SEL", "OPTM_SEL_TLL")),
+        ("N15 headlines highlighted as the cursor bar",
+         _I16 + "MOVE    OPTM_SEL_TLL, R9\n", _I16 + "MOVE    OPTM_SEL_SEL, R9\n"),
+        ("N16 no headline highlighted",
+         _I16 + "RBRA    _OPTM_TT_1B, Z          ; flag not set: continue",
+         _I16 + "RBRA    _OPTM_TT_1B, 1          ; flag not set: continue"),
+        ("N17 every line highlighted as a headline",
+         _I16 + "AND     OPTM_HEADLINE, R3\n", _I16 + "OR      OPTM_HEADLINE, R3\n"),
+    )
+]
+
+# the column of the menu: scenario 4 places the menu away from the left edge
+# (NAV4_X), so a path that ignores OPTM_X prints in the wrong column
+_X_COL = _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9"
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("X1  OPTM_SHOW draws the markers without the column of the menu",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n" + _X_COL,
+         "_OPTM_SHOW_1B   MOVE    1, R9                   ; R9: current x-pos"),
+        ("X2  OPTM_SHOW prints the %s strings without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9\n" + _X_COL + "                   ; add 1 to x because of frame",
+         _I16 + "MOVE    1, R9                   ; add 1 to x because of frame"),
+        ("X3  the marker of a single-select item switched on without the column of the menu",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _X_COL + "                \n",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    1, R9\n"),
+        ("X4  the marker of a single-select item switched off deleted without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n" + _X_COL + "\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord",
+         _I16 + "MOVE    1, R9\n" + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord"),
+        ("X5  the markers of a radio group deleted without the column of the menu",
+         _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n" + _X_COL + "\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos",
+         _I16 + "MOVE    1, R9\n" + _I16 + "XOR     R10, R10                ; R10: flat list item pos"),
+    )
+]
+
+# OPTM_SELECT, which draws the cursor bar again after a background redraw
+# (scenario 4 sends keys with bit 15 around the switches)
+_SELECT_SEL = _I16 + "MOVE    OPTM_SEL_SEL, R9        ; R8 contains screen coords.\n"
+RCLICK_MUTANTS += [
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("R7  OPTM_SELECT draws the cursor bar one row too low", _SELECT_SEL,
+         _I16 + "ADD     1, R8\n" + _SELECT_SEL),
+        ("R8  OPTM_SELECT draws a headline highlight instead of the cursor bar",
+         _SELECT_SEL, _SELECT_SEL.replace("OPTM_SEL_SEL", "OPTM_SEL_TLL")),
+        ("R14 OPTM_SELECT draws no cursor bar",
+         _SELECT_SEL + _I16 + "RSUB    _OPTM_CALL, 1\n", _SELECT_SEL),
+    )
+]
 
 MUTANTS = [
     ("optm_deps.asm  OPTM_DEP_OK never hides a line",
@@ -2995,8 +4261,8 @@ MUTANTS = [
      "_ODO_HID        OR      0x0004, SR"),
     ("optm_deps.asm  RESOLVE truncates the item mask to 2 bits",
      "M2M/rom/optm_deps.asm",
-     "AND     0x0F00, R5              ; (bits 11-8, as in the raw word)",
-     "AND     0x0300, R5              ; (bits 11-8, as in the raw word)"),
+     "AND     0x0F00, R5              ; bits 11-8 of the raw word to",
+     "AND     0x0300, R5              ; bits 11-8 of the raw word to"),
     ("optm_deps.asm  VAL skips the dependency-chain fatal",
      "M2M/rom/optm_deps.asm",
      "RBRA    _VAL_E_CHAIN, !Z",
@@ -3081,7 +4347,89 @@ MUTANTS = [
      "M2M/rom/optm_deps.asm",
      "MOVE    2, R7                   ; single-select: states 0 and 1",
      "MOVE    1, R7                   ; single-select: states 0 and 1"),
-]
+    # Input Devices (#190, #193): edits of config.vhd and mega65.vhd, which
+    # only "verify" reads (fifth element: the gate that must catch them)
+    ("mega65.vhd  C_MENU_MOUSE_P1_AMIGA points to Port 1: C64",
+     "CORE/vhdl/mega65.vhd",
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;",
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 300;", "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to the item of port 1",
+     "CORE/vhdl/mega65.vhd",
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 316;",
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 313;", "verify"),
+    ("mega65.vhd  main_mouse_amiga_o(1) decodes the mouse of port 1",
+     "CORE/vhdl/mega65.vhd",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P1_AMIGA);", "verify"),
+    ("config.vhd  Port 1: Atari CX30 in the radio group of port 2",
+     "CORE/vhdl/config.vhd",
+     "OPTM_G_PADDLES_P1,                       -- Port 1: Atari CX30",
+     "OPTM_G_PADDLES_P2,                       -- Port 1: Atari CX30", "verify"),
+    ("config.vhd  Amiga instead of C64 is the default of the mouse at port 2",
+     "CORE/vhdl/config.vhd",
+     "OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: C64\n"
+     "                                             OPTM_G_MOUSE_P2,                         -- Port 2: Amiga",
+     "OPTM_G_MOUSE_P2,                         -- Port 2: C64\n"
+     "                                             OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: Amiga", "verify"),
+    # second drivers of a port bit that a count of the assignments at the
+    # start of a line does not see
+    ("mega65.vhd  a second driver of main_mouse_amiga_o(0) behind another statement",
+     "CORE/vhdl/mega65.vhd",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);",
+     "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA); "
+     "main_mouse_amiga_o(0) <= '0';", "verify"),
+    ("mega65.vhd  main_mouse_amiga_o(1) also driven as the actual of a port map",
+     "CORE/vhdl/mega65.vhd",
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),",
+     "         mouse_type_o           => main_mouse_amiga_o(1),\n"
+     "         c64_cia_ver_i          => main_osm_control_i(C_MENU_8521),", "verify"),
+    # an unresolvable C_MENU entry of the golden model itself must be a
+    # reported error of verify, not a crash (the strings are split so that
+    # they occur only once in this file: in V6_MENU)
+    ("menu_test.py  Port 1: Amiga in the radio group of port 2 (golden model)",
+     "M2M/rom/tests/menu_test.py",
+     '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P1", [])',
+     '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P2", [])', "verify"),
+] + [
+    # the menu heap of m2m-rom.asm, see heap_check(): every mutant must be
+    # caught by verify and by run
+    (desc, "CORE/m2m-rom/m2m-rom.asm", old, new, ("verify", "run"))
+    for desc, old, new in (
+        ("H1  the sizes of the menu of 323 lines (5632 / 24576 / 1536)",
+         (_MHS, _HS_DBG, _HS_REL), _heap_sizes(5632)),
+        ("H2  HEAP_SIZE 24576 with MENU_HEAP_SIZE 5696 (into the stack area)",
+         _HS_REL,
+         "HEAP_SIZE       .EQU 24576                      ; 30208 - 5696 = 24512"),
+        ("H3  MENU_HEAP_SIZE 5632, consistent everywhere (158 words headroom)",
+         (_MHS, _HS_DBG, _HS_REL,
+          "write 30208-5696=24512", "; 5696 words comfortably fit",
+          "leaving 222 words of"),
+         _heap_sizes(5632) + (
+          "write 30208-5632=24576", "; 5632 words comfortably fit",
+          "leaving 158 words of")),
+        ("H4  MENU_HEAP_SIZE 5653, consistent everywhere (179 words headroom)",
+         (_MHS, _HS_DBG, _HS_REL,
+          "write 30208-5696=24512", "; 5696 words comfortably fit",
+          "leaving 222 words of"),
+         _heap_sizes(5653) + (
+          "write 30208-5653=24555", "; 5653 words comfortably fit",
+          "leaving 179 words of")),
+        ("H5  HEAP_SIZE of the branch without RELEASE left at 1536",
+         _HS_DBG,
+         "HEAP_SIZE       .EQU 1536                       ; 7168 - 5696 = 1472"),
+        ("H6  stale line count in the comment at the stack",
+         "; line (325 lines today),", "; line (323 lines today),"),
+        ("H7  stale submenu count in the comment above MENU_HEAP_SIZE",
+         "325 items, 20 submenus and a", "325 items, 18 submenus and a"),
+        ("H8  stale item count in the comment above MENU_HEAP_SIZE",
+         "fit the current menu: 325 items", "fit the current menu: 323 items"),
+        ("H9  stale length of OPTM_ITEMS in the comment above MENU_HEAP_SIZE",
+         "(3450 now)", "(3402 now)"),
+        ("H10 stale peak in the comment above MENU_HEAP_SIZE",
+         "Peak use is 4772 + 702 = 5474, leaving 222",
+         "Peak use is 4716 + 702 = 5418, leaving 278"),
+    )
+] + RCLICK_MUTANTS
 
 
 def _quiet_run():
@@ -3092,32 +4440,106 @@ def _quiet_run():
         return run()
 
 
+def _run_gate():
+    """run in this process; returns (caught, first failure line)"""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fails = run()
+    out = buf.getvalue().split("\n")
+    detail = [l for l in out if l.startswith("  - ")]
+    first = [l for l in out if l.startswith(("FAIL", "ASSEMBLE FAIL", "RUN TIMEOUT"))]
+    return fails != 0, (detail or first or [""])[0]
+
+
+def _verify_gate():
+    """verify in a fresh process, so that it reads the mutated file (also a
+    mutated menu_test.py); only a reported VERIFY FAIL counts as caught, a
+    crash of the script does not. Returns (caught, first error line)"""
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), "verify"],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                       timeout=600)
+    errs = [l for l in r.stdout.split("\n") if l.startswith("  - ")]
+    if r.returncode != 0 and "VERIFY FAIL" in r.stdout:
+        return True, errs[0] if errs else ""
+    if r.returncode != 0:
+        tail = (r.stdout + r.stderr).strip().split("\n")[-1]
+        return False, "verify did not report the error, it ended with: " + tail
+    return False, ""
+
+
+def _ghdl_gate():
+    """the ghdl testbench of the config.vhd decoders in a fresh process;
+    only a reported decoder failure counts. Returns (caught, first line)"""
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), "ghdl"],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                       timeout=600)
+    if r.returncode != 0 and "VHDL DECODER TB: FAIL" in r.stdout:
+        miss = [l for l in r.stdout.split("\n") if "MISMATCH" in l]
+        return True, (miss[0].strip() if miss else "VHDL DECODER TB: FAIL")
+    return False, (r.stdout + r.stderr).strip().split("\n")[-1]
+
+
+GATES = {"run": _run_gate, "verify": _verify_gate, "ghdl": _ghdl_gate}
+
+
 def mutate():
     print("baseline (unmutated) suite must pass first:")
-    if _quiet_run() != 0:
+    if _quiet_run() != 0 or subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "verify"],
+            stdin=subprocess.DEVNULL, capture_output=True).returncode != 0:
         print("  BASELINE FAILS - fix the suite before mutation testing")
         return 1
     print("  baseline OK\n")
     fails = 0
-    for desc, rel, old, new in MUTANTS:
-        path = os.path.join(REPO, rel)
-        src = open(path).read()
-        if src.count(old) != 1:
-            print("SETUP ERROR (%d matches): %s" % (src.count(old), desc))
+    for mutant in MUTANTS:
+        desc, rel, old, new = mutant[:4]
+        # the gates that must catch the mutant: one name or a tuple of names
+        gates = mutant[4] if len(mutant) > 4 else "run"
+        gates = (gates,) if isinstance(gates, str) else gates
+        # a mutant edits one file or, with a tuple of files, several files
+        # (old and new then hold one entry per file); the entry of a file is
+        # one replacement or a tuple of replacements in that file
+        edits = (list(zip(rel, old, new)) if isinstance(rel, tuple)
+                 else [(rel, old, new)])
+        srcs, mutated, bad = {}, {}, []
+        for r, o, n in edits:
+            path = os.path.join(REPO, r)
+            if path not in srcs:
+                srcs[path] = mutated[path] = open(path).read()
+            pairs = list(zip(o, n)) if isinstance(o, tuple) else [(o, n)]
+            for oo, nn in pairs:
+                if mutated[path].count(oo) != 1:
+                    bad.append(mutated[path].count(oo))
+                mutated[path] = mutated[path].replace(oo, nn)
+        if bad:
+            print("SETUP ERROR (%s matches): %s" % (bad, desc))
             fails += 1
             continue
+        notes = []
         try:
-            with open(path, "w") as f:
-                f.write(src.replace(old, new))
-            killed = _quiet_run() != 0
+            for path, text in mutated.items():
+                with open(path, "w") as f:
+                    f.write(text)
+            killed = True
+            for g in gates:
+                caught, note = GATES[g]()
+                notes.append("%s: %s" % (g, note[:110] if caught else
+                                         "NOT CAUGHT " + note[:90]))
+                killed = killed and caught
         finally:
-            with open(path, "w") as f:        # always restore the original
-                f.write(src)
+            for path, text in srcs.items():   # always restore the originals
+                with open(path, "w") as f:
+                    f.write(text)
         if killed:
             print("KILLED   %s" % desc)
         else:
             print("SURVIVED %s   <-- TEST GAP" % desc)
             fails += 1
+        if len(mutant) > 4:
+            for nt in notes:
+                print("           %s" % nt)
     # the suite regenerates its own fixtures on the next run, but restore a
     # clean, unmutated set right away
     gen()

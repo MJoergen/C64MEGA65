@@ -669,11 +669,25 @@ TB_HEX          MOVE    R8, @--SP
 TB_NL           SYSCALL(crlf, 1)
                 RET
 
+; stop the testbed if R8 is not a line of the menu: TB_CFM has one word per
+; menu line, so a larger index would hit the fake HEAP record behind it
+TB_CFM_CHK      CMP     TB_CFM_SIZE, R8         ; unsigned: R8 < TB_CFM_SIZE?
+                RBRA    _TBCC_RET, N            ; yes: a line of the menu
+                MOVE    R8, @--SP
+                MOVE    S_CFMR, R8              ; no: "CFM RANGE <index>"
+                RSUB    TB_TAG, 1
+                MOVE    @SP++, R8
+                RSUB    TB_HEX, 1
+                RSUB    TB_NL, 1
+                SYSCALL(exit, 1)
+_TBCC_RET       RET
+
 ; ----------------------------------------------------------------------------
 ; Stubs of the routines that the modules call
 ; ----------------------------------------------------------------------------
 
 M2M$GET_SETTING INCRB
+                RSUB    TB_CFM_CHK, 1
                 MOVE    TB_CFM, R0
                 ADD     R8, R0
                 MOVE    @R0, R9
@@ -681,6 +695,7 @@ M2M$GET_SETTING INCRB
                 RET
 
 M2M$SET_SETTING INCRB                           ; "SET <index> <value>"
+                RSUB    TB_CFM_CHK, 1
                 MOVE    TB_CFM, R0
                 ADD     R8, R0
                 MOVE    R9, @R0
@@ -973,6 +988,7 @@ S_KEY           .ASCII_W "KEY"
 S_CARRY         .ASCII_W "C"
 S_MAIN          .ASCII_W "MAIN"
 S_SET           .ASCII_W "SET"
+S_CFMR          .ASCII_W "CFM RANGE"
 S_CLR           .ASCII_W "CLR"
 S_OFF           .ASCII_W "OFF"
 S_FRAME         .ASCII_W "FRAME"
@@ -1023,6 +1039,7 @@ OPTM_CUR_SEL    .BLOCK 1
 OPTM_ICOUNT     .BLOCK 1
 SCR$SYS_DX      .DW     45
 SCR$SYS_DY      .DW     33
-TB_CFM_SIZE     .EQU    300
-TB_CFM          .BLOCK  300                     ; one word per menu line
+TB_CFM          .BLOCK  TB_CFM_SIZE             ; one word per menu line
+                                                ; (TB_CFM_SIZE = OPTM_SIZE, see
+                                                ; shortcuts_tbgen_const.asm)
 HEAP            .BLOCK  20

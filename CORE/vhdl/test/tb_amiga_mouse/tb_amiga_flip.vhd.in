@@ -1,0 +1,314 @@
+----------------------------------------------------------------------------------------------------
+-- Amiga mouse benches (GitHub issues #190, #193), part 4: the port switcher of the paddle values
+--
+-- run.sh copies the process correct_and_flip_paddles of M2M/vhdl/qnice_wrapper.vhd verbatim into this
+-- template (marker below): in the QNICE clock domain it inverts the four measured values of the two
+-- sockets and switches them to the C64 ports. Behind it, as in framework.vhd: the four values cross
+-- to the core clock through cdc_stable (32 bits, source register, the byte order of framework.vhd),
+-- "Flip joystick ports" through two flip-flops (the model of xpm_cdc_array_single), and the
+-- debouncer with its two Amiga mice gets both.
+--
+-- Checks, with flip_joys at '0' and at '1':
+--  * amiga_i = "00": the paddle outputs of each C64 port are the inverted measured values of the
+--    socket connected to it (random values for all four)
+--  * amiga_i = "11": each mouse reports the buttons of its own socket (right button: pin 9 = x,
+--    middle button: pin 5 = y), on the up and down lines of the C64 port that its socket is connected
+--    to; the sockets have different button states, which are exchanged during the test
+--  * a change of flip_joys while the buttons are held: right after it every C64 port shows the buttons
+--    of the socket that is now connected to it, so no mouse changed its state during the crossing
+--
+-- done by sy2002 in 2026 and licensed under GPL v3
+----------------------------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use std.env.all;
+use work.tb_amiga_mouse_pkg.all;
+
+entity tb_amiga_flip is
+   generic (
+      G_SEED : positive := 1;
+      G_STOP : boolean  := false
+   );
+end entity tb_amiga_flip;
+
+architecture sim of tb_amiga_flip is
+
+   constant C_CORE_HZ  : positive := 31_527_778;
+   constant C_QN_HALF  : time     := 10 ns;                        -- 50 MHz
+   constant C_DST_HALF : time     := 1 sec / (2 * C_CORE_HZ);
+   constant C_CONFIRM  : time     := 4.5 ms;                       -- 10 to 11 ticks of 400 us
+
+   signal qnice_clk    : std_logic := '0';
+   signal main_clk     : std_logic := '0';
+   signal running      : boolean   := true;
+
+   -- QNICE clock domain: the measured values of the sockets (pota = port 1 = socket 0) and the setting
+   signal qnice_flip_joyports_i : std_logic := '0';
+   signal qnice_pot1_x          : unsigned(7 downto 0) := x"FF";
+   signal qnice_pot1_y          : unsigned(7 downto 0) := x"FF";
+   signal qnice_pot2_x          : unsigned(7 downto 0) := x"FF";
+   signal qnice_pot2_y          : unsigned(7 downto 0) := x"FF";
+   signal qnice_pot1_x_n_o      : unsigned(7 downto 0);
+   signal qnice_pot1_y_n_o      : unsigned(7 downto 0);
+   signal qnice_pot2_x_n_o      : unsigned(7 downto 0);
+   signal qnice_pot2_y_n_o      : unsigned(7 downto 0);
+
+   -- core clock domain
+   signal flip_d       : std_logic := '0';
+   signal main_flip    : std_logic := '0';
+   signal main_pots    : std_logic_vector(31 downto 0);
+   signal amiga        : std_logic_vector(1 downto 0) := "00";
+   type lines_t is array (0 to 1) of std_logic_vector(4 downto 0);   -- 0 up, 1 down, 2 left, 3 right, 4 fire
+   signal port_j       : lines_t;
+   type pot2_t is array (0 to 1) of std_logic_vector(7 downto 0);
+   signal port_px      : pot2_t;
+   signal port_py      : pot2_t;
+
+   shared variable errcnt : counter_pt;
+
+   procedure tb_error(msg : string) is
+   begin
+      if errcnt.value < 30 then
+         report "TB_ERROR: " & msg severity error;
+      end if;
+      errcnt.inc;
+      if G_STOP then
+         report "TB: RESULT FAIL (stopped at the first error)" severity note;
+         finish;
+      end if;
+   end procedure tb_error;
+
+begin
+
+   qnice_clk <= not qnice_clk after C_QN_HALF when running;
+
+   main_clk_proc : process
+   begin
+      wait for 5.3 ns;                                              -- no relation to the QNICE clock
+      while running loop
+         main_clk <= not main_clk;
+         wait for C_DST_HALF;
+      end loop;
+      wait;
+   end process main_clk_proc;
+
+   ---------------------------------------------------------------------------------------------
+   -- copied from M2M/vhdl/qnice_wrapper.vhd by run.sh
+   -- @CORRECT_AND_FLIP_PADDLES@
+   ---------------------------------------------------------------------------------------------
+
+   -- the crossings of framework.vhd
+   i_qnice2main_paddles : entity work.cdc_stable
+      generic map (
+         G_REGISTER_SRC => true,
+         G_DATA_SIZE    => 32
+      )
+      port map (
+         src_clk_i                => qnice_clk,
+         src_data_i( 7 downto  0) => std_logic_vector(qnice_pot1_x_n_o),
+         src_data_i(15 downto  8) => std_logic_vector(qnice_pot1_y_n_o),
+         src_data_i(23 downto 16) => std_logic_vector(qnice_pot2_x_n_o),
+         src_data_i(31 downto 24) => std_logic_vector(qnice_pot2_y_n_o),
+         dst_clk_i                => main_clk,
+         dst_data_o               => main_pots
+      );
+
+   flip_sync : process (main_clk)
+   begin
+      if rising_edge(main_clk) then
+         flip_d    <= qnice_flip_joyports_i;
+         main_flip <= flip_d;
+      end if;
+   end process flip_sync;
+
+   i_debouncer : entity work.debouncer
+      generic map (
+         CLK_FREQ           => C_CORE_HZ
+      )
+      port map (
+         clk                => main_clk,
+         reset_n            => '1',
+         flip_joys_i        => main_flip,
+         joy_1_on           => '1',
+         joy_2_on           => '1',
+         joy_1_up_n         => '1',
+         joy_1_down_n       => '1',
+         joy_1_left_n       => '1',
+         joy_1_right_n      => '1',
+         joy_1_fire_n       => '1',
+         dbnce_joy1_up_n    => port_j(0)(0),
+         dbnce_joy1_down_n  => port_j(0)(1),
+         dbnce_joy1_left_n  => port_j(0)(2),
+         dbnce_joy1_right_n => port_j(0)(3),
+         dbnce_joy1_fire_n  => port_j(0)(4),
+         joy_2_up_n         => '1',
+         joy_2_down_n       => '1',
+         joy_2_left_n       => '1',
+         joy_2_right_n      => '1',
+         joy_2_fire_n       => '1',
+         dbnce_joy2_up_n    => port_j(1)(0),
+         dbnce_joy2_down_n  => port_j(1)(1),
+         dbnce_joy2_left_n  => port_j(1)(2),
+         dbnce_joy2_right_n => port_j(1)(3),
+         dbnce_joy2_fire_n  => port_j(1)(4),
+         amiga_i            => amiga,
+         amiga_rclick_i     => "00",
+         mega_key_n_i       => '1',
+         pot1_x_i           => main_pots( 7 downto  0),
+         pot1_y_i           => main_pots(15 downto  8),
+         pot2_x_i           => main_pots(23 downto 16),
+         pot2_y_i           => main_pots(31 downto 24),
+         pot1_x_o           => port_px(0),
+         pot1_y_o           => port_py(0),
+         pot2_x_o           => port_px(1),
+         pot2_y_o           => port_py(1)
+      );
+
+   stim : process
+      variable r     : rng_t := rng_init(G_SEED);
+      variable v     : integer;
+      variable tv    : integer_vector(0 to 3);      -- socket 0 x, y, socket 1 x, y
+      variable s     : natural;
+      variable n_chk : natural := 0;
+
+      procedure set_values(t : integer_vector(0 to 3)) is
+      begin
+         wait until rising_edge(qnice_clk);
+         qnice_pot1_x <= to_unsigned(t(0), 8);
+         qnice_pot1_y <= to_unsigned(t(1), 8);
+         qnice_pot2_x <= to_unsigned(t(2), 8);
+         qnice_pot2_y <= to_unsigned(t(3), 8);
+      end procedure set_values;
+
+      procedure set_flip(f : std_logic) is
+      begin
+         wait until rising_edge(qnice_clk);
+         qnice_flip_joyports_i <= f;
+      end procedure set_flip;
+
+      -- the socket connected to C64 port p
+      impure function socket_of(p : natural) return natural is
+      begin
+         if qnice_flip_joyports_i = '0' then
+            return p;
+         end if;
+         return 1 - p;
+      end function socket_of;
+
+      -- the buttons of every C64 port are those of the socket connected to it; t holds the true values
+      procedure check_buttons(t : integer_vector(0 to 3); what : string) is
+         variable ex : std_logic_vector(1 downto 0);       -- down, up
+      begin
+         for p in 0 to 1 loop
+            s := socket_of(p);
+            ex(0) := '1';
+            ex(1) := '1';
+            if t(2 * s) = 255 then
+               ex(0) := '0';                                 -- right button on up
+            end if;
+            if t(2 * s + 1) = 255 then
+               ex(1) := '0';                                 -- middle button on down
+            end if;
+            if port_j(p)(1 downto 0) /= ex or port_j(p)(3 downto 2) /= "11" then
+               tb_error(what & ", flip " & std_logic'image(qnice_flip_joyports_i) & ": C64 port " &
+                        integer'image(p + 1) & " shows up/down " & to_string(port_j(p)(1 downto 0)) &
+                        " (down, up), left/right " & to_string(port_j(p)(3 downto 2)) & ", expected " &
+                        to_string(ex) & " from socket " & integer'image(s) & " (values " &
+                        integer'image(t(2 * s)) & " / " & integer'image(t(2 * s + 1)) & ")");
+            end if;
+            n_chk := n_chk + 1;
+         end loop;
+      end procedure check_buttons;
+
+      variable pat : integer_vector(0 to 3);
+   begin
+      wait for 1 us;
+      -- 1. amiga_i = "00": the paddle outputs, random values, both flip states
+      amiga <= "00";
+      for f in 0 to 1 loop
+         if f = 0 then
+            set_flip('0');
+         else
+            set_flip('1');
+         end if;
+         for k in 1 to 200 loop
+            for i in 0 to 3 loop
+               rand_int(r, 0, 255, v);
+               tv(i) := v;
+            end loop;
+            set_values(tv);
+            wait for 2 us;
+            for p in 0 to 1 loop
+               s := socket_of(p);
+               if port_px(p) /= std_logic_vector(to_unsigned(255 - tv(2 * s), 8)) or
+                  port_py(p) /= std_logic_vector(to_unsigned(255 - tv(2 * s + 1), 8)) then
+                  tb_error("flip " & std_logic'image(qnice_flip_joyports_i) & ": C64 port " & integer'image(p + 1) &
+                           " paddles " & to_hstring(port_px(p)) & " / " & to_hstring(port_py(p)) &
+                           ", expected the inverted values of socket " & integer'image(s) & " (" &
+                           integer'image(tv(2 * s)) & " / " & integer'image(tv(2 * s + 1)) & ")");
+               end if;
+               n_chk := n_chk + 1;
+            end loop;
+         end loop;
+      end loop;
+      report "TB: amiga_i 00, 200 random values of the four paddles in each flip state: the paddle outputs of " &
+             "each C64 port were the inverted values of the socket connected to it" severity note;
+
+      -- 2. amiga_i = "11": the buttons of each mouse come from its own socket
+      set_flip('0');
+      set_values((12, 12, 12, 12));                           -- pull-ups seen, all released
+      wait for 2 us;
+      amiga <= "11";
+      wait for 2 * C_CONFIRM;
+      check_buttons((12, 12, 12, 12), "all released");
+      for f in 0 to 1 loop
+         if f = 1 then
+            set_flip('1');
+            wait for 2 * C_CONFIRM;
+         end if;
+         -- socket 0: right pressed, middle released; socket 1: right released, middle pressed
+         pat := (255, 12, 12, 255);
+         set_values(pat);
+         wait for 2 * C_CONFIRM;
+         check_buttons(pat, "pattern 1");
+         -- exchanged: socket 0: right released, middle pressed; socket 1: right pressed, middle released
+         pat := (12, 255, 255, 12);
+         set_values(pat);
+         wait for 2 * C_CONFIRM;
+         check_buttons(pat, "pattern 2");
+         -- a change of the flip while the buttons are held: the crossings take a few clock cycles
+         -- with different delays; no mouse may change its state
+         if f = 0 then
+            set_flip('1');
+         else
+            set_flip('0');
+         end if;
+         wait for 2 us;
+         check_buttons(pat, "right after a change of the flip");
+         wait for 2 * C_CONFIRM;
+         check_buttons(pat, "after a change of the flip");
+         if f = 0 then
+            set_flip('0');
+         else
+            set_flip('1');
+         end if;
+         wait for 2 us;
+         check_buttons(pat, "right after the flip back");
+      end loop;
+      report "TB: amiga_i 11, both flip states, two button patterns that differ between the sockets: every C64 " &
+             "port showed the buttons of the socket connected to it, also 2 us after each change of the flip (" &
+             integer'image(n_chk) & " checks)" severity note;
+
+      wait for 1 us;
+      if errcnt.value = 0 then
+         report "TB: RESULT PASS" severity note;
+      else
+         report "TB: RESULT FAIL " & integer'image(errcnt.value) & " errors" severity note;
+      end if;
+      running <= false;
+      finish;
+   end process stim;
+
+end architecture sim;

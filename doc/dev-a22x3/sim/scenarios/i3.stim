@@ -1,0 +1,64 @@
+# Scenario i3: the submenus Mouse and Paddles with the factory defaults of config.vhd, SD card
+# sd/card_empty.blk in the bottom tray (no config file: the firmware sets the menu from the
+# defaults instead of from a file and saves nothing).
+# Every key: hold it 3 ms, then wait until neither the UART nor the video RAM was active for
+# 20 ms. Menu bits = flat indices: Mouse 300/301 (port 1), 304/305 (port 2), the switches
+# 302 and 306; Paddles 312/313 (port 1), 315/316 (port 2).
+#   Help; Right (last item), Up, Up, Return: Advanced Settings; Right, Up, Up, Return: Mouse
+#   (both ports C64, no switch); Right, Return: Back (the cursor is on Mouse); Down, Return:
+#   Paddles; Run/Stop; Help closes the menu
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump a_boot
+mark A: Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump a_menu
+mark A: Right, Up, Up, Return: Advanced Settings
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump a_cursor_adv
+press 0010 3
+wait_quiet 20000 500
+dump a_adv
+mark A: Right, Up, Up, Return: Mouse
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump a_cursor_mouse
+press 0010 3
+wait_quiet 20000 500
+dump a_mouse
+mark A: Right, Return: Back
+press 0008 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump a_back_on_mouse
+mark A: Down, Return: Paddles
+press 0002 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump a_paddles
+mark A: Run/Stop leaves Paddles
+press 0040 3
+wait_quiet 20000 500
+dump a_rs
+mark A: Help closes the menu
+press 0080 3
+wait_osm 0 300
+wait_quiet 20000 500
+wait_ms 400
+dump a_closed
+end

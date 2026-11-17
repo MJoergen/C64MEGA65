@@ -40,6 +40,8 @@ SUITES = {
     "tb_crt_cacher": (".", ["bash", "CORE/vhdl/test/tb_crt_cacher/run.sh"], r"^RESULT: PASS", 3600),
     "tb_crt_eject":  (".", ["bash", "CORE/vhdl/test/tb_crt_eject/run.sh"], r"^RESULT: PASS", 3600),
     "tb_shortcuts":  (".", ["bash", "CORE/vhdl/test/tb_shortcuts/run.sh", "all"], r"^RESULT: PASS", 1800),
+    "tb_amiga_mouse": (".", ["bash", "CORE/vhdl/test/tb_amiga_mouse/run.sh", "all", "--jobs", JOBS], r"^RESULT: PASS", 3600),
+    "tb_paddles":    (".", ["bash", "CORE/vhdl/test/tb_paddles/run.sh", "all"], r"^RESULT: PASS", 3600),
 }
 GROUPS = {
     "fw0": ["make_rom", "menu_run", "menu_verify", "strrom", "strrom_tool", "rosm", "jiffy"],

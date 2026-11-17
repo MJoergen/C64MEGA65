@@ -66,6 +66,7 @@ port (
    qnice_ascal_polyphase_i   : in  std_logic;
    qnice_ascal_triplebuf_i   : in  std_logic;
    qnice_flip_joyports_i     : in  std_logic;
+   qnice_paddle_atari_i      : in  std_logic_vector(1 downto 0) := "00"; -- '1': Atari CX30 paddles; 0 = port 1, 1 = port 2
    qnice_osm_control_m_o     : out std_logic_vector(511 downto 0);
    qnice_gp_reg_o            : out std_logic_vector(255 downto 0);
 
@@ -559,7 +560,9 @@ begin
       end if;
    end process p_hr_stats;
 
-   -- Generate the paddle readings (mouse not supported, yet)
+   -- Generate the paddle readings, with half the sensitivity for the Atari CX30 paddles of a port
+   -- (issue #193). The Amiga mouse support of this file stays switched off: Amiga mice are decoded by
+   -- amiga_mouse.vhd in the core clock domain (see debouncer.vhd, issue #190).
    -- Works with 50 MHz, which happens to be the QNICE clock domain
    i_mouse_paddles: entity work.mouse_input
       port map (
@@ -570,6 +573,10 @@ begin
          amiga_mouse_enable_b    => '0',
          amiga_mouse_assume_a    => '0',
          amiga_mouse_assume_b    => '0',
+
+         -- Atari CX30 paddles (1 MOhm) per physical port: port 1, port 2
+         atari_paddles_a         => qnice_paddle_atari_i(0),
+         atari_paddles_b         => qnice_paddle_atari_i(1),
 
          -- These are the 1351 mouse / C64 paddle inputs and drain control
          fa_potx                 => paddle_i(0),

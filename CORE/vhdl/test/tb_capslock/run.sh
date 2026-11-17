@@ -258,11 +258,13 @@ if want wiring; then
    fi
 
    # differential analysis: the full framework.vhd and mega65.vhd of the base commit and of the
-   # working tree in identical libraries (packages, keyboard chain, current m2m_keyb); the sub-entities
-   # that are not in the library produce the same "not found" diagnostics in both, everything else
-   # (signal and port names, types, the m2m_keyb port map) is checked
+   # working tree in identical libraries (packages, keyboard chain, current m2m_keyb, cdc_stable); the
+   # sub-entities that are not in the library produce the same "not found" diagnostics in both,
+   # everything else (signal and port names, types, the m2m_keyb port map) is checked. cdc_stable is in
+   # the library because framework.vhd has one instance more of it since the paddle values cross
+   # through it (issue #193); its port maps are checked in both versions
    D="$BUILD/diff"
-   if analyze "$D/lib" $PKGS $KEYB_SRC "$REPO/M2M/vhdl/m2m_keyb.vhd"; then
+   if analyze "$D/lib" $PKGS $KEYB_SRC "$REPO/M2M/vhdl/m2m_keyb.vhd" "$REPO/M2M/vhdl/cdc_stable.vhd"; then
       for f in M2M/vhdl/framework.vhd CORE/vhdl/mega65.vhd; do
          n=$(basename "$f" .vhd)
          mkdir -p "$D/base_$n" "$D/new_$n"

@@ -123,8 +123,9 @@ when using retro monitors via the MEGA65's VGA out.
 
 ## 12) My mouse does not work
 
-Make sure that you use either a real C64 mouse or
-[MouSTer](https://retrohax.net/shop/modulesandparts/mouster/).
+Make sure that you use a real C64 mouse,
+[MouSTer](https://retrohax.net/shop/modulesandparts/mouster/)
+or an AMIGA mouse.
 
 The
 [C64 mouse "1351"](https://www.c64-wiki.com/wiki/Mouse_1351)
@@ -132,9 +133,22 @@ is clearly superior to the C64 mouse "1350" as the latter one does not feature
 proportional movements and therefore does not feel right, for example when you
 use GEOS.
 
-Caution: AMIGA mice look pretty much like C64 mice but the C64 core does not
-support AMIGA mice, yet. The MEGA65 core does support AMIGA mice and this
-feature is on our roadmap.
+Caution: AMIGA mice look pretty much like C64 mice but they work differently.
+If you use an AMIGA mouse, tell the core: Open the on-screen menu, go to
+"Advanced Settings" and there to "Mouse" in the section "Input Devices" and
+select "Amiga" for the port that the mouse is plugged into ("Port 1" and
+"Port 2" are the two sockets of the MEGA65). The C64 then sees a 1351.
+An original AMIGA mouse has its left button only. The right and the middle
+button need a mouse or an adapter that drives their lines, or a small adapter
+with two pull-up resistors of about 2 kOhm from pin 7 to pin 9 and from pin 7
+to pin 5 (the same devices that give you the right button in the Amiga core
+for the MEGA65).
+If you need a right click and have no such device, switch on the menu item
+"#1: MEGA+left = right" for port 1 or "#2: MEGA+left = right" for port 2
+(the "Mouse" submenu shows them while the port is set to "Amiga"): a click
+with the left mouse button while you hold the MEGA key is then a right click.
+With the setting "C64" an AMIGA mouse does not move the pointer and disturbs
+the keyboard, and with the setting "Amiga" a C64 mouse does not work.
 
 ## 13) Can I use cartridges?
 

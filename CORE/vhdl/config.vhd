@@ -68,7 +68,7 @@ type WHS_RECORD_ARRAY_TYPE is array (0 to WHS_RECORDS - 1) of WHS_RECORD_TYPE;
 -- by CFG_FILE (the on-SD-card config filename further down). Update this
 -- one line when releasing a new version; make_release.py parses it and
 -- uses it as the official version string for that release.
-constant CORE_VERSION : string := "WIP-V6-A25";
+constant CORE_VERSION : string := "WIP-V6-A26";
 
 -- Define all your screens as string constants. They will be synthesized as ROMs.
 -- You can name these string constants as you want to, as long as you make them part of the WHS array (see below).
@@ -394,7 +394,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 301; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 325; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -628,6 +628,8 @@ constant OPTM_ITEMS        : string :=
    " On: MK3 & Custom ROM\n"    &
 
    "\n"                         &
+   " Input Devices\n"           &  -- Input Devices section within Advanced Settings (#142, #190, #193)
+   "\n"                         &
    " Keyboard Shortcuts\n"      &  -- Keyboard Shortcuts submenu (#142), nested inside Advanced Settings
    " Keyboard Shortcuts\n"      &
    "\n"                         &
@@ -730,6 +732,30 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Back\n"                    &  -- returns to Advanced Settings
 
+   " Mouse\n"                   &  -- Mouse submenu (#190), nested inside Advanced Settings: "Port 1" and
+   " Mouse\n"                   &  -- "Port 2" are the physical sockets of the MEGA65, independent of
+   "\n"                         &  -- "Flip joystick ports"
+   " Port 1: C64\n"             &  -- Commodore 1351 (or a compatible mouse); default
+   " Port 1: Amiga\n"           &
+   " #1: MEGA+left = right\n"   &  -- right click with the MEGA key; only shown while port 1 is "Amiga"
+   "\n"                         &
+   " Port 2: C64\n"             &  -- default
+   " Port 2: Amiga\n"           &
+   " #2: MEGA+left = right\n"   &  -- right click with the MEGA key; only shown while port 2 is "Amiga"
+   "\n"                         &
+   " Back\n"                    &  -- returns to Advanced Settings
+
+   " Paddles\n"                 &  -- Paddles submenu (#193), nested inside Advanced Settings; ports as above
+   " Paddles\n"                 &
+   "\n"                         &
+   " Port 1: C64\n"             &  -- Commodore paddles; default
+   " Port 1: Atari CX30\n"      &  -- Atari CX30 paddles with 1 MOhm potentiometers
+   "\n"                         &
+   " Port 2: C64\n"             &  -- default
+   " Port 2: Atari CX30\n"      &
+   "\n"                         &
+   " Back\n"                    &  -- returns to Advanced Settings
+
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
@@ -781,6 +807,14 @@ constant OPTM_G_SC_F11        : integer := 39;  -- action of F11
 constant OPTM_G_SC_F12        : integer := 40;  -- action of F12 (Shift+F11)
 constant OPTM_G_SC_F13        : integer := 41;  -- action of F13
 constant OPTM_G_SC_F14        : integer := 42;  -- action of F14 (Shift+F13)
+-- Input Devices (#190, #193): "Port 1" and "Port 2" are the physical sockets of the MEGA65,
+-- independent of "Flip joystick ports"
+constant OPTM_G_MOUSE_P1      : integer := 43;  -- mouse type at the MEGA65 port 1: C64 (1351) or Amiga (#190)
+constant OPTM_G_MOUSE_P2      : integer := 44;  -- mouse type at the MEGA65 port 2: C64 (1351) or Amiga (#190)
+constant OPTM_G_PADDLES_P1    : integer := 45;  -- paddle type at the MEGA65 port 1: C64 or Atari CX30 with 1 MOhm potentiometers (#193)
+constant OPTM_G_PADDLES_P2    : integer := 46;  -- paddle type at the MEGA65 port 2: C64 or Atari CX30 with 1 MOhm potentiometers (#193)
+constant OPTM_G_MOUSE_P1_RCLICK : integer := 47;  -- port 1, Amiga mouse: MEGA key + left button = right button; off by default (#190)
+constant OPTM_G_MOUSE_P2_RCLICK : integer := 48;  -- port 2, Amiga mouse: MEGA key + left button = right button; off by default (#190)
 
 -- !!! DO NOT TOUCH THE FUNCTION DEFINITIONS IN THE NEXT NINE LINES
 -- Dependency format 2 (magic 0x2DEF): bits 28..25 are a 4-bit mask of mother-group items, so a line
@@ -1020,6 +1054,8 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_SIM_RRNET,                        -- On: MK3 & Custom ROM
 
                                              OPTM_G_LINE,
+                                             OPTM_G_HEADLINE,                         -- Input Devices
+                                             OPTM_G_LINE,
                                              OPTM_G_SUBMENU,                          -- open "Keyboard Shortcuts", nested
                                              OPTM_G_HEADLINE,                         -- Keyboard Shortcuts
                                              OPTM_G_LINE,
@@ -1121,6 +1157,30 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "F14: %s"
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Keyboard Shortcuts"
+
+                                             OPTM_G_SUBMENU,                          -- open "Mouse", nested
+                                             OPTM_G_HEADLINE,                         -- Mouse
+                                             OPTM_G_LINE,
+                                             OPTM_G_MOUSE_P1      + OPTM_G_STDSEL,    -- Port 1: C64
+                                             OPTM_G_MOUSE_P1,                         -- Port 1: Amiga
+                                             OPTM_G_MOUSE_P1_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P1, 1), -- #1: MEGA+left = right (only with Amiga)
+                                             OPTM_G_LINE,
+                                             OPTM_G_MOUSE_P2      + OPTM_G_STDSEL,    -- Port 2: C64
+                                             OPTM_G_MOUSE_P2,                         -- Port 2: Amiga
+                                             OPTM_G_MOUSE_P2_RCLICK + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MOUSE_P2, 1), -- #2: MEGA+left = right (only with Amiga)
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Mouse"
+
+                                             OPTM_G_SUBMENU,                          -- open "Paddles", nested
+                                             OPTM_G_HEADLINE,                         -- Paddles
+                                             OPTM_G_LINE,
+                                             OPTM_G_PADDLES_P1    + OPTM_G_STDSEL,    -- Port 1: C64
+                                             OPTM_G_PADDLES_P1,                       -- Port 1: Atari CX30
+                                             OPTM_G_LINE,
+                                             OPTM_G_PADDLES_P2    + OPTM_G_STDSEL,    -- Port 2: C64
+                                             OPTM_G_PADDLES_P2,                       -- Port 2: Atari CX30
+                                             OPTM_G_LINE,
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Paddles"
 
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Advanced Settings"

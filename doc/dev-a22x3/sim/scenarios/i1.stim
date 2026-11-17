@@ -1,0 +1,169 @@
+# Scenario i1: the submenus Mouse and Paddles of the section Input Devices in Advanced Settings
+# (issues #190, #193), SD card sd/card_full.blk in the bottom tray.
+# Every key: hold it 3 ms, then wait until neither the UART nor the video RAM was active for
+# 20 ms. Menu bits = flat indices: Mouse 300/301 (port 1), 304/305 (port 2), the switches
+# MEGA+left = right 302 (port 1, visible only with Port 1: Amiga) and 306 (port 2), opener 297;
+# Paddles 312/313 (port 1), 315/316 (port 2), opener 309; Back of Advanced Settings 320.
+#   A  Help; Right (last item), Up, Up: Advanced Settings; Return; Right, Up, Up (Paddles,
+#      Mouse); Return: Mouse; Left, Down, Space: Port 1: Amiga (the switch of port 1 appears
+#      behind it); Down: the switch (not selected); Down, Down, Return: Port 2: Amiga; Right,
+#      Return: Back (the cursor is on Mouse); Down, Return: Paddles; Left, Down, Space: Port 1:
+#      Atari CX30; Down, Space on Port 2: C64 (already selected: no change); Run/Stop (the
+#      cursor is on Paddles); Help closes the menu and saves the changes
+#   B  Help: the menu opens again in Advanced Settings with the cursor on Paddles; Up, Return:
+#      Mouse; Left, Return: Port 1: C64 (the switch of port 1 disappears); Right, Return: Back;
+#      Down, Return: Paddles; Run/Stop; Help closes the menu and saves the change
+#   C  Help, Help: nothing changed, nothing is written
+# The switches themselves are the subject of scenario i2.
+set sd_int 1
+reset
+wait_uart 1500 MHz
+wait_quiet 20000 300
+dump a_boot
+mark A: Help opens the menu
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump a_menu
+mark A: Right, Up, Up
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump a_cursor_adv
+mark A: Return: Advanced Settings
+press 0010 3
+wait_quiet 20000 500
+dump a_adv
+mark A: Right, Up, Up (Paddles, Mouse)
+press 0008 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+press 0001 3
+wait_quiet 20000 500
+dump a_cursor_mouse
+mark A: Return: Mouse
+press 0010 3
+wait_quiet 20000 500
+dump a_mouse
+mark A: Left, Down: Port 1: Amiga
+press 0004 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_m1amiga
+mark A: Space selects Port 1: Amiga
+press 0020 3
+wait_quiet 20000 500
+dump a_mouse_m1amiga
+mark A: Down: the switch of port 1
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_m1sw
+mark A: Down, Down: Port 2: Amiga
+press 0002 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_m2amiga
+mark A: Return selects Port 2: Amiga
+press 0010 3
+wait_quiet 20000 500
+dump a_mouse_amiga
+mark A: Right, Return: Back
+press 0008 3
+wait_quiet 20000 500
+dump a_cursor_mback
+press 0010 3
+wait_quiet 20000 500
+dump a_back_on_mouse
+mark A: Down, Return: Paddles
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_paddles
+press 0010 3
+wait_quiet 20000 500
+dump a_paddles
+mark A: Left, Down: Port 1: Atari CX30
+press 0004 3
+wait_quiet 20000 500
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_p1atari
+mark A: Space selects Port 1: Atari CX30
+press 0020 3
+wait_quiet 20000 500
+dump a_paddles_atari
+mark A: Down, Space on Port 2: C64 (already selected)
+press 0002 3
+wait_quiet 20000 500
+dump a_cursor_p2c64
+press 0020 3
+wait_quiet 20000 500
+dump a_p2c64_again
+mark A: Run/Stop leaves Paddles
+press 0040 3
+wait_quiet 20000 500
+dump a_rs
+mark A: Help closes the menu
+press 0080 3
+wait_osm 0 300
+wait_quiet 20000 500
+dump a_closed
+# HELP_MENU ends with WAIT333MS (busy loop): the main loop reads keys again only after it
+wait_ms 400
+mark B: Help opens the menu again
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump b_menu
+mark B: Up, Return: Mouse
+press 0001 3
+wait_quiet 20000 500
+dump b_cursor_mouse
+press 0010 3
+wait_quiet 20000 500
+dump b_mouse
+mark B: Left, Return: Port 1: C64
+press 0004 3
+wait_quiet 20000 500
+dump b_cursor_m1c64
+press 0010 3
+wait_quiet 20000 500
+dump b_mouse_c64
+mark B: Right, Return: Back
+press 0008 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump b_back_on_mouse
+mark B: Down, Return: Paddles
+press 0002 3
+wait_quiet 20000 500
+press 0010 3
+wait_quiet 20000 500
+dump b_paddles
+mark B: Run/Stop leaves Paddles
+press 0040 3
+wait_quiet 20000 500
+dump b_rs
+mark B: Help closes the menu
+press 0080 3
+wait_osm 0 300
+wait_quiet 20000 500
+dump b_closed
+wait_ms 400
+mark C: Help opens the menu, Help closes it without a change
+press 0080 3
+wait_osm 1 300
+wait_quiet 20000 500
+dump c_menu
+press 0080 3
+wait_osm 0 300
+wait_quiet 20000 500
+wait_ms 400
+dump c_closed
+end
