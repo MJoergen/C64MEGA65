@@ -16,8 +16,11 @@
 ;
 ; Scenario 4 switches the screen trace on: OPTM_FP_PRINT prints
 ;     D <flat index of every line it draws>
-; OPTM_FP_PRINTXY prints  X Y=<row> [<string>]  and the selection callback
-; prints  M <flat index of every selected item>  behind its S line.
+; OPTM_FP_PRINTXY prints  X X=<column> Y=<row> [<string>]  and the selection
+; callback prints  M <flat index of every selected item>  behind its S line.
+; The marker of a selected radio item is r, the marker of a selected
+; single-select item is s (the firmware uses M2M$OPT_SEL_MULTI and
+; M2M$OPT_SEL_SINGLE, two different characters as well).
 ;
 ; This covers: entering nested submenus (depth 2), leaving them via the
 ; closer line and via Run/Stop (one level per press), the enter cursor
@@ -261,7 +264,8 @@ _NT_DONE        MOVE    NT_S_DONE, R8
 NT_REC          .DW     NT_STUB, NT_STUB, NT_PRINT, NT_PRINTXY
                 .DW     NT_STUB, NT_STUB, NT_GETKEY
                 .DW     NT_CB_SEL, NT_CB_SHOW, NT_FATAL
-                .DW     0x0078, 0, 0x0078, 0    ; sel. chars (inline strings)
+                .DW     0x0072, 0, 0x0073, 0    ; sel. chars (inline strings):
+                                                ; r = radio, s = single-select
                 .DW     NAV_N, NAV_ITEMS, NAV_GROUPS, NT_STDSEL, NT_LINES, 0
                                                 ; last word = OPTM_IR_DEPS: 0 =
                                                 ; dependency feature off here
@@ -299,13 +303,17 @@ _NT_PR_RET      DECRB
                 RET
 
                 ; OPTM_FP_PRINTXY: R8 = string, R9 = x, R10 = y. With the
-                ; screen trace on, print the row and the string
+                ; screen trace on, print the column, the row and the string
 NT_PRINTXY      INCRB
                 MOVE    NT_SCR, R0
                 CMP     0, @R0
                 RBRA    _NT_PX_RET, Z           ; screen trace off
                 MOVE    R8, R6                  ; preserve R8
-                MOVE    NT_S_XY, R8             ; "X Y="
+                MOVE    NT_S_XX, R8             ; "X X="
+                SYSCALL(puts, 1)
+                MOVE    R9, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_XY, R8             ; " Y="
                 SYSCALL(puts, 1)
                 MOVE    R10, R8
                 SYSCALL(puthex, 1)
@@ -477,7 +485,8 @@ NT_S_N2         .ASCII_W "N2"
 NT_S_N3         .ASCII_W "N3"
 NT_S_N4         .ASCII_W "N4"
 NT_S_D          .ASCII_W "D"
-NT_S_XY         .ASCII_W "X Y="
+NT_S_XX         .ASCII_W "X X="
+NT_S_XY         .ASCII_W " Y="
 NT_S_LB         .ASCII_W " ["
 NT_S_RB         .ASCII_W "]"
 NT_S_M          .ASCII_W "M"

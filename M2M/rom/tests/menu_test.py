@@ -1313,6 +1313,14 @@ def deps_minhid_fixtures():
 KEY_UP, KEY_DOWN, KEY_SELECT, KEY_CLOSE, KEY_SELALT, KEY_MENUUP = 1, 2, 3, 4, 5, 6
 KEY_FIRST, KEY_LAST = 7, 8      # Cursor left / Cursor right (issue #258)
 
+# The screen of the nav testbed (screen trace of scenario 4): OPTM_X is 0, so
+# the marker column, which is also the first column of a %s string, is 1
+# (behind the frame). The record NT_REC of the testbed draws the marker of a
+# selected radio item as r and the marker of a selected single-select item as
+# s: two different characters, like M2M$OPT_SEL_MULTI and M2M$OPT_SEL_SINGLE
+NAV_COL = 1
+NAV_MARK_RADIO, NAV_MARK_SINGLE = "r", "s"
+
 
 class NavSim:
     def __init__(self, groups, stdsel, start, labels=None, raw_deps=None,
@@ -1328,10 +1336,10 @@ class NavSim:
         self.resolved = resolve_deps(self.g, raw_deps) if raw_deps else None
         # screen trace (scenario 4): the testbed prints a D line for every
         # OPTM_FP_PRINT (the flat indices of the lines it draws), an X line
-        # for every OPTM_FP_PRINTXY (row and string) and an M line behind
-        # every S line (the flat indices of all selected items). The model
-        # keeps what the screen shows: the drawn lines and the character in
-        # the marker column of each row
+        # for every OPTM_FP_PRINTXY (column, row and string) and an M line
+        # behind every S line (the flat indices of all selected items). The
+        # model keeps what the screen shows: the drawn lines and the first
+        # character of every string at its column and row
         self.screen = screen
         self.scr_vis = None
         self.scr_mark = {}
@@ -1350,9 +1358,15 @@ class NavSim:
         assert i in vis, "row of the hidden line %d" % i
         return vis.index(i) + 1
 
-    def _printxy(self, row, text):
-        self.trace.append("X Y=%04X [%s]" % (row, text))
-        self.scr_mark[row] = text[:1]           # the marker column
+    def _printxy(self, row, text, col=NAV_COL):
+        self.trace.append("X X=%04X Y=%04X [%s]" % (col, row, text))
+        self.scr_mark[(row, col)] = text[:1]
+
+    def _marker(self, i):
+        """the marker of line i when it is selected: OPTM_SHOW and OPTM_RUN
+        take the single-select string for a line with the single-select
+        flag and the radio string otherwise"""
+        return NAV_MARK_SINGLE if self.g[i] & 0x8000 else NAV_MARK_RADIO
 
     def _emit_m(self):
         if self.screen:
@@ -1361,18 +1375,22 @@ class NavSim:
 
     def _check_screen(self):
         """What the screen shows after a key: exactly the visible lines of
-        the current view, a marker in the row of every visible selected line
-        and in no other row, and the cursor on a visible line"""
+        the current view; in the marker column the marker of its type (radio
+        or single-select) in the row of every visible selected line and in no
+        other row; nothing printed in another column; and the cursor on a
+        visible line"""
         vis = self._vis()
         assert self.scr_vis == vis, (
             "stale screen at level %d: drawn %r, visible %r"
             % (self.level, self.scr_vis, vis))
+        cols = sorted({c for _, c in self.scr_mark if c != NAV_COL})
+        assert not cols, "printed in the columns %r" % cols
         for row, i in enumerate(vis, 1):
-            want = "x" if self.sel[i] else " "
-            assert self.scr_mark.get(row, " ") == want, (
-                "row %d (line %d) shows %r, the line is %s"
-                % (row, i, self.scr_mark.get(row, " "),
-                   "selected" if self.sel[i] else "not selected"))
+            want = self._marker(i) if self.sel[i] else " "
+            got = self.scr_mark.get((row, NAV_COL), " ")
+            assert got == want, (
+                "row %d (line %d) shows %r, expected %r"
+                % (row, i, got, want))
         assert self.cursor in vis, "cursor on the hidden line %d" % self.cursor
 
     def _affects(self, w):
@@ -1400,7 +1418,8 @@ class NavSim:
         percent-terminated-label desync bug in the OPTM_SHOW scanner.
         With the screen trace, OPTM_SHOW first draws the visible lines (D),
         prints the string of each %s callback in its row (X) and then the
-        marker of every visible selected line (X)."""
+        marker of every visible selected line (X), the single-select or the
+        radio marker by the type of the line."""
         arr = self._struct()["arr"]
         vis = [i for i, w in enumerate(arr) if w & 0x8000]
         if self.screen:
@@ -1415,7 +1434,7 @@ class NavSim:
         if self.screen:
             for row, i in enumerate(vis, 1):
                 if self.sel[i]:
-                    self._printxy(row, "x")
+                    self._printxy(row, self._marker(i))
 
     def _normalize(self):
         """Port of the _OPTM_RUN_INI* entry normalization that OPTM_RUN runs
@@ -1538,7 +1557,7 @@ class NavSim:
             return None                             # multi already set: ignore
         if w & 0x8000:
             if self.screen:                         # draw the marker
-                self._printxy(self._row(self.cursor), "x")
+                self._printxy(self._row(self.cursor), NAV_MARK_SINGLE)
             self.sel[self.cursor] = 1
             item = 1
         else:
@@ -1548,7 +1567,7 @@ class NavSim:
                     if self.screen:                 # delete each marker
                         self._printxy(self._row(j), " ")
             if self.screen:                         # draw the new one
-                self._printxy(self._row(self.cursor), "x")
+                self._printxy(self._row(self.cursor), NAV_MARK_RADIO)
             self.sel[self.cursor] = 1
             first = self.g.index(w)
             item = sum(1 for j in range(first, self.cursor)
@@ -3831,6 +3850,7 @@ _MDL_D1 = '302: ("MOUSE_P1", 0b' + '0010)'
 _MDL_D2 = '306: ("MOUSE_P2", 0b' + '0010)'
 _MDL_F1 = '"MOUSE_P1_RCLICK", ["SINGLE' + 'SEL"])'
 _MDL_F2 = '"MOUSE_P2_RCLICK", ["SINGLE' + 'SEL"])'
+_I16 = " " * 16                 # the indentation of an instruction
 _CFG, _MEGA, _MDL = ("CORE/vhdl/config.vhd", "CORE/vhdl/mega65.vhd",
                      "M2M/rom/tests/menu_test.py")
 
@@ -3979,6 +3999,49 @@ RCLICK_MUTANTS = [
      "_OPTM_RUN_9     MOVE    OPTM_Y, R10\n                MOVE    @R10, R10\n"
      "                ADD     1, R10\n",
      "_OPTM_RUN_9     MOVE    OPTM_Y, R10\n                MOVE    @R10, R10\n"),
+] + [
+    # the type and the column of the markers: only the screen trace of
+    # scenario 4 sees them (the testbed draws r for a radio item and s for a
+    # single-select item, like the two different characters of the firmware)
+    ("menu.asm  " + desc, "M2M/rom/menu.asm", old, new)
+    for desc, old, new in (
+        ("OPTM_SHOW draws the radio marker for single-select lines",
+         _I16 + "ADD     2, R8                   ; single-select\n", ""),
+        ("switching a single-select item on draws the radio marker",
+         _I16 + "MOVE    OPTM_SSMS, R7           ; single select flag\n"
+         + _I16 + "ADD     @R7, R8\n",
+         _I16 + "MOVE    OPTM_SSMS, R7           ; single select flag\n"),
+        ("selecting a radio item draws the single-select marker",
+         "_OPTM_RUN_16    MOVE    OPTM_SSMS, R12          ; Flag on stack: multi-select\n"
+         + _I16 + "MOVE    0, @R12",
+         "_OPTM_RUN_16    MOVE    OPTM_SSMS, R12          ; Flag on stack: multi-select\n"
+         + _I16 + "MOVE    2, @R12"),
+        ("OPTM_SHOW swaps the radio and the single-select marker",
+         _I16 + "RBRA    _OPTM_SHOW_1B, Z        ; multi-select",
+         _I16 + "RBRA    _OPTM_SHOW_1B, !Z       ; multi-select"),
+        ("the marker of a single-select item switched on one column to the right",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9                \n",
+         _I16 + "MOVE    2, @R12\n" + _I16 + "MOVE    OPTM_X, R9              ; R9: x-coord\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9                \n"),
+        ("the marker of a single-select item switched off deleted one column to the right",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9\n"
+         + _I16 + "MOVE    OPTM_Y, R10             ; R10: y-coord"),
+        ("the markers of a radio group deleted one column to the right",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos",
+         _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9\n"
+         + _I16 + "XOR     R10, R10                ; R10: flat list item pos"),
+        ("OPTM_SHOW draws the markers one column to the right",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     1, R9",
+         "_OPTM_SHOW_1B   MOVE    OPTM_X, R9              ; R9: current x-pos\n"
+         + _I16 + "MOVE    @R9, R9\n" + _I16 + "ADD     2, R9"),
+        ("OPTM_SHOW prints the strings of the %s lines one column to the left",
+         "ADD     1, R9                   ; add 1 to x because of frame\n", ""),
+    )
 ]
 
 MUTANTS = [
