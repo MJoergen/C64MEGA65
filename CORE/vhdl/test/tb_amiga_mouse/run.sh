@@ -37,7 +37,7 @@
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
 # Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime of "all" about
-# 35 minutes with 2 processes (--jobs 2).
+# 46 minutes with 2 processes (--jobs 2) and 33 minutes with 3.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------

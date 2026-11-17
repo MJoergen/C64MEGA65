@@ -17,7 +17,7 @@ CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|keyb|wiring|synth|al
 * `all` (default): everything.
 * `--keep`: keeps the build directory (with one log per simulation) and prints its path. `--jobs N`: number of parallel simulations (default 4, or the variable `JOBS`). `--no-mutants`: skips the mutants.
 
-The runner ends with `RESULT: PASS` (exit status 0) or `RESULT: FAIL ...`. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl`, or set `GHDL`), python3, git. Runtime of `all` about 35 minutes with 2 processes (`--jobs 2`); every simulation has a timeout of 25 minutes.
+The runner ends with `RESULT: PASS` (exit status 0) or `RESULT: FAIL ...`. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl`, or set `GHDL`), python3, git. Runtime of `all` about 46 minutes with 2 processes (`--jobs 2`) and 33 minutes with 3; every simulation has a timeout of 25 minutes.
 
 ## The decoder and the buttons (`tb_amiga_mouse.vhd`)
 
