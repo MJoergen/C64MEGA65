@@ -3,13 +3,14 @@
 # Amiga mouse benches (GitHub issue #190): the mutants, used by run.sh
 #
 #   mutants.py list <part>           name|kind|file|unit|bench arguments for the mutants of a part
-#                                    (decoder, buttons, ports or all); kind is "mutant" (must be
+#                                    (decoder, buttons, ports, keyb or all); kind is "mutant" (must be
 #                                    rejected) or "survivor" (expected to survive, reported only)
 #   mutants.py make <name> <src> <dst>   copy src to dst with the text of the mutant replaced;
 #                                    the old text must occur exactly once
 #
 # Each mutant is one exact text replacement in M2M/vhdl/amiga_mouse.vhd, M2M/vhdl/debouncer.vhd,
-# M2M/vhdl/cdc_stable.vhd or M2M/vhdl/qnice_wrapper.vhd, and names the bench run that has to reject it.
+# M2M/vhdl/cdc_stable.vhd, M2M/vhdl/qnice_wrapper.vhd or M2M/vhdl/m2m_keyb.vhd, and names the bench
+# run that has to reject it.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -18,8 +19,21 @@ import sys
 
 FAST = "-gG_STEP_US=1"
 SMALL = "-gG_STEP_US=10 -gG_CONFIRM_US=100 -gG_STUCK_MS=5"
+TENTH = "-gG_FREQ=3152778"
 TB = "tb_amiga_mouse"
 TP = "tb_amiga_ports"
+TK = "tb_amiga_keyb"
+RULE = "-gG_PART=rule " + TENTH
+DIRECTED = "-gG_PART=directed " + TENTH
+ONLY_PROPERTIES = " -gG_MODEL=false -gG_IDENT=false"
+
+RQ0 = "rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;"
+R0 = "rclick(0)     <= rclick_q(0) and amiga_i(0) and amiga_rclick_i(0);"
+R1 = "rclick(1)     <= rclick_q(1) and amiga_i(1) and amiga_rclick_i(1);"
+# r registered: every decision takes effect one clock cycle late; "now = 0 fs" gives the register the
+# start value '0', so that only the delay can be caught
+LATE = "rclick(0)     <= rclick_q(0) and amiga_i(0) and amiga_rclick_i(0) when rising_edge(clk) or now = 0 fs;"
+UP0 = "mouse_up_n(0) <= mouse_right_n(0) and (j1_f or not rclick(0));"
 
 X_LINE = "count := quad_count(lines_old(C_RIGHT), lines_old(C_DOWN), lines_flt(C_RIGHT), lines_flt(C_DOWN));"
 Y_LINE = "count := quad_count(lines_old(C_UP), lines_old(C_LEFT), lines_flt(C_UP), lines_flt(C_LEFT));"
@@ -110,8 +124,7 @@ MUTANTS = [
     ("direction_masking_removed", "ports", "debouncer", TP, "-gG_PART=modes",
      "s1_l <= '1'               when amiga_i(0) = '1' else j1_l;", "s1_l <= j1_l;"),
     ("buttons_exchanged", "ports", "debouncer", TP, "-gG_PART=modes",
-     "mouse_up_n(0) <= mouse_right_n(0) and (j1_f or not rclick(0));",
-     "mouse_up_n(0) <= mouse_middle_n(0) and (j1_f or not rclick(0));"),
+     UP0, "mouse_up_n(0) <= mouse_middle_n(0) and (j1_f or not rclick(0));"),
     ("fire_masked", "ports", "debouncer", TP, "-gG_PART=modes",
      "s2_f <= j2_f or rclick(1);", "s2_f <= '1' when amiga_i(1) = '1' else j2_f or rclick(1);"),
     ("measured_values_not_unflipped", "ports", "debouncer", TP, "-gG_PART=modes",
@@ -127,6 +140,80 @@ MUTANTS = [
      "         enable_i       => amiga_i(1),", "         enable_i       => amiga_i(0),"),
     ("port_switcher_broken", "ports", "debouncer", TP, "-gG_PART=identity",
      "dbnce_joy1_up_n      <= s1_u when flip_joys_i = '0' else s2_u;", "dbnce_joy1_up_n      <= s1_u;"),
+    # ports: the right click with the MEGA key (SPEC.md section 5.1)
+    ("rc_swap_follows_key", "ports", "debouncer", TP, RULE,
+     R0, "rclick(0)     <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;"),
+    ("rc_swap_follows_key_directed", "ports", "debouncer", TP, DIRECTED,
+     R0, "rclick(0)     <= amiga_i(0) and amiga_rclick_i(0) and not mega_key_n_i;"),
+    ("rc_ff_updated_while_pressed", "ports", "debouncer", TP, RULE,
+     "if j2_f = '1' then\n            rclick_q(1)", "if true then\n            rclick_q(1)"),
+    ("rc_decision_one_cycle_late", "ports", "debouncer", TP, RULE,
+     R0, LATE),
+    ("rc_decision_one_cycle_late_properties", "ports", "debouncer", TP, RULE + ONLY_PROPERTIES,
+     R0, LATE),
+    ("rc_decision_one_cycle_late_directed", "ports", "debouncer", TP, DIRECTED,
+     R0, LATE),
+    ("rc_fire_not_released", "ports", "debouncer", TP, RULE,
+     "s1_f <= j1_f or rclick(0);", "s1_f <= j1_f;"),
+    ("rc_fire_not_released_properties", "ports", "debouncer", TP, RULE + ONLY_PROPERTIES,
+     "s1_f <= j1_f or rclick(0);", "s1_f <= j1_f;"),
+    ("rc_key_ignored_properties", "ports", "debouncer", TP, RULE + ONLY_PROPERTIES,
+     RQ0, "rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0);"),
+    ("rc_up_not_pulled", "ports", "debouncer", TP, RULE,
+     UP0, "mouse_up_n(0) <= mouse_right_n(0);"),
+    ("rc_device_right_lost_in_rclick", "ports", "debouncer", TP, RULE,
+     UP0, "mouse_up_n(0) <= (j1_f or not rclick(0)) when rclick(0) = '1' else mouse_right_n(0);"),
+    ("rc_device_right_lost_in_rclick_directed", "ports", "debouncer", TP, DIRECTED,
+     UP0, "mouse_up_n(0) <= (j1_f or not rclick(0)) when rclick(0) = '1' else mouse_right_n(0);"),
+    ("rc_device_right_lost_switch_on", "ports", "debouncer", TP, RULE,
+     UP0, "mouse_up_n(0) <= (j1_f or not rclick(0)) when amiga_rclick_i(0) = '1' else mouse_right_n(0);"),
+    ("rc_device_right_lost_switch_on_directed", "ports", "debouncer", TP, DIRECTED,
+     UP0, "mouse_up_n(0) <= (j1_f or not rclick(0)) when amiga_rclick_i(0) = '1' else mouse_right_n(0);"),
+    ("rc_key_polarity", "ports", "debouncer", TP, RULE,
+     RQ0, "rclick_q(0) <= amiga_i(0) and amiga_rclick_i(0) and mega_key_n_i;"),
+    ("rc_switch_missing_in_q", "ports", "debouncer", TP, RULE,
+     RQ0, "rclick_q(0) <= amiga_i(0) and not mega_key_n_i;"),
+    ("rc_switch_missing_in_q_directed", "ports", "debouncer", TP, DIRECTED,
+     RQ0, "rclick_q(0) <= amiga_i(0) and not mega_key_n_i;"),
+    ("rc_switch_missing_in_r", "ports", "debouncer", TP, RULE,
+     R0, "rclick(0)     <= rclick_q(0) and amiga_i(0);"),
+    ("rc_amiga_missing_in_q", "ports", "debouncer", TP, RULE,
+     RQ0, "rclick_q(0) <= amiga_rclick_i(0) and not mega_key_n_i;"),
+    ("rc_amiga_missing_in_q_directed", "ports", "debouncer", TP, DIRECTED,
+     RQ0, "rclick_q(0) <= amiga_rclick_i(0) and not mega_key_n_i;"),
+    ("rc_amiga_missing_in_r", "ports", "debouncer", TP, RULE,
+     R0, "rclick(0)     <= rclick_q(0) and amiga_rclick_i(0);"),
+    ("rc_switch_of_other_socket", "ports", "debouncer", TP, RULE,
+     RQ0, "rclick_q(0) <= amiga_i(0) and amiga_rclick_i(1) and not mega_key_n_i;"),
+    ("rc_flip_flops_shared", "ports", "debouncer", TP, RULE,
+     R1, "rclick(1)     <= rclick_q(0) and amiga_i(1) and amiga_rclick_i(1);"),
+    ("rc_flip_flops_shared_directed", "ports", "debouncer", TP, DIRECTED,
+     R1, "rclick(1)     <= rclick_q(0) and amiga_i(1) and amiga_rclick_i(1);"),
+    ("rc_flip_flop_starts_at_one", "ports", "debouncer", TP, DIRECTED,
+     "signal rclick_q               : std_logic_vector(1 downto 0) := \"00\";",
+     "signal rclick_q               : std_logic_vector(1 downto 0) := \"11\";"),
+    ("rc_fire_without_amiga_setting", "ports", "debouncer", TP, "-gG_PART=identity -gG_MODEL=false",
+     "s1_f <= j1_f or rclick(0);", "s1_f <= j1_f or (amiga_rclick_i(0) and not mega_key_n_i);"),
+    ("rc_up_without_switch", "ports", "debouncer", TP, "-gG_PART=modes -gG_MODEL=false",
+     UP0, "mouse_up_n(0) <= mouse_right_n(0) and (j1_f or mega_key_n_i);"),
+    # keyb: the MEGA key output of m2m_keyb.vhd
+    ("kb_key_60", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "if key_num = 61 then", "if key_num = 60 then"),
+    ("kb_key_62", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "if key_num = 61 then", "if key_num = 62 then"),
+    ("kb_masked_by_enable_core", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "mega_key_n_o      <= mega_key_n;", "mega_key_n_o      <= mega_key_n when enable_core_i else '1';"),
+    ("kb_register_masked_by_enable_core", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "mega_key_n <= key_status_n;", "mega_key_n <= key_status_n when enable_core_i else '1';"),
+    ("kb_polarity", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "mega_key_n_o      <= mega_key_n;", "mega_key_n_o      <= not mega_key_n;"),
+    ("rc_fire_not_released_e2e", "keyb", "debouncer", TK, "-gG_PART=e2e",
+     "s1_f <= j1_f or rclick(0);", "s1_f <= j1_f;"),
+    ("kb_starts_at_zero", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "signal mega_key_n          : std_logic := '1';", "signal mega_key_n          : std_logic := '0';"),
+    ("kb_core_output_touched", "keyb", "m2m_keyb", TK, "-gG_PART=keyb",
+     "key_pressed_n_o   <= key_status_n when enable_core_i else '1';",
+     "key_pressed_n_o   <= key_status_n and mega_key_n when enable_core_i else '1';"),
     # wiring: the crossing of the paddle values (the other mutants of the wiring are in wiring.py)
     ("cdc_without_stability_check", "wiring", "cdc_stable", "tb_amiga_cdc", "-gG_CHANGES=100000",
      "if dst_data_d = dst_data_dd then", "if true then"),

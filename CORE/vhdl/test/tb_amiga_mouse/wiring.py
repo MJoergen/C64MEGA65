@@ -10,11 +10,12 @@
 #     MEGA65_Core, audio, max10 and pcm_to_pdm of the working tree
 #   * differential analysis against the base commit: framework.vhd, qnice_wrapper.vhd and the four
 #     board files, each in a library with what it instantiates (real entities where they analyze
-#     on their own, shells otherwise) and with a stub of the Xilinx library xpm that declares the
-#     component xpm_cdc_array_single, so that GHDL checks the port maps of i_sys2main,
-#     i_main2qnice and i_qnice2main, the widths of the actuals included; the working tree must not
-#     show a diagnostic that the base does not show, and only "not found" for entities outside the
-#     library
+#     on their own, shells otherwise: qnice_wrapper and m2m_keyb for framework.vhd, so that the port
+#     maps of i_qnice_wrapper and i_m2m_keyb are checked) and with a stub of the Xilinx library xpm
+#     that declares the component xpm_cdc_array_single, so that GHDL checks the port maps of
+#     i_sys2main, i_main2qnice and i_qnice2main, the widths of the actuals included; the working
+#     tree must not show a diagnostic that the base does not show, and only "not found" for
+#     entities outside the library
 # Static checks (what GHDL cannot see):
 #   * i_qnice2main: every src_in slice has a dest_out slice with the identical range; the slices
 #     are contiguous from 0, do not overlap and add up to WIDTH; each source is paired with the
@@ -25,10 +26,15 @@
 #     debouncer input whose output is the destination of that pair
 #   * i_joy_debouncer gets main_mouse_amiga_i, and as flip_joys_i the destination of
 #     qnice_flip_joyports_i in i_qnice2main; main_pot1_x_o .. main_pot2_y_o have no other source
+#   * the right click with the MEGA key: framework has the port main_mouse_rclick_i :
+#     in std_logic_vector(1 downto 0), i_joy_debouncer gets amiga_rclick_i => main_mouse_rclick_i
+#     (whole, no slices), and mega_key_n_o of i_m2m_keyb reaches mega_key_n_i of i_joy_debouncer
+#     through a signal of framework that is declared as std_logic and used nowhere else (not exported)
 #   * i_qnice_wrapper gets qnice_paddle_atari_i; qnice_wrapper.vhd passes bit 0 to atari_paddles_a
 #     and bit 1 to atari_paddles_b
-#   * each board file connects qnice_paddle_atari_o and main_mouse_amiga_o of MEGA65_Core to
-#     qnice_paddle_atari_i and main_mouse_amiga_i of framework, through two distinct signals
+#   * each board file connects qnice_paddle_atari_o, main_mouse_amiga_o and main_mouse_rclick_o of
+#     MEGA65_Core to qnice_paddle_atari_i, main_mouse_amiga_i and main_mouse_rclick_i of framework,
+#     through three distinct signals of std_logic_vector(1 downto 0), each used exactly twice
 #   * every entity that framework.vhd, qnice_wrapper.vhd, debouncer.vhd, amiga_mouse.vhd,
 #     mega65.vhd and the board file instantiate is declared in a source file of each Vivado project
 #     CORE/CORE-R{3,4,5,6}.xpr
@@ -60,6 +66,7 @@ FILES = {
     "debouncer":       "M2M/vhdl/debouncer.vhd",
     "cdc_stable":      "M2M/vhdl/cdc_stable.vhd",
     "mouse_input":     "M2M/vhdl/controllers/M65/mouse_input.vhdl",
+    "m2m_keyb":        "M2M/vhdl/m2m_keyb.vhd",
     "tools":           "M2M/QNICE/vhdl/tools.vhd",
     "video_modes_pkg": "M2M/vhdl/av_pipeline/video_modes_pkg.vhd",
     "types_pkg":       "M2M/vhdl/controllers/HDMI/types_pkg.vhd",
@@ -230,7 +237,8 @@ def ghdl_checks(tree, base, g):
     # differential analysis
     lib_f = os.path.join(g.build, "lib_framework")
     ok, out = g.analyze(lib_f, pk + [g.write(k + ".vhd", tree[k]) for k in ("cdc_stable", "debounce", "amiga_mouse", "debouncer")]
-                        + [g.write("sh_qnice_wrapper.vhd", shell(tree["qnice_wrapper"], "qnice_wrapper"))])
+                        + [g.write("sh_qnice_wrapper.vhd", shell(tree["qnice_wrapper"], "qnice_wrapper")),
+                           g.write("sh_m2m_keyb.vhd", shell(tree["m2m_keyb"], "m2m_keyb"))])
     if not ok:
         return errs + [f"GHDL analysis of the library for framework.vhd: {first_error(out)}"], notes
     lib_w = os.path.join(g.build, "lib_wrapper")
@@ -400,6 +408,33 @@ def static_checks(tree, base):
                              "feeds potN_i of i_joy_debouncer, whose potN_o is the destination of the base")
     if deb is None or actual(da, "amiga_i") != "main_mouse_amiga_i":
         errs.append("framework.vhd: i_joy_debouncer does not get amiga_i => main_mouse_amiga_i")
+    # the right click with the MEGA key
+    rc_errs = []
+    if actual(da, "amiga_rclick_i") != "main_mouse_rclick_i":
+        rc_errs.append(f"framework.vhd: amiga_rclick_i of i_joy_debouncer is {actual(da, 'amiga_rclick_i')}, "
+                       f"expected main_mouse_rclick_i")
+    _, kb = block(fw, "i_m2m_keyb")
+    mk = actual(assocs(kb), "mega_key_n_o") if kb else None
+    if mk is None or not re.fullmatch(r"\w+", mk):
+        rc_errs.append(f"framework.vhd: mega_key_n_o of i_m2m_keyb is {mk}, expected a signal")
+    elif actual(da, "mega_key_n_i") != mk:
+        rc_errs.append(f"framework.vhd: mega_key_n_i of i_joy_debouncer is {actual(da, 'mega_key_n_i')}, expected "
+                       f"{mk} (mega_key_n_o of i_m2m_keyb)")
+    else:
+        fcode = strip_comments(fw)
+        if not re.search(rf"^\s*signal\s+{mk}\s*:\s*std_logic\s*;", fcode, re.M | re.I):
+            rc_errs.append(f"framework.vhd: {mk} is not a signal of type std_logic")
+        uses = len(re.findall(rf"\b{mk}\b", fcode, re.I))
+        if uses != 3:
+            rc_errs.append(f"framework.vhd: {mk} appears {uses} times, expected the declaration and the two "
+                           f"associations (the MEGA key is not exported)")
+    if not re.search(r"^\s*main_mouse_rclick_i\s*:\s*in\s+std_logic_vector\(1 downto 0\)\s*;",
+                     strip_comments(fw), re.M | re.I):
+        rc_errs.append("framework.vhd: no port main_mouse_rclick_i : in std_logic_vector(1 downto 0)")
+    errs += rc_errs
+    if not rc_errs:
+        notes.append(f"framework.vhd: main_mouse_rclick_i -> amiga_rclick_i of i_joy_debouncer; mega_key_n_o of "
+                     f"i_m2m_keyb -> {mk} -> mega_key_n_i of i_joy_debouncer, {mk} used nowhere else")
     # the port switcher of the debouncer: the core clock domain version of qnice_flip_joyports_i, which
     # is its destination in i_qnice2main
     flip_dst = [d for s, d in pairs.values() if s == "qnice_flip_joyports_i"]
@@ -441,15 +476,18 @@ def static_checks(tree, base):
         fa, ca = assocs(fb), assocs(cb)
         A, M = actual(fa, "qnice_paddle_atari_i"), actual(fa, "main_mouse_amiga_i")
         A2, M2 = actual(ca, "qnice_paddle_atari_o"), actual(ca, "main_mouse_amiga_o")
+        R, R2 = actual(fa, "main_mouse_rclick_i"), actual(ca, "main_mouse_rclick_o")
         bad = []
         if A is None or A2 is None or A != A2:
             bad.append(f"qnice_paddle_atari: framework gets {A}, MEGA65_Core drives {A2}")
         if M is None or M2 is None or M != M2:
             bad.append(f"main_mouse_amiga: framework gets {M}, MEGA65_Core drives {M2}")
-        if A is not None and A == M:
-            bad.append("both settings on the same signal")
+        if R is None or R2 is None or R != R2:
+            bad.append(f"main_mouse_rclick: framework gets {R}, MEGA65_Core drives {R2}")
+        if len({x for x in (A, M, R) if x}) != len([x for x in (A, M, R) if x]):
+            bad.append("two settings on the same signal")
         bcode = strip_comments(t)
-        for sig in {x for x in (A, M) if x}:
+        for sig in {x for x in (A, M, R, A2, M2, R2) if x}:
             if not re.search(rf"^\s*signal\s+{sig}\s*:\s*std_logic_vector\(1 downto 0\)\s*;", bcode, re.M | re.I):
                 bad.append(f"{sig} is not a signal of std_logic_vector(1 downto 0)")
             else:
@@ -459,7 +497,8 @@ def static_checks(tree, base):
         for x in bad:
             errs.append(f"top_mega65-{b}.vhd: {x}")
         if not bad:
-            notes.append(f"top_mega65-{b}.vhd: MEGA65_Core -> {A} -> framework, MEGA65_Core -> {M} -> framework")
+            notes.append(f"top_mega65-{b}.vhd: MEGA65_Core -> {A} -> framework, MEGA65_Core -> {M} -> framework, "
+                         f"MEGA65_Core -> {R} -> framework")
     return errs, notes
 
 
@@ -547,6 +586,13 @@ def mutants():
             (f"{b}_settings_exchanged", b, [
                 ("      qnice_paddle_atari_i    => qnice_paddle_atari,\n", "      qnice_paddle_atari_i    => main_mouse_amiga,\n"),
                 ("      main_mouse_amiga_i      => main_mouse_amiga,\n", "      main_mouse_amiga_i      => qnice_paddle_atari,\n")]),
+            (f"{b}_framework_without_rclick", b, [("      main_mouse_rclick_i     => main_mouse_rclick,\n", "")]),
+            (f"{b}_core_without_rclick", b, [("         main_mouse_rclick_o     => main_mouse_rclick,\n", "")]),
+            (f"{b}_rclick_from_amiga", b, [
+                ("      main_mouse_rclick_i     => main_mouse_rclick,\n", "      main_mouse_rclick_i     => main_mouse_amiga,\n")]),
+            (f"{b}_rclick_bits_swapped", b, [
+                ("      main_mouse_rclick_i     => main_mouse_rclick,\n",
+                 "      main_mouse_rclick_i(0)  => main_mouse_rclick(1),\n      main_mouse_rclick_i(1)  => main_mouse_rclick(0),\n")]),
         ]
     ms += [
         ("framework_wrapper_without_atari", "framework",
@@ -584,6 +630,27 @@ def mutants():
           ("         dest_out(838 downto 774)   => main_rtc_o", "         dest_out(837 downto 774)   => main_rtc_o")]),
         ("framework_debouncer_flip_from_qnice", "framework",
          [("         flip_joys_i          => main_flip_joyports,", "         flip_joys_i          => qnice_flip_joyports_i,")]),
+        ("framework_without_rclick_port", "framework",
+         [("   main_mouse_rclick_i     : in    std_logic_vector(1 downto 0);", "")]),
+        ("framework_debouncer_without_rclick", "framework",
+         [("         amiga_rclick_i       => main_mouse_rclick_i,\n", "")]),
+        ("framework_debouncer_rclick_from_amiga", "framework",
+         [("         amiga_rclick_i       => main_mouse_rclick_i,\n", "         amiga_rclick_i       => main_mouse_amiga_i,\n")]),
+        ("framework_debouncer_rclick_bits_swapped", "framework",
+         [("         amiga_rclick_i       => main_mouse_rclick_i,\n",
+           "         amiga_rclick_i(0)    => main_mouse_rclick_i(1),\n         amiga_rclick_i(1)    => main_mouse_rclick_i(0),\n")]),
+        ("framework_debouncer_without_mega_key", "framework",
+         [("         mega_key_n_i         => main_mega_key_n,\n", "")]),
+        ("framework_mega_key_from_key_pressed", "framework",
+         [("         mega_key_n_i         => main_mega_key_n,\n", "         mega_key_n_i         => main_key_pressed_n_o,\n")]),
+        ("framework_keyb_without_mega_key", "framework",
+         [("         mega_key_n_o         => main_mega_key_n,\n", "")]),
+        ("framework_keyb_wrong_formal", "framework",
+         [("         mega_key_n_o         => main_mega_key_n,\n", "         mega_key_o           => main_mega_key_n,\n")]),
+        ("framework_mega_key_exported", "framework",
+         [("   main_mouse_rclick_i     : in    std_logic_vector(1 downto 0);",
+           "   main_mouse_rclick_i     : in    std_logic_vector(1 downto 0);\n   main_mega_key_n_o       : out   std_logic;"),
+          ("   joy_1_up_n_o    <= main_joy1_up_n_i;", "   main_mega_key_n_o <= main_mega_key_n;\n   joy_1_up_n_o    <= main_joy1_up_n_i;")]),
     ]
     return ms
 

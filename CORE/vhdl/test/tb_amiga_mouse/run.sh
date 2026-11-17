@@ -2,8 +2,8 @@
 # --------------------------------------------------------------------------------------------------
 # Amiga mouse benches (GitHub issue #190), see README.md
 #
-#   CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|wiring|synth|all] [--keep] [--jobs N]
-#                                        [--no-mutants]
+#   CORE/vhdl/test/tb_amiga_mouse/run.sh [decoder|buttons|ports|keyb|wiring|synth|all] [--keep]
+#                                        [--jobs N] [--no-mutants]
 #
 #   decoder  M2M/vhdl/amiga_mouse.vhd alone (tb_amiga_mouse.vhd): transitions, double transitions,
 #            pulses shorter and longer than the filter, a model of the mouse with chatter, the rate
@@ -13,14 +13,22 @@
 #            plus the mutants of the button logic
 #   ports    M2M/vhdl/debouncer.vhd (tb_amiga_ports.vhd) against the entity of commit 6845596 and
 #            in all combinations of the port switcher, the Amiga settings and the on/off switches;
+#            the right click with the MEGA key against the entity of commit 756677a, against a model
+#            of SPEC.md section 5.1 under random stimulus around the edges of the debounced fire
+#            line, and in directed cases, with its two properties checked at every event and edge;
 #            plus the mutants of the port conditioning
+#   keyb     the MEGA key output of M2M/vhdl/m2m_keyb.vhd with the keyboard model of tb_capslock
+#            (tb_amiga_keyb.vhd): the delay, no other key, independent of enable_core_i, all other
+#            outputs identical to the entity of commit 756677a; the real m2m_keyb and debouncer
+#            connected as in framework.vhd; plus the mutants of m2m_keyb.vhd
 #   wiring   the settings from MEGA65_Core through the four board files, framework.vhd and
 #            qnice_wrapper.vhd (wiring.py: GHDL analysis and elaboration against the real entity
 #            declarations, differential analysis against 6845596, static check of the clock domain
 #            crossings), the crossing of the paddle values in simulation (tb_amiga_cdc.vhd), the
 #            port switcher of the paddle values copied out of qnice_wrapper.vhd (tb_amiga_flip.vhd.in);
 #            plus the mutants of the wiring
-#   synth    ghdl synth of amiga_mouse and of debouncer: no error, no latch, number of flip-flops
+#   synth    ghdl synth of amiga_mouse, of debouncer and of m2m_keyb (with stubs of its two
+#            sub-entities): no error, no latch, number of flip-flops, compared with 756677a
 #   all      everything (default)
 #
 # Every simulation runs with a timeout of 25 minutes; the runs are spread over --jobs processes
@@ -28,8 +36,8 @@
 # runs it with G_STOP (end at the first error) and must not report "TB: RESULT PASS".
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
-# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime about 12 minutes
-# with 4 processes.
+# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3, git. Runtime of "all" about
+# 32 minutes with 2 processes (--jobs 2).
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -40,6 +48,7 @@ REPO=$(cd "$HERE/../../../.." && pwd)
 GHDL=${GHDL:-/usr/local/bin/ghdl}
 GF="--std=08 -frelaxed"
 BASE=6845596        # WIP-V6-A25: the last commit before the Amiga mice
+PREV=756677a        # the last commit before the right click with the MEGA key
 
 WHAT=all
 KEEP=0
@@ -47,11 +56,11 @@ MUTANTS=1
 JOBS=${JOBS:-4}
 while [ $# -gt 0 ]; do
    case "$1" in
-      decoder|buttons|ports|wiring|synth|all) WHAT=$1 ;;
+      decoder|buttons|ports|keyb|wiring|synth|all) WHAT=$1 ;;
       --keep) KEEP=1 ;;
       --no-mutants) MUTANTS=0 ;;
       --jobs) shift; JOBS=$1 ;;
-      *) echo "usage: $0 [decoder|buttons|ports|wiring|synth|all] [--keep] [--jobs N] [--no-mutants]"; exit 2 ;;
+      *) echo "usage: $0 [decoder|buttons|ports|keyb|wiring|synth|all] [--keep] [--jobs N] [--no-mutants]"; exit 2 ;;
    esac
    shift
 done
@@ -77,20 +86,21 @@ elaborate() {
    done
 }
 
-# the entity before the Amiga mice, renamed to debouncer_ref
-ref_entity() {
-   git -C "$REPO" show "$BASE:M2M/vhdl/debouncer.vhd" > "$BUILD/debouncer_base.vhd" 2>/dev/null || return 1
-   python3 - "$BUILD/debouncer_base.vhd" "$1" <<'PYEOF'
+# old_entity <commit> <file> <entity> <new name> <out>: the entity of an older commit, renamed
+old_entity() {
+   git -C "$REPO" show "$1:$2" > "$5.orig" 2>/dev/null || { echo "    $1:$2 not found"; return 1; }
+   python3 - "$5.orig" "$5" "$3" "$4" <<'PYEOF'
 import re, sys
-s = open(sys.argv[1]).read()
-pats = [(r"\bentity debouncer is\b", "entity debouncer_ref is"), (r"\bend debouncer;", "end debouncer_ref;"),
-        (r"\bof debouncer is\b", "of debouncer_ref is")]
+src, out, ent, new = sys.argv[1:5]
+s = open(src).read()
+pats = [(rf"\bentity {ent} is\b", f"entity {new} is"), (rf"\bend {ent};", f"end {new};"),
+        (rf"\bof {ent} is\b", f"of {new} is")]
 for p, r in pats:
     if len(re.findall(p, s)) != 1:
-        print(f"    {p}: not found exactly once in the base version")
+        print(f"    {p}: not found exactly once in the old version")
         sys.exit(1)
     s = re.sub(p, r, s)
-open(sys.argv[2], "w").write(s)
+open(out, "w").write(s)
 PYEOF
 }
 
@@ -99,9 +109,17 @@ SRC_M2M="$BUILD/src/m2m"
 SRC_TB="$BUILD/src/tb"
 mkdir -p "$SRC_M2M" "$SRC_TB"
 cp "$REPO/M2M/vhdl/debounce.vhd" "$REPO/M2M/vhdl/amiga_mouse.vhd" "$REPO/M2M/vhdl/debouncer.vhd" \
-   "$REPO/M2M/vhdl/cdc_stable.vhd" "$REPO/M2M/vhdl/qnice_wrapper.vhd" "$SRC_M2M/" &&
+   "$REPO/M2M/vhdl/cdc_stable.vhd" "$REPO/M2M/vhdl/qnice_wrapper.vhd" "$REPO/M2M/vhdl/m2m_keyb.vhd" \
+   "$REPO/M2M/vhdl/controllers/M65/kb_matrix_ram.vhdl" "$REPO/M2M/vhdl/controllers/M65/mega65kbd_to_matrix.vhdl" \
+   "$REPO/M2M/vhdl/controllers/M65/matrix_to_keynum.vhdl" "$SRC_M2M/" &&
 cp "$HERE"/*.vhd "$HERE/tb_amiga_flip.vhd.in" "$HERE/mutants.py" "$HERE/wiring.py" "$SRC_TB/" ||
    { echo "cannot copy the sources"; exit 1; }
+# the entities before the Amiga mice (debouncer_ref) and before the right click (debouncer_prev,
+# m2m_keyb_prev)
+old_entity "$BASE" M2M/vhdl/debouncer.vhd debouncer debouncer_ref "$BUILD/debouncer_ref.vhd" &&
+old_entity "$PREV" M2M/vhdl/debouncer.vhd debouncer debouncer_prev "$BUILD/debouncer_prev.vhd" &&
+old_entity "$PREV" M2M/vhdl/m2m_keyb.vhd m2m_keyb m2m_keyb_prev "$BUILD/m2m_keyb_prev.vhd" ||
+   { echo "cannot extract the entities of $BASE and $PREV"; exit 1; }
 
 # gen_flip <qnice_wrapper.vhd> <bench.vhd>: the bench of the port switcher with the process
 # correct_and_flip_paddles copied verbatim out of qnice_wrapper.vhd
@@ -122,9 +140,13 @@ if t.count("-- @CORRECT_AND_FLIP_PADDLES@") != 1:
 open(out, "w").write(t.replace("-- @CORRECT_AND_FLIP_PADDLES@", m[0].strip()))
 PYEOF
 }
-# sources of a library: debounce, amiga_mouse, debouncer, debouncer_ref, cdc_stable, package, benches
-lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd> <cdc_stable.vhd> <tb_amiga_flip.vhd>
-   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $3 $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd $SRC_TB/tb_amiga_ports.vhd $SRC_TB/tb_amiga_cdc.vhd $4"
+# sources of a library: debounce, amiga_mouse, debouncer, the old entities, cdc_stable, the keyboard
+# chain, package, benches
+lib_sources() {        # lib_sources <amiga_mouse.vhd> <debouncer.vhd> <cdc_stable.vhd> <tb_amiga_flip.vhd> <m2m_keyb.vhd>
+   echo "$SRC_M2M/debounce.vhd $1 $2 $BUILD/debouncer_ref.vhd $BUILD/debouncer_prev.vhd $3" \
+        "$SRC_M2M/kb_matrix_ram.vhdl $SRC_M2M/mega65kbd_to_matrix.vhdl $SRC_M2M/matrix_to_keynum.vhdl $5" \
+        "$BUILD/m2m_keyb_prev.vhd $SRC_TB/tb_amiga_mouse_pkg.vhd $SRC_TB/tb_amiga_mouse.vhd" \
+        "$SRC_TB/tb_amiga_ports.vhd $SRC_TB/tb_amiga_keyb.vhd $SRC_TB/tb_amiga_cdc.vhd $4"
 }
 
 # --------------------------------------------------------------------------------------------------
@@ -137,12 +159,13 @@ job() { echo "$1|$2|$3|$4|$5" >> "$JOBFILE"; }
 
 M="$BUILD/main"
 BUILT=0
-if want decoder || want buttons || want ports || want wiring; then
+if want decoder || want buttons || want ports || want keyb || want wiring; then
    echo "=== build"
-   if ref_entity "$BUILD/debouncer_ref.vhd" && gen_flip "$SRC_M2M/qnice_wrapper.vhd" "$BUILD/tb_amiga_flip.vhd" &&
-      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" "$SRC_M2M/cdc_stable.vhd" "$BUILD/tb_amiga_flip.vhd") &&
-      elaborate "$M" tb_amiga_mouse tb_amiga_ports tb_amiga_cdc tb_amiga_flip; then
-      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE), cdc_stable and the four benches analyzed and elaborated"
+   if gen_flip "$SRC_M2M/qnice_wrapper.vhd" "$BUILD/tb_amiga_flip.vhd" &&
+      analyze "$M" $(lib_sources "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" "$SRC_M2M/cdc_stable.vhd" "$BUILD/tb_amiga_flip.vhd" "$SRC_M2M/m2m_keyb.vhd") &&
+      elaborate "$M" tb_amiga_mouse tb_amiga_ports tb_amiga_keyb tb_amiga_cdc tb_amiga_flip; then
+      echo "  amiga_mouse, debouncer, debouncer_ref ($BASE), debouncer_prev ($PREV), cdc_stable, the keyboard chain,"
+      echo "  m2m_keyb_prev ($PREV) and the five benches analyzed and elaborated"
       echo "  (tb_amiga_flip with the process correct_and_flip_paddles copied out of qnice_wrapper.vhd)"
       BUILT=1
    else
@@ -181,9 +204,20 @@ if want buttons; then
    job buttons         run "$M" $T "-gG_PART=buttons $SMALL"
    job defaults        run "$M" $T "-gG_PART=defaults -gG_CLK_HZ=100000 -gG_FREQ=100000"
 fi
+TENTH="-gG_FREQ=3152778"        # the instances count a tenth of the clock cycles: all times / 10
 if want ports; then
    job ports_identity  run "$M" tb_amiga_ports "-gG_PART=identity"
    job ports_modes     run "$M" tb_amiga_ports "-gG_PART=modes"
+   job ports_rule_1    run "$M" tb_amiga_ports "-gG_PART=rule $TENTH -gG_SEED=1"
+   job ports_rule_2    run "$M" tb_amiga_ports "-gG_PART=rule $TENTH -gG_SEED=2"
+   job ports_rule_pal  run "$M" tb_amiga_ports "-gG_PART=rule -gG_SEED=3 -gG_EPISODES=50"
+   job ports_directed  run "$M" tb_amiga_ports "-gG_PART=directed $TENTH"
+   job ports_directed_pal run "$M" tb_amiga_ports "-gG_PART=directed"
+fi
+if want keyb; then
+   job keyb            run "$M" tb_amiga_keyb  "-gG_PART=keyb"
+   job keyb_start      run "$M" tb_amiga_keyb  "-gG_PART=keyb -gG_START=true -gG_SEED=2"
+   job keyb_e2e        run "$M" tb_amiga_keyb  "-gG_PART=e2e"
 fi
 if want wiring; then
    job cdc             run "$M" tb_amiga_cdc   "-gG_CHANGES=100000"
@@ -202,15 +236,17 @@ if [ $MUTANTS -eq 1 ] && [ $BUILT -eq 1 ] && [ "$WHAT" != synth ]; then
       DB="$SRC_M2M/debouncer.vhd"
       CS="$SRC_M2M/cdc_stable.vhd"
       QW="$SRC_M2M/qnice_wrapper.vhd"
+      KB="$SRC_M2M/m2m_keyb.vhd"
       case $file in
          amiga_mouse)   AM="$D/amiga_mouse.vhd" ;;
          debouncer)     DB="$D/debouncer.vhd" ;;
          cdc_stable)    CS="$D/cdc_stable.vhd" ;;
          qnice_wrapper) QW="$D/qnice_wrapper.vhd" ;;
+         m2m_keyb)      KB="$D/m2m_keyb.vhd" ;;
       esac
       if python3 "$SRC_TB/mutants.py" make "$name" "$SRC_M2M/$file.vhd" "$D/$file.vhd" &&
          gen_flip "$QW" "$D/tb_amiga_flip.vhd" &&
-         analyze "$D" $(lib_sources "$AM" "$DB" "$CS" "$D/tb_amiga_flip.vhd") && elaborate "$D" "$unit"; then
+         analyze "$D" $(lib_sources "$AM" "$DB" "$CS" "$D/tb_amiga_flip.vhd" "$KB") && elaborate "$D" "$unit"; then
          job "mutant_$name" "$kind" "$D" "$unit" "$args -gG_STOP=true"
       else
          note_fail "mutant_${name}_build"
@@ -227,8 +263,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ghdl, jobfile, njobs, failfile = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 jobs = [l.rstrip("\n").split("|", 4) for l in open(jobfile) if l.strip()]
 # the long runs first
-cost = {"driver": 9, "ports_modes": 8, "model": 7, "rate_follow": 6, "ports_identity": 6, "dir": 4,
-        "enable": 4, "rate_sat": 3}
+cost = {"driver": 9, "ports_modes": 8, "model": 7, "rate_follow": 6, "ports_identity": 6, "keyb": 5, "dir": 4,
+        "enable": 4, "ports_rule_pal": 4, "rate_sat": 3}
 def weight(j):
     if j[1] != "run":
         return 0
@@ -295,10 +331,11 @@ if want wiring; then
 fi
 
 # --------------------------------------------------------------------------------------------------
-# synth <lib> <unit> <generic>: ghdl synth; no error, no latch; number of flip-flops of the netlist
+# synth <lib> <unit> [<generic>]: ghdl synth; no error, no latch; number of flip-flops of the netlist
+# (written to <lib>/<unit>.ff as "<total> <own>")
 synth() {
-   local lib=$1 unit=$2 gen=$3
-   if ! "$GHDL" --synth --std=08 --workdir="$lib" "$gen" "$unit" > "$lib/$unit.net.vhd" 2> "$lib/$unit.synth.log"; then
+   local lib=$1 unit=$2 gen=${3:-}
+   if ! "$GHDL" --synth --std=08 --workdir="$lib" $gen "$unit" > "$lib/$unit.net.vhd" 2> "$lib/$unit.synth.log"; then
       sed 's/^/    /' "$lib/$unit.synth.log" | grep -v async_reg | head -10
       return 1
    fi
@@ -306,7 +343,7 @@ synth() {
       echo "    $unit: a latch was inferred"
       return 1
    fi
-   python3 - "$lib/$unit.net.vhd" "$unit" "$lib/$unit.synth.log" <<'PYEOF'
+   python3 - "$lib/$unit.net.vhd" "$unit" "$lib/$unit.synth.log" "$lib/$unit.ff" <<'PYEOF'
 import re, sys
 s = open(sys.argv[1]).read()
 # the netlist defines every entity once; count the flip-flops per architecture and multiply them up
@@ -326,16 +363,38 @@ subs = ", ".join(f"{len([c for c in inst[top] if c == k])} x {k.split('_')[0]}{'
 warn = [l for l in open(sys.argv[3]) if "warning" in l and "async_reg" not in l]
 print(f"  {top}: ghdl synth without error and without a latch, {total(top)} flip-flops"
       + (f" ({own[top]} own; {subs})" if inst[top] else "") + (f", {len(warn)} warnings" if warn else ""))
+open(sys.argv[4], "w").write(f"{total(top)} {own[top]}\n")
 PYEOF
+}
+
+# ff_delta <lib> <new unit> <old unit> <field: 1 total, 2 own> <expected difference> <what>
+ff_delta() {
+   local a b
+   a=$(cut -d' ' -f"$4" "$1/$2.ff" 2>/dev/null) && b=$(cut -d' ' -f"$4" "$1/$3.ff" 2>/dev/null) || return 1
+   if [ "$((a - b))" -ne "$5" ]; then
+      echo "    $6: $a flip-flops, $3 ($PREV) $b: expected a difference of $5"
+      return 1
+   fi
+   echo "  $6: $a flip-flops, $b in $PREV ($5 more)"
 }
 
 if want synth; then
    echo "=== synthesis (ghdl synth)"
    S="$BUILD/synth"
    mkdir -p "$S"
-   if "$GHDL" -a --std=08 --workdir="$S" "$SRC_M2M/debounce.vhd" "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" > "$S/analyze.log" 2>&1; then
+   if "$GHDL" -a --std=08 --workdir="$S" "$SRC_M2M/debounce.vhd" "$SRC_M2M/amiga_mouse.vhd" "$SRC_M2M/debouncer.vhd" \
+         "$BUILD/debouncer_prev.vhd" "$SRC_TB/keyb_synth_stubs.vhd" "$SRC_M2M/m2m_keyb.vhd" "$BUILD/m2m_keyb_prev.vhd" \
+         > "$S/analyze.log" 2>&1; then
       synth "$S" amiga_mouse -gG_CLK_FREQ=31527778 || note_fail synth_amiga_mouse
       synth "$S" debouncer -gCLK_FREQ=31527778 || note_fail synth_debouncer
+      synth "$S" debouncer_prev -gCLK_FREQ=31527778 || note_fail synth_debouncer_prev
+      ff_delta "$S" debouncer debouncer_prev 1 2 "debouncer (two flip-flops for the right click)" ||
+         note_fail synth_debouncer_ff
+      # the real sub-entities of m2m_keyb do not pass ghdl synth; keyb_synth_stubs.vhd stands in for them
+      synth "$S" m2m_keyb || note_fail synth_m2m_keyb
+      synth "$S" m2m_keyb_prev || note_fail synth_m2m_keyb_prev
+      ff_delta "$S" m2m_keyb m2m_keyb_prev 2 1 "m2m_keyb, its own flip-flops (one for the MEGA key)" ||
+         note_fail synth_m2m_keyb_ff
       grep -q 'attribute async_reg of lines_d  : signal is "true";' "$SRC_M2M/amiga_mouse.vhd" &&
       grep -q 'attribute async_reg of lines_dd : signal is "true";' "$SRC_M2M/amiga_mouse.vhd" &&
          echo "  amiga_mouse: both synchronizer stages carry async_reg (GHDL ignores the attribute, Vivado uses it)" ||
