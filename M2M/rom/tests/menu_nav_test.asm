@@ -14,6 +14,11 @@
 ; OPTM_SELECT, like the vdrive status redraws in options.asm) before
 ; returning the key.
 ;
+; Scenario 4 switches the screen trace on: OPTM_FP_PRINT prints
+;     D <flat index of every line it draws>
+; OPTM_FP_PRINTXY prints  X Y=<row> [<string>]  and the selection callback
+; prints  M <flat index of every selected item>  behind its S line.
+;
 ; This covers: entering nested submenus (depth 2), leaving them via the
 ; closer line and via Run/Stop (one level per press), the enter cursor
 ; scan, cursor wrap-around within a nested view, radio and single-select
@@ -47,6 +52,8 @@ _NT_CPY         MOVE    @R0++, @R1++
                 RBRA    _NT_CPY, !Z
 
                 MOVE    NT_SCEN, R8             ; scenario counter := 0
+                MOVE    0, @R8
+                MOVE    NT_SCR, R8              ; screen trace off
                 MOVE    0, @R8
                 MOVE    NT_SCRIPT_POS, R8       ; script position := 0
                 MOVE    NAV_SCRIPT, @R8
@@ -98,7 +105,11 @@ _NT_RUN         RSUB    OPTM_SHOW, 1
                 ;  3 = dependency menu covering the live OPTM_RUN dependency
                 ;      paths: the enter-scan dependency skip and the real-time
                 ;      redraw on a mother toggle
-                ; (see nav2_script() / nav3_script() in menu_test.py)
+                ;  4 = the V6 menu of scenario 1 with the dependency feature
+                ;      on and the screen trace on: the dependent switches of
+                ;      the Mouse submenu
+                ; (see nav2_script() / nav3_script() / nav4_script() in
+                ; menu_test.py)
                 ; ------------------------------------------------------------
 
                 MOVE    NT_SCEN, R8
@@ -108,6 +119,8 @@ _NT_RUN         RSUB    OPTM_SHOW, 1
                 RBRA    _NT_SCEN2, Z
                 CMP     2, R0
                 RBRA    _NT_SCEN3, Z
+                CMP     3, R0
+                RBRA    _NT_SCEN4, Z
                 RBRA    _NT_DONE, 1             ; all scenarios done
 
 _NT_SCEN2       MOVE    NT_S_N2, R8            ; print the scenario marker
@@ -191,6 +204,51 @@ _NT_CPY3        MOVE    @R0++, @R1++
                 MOVE    NAV3_START, @R8
                 RBRA    _NT_RUN, 1
 
+_NT_SCEN4       MOVE    NT_S_N4, R8            ; print the scenario marker
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+
+                MOVE    NAV_STDSEL_DEF, R0      ; selected-state defaults
+                MOVE    NT_STDSEL, R1
+                MOVE    NAV_N, R3
+_NT_CPY4        MOVE    @R0++, @R1++
+                SUB     1, R3
+                RBRA    _NT_CPY4, !Z
+
+                MOVE    NT_REC, R8              ; repoint the init record to
+                ADD     OPTM_IR_SIZE, R8        ; the V6 menu and turn the
+                MOVE    NAV_N, @R8              ; dependency feature ON
+                MOVE    NT_REC, R8
+                ADD     OPTM_IR_ITEMS, R8
+                MOVE    NAV_ITEMS, @R8
+                MOVE    NT_REC, R8
+                ADD     OPTM_IR_GROUPS, R8
+                MOVE    NAV_GROUPS, @R8
+                MOVE    NT_REC, R8
+                ADD     OPTM_IR_DEPS, R8
+                MOVE    NAV4_DEPS, @R8
+
+                MOVE    NT_SCRIPT_POS, R8       ; switch to script 4
+                MOVE    NAV4_SCRIPT, @R8
+                MOVE    NT_SCRIPT_END, R8
+                MOVE    NAV4_SCRIPT, R9
+                ADD     NAV4_SCRIPT_CNT, R9
+                MOVE    R9, @R8
+
+                MOVE    NT_SCR, R8              ; screen trace on
+                MOVE    1, @R8
+
+                MOVE    NT_REC, R8              ; re-initialize like a boot
+                MOVE    0, R9
+                MOVE    0, R10
+                MOVE    30, R11
+                MOVE    30, R12
+                RSUB    OPTM_INIT, 1
+
+                MOVE    NT_CURSOR, R8           ; cursor := start item
+                MOVE    NAV_START, @R8
+                RBRA    _NT_RUN, 1
+
 _NT_DONE        MOVE    NT_S_DONE, R8
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
@@ -200,7 +258,7 @@ _NT_DONE        MOVE    NT_S_DONE, R8
 ; Initialization record: stubbed screen functions, scripted key feed
 ; ----------------------------------------------------------------------------
 
-NT_REC          .DW     NT_STUB, NT_STUB, NT_STUB, NT_STUB
+NT_REC          .DW     NT_STUB, NT_STUB, NT_PRINT, NT_PRINTXY
                 .DW     NT_STUB, NT_STUB, NT_GETKEY
                 .DW     NT_CB_SEL, NT_CB_SHOW, NT_FATAL
                 .DW     0x0078, 0, 0x0078, 0    ; sel. chars (inline strings)
@@ -208,8 +266,59 @@ NT_REC          .DW     NT_STUB, NT_STUB, NT_STUB, NT_STUB
                                                 ; last word = OPTM_IR_DEPS: 0 =
                                                 ; dependency feature off here
 
-                ; all visual functions: do nothing, preserve all registers
+                ; all other visual functions: do nothing, preserve all
+                ; registers
 NT_STUB         RET
+
+                ; OPTM_FP_PRINT: R8 = string, R9 = mask array (size, then
+                ; one word per line, bit 15 = drawn). With the screen trace
+                ; on, print the flat index of every drawn line
+NT_PRINT        INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_PR_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    R9, R0                  ; R0: mask array
+                MOVE    @R0++, R1               ; R1: number of lines
+                XOR     R2, R2                  ; R2: flat index
+                MOVE    NT_S_D, R8              ; "D"
+                SYSCALL(puts, 1)
+_NT_PR_1        MOVE    @R0++, R3
+                AND     0x8000, R3              ; drawn?
+                RBRA    _NT_PR_2, Z             ; no
+                MOVE    NT_S_SP, R8
+                SYSCALL(puts, 1)
+                MOVE    R2, R8
+                SYSCALL(puthex, 1)
+_NT_PR_2        ADD     1, R2
+                SUB     1, R1
+                RBRA    _NT_PR_1, !Z
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_PR_RET      DECRB
+                RET
+
+                ; OPTM_FP_PRINTXY: R8 = string, R9 = x, R10 = y. With the
+                ; screen trace on, print the row and the string
+NT_PRINTXY      INCRB
+                MOVE    NT_SCR, R0
+                CMP     0, @R0
+                RBRA    _NT_PX_RET, Z           ; screen trace off
+                MOVE    R8, R6                  ; preserve R8
+                MOVE    NT_S_XY, R8             ; "X Y="
+                SYSCALL(puts, 1)
+                MOVE    R10, R8
+                SYSCALL(puthex, 1)
+                MOVE    NT_S_LB, R8             ; " ["
+                SYSCALL(puts, 1)
+                MOVE    R6, R8                  ; the string
+                SYSCALL(puts, 1)
+                MOVE    NT_S_RB, R8             ; "]"
+                SYSCALL(puts, 1)
+                SYSCALL(crlf, 1)
+                MOVE    R6, R8                  ; restore R8
+_NT_PX_RET      DECRB
+                RET
 
                 ; scripted OPTM_FP_GETKEY: print the state trace, optionally
                 ; simulate a background redraw, return the next key in R8
@@ -311,7 +420,29 @@ NT_CB_SEL       INCRB
                 SYSCALL(puthex, 1)
                 SYSCALL(crlf, 1)
 
-                MOVE    R0, R8
+                MOVE    NT_SCR, R3              ; screen trace on: print the
+                CMP     0, @R3                  ; flat index of every item
+                RBRA    _NT_SEL_RET, Z          ; that is selected now
+                MOVE    NT_S_M, R8              ; "M"
+                SYSCALL(puts, 1)
+                MOVE    NT_STDSEL, R3           ; R3: selected-state array
+                MOVE    NT_REC, R5              ; R5: number of items
+                ADD     OPTM_IR_SIZE, R5
+                MOVE    @R5, R5
+                XOR     R4, R4                  ; R4: flat index
+_NT_SEL_1       MOVE    @R3++, R6
+                CMP     0, R6                   ; selected?
+                RBRA    _NT_SEL_2, Z            ; no
+                MOVE    NT_S_SP, R8
+                SYSCALL(puts, 1)
+                MOVE    R4, R8
+                SYSCALL(puthex, 1)
+_NT_SEL_2       ADD     1, R4
+                SUB     1, R5
+                RBRA    _NT_SEL_1, !Z
+                SYSCALL(crlf, 1)
+
+_NT_SEL_RET     MOVE    R0, R8
                 MOVE    R1, R9
                 MOVE    R2, R10
                 DECRB
@@ -344,6 +475,13 @@ NT_S_X          .ASCII_W "X"
 NT_S_W          .ASCII_W "W I="
 NT_S_N2         .ASCII_W "N2"
 NT_S_N3         .ASCII_W "N3"
+NT_S_N4         .ASCII_W "N4"
+NT_S_D          .ASCII_W "D"
+NT_S_XY         .ASCII_W "X Y="
+NT_S_LB         .ASCII_W " ["
+NT_S_RB         .ASCII_W "]"
+NT_S_M          .ASCII_W "M"
+NT_S_SP         .ASCII_W " "
 NT_S_DONE       .ASCII_W "DONE"
 
 ; the component under test (menu.asm includes menu_struct.asm)
@@ -357,5 +495,6 @@ NT_SCRIPT_POS   .BLOCK 1
 NT_SCRIPT_END   .BLOCK 1
 NT_SCEN         .BLOCK 1
 NT_CURSOR       .BLOCK 1
+NT_SCR          .BLOCK 1                        ; 1 = screen trace on
 NT_STDSEL       .BLOCK 512                      ; N words for N <= 512
 NT_LINES        .BLOCK 512
