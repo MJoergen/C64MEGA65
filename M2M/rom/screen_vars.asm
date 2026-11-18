@@ -30,5 +30,9 @@ SCR$OSM_O_DY    .BLOCK 1
 ; x-coordinate of the frame
 SCR$ILX         .BLOCK 1
 
+; if not zero: SCR$PRINTSTR clears the rest of the line up to this column
+; (exclusive) before it starts a new line
+SCR$NL_CLRX     .BLOCK 1
+
 ; Scratch variables
 TEMP_2W         .BLOCK 2

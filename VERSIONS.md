@@ -123,6 +123,16 @@ Version 6 - MONTH DAY, 2026
   last item of the current menu or submenu.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/258)
 
+* File browser: Cursor up on the first entry jumps to the last entry and
+  cursor down on the last entry jumps to the first one, like in the on-screen
+  menu. Holding cursor left or cursor right keeps turning the pages (also in
+  the help screens), and scrolling through the list no longer flickers.
+
+* Holding a cursor key repeats it after half a second and then 12 times per
+  second, in the file browser as well as in the on-screen menu. Before, the
+  first repeat came only after one to one and a half seconds, and the repeat
+  was about half as fast.
+
 ## Improved Compatibility of the Core
 
 * Generally improved hardware cartridge compatibility, thanks to four

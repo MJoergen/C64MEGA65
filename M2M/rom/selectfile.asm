@@ -273,7 +273,7 @@ _IL_CUR_UP      CMP     R4, 0                   ; > 0?
                 SUB     1, R6
                 RBRA    _S_SELECT_LOOP, 1       ; select new line and continue
 _IL_CUR_UP_CHK  CMP     R5, R2                  ; # shown > max rows on scr.?
-                RBRA    _S_INPUT_LOOP, !N       ; no: do not scroll; ign. key
+                RBRA    _IL_WRAP_BTTM, !N       ; no: first entry: wrap around
                 MOVE    -1, R9                  ; R9: iterate backward
                 MOVE    1, R10                  ; R10: scroll by one element
                 RBRA    _SCROLL, 1              ; scroll, then input loop
@@ -282,7 +282,7 @@ _IL_CUR_UP_CHK  CMP     R5, R2                  ; # shown > max rows on scr.?
 _IL_CUR_DOWN    MOVE    R1, R8                  ; R1: amount of items in dir..
                 SUB     1, R8                   ; ..-1 as we count from zero
                 CMP     R4, R8                  ; R4 = R1 (bottom reached?)
-                RBRA    _S_INPUT_LOOP, Z        ; yes: ignore key press
+                RBRA    _IL_WRAP_TOP, Z         ; yes: wrap around to the top
                 MOVE    R2, R8                  ; R2: max rows on screen..
                 SUB     1, R8                   ; ..-1 as we count from zero
                 CMP     R4, R8                  ; R4 = R1: scrolling needed?
@@ -295,13 +295,51 @@ _IL_CUR_DOWN    MOVE    R1, R8                  ; R1: amount of items in dir..
                 RBRA    _S_SELECT_LOOP, 1       ; select new line and continue
 
                 ; scroll down by iterating the currently visible head of the
-                ; SLL by 1 step; if this is not possible: do not scroll,
-                ; because we reached the end of the list
+                ; SLL by 1 step; if this is not possible, then the cursor is
+                ; on the last entry of the list: wrap around to the top
 _IL_SCRL_DN     CMP     R5, R1                  ; all items already shown?
-                RBRA    _S_INPUT_LOOP, Z        ; yes: ignore key press
+                RBRA    _IL_WRAP_TOP, Z         ; yes: wrap around to the top
                 MOVE    1, R9                   ; R9: iterate forward
                 MOVE    1, R10                  ; R10: scroll by one element
                 RBRA    _SCROLL, 1              ; scroll, then input loop
+
+                ; wrap-around, like in the on-screen menu: CURSOR UP on the
+                ; first entry selects the last entry and CURSOR DOWN on the
+                ; last entry selects the first one; if the target entry is
+                ; not on the screen, then the list scrolls there in one step
+                ;
+                ; first entry (R4 = R6 = 0): if the last entry is on the
+                ; screen, then select it, else scroll forward by the amount
+                ; of entries below the screen with the cursor on the last
+                ; line of the screen (the redraw keeps the highlight of the
+                ; lines, so the current line is deselected first)
+_IL_WRAP_BTTM   CMP     R5, R1                  ; last entry on the screen?
+                RBRA    _IL_GOTO_BOTTOM, Z      ; yes: select it
+                MOVE    R4, R8                  ; no: deselect the first line
+                MOVE    M2M$SA_COL_STD, R9
+                RSUB    SELECT_LINE, 1
+                MOVE    R2, R4                  ; cursor to the last line
+                SUB     1, R4                   ; ..of the screen and R6 to..
+                MOVE    R4, R6                  ; ..the abs. index of the line
+                MOVE    1, R9                   ; R9: iterate forward
+                MOVE    R1, R10                 ; R10: amount of entries..
+                SUB     R5, R10                 ; ..below the screen
+                RBRA    _SCROLL, 1              ; scroll, then input loop
+
+                ; last entry: if the first entry is on the screen, then
+                ; select it, else scroll backward by the amount of entries
+                ; above the screen with the cursor on the first line
+_IL_WRAP_TOP    CMP     R5, R2                  ; # shown > max rows on scr.?
+                RBRA    _IL_GOTO_TOP, !N        ; no: first entry is visible
+                MOVE    R4, R8                  ; yes: deselect the last line
+                MOVE    M2M$SA_COL_STD, R9
+                RSUB    SELECT_LINE, 1
+                MOVE    R5, R6                  ; R6 = abs. index of the..
+                SUB     R2, R6                  ; ..first line of the screen..
+                XOR     R4, R4                  ; ..where the cursor goes
+                MOVE    -1, R9                  ; R9: iterate backward
+                MOVE    R6, R10                 ; R10: amount of entries..
+                RBRA    _SCROLL, 1              ; ..above the screen
 
                 ; CURSOR LEFT has been pressed: previous page
                 ; check if amount of entries shown minus the amount
@@ -352,7 +390,7 @@ _IL_GOTO_BTTM2  MOVE    R2, R8                  ; max rows on screen..
                 ; this code segment is used by all four scrolling modes:
                 ; up/down and page up/page down; it is meant to called via
                 ; RBRA and not via RSUB because it will return
-                ; to _S_DRAW_DIRLIST
+                ; to _S_REDRAW
                 ;
                 ; iterates forward or backward depending on R9 being +1 or -1
                 ; the iteration amount if given in R10
@@ -375,7 +413,31 @@ _SCROLL_DO      ADD     R12, R6                 ; R6: abs. index; R12 signed
                 MOVE    R3, R10
 _SCROLL_DO2     MOVE    R11, R3                 ; new visible head
                 ADD     R10, R5                 ; R10 more/less visible files
-                RBRA    _S_DRAW_DIRLIST, 1      ; redraw directory list
+
+                ; redraw after scrolling: the list only scrolls if it is
+                ; longer than the screen, so the new list fills all lines
+                ; and is printed over the old one instead of clearing the
+                ; screen first, which flickers; the new lines of SHOW_DIR
+                ; clear the rest of each line (SCR$NL_CLRX) and the cursor
+                ; line keeps its highlight
+_S_REDRAW       MOVE    SCR$OSM_M_X, R8         ; clear lines up to the..
+                MOVE    @R8, R8                 ; ..right side of the frame
+                MOVE    SCR$OSM_M_DX, R9
+                ADD     @R9, R8
+                SUB     1, R8
+                MOVE    SCR$NL_CLRX, R9
+                MOVE    R8, @R9
+                MOVE    1, R8                   ; start inside the frame, at..
+                MOVE    1, R9                   ; ..the same place as after..
+                RSUB    SCR$GOTOXY, 1           ; ..SCR$CLRINNER
+                MOVE    R3, R8                  ; R8: pos in LL to show list
+                MOVE    R2, R9                  ; R9: amount of lines to show
+                RSUB    SHOW_DIR, 1
+                MOVE    SCR$NL_CLRX, R8         ; new lines do not clear..
+                MOVE    0, @R8                  ; ..any more
+                CMP     R2, R10                 ; less lines than the screen?
+                RBRA    _S_DRAW_DIRLIST, N      ; (never) yes: clear and redraw
+                RBRA    _S_SELECT_LOOP, 1
 
                 ; this code segment is used by page up/page down in case
                 ; the selection cursor needs to be moved to the very top
