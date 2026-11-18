@@ -119,6 +119,13 @@ Version 6 - MONTH DAY, 2026
 * The file browser loads large directories up to 15x faster.
   (https://github.com/MJoergen/C64MEGA65/issues/228)
 
+* The file browser shows much larger folders: about 2,800 files with typical
+  names of 45 characters, more with shorter names. Before, it stopped after
+  about 450 such files with the message "This directory contains more files
+  than this core is able to load into memory". Files that the file browser
+  does not show, for example `*.prg` files while you mount a disk image, no
+  longer take up any of this space.
+
 * On-screen menu: Cursor left jumps to the first item and cursor right to the
   last item of the current menu or submenu.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/258)

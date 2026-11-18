@@ -437,16 +437,14 @@ _IL_KEY_RETURN  MOVE    R3, R8                  ; R8: currently visible head
                 RBRA    FATAL, 1
 
                 ; depending on if a directory of a file was selected:
-                ; change directory or load data; we therefore need to
-                ; find the flag that contains the info "directory" or "file":
-                ; it sits in front of the two start cluster words at the end
-                ; of the data blob (see _DIRBR_NEWELM in dirbrowse.asm)
+                ; change directory or load data; the name is copied to the
+                ; name buffer of the file browser, so that it stays valid
+                ; after SELECT_FILE returns
 _ELEMENT_FOUND  MOVE    R11, R8                 ; R11: selected SLL element
-                ADD     SLL$DATA_SIZE, R8
-                MOVE    @R8, R8
-                ADD     R11, R8
-                CMP     0, @R8                  ; 0=file, 1=directory
-                RBRA    _RETNAME, Z             ; return name
+                RSUB    DIRBR$GETNAME, 1        ; R8: name, R9: flags
+                MOVE    R8, R11                 ; R11: name
+                AND     DIRBR$FLAG_DIR, R9      ; file or directory?
+                RBRA    _RETNAME, Z             ; file: return name
 
                 ; change directory
                 MOVE    R4, R8                  ; deselect current line
@@ -455,7 +453,6 @@ _ELEMENT_FOUND  MOVE    R11, R8                 ; R11: selected SLL element
                 MOVE    LOG_STR_CD, R8          ; log directory change to UART
                 SYSCALL(puts, 1)
                 RSUB    SCR$CLRINNER, 1         ; clear inner part of frame
-                ADD     SLL$DATA, R11
                 ADD     1, R11                  ; remove < from name
                 MOVE    R11, R8                 ; remove > from name
                 SYSCALL(strlen, 1)
@@ -480,7 +477,6 @@ _CHANGEDIR      MOVE    R8, R9                  ; use this directory
 
 _RETNAME        MOVE    R6, @--SP               ; rem. abs itm idx for cursor
 
-                ADD     SLL$DATA, R11
                 MOVE    R11, R8                 ; R8: file name
                 XOR     R9, R9                  ; R9=0: all OK, no error
 
@@ -596,38 +592,32 @@ SHOW_DIR        INCRB
 
 _SHOWDIR_L      MOVE    R8, R1                  ; R1: ptr to next LL element
                 ADD     SLL$NEXT, R1
-                ADD     SLL$DATA, R8            ; R8: entry name
-                XOR     R7, R7                  ; R7: flag: clean up stack?
 
-                ; replace the end part of a too long string by "..."
+                ; copy the name to the stack (one character per word) and
+                ; replace the end part of a too long name by "..."
                 MOVE    SCR$OSM_M_DX, R2
                 MOVE    @R2, R2
                 SUB     2, R2                   ; R2: max stringlen to display
-                MOVE    R9, R4                  ; save R9 to restore it later
-                SYSCALL(strlen, 1)
-                MOVE    R9, R3                  ; R3: length of current item
-                MOVE    R4, R9                  ; restore R9: # items to show
-                CMP     R3, R2                  ; current length > max strlen?
-                RBRA    _SHOWDIR_PRINT, !N      ; R3 <= R2: print items
                 MOVE    SP, R4                  ; save SP to restore it later
+                SUB     R2, SP                  ; R2 + 1 characters..
+                SUB     2, SP                   ; ..plus zero-terminator
                 MOVE    R9, R5                  ; save R9 to restore it later
-                SUB     R3, SP                  ; reserve strlen
-                SUB     1, SP                   ; .. including zero-terminator
-                MOVE    SP, R9                  ; modified entry name
-                SYSCALL(strcpy, 1)
-
-                MOVE    R9, R8                  ; R8: modified item name
-                MOVE    R5, R9                  ; restore R9: # items to show               
+                MOVE    SP, R9                  ; R9: copy of the name
+                MOVE    R2, R10
+                ADD     1, R10                  ; one more than displayable
+                RSUB    DIRBR$UNPACK, 1         ; R10: length of the name
+                MOVE    R9, R8                  ; R8: name
+                MOVE    R5, R9                  ; restore R9: # items to show
+                CMP     R10, R2                 ; length > max strlen?
+                RBRA    _SHOWDIR_PRINT, !N      ; no: print it as it is
                 MOVE    R8, R5
                 ADD     R2, R5
                 SUB     3, R5                   ; hardcoded len of FN_ELLIPSIS
-                                                ; plus zero-terminator
                 MOVE    FN_ELLIPSIS, R6
                 MOVE    @R6++, @R5++            ; hardcoded len of FN_ELLIPSIS
                 MOVE    @R6++, @R5++            ; TODO: switch to strcpy..
                 MOVE    @R6++, @R5++            ; .. as of QNICE V1.7
                 MOVE    0, @R5
-                MOVE    1, R7                   ; flag to clean up stack
 
                 ; for performance reasons: do not output to UART
                 ; if you need to debug: delete "SCR" in the following
@@ -635,10 +625,7 @@ _SHOWDIR_L      MOVE    R8, R1                  ; R1: ptr to next LL element
 _SHOWDIR_PRINT  RSUB    SCR$PRINTSTR, 1         ; print dirname/filename
                 MOVE    NEWLINE, R8
                 RSUB    SCR$PRINTSTR, 1
-
-                CMP     0, R7                   ; clean up stack?
-                RBRA    _SHOWDIR_NOCLN, Z       ; no: go on
-                MOVE    R4, SP                  ; yes: clean up stack
+                MOVE    R4, SP                  ; free the copy of the name
 
 _SHOWDIR_NOCLN  ADD     1, R0
                 CMP     R0, R9                  ; shown <= maximum?

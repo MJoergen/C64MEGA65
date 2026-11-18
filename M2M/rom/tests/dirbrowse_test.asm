@@ -9,6 +9,14 @@
 #include "../../QNICE/dist_kit/sysdef.asm"
 #include "../../QNICE/dist_kit/monitor.def"
 
+; Name store of the file browser on the hardware (see ../sysdef.asm and
+; FB_NAMES_WIN in CORE/m2m-rom/globals.asm, which comes from C_FB_NAMES_AW)
+M2M$RAMROM_DEV   .EQU 0xFFF4
+M2M$RAMROM_4KWIN .EQU 0xFFF5
+M2M$RAMROM_DATA  .EQU 0x7000
+M2M$FB_NAMES     .EQU 0x0008
+FB_NAMES_WIN     .EQU 16
+
                 .ORG    0x8000                  ; start at 0x8000
 
                 MOVE    TITLE_STR, R8           ; output title string
@@ -52,10 +60,9 @@ MOUNT_OK        MOVE    STARTPATH_STR, R8       ; user enters start path
 
                 ; Output sorted directory listing
 LOAD_OK         MOVE    R10, R0
-                ADD     SLL$NEXT, R0                
-                MOVE    R10, R1
-                ADD     SLL$DATA, R1
-                MOVE    R1, R8
+                ADD     SLL$NEXT, R0
+                MOVE    R10, R8                 ; R8: name of the element
+                RSUB    DIRBR$GETNAME, 1        ; (names are packed)
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
                 CMP     0, @R0

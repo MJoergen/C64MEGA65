@@ -64,6 +64,8 @@ awk '/constant OPTM_G_/ && !/16#/ {gsub("OPTM_G_", "C64_OPTM_G_"); gsub(";", "")
 awk '/constant C_VDNUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("VDRIVES_MAX                 .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 awk '/constant C_CRTROMS_MAN_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_MAN_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
 awk '/constant C_CRTROMS_AUTO_NUM/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); val=a[1]; if (val+0 == 0) val=1; printf("CRTROM_AUT_MAX              .EQU %s\n", val)}' ../vhdl/globals.vhd >> globals.asm
+# file browser name store: C_FB_NAMES_AW (address width in words) -> number of 4K-word windows
+awk '/constant C_FB_NAMES_AW/ {gsub(/.*:=|;.*/, "", $0); split($0, a, " "); printf("FB_NAMES_WIN                .EQU %d\n", 2 ^ (a[1] - 12))}' ../vhdl/globals.vhd >> globals.asm
 
 # Export the .crt size ceiling = C_CRT_MAX_SIZE = (C_HMAP_CRT_GUARD - C_HMAP_CRT) windows
 # * 8 KB, so the Shell (PREP_LOAD_IMAGE) enforces exactly the SIMCRT-pool size and can never

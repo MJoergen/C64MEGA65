@@ -29,6 +29,16 @@
 #include "../../QNICE/dist_kit/monitor.def"
 
 CTX_MOUNT_DISKIMG .EQU 0x0100                   ; see ../sysdef.asm
+
+; The QNICE emulator has no M2M devices: the name store of the file browser
+; (see ../dirbrowse.asm) is emulated by one 4K-word window in RAM at fixed
+; addresses, and its device and window registers are plain RAM words there.
+; The folders of the test need less than one window of names.
+M2M$FB_NAMES     .EQU 0x0008
+FB_NAMES_WIN     .EQU 1
+M2M$RAMROM_DATA  .EQU 0xE000                    ; 0xE000 .. 0xEFFF
+M2M$RAMROM_DEV   .EQU 0xF000
+M2M$RAMROM_4KWIN .EQU 0xF001
 RING_MAX        .EQU 100                        ; guard against endless rings
 
                 .ORG    0x8000
@@ -107,29 +117,35 @@ CD_OK           MOVE    HANDLE_DEV, R3
                 RBRA    DIE, 1
 READ_OK         MOVE    R10, R6                 ; R6: head of the list
 
-                ; print all list elements: flag and cluster from the end of
-                ; the data blob (same layout that _ELEMENT_FOUND relies on)
+                ; print all list elements: directory flag and start cluster
+                ; from the start of the data blob (see DIRBR$FLAGS), name via
+                ; DIRBR$GETNAME
                 MOVE    R6, R7
 PRINT_ELM       CMP     0, R7
                 RBRA    PRINT_ELM_END, Z
                 MOVE    STR_E, R8
                 SYSCALL(puts, 1)
                 MOVE    R7, R3
-                ADD     SLL$DATA_SIZE, R3
-                MOVE    @R3, R3
-                ADD     R7, R3                  ; R3: directory flag
-                MOVE    @R3++, R8
+                ADD     SLL$DATA, R3            ; R3: data blob
+                MOVE    R3, R8
+                ADD     DIRBR$FLAGS, R8
+                MOVE    @R8, R8
+                AND     DIRBR$FLAG_DIR, R8      ; 0=file, 1=directory
                 SYSCALL(puthex, 1)
                 RSUB    PRINT_SPACE, 1
-                MOVE    @R3++, R4               ; R4: cluster low
-                MOVE    @R3, R8                 ; cluster high
+                MOVE    R3, R4
+                ADD     DIRBR$CLUS_LO, R4
+                MOVE    @R4, R4                 ; R4: cluster low
+                MOVE    R3, R8
+                ADD     DIRBR$CLUS_HI, R8
+                MOVE    @R8, R8                 ; cluster high
                 SYSCALL(puthex, 1)
                 RSUB    PRINT_SPACE, 1
                 MOVE    R4, R8
                 SYSCALL(puthex, 1)
                 RSUB    PRINT_SPACE, 1
                 MOVE    R7, R8
-                ADD     SLL$DATA, R8
+                RSUB    DIRBR$GETNAME, 1
                 SYSCALL(puts, 1)
                 SYSCALL(crlf, 1)
                 MOVE    @R7, R7
@@ -168,10 +184,12 @@ RING_LOOP       MOVE    R10, R8
                 MOVE    R11, R9
                 RSUB    PRINT_ELMIDX, 1
                 MOVE    R10, R7                 ; cluster of this image
-                ADD     SLL$DATA_SIZE, R7
-                ADD     @R7, R7
+                ADD     SLL$DATA, R7
+                MOVE    R7, R9
+                ADD     DIRBR$CLUS_LO, R9
+                MOVE    @R9, R9                 ; low
+                ADD     DIRBR$CLUS_HI, R7
                 MOVE    @R7, R10                ; high
-                MOVE    @--R7, R9               ; low
                 MOVE    R6, R8
                 RSUB    DIRBROWSE_NEXT, 1
                 CMP     R10, R4
@@ -200,7 +218,9 @@ PRINT_ELMNAME   INCRB
                 CMP     0, R0
                 RBRA    _PEN_PRINT, Z
                 MOVE    R0, R8
-                ADD     SLL$DATA, R8
+                MOVE    R9, R1                  ; DIRBR$GETNAME changes R9
+                RSUB    DIRBR$GETNAME, 1        ; R8: name
+                MOVE    R1, R9
 _PEN_PRINT      SYSCALL(puts, 1)
                 MOVE    R0, R8
                 DECRB
