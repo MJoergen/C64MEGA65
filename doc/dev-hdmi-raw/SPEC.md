@@ -120,7 +120,7 @@ The two changed timings are the ones of the Ultimate 64 (720 + 12 + 64 + 68 by 5
 | "1001" | 28.375 | 3 | 7 | 35 | 945.833 MHz | 27.023810 MHz (100 MHz x 227 / 840) |
 | "1010" | 29.625 | 4 | 2 | 10 | 740.625 MHz | 74.062500 MHz (100 MHz x 237 / 320) |
 
-The tables come from the generator `tools/mmcm_tables.py`, which is accepted only if it reproduces the existing tables bit by bit (`research/R5-mmcm-tables.md`). The static attributes of the MMCM and the state machine do not change. The five unused codes "1011" to "1111" select a copy of table "0010" (74.25 MHz).
+The tables come from the generator `tools/mmcm_tables.py`, which reproduces the eight existing tables bit by bit (`research/R5-mmcm-tables.md`); the new tables follow the same conventions as the existing ones, including the way those store the lock words. The function with the eight existing tables is not touched; the new tables are a second function of the same shape, and a ninth bit of the table address selects between the two. The static attributes of the MMCM and the state machine do not change. The five unused codes "1011" to "1111" load the table of "0010" (74.25 MHz), so that no code can leave the loader without an end of table.
 
 What the numbers mean per frame (core frame length in pixel clocks minus the totals of the record; in 720p the genlock supplies this number of extra pixel clocks per frame):
 
