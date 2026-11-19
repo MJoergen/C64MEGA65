@@ -29,9 +29,16 @@ Version 6 - MONTH DAY, 2026
 * NTSC: Choose PAL (default) or NTSC in the "Model" submenu. In NTSC mode
   the core is an NTSC C64 (VIC-II 6567R8, NTSC clock) and resets automatically
   when you switch. HDMI gets its own 59.94 Hz modes (720p, 4:3 480p, 5:4 480p)
-  including "HDMI: Flicker-free". The analog output ("VGA") runs at the true
+  including flicker-free. The analog output ("VGA") runs at the true
   NTSC frame rate of 59.83 Hz.
   (GitHub issue https://github.com/MJoergen/C64MEGA65/issues/181)
+
+* HDMI at the C64's own frame rate: The new `HDMI Frame Sync` choice in the
+  HDMI submenu offers `Off`, `Flicker-free` (default) and `Raw 50.1 Hz` (PAL)
+  or `Raw 59.8 Hz` (NTSC). `Raw` keeps the C64 at its original speed and runs
+  HDMI at the C64's frame rate: smooth on displays that accept this rate.
+  (GitHub issues https://github.com/MJoergen/C64MEGA65/issues/184 and
+   https://github.com/MJoergen/C64MEGA65/issues/148)
 
 * Turbo modes: "C128" (fast while a program sets `$D030`) and "Smart" (fast
   except during disk access) at 2x, 3x or 4x. Caps Lock toggles Smart 4x.

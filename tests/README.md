@@ -5,6 +5,47 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A27 - TBD
+------------------------
+
+@TODO: Test the new group `HDMI Frame Sync` of the HDMI submenu on R3/R3A and R6 (issues #184 and #148). It replaces the switch `HDMI: Flicker-free` with three choices: `Off` and `Flicker-free` are the switch off and on as in WIP-V6-A26; `Raw 50.1 Hz` (PAL) or `Raw 59.8 Hz` (NTSC) keeps the C64 at its original speed and runs the HDMI output at the C64's own frame rate (50.124 Hz or 59.826 Hz), locked to the C64's picture. Which displays show `Raw` is not known before this test: for every display you try, report make and model and the result of each step. Everything of WIP-V6-A26 below still applies. Background: `doc/dev-hdmi-raw/SPEC.md`.
+
+Tools: the title screen of "The Great Giana Sisters" (a long, smooth horizontal scroller: a tear line or a jump shows there first) and a game or demo with continuous music for the sound steps.
+
+Getting the picture back: if a display shows nothing after you selected `Raw`, the menu is still open and the selection bar is on the `Raw` line. Press Cursor Up and then Return: `Flicker-free` is selected and the picture comes back. A VGA monitor on the analog output shows the menu in any case. Switching between `Raw` and the two other items changes the HDMI frame rate, so most displays go black for 1 to 3 seconds; that is expected.
+
+Menu:
+
+* @TODO The HDMI submenu shows: the headline `HDMI Display Mode`, a line, the three display modes of the active machine mode, a line, the yellow headline `HDMI Frame Sync`, a line, `Off`, `Flicker-free`, `Raw 50.1 Hz` (PAL) or `Raw 59.8 Hz` (NTSC), a line, the yellow headline `HDMI Options`, a line, `HDMI: DVI (no sound)`, the filter submenu `HDMI: <filter>`, `HDMI: Zoom-in`, a line and `Back`. The three items of `HDMI Frame Sync` are a radio group: exactly one of them is selected at any time.
+* @TODO On the first start with the new config file `Flicker-free` is selected in PAL; switch `Model` to NTSC and open the HDMI submenu again: `Flicker-free` is selected there too.
+* @TODO PAL and NTSC remember their choice separately: select `Raw 50.1 Hz` in PAL and switch to NTSC: `Flicker-free` is still selected; select `Off` there and switch back to PAL: `Raw 50.1 Hz` is still selected.
+* @TODO Close the menu, switch the MEGA65 off and on: the choice of both machine modes is restored, and the HDMI output starts in the restored mode (try it with `Raw` selected in the active machine mode).
+* @TODO The menu bits of every item below the HDMI display modes moved. Change one item in each of `HDMI Options` (DVI, a filter, zoom-in), `VGA`, `SID`, `Kernal`, the Volume submenu and `Advanced Settings` (a keyboard shortcut, `Mouse`, `Paddles`): each one takes effect at once and is restored after a power cycle.
+
+`Off` and `Flicker-free` (nothing may differ from `HDMI: Flicker-free` off and on in WIP-V6-A26):
+
+* @TODO PAL, in `16:9 720p 50 Hz`, `4:3 576p 50 Hz` and `5:4 576p 50 Hz`: with `Off`, a tear line crosses the picture about every 8 seconds and the Giana Sisters scroller jumps at that moment; with `Flicker-free`, the picture is smooth after the first seconds. The display reports 50 Hz in all six cases.
+* @TODO NTSC, in `16:9 720p 59.94 Hz`, `4:3 480p 59.94 Hz` and `5:4 480p 59.94 Hz`: the same, with the tear line about every 9 seconds with `Off`. The display reports 59.94 Hz (720p shows as 59.93 Hz on displays that print two decimals). In the two 480p modes with `Flicker-free`, also watch the lower part of the picture: report a tear line that stays near the bottom (worst case `5:4 480p 59.94 Hz`), and check whether WIP-V6-A26 shows it too.
+
+`Raw` (each step in PAL with the three PAL display modes and in NTSC with the three NTSC display modes):
+
+* @TODO Does the display show a picture at all? Note make and model of the display and the frame rate that its info screen reports (expected: 50.12 Hz in PAL and 59.83 Hz in NTSC, or 50 Hz and 60 Hz on displays that round). If it shows nothing or a message such as "not supported", get the picture back as described above and go on with the next display mode.
+* @TODO After selecting `Raw` a tear line may wander through the picture for the first seconds (up to about 8 s in PAL 720p, 6 s in NTSC 720p, 3 s in 576p, 2 s in 480p). After that: no tear line and no jump in the Giana Sisters scroller for several minutes. A display that shows the picture but still jumps about every 8 seconds (PAL) or 9 seconds (NTSC) converts the frame rate internally: report it as "picture yes, not smooth".
+* @TODO Sound over HDMI plays for at least 10 minutes without dropouts, clicks or crackling.
+* @TODO `HDMI: Zoom-in` on and off: the picture is framed as with `Flicker-free` and stays steady.
+* @TODO The on-screen menu, a help page and the file browser look as with `Flicker-free` (in NTSC on the 480p modes at 89 % of the size).
+* @TODO Every HDMI filter, from `No Filter` to `CRT (Composite)`: the picture looks as with `Flicker-free`.
+* @TODO `HDMI: DVI (no sound)` on: picture as before, no sound over HDMI; off again: the sound is back.
+* @TODO After a reset of the C64 (short press of the reset button), after a pause (open the file browser, wait 30 seconds, leave it again) and after a change of `Model` between PAL and NTSC with `Raw` selected in both: a tear line may wander through the picture for some seconds (up to about 8 in 720p), then the picture is steady again. Note whether the display goes black or shows a message during these seconds (the PAL/NTSC change changes the HDMI mode, so a short black screen is expected there).
+* @TODO Blind recovery: select `Raw`, then without looking at the screen press Cursor Up and Return: `Flicker-free` is selected and the picture is back. In PAL and in NTSC, and on a display that does not show `Raw` if you have one.
+* @TODO Analog output while `Raw` is selected: VGA `Standard` and both 15 kHz modes behave exactly as with `Off`, because the C64 runs at its original, constant speed (a monitor that shows the rate reports 50.12 Hz in PAL and 59.83 Hz in NTSC). No "underwater" effect or loss of sync, which `Flicker-free` can cause on some analog monitors.
+* @TODO TOD accuracy as for WIP-V6-A22, with `Raw` instead of `Off`: deviation below 1 s over 10 minutes, in PAL and in NTSC.
+* @TODO Pixel clock: enter the QNICE debug console, select the HDMI device with `MC FFF4 0011` and `MC FFF5 0000`, then `MD 7003 7004` prints the pixel clock in Hz, measured over one second, as two words: first the low word, then the high word. Expected in `Raw` (as printed, the low word may differ by a few counts): PAL 720p 74.444 MHz (`EE9C 046F`), PAL 576p 27.024 MHz (`59C1 019C`), NTSC 720p 74.063 MHz (`1AA4 046A`), NTSC 480p 27.000 MHz (`FCC0 019B`). For comparison with `Flicker-free`: 74.250 MHz (`F710 046C`) in PAL 720p, 74.167 MHz (`B18A 046B`) in NTSC 720p, 27.000 MHz (`FCC0 019B`) in 576p and 480p.
+
+Vivado build:
+
+* @TODO Timing is met on R3 and R6 in every clock domain, `hdmi_clk` included (`M2M/common.xdc` adds a clock uncertainty for the faster raw pixel clocks). The synthesis log reports no latch and no critical warning for `hdmi_genlock.vhd`, `digital_pipeline.vhd`, `video_out_clock.vhd`, `video_modes_pkg.vhd` and `framework.vhd`.
+
 Version WIP-V6-A26 - TBD
 ------------------------
 
