@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Checker of tb_hdmi_raw_cts (issue #184, doc/dev-hdmi-raw/SPEC.md section 6).
+
+    check_cts.py VCD REPO
+
+The CTS of a packet is the value of audio_pcm_cts at the rising edge of the packet
+strobe audio_pcm_acr. Expected values come from the mode records of
+video_modes_pkg.vhd and VIDEO_MODE_VECTOR of framework.vhd (parsed with
+doc/dev-ntsc/tools/w2_checks.py); the copy of the vector in tb_hdmi_raw_cts.vhd must
+be the same.
+
+Checks:
+  * a mode whose CTS_FRAC_N is 0 (every mode that is not a raw mode, and raw 480p):
+    every packet carries CLK_KHZ, also the first one after a change from a raw mode
+  * a raw mode with CTS_FRAC_N / CTS_FRAC_D: after the first two packets of the step
+    (the accumulator may still hold the value of the previous mode) every window of
+    CTS_FRAC_D consecutive packets has exactly CTS_FRAC_N packets with CLK_KHZ + 1
+    and the others with CLK_KHZ, so the average over a whole number of windows is
+    exactly CLK_KHZ + CTS_FRAC_N / CTS_FRAC_D kHz; that is the pixel clock of the
+    table that the record selects (exact fraction printed)
+  * CTS never changes less than 0.4 ms before or after a strobe
+
+Prints "RESULT: PASS" or "RESULT: FAIL ...".
+"""
+
+import importlib.util
+import os
+import re
+import sys
+from fractions import Fraction
+
+FAILS = []
+
+
+def check(cond, what):
+    if not cond:
+        FAILS.append(what)
+        print("  MISMATCH: " + what)
+
+
+def main():
+    if len(sys.argv) != 3:
+        print(__doc__)
+        return 2
+    vcd, repo = sys.argv[1:3]
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("w2_checks", os.path.join(repo, "doc", "dev-ntsc", "tools", "w2_checks.py"))
+    w2 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(w2)
+
+    pkg = w2.read(repo, "M2M/vhdl/av_pipeline/video_modes_pkg.vhd")
+    recs = w2.parse_records(pkg)
+    members = w2.parse_members(pkg)
+    _, vector, _, _ = w2.parse_framework(w2.read(repo, "M2M/vhdl/framework.vhd"))
+    tb = w2.strip_comments(w2.read(repo, "CORE/vhdl/test/tb_hdmi_raw_clock/tb_hdmi_raw_cts.vhd"))
+    tbvec = re.findall(r"\b(C_\w+)", re.search(r"VIDEO_MODE_VECTOR\s*:.*?:=\s*\((.*?)\);", tb, re.S).group(1))
+    check(tbvec == vector, "the vector of tb_hdmi_raw_cts.vhd is not VIDEO_MODE_VECTOR of framework.vhd")
+    vo = w2.read(repo, "M2M/vhdl/controllers/HDMI/video_out_clock.vhd")
+
+    # packets: (time, phase, cts); changes of CTS: times
+    ch = w2.parse_vcd(vcd)
+    state, packets, cts_changes = {}, [], []
+    for t, name, v in ch:
+        if name == "audio_pcm_cts" and state.get(name) is not None and state.get(name) != v:
+            cts_changes.append(t)
+        prev = state.get(name)
+        state[name] = v
+        if name == "audio_pcm_acr" and v == "1" and prev == "0":
+            packets.append((t, int(state["tb_phase"], 2), int(state["audio_pcm_cts"], 2)))
+    # the CTS value at the strobe is the value after all changes at that time
+    final = {}
+    for t, name, v in ch:
+        if name == "audio_pcm_cts":
+            final[t] = int(v, 2)
+    print("%d packets, %d changes of CTS" % (len(packets), len(cts_changes)))
+
+    # steps: consecutive packets with the same phase
+    steps = []
+    for t, ph, cts in packets:
+        cts = final.get(t, cts)
+        if ph == 99:
+            continue
+        if not steps or steps[-1][0] != ph:
+            steps.append((ph, []))
+        steps[-1][1].append(cts)
+    print("%-28s %-26s %7s %10s %-26s %s" % ("mode", "record", "packets", "CLK_KHZ", "average CTS (kHz)", "pixel clock (kHz)"))
+    for ph, ctss in steps:
+        rec = recs[vector[ph]]
+        k, n, d = rec["CLK_KHZ"], rec["CTS_FRAC_N"], rec["CTS_FRAC_D"]
+        m, dd, o0, o1, f = w2.mmcm_freq(w2.drp_table(vo, rec["CLK_SEL"]))
+        pix = Fraction(100000) * Fraction(m) / dd / Fraction(o1)
+        if n == 0:
+            check(all(c == k for c in ctss), "%s: CTS %s, expected %d in every packet" % (
+                members[ph], sorted(set(ctss)), k))
+            avg = Fraction(sum(ctss), len(ctss))
+        else:
+            body = ctss[2:]
+            check(all(c in (k, k + 1) for c in body), "%s: CTS values %s" % (members[ph], sorted(set(body))))
+            inc = [c - k for c in body]
+            for i in range(len(inc) - d + 1):
+                if sum(inc[i:i + d]) != n:
+                    check(False, "%s: window at packet %d has %d increments, expected %d" % (
+                        members[ph], i + 2, sum(inc[i:i + d]), n))
+                    break
+            whole = (len(body) // d) * d
+            avg = Fraction(sum(body[:whole]), whole) if whole else None
+            check(avg == k + Fraction(n, d), "%s: average CTS %s, expected %s" % (members[ph], avg, k + Fraction(n, d)))
+            check(pix == k + Fraction(n, d), "%s: pixel clock %s kHz, record says %s" % (members[ph], pix, k + Fraction(n, d)))
+        print("%-28s %-26s %7d %10d %-26s %s" % (members[ph], vector[ph], len(ctss), k,
+                                                 "%s (%.6f)" % (avg, float(avg)), "%s (%.6f)" % (pix, float(pix))))
+    # every change of CTS lies at least 0.4 ms away from every strobe, except at a change of the mode
+    # (the CTS follows the new record at once, the accumulator is cleared one audio clock later)
+    strobes = [t for t, _, _ in packets]
+    mode_times = [t for t, name, _ in ch if name == "tb_phase"]
+    near, unexplained = 0, 0
+    for t in cts_changes:
+        if any(abs(s - t) < 400 * 10 ** 9 for s in strobes):          # VCD unit: fs; 0.4 ms
+            near += 1
+            if not any(0 <= t - m <= 200 * 10 ** 6 for m in mode_times):   # 200 ns
+                unexplained += 1
+    print("changes of CTS within 0.4 ms of a strobe: %d, all of them at a change of the mode: %s" % (
+        near, "yes" if unexplained == 0 else "NO (%d)" % unexplained))
+    check(unexplained == 0, "CTS changes close to a strobe without a change of the mode")
+    seen_raw = {members[ph] for ph, _ in steps if recs[vector[ph]]["CTS_FRAC_N"] != 0}
+    check(seen_raw == {"C_VIDEO_HDMI_16_9_50_RAW", "C_VIDEO_HDMI_4_3_50_RAW", "C_VIDEO_HDMI_5_4_50_RAW",
+                       "C_VIDEO_HDMI_16_9_5994_RAW"}, "raw modes with a fraction covered: %s" % sorted(seen_raw))
+    check(len({ph for ph, _ in steps}) == 16, "not every mode covered")
+    if FAILS:
+        print("RESULT: FAIL %d mismatch(es)" % len(FAILS))
+        return 1
+    print("RESULT: PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

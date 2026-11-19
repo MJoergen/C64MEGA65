@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
--- tb_window_av: av_pipeline with the 10-entry video mode vector (issue #181)
+-- tb_window_av: av_pipeline with the 16-entry video mode vector (issues #181, #184)
 --
 -- Elaborates and runs the real M2M/vhdl/av_pipeline/av_pipeline.vhd (and with
 -- it digital_pipeline, analog_pipeline, crop, vga_to_hdmi, ...) with the
@@ -24,7 +24,10 @@
 -- doc/dev-ntsc/tools/w2_standin.py); run_w2.sh replaces them with generated
 -- stand-ins that keep their entity declarations, and csync (SystemVerilog)
 -- with an XOR of the two syncs. The real video_overlay and vga_osm are
--- simulated by tb_osm_place.vhd.
+-- simulated by tb_osm_place.vhd. The genlock of the raw modes (hdmi_genlock)
+-- is a stand-in with the ports of doc/dev-hdmi-raw/SPEC.md section 5.1 that
+-- passes htotal_i through (the genlock has its own benches), so the line length
+-- that reaches the scaler can be compared with the mode record in every mode.
 --
 -- Prints "SIMULATION DONE" at the end.
 -------------------------------------------------------------------------------
@@ -48,7 +51,7 @@ end entity tb_window_av;
 architecture sim of tb_window_av is
 
    -- copy of framework.vhd VIDEO_MODE_VECTOR
-   constant VIDEO_MODE_VECTOR : video_modes_vector(0 to 9) := (
+   constant VIDEO_MODE_VECTOR : video_modes_vector(0 to 15) := (
       C_HDMI_720p_50,
       C_HDMI_720p_60,
       C_HDMI_576p_50,
@@ -58,7 +61,13 @@ architecture sim of tb_window_av is
       C_SVGA_800_600_60,
       C_HDMI_720p_5994,
       C_HDMI_720x480p_5994,
-      C_HDMI_720x480p_5994);
+      C_HDMI_720x480p_5994,
+      C_HDMI_720p_50_RAW,
+      C_HDMI_576p_50_RAW,
+      C_HDMI_576p_50_RAW,
+      C_HDMI_720p_5994_RAW,
+      C_HDMI_720x480p_5994_RAW,
+      C_HDMI_720x480p_5994_RAW);
 
    signal qnice_clk   : std_logic := '0';
    signal video_clk   : std_logic := '0';
@@ -180,7 +189,7 @@ begin
    p_stim : process
       variable l : line;
    begin
-      for m in 0 to 9 loop
+      for m in 0 to 15 loop
          video_mode <= video_mode_to_slv(video_mode_type'val(m));
          for z in 0 to 1 loop
             zoom <= '1' when z = 1 else '0';

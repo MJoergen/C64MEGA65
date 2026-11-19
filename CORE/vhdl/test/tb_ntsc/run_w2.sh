@@ -4,16 +4,18 @@
 #   CORE/vhdl/test/tb_ntsc/run_w2.sh [modes|window|crop|osm|py|all]
 #
 #   modes   tb_video_modes: video_modes_pkg round trip, codes, video_mode_is_ntsc,
-#           C_HDMI_720p_5994 (htotal x vtotal, CLK_KHZ)
-#   window  tb_window_av: the real av_pipeline with the 10-entry mode vector, one
-#           run per mode: digital_pipeline window, mode record, OSM shift and
-#           scaling force, standard bit and crop window
+#           video_mode_is_raw, C_HDMI_720p_5994 (htotal x vtotal, CLK_KHZ), the raw
+#           records against the records they are derived from
+#   window  tb_window_av: the real av_pipeline with the 16-entry mode vector, one
+#           run per mode: digital_pipeline window, mode record, line length of the
+#           scaler, OSM shift and scaling force, standard bit and crop window
 #   crop    tb_crop_ntsc: real VIC-II + video_sync + crop, PAL and NTSC, all four
 #           phases of the core video clock enable
 #   osm     tb_osm_place: the real video_overlay (vga_osm, font ROM) on the NTSC
 #           outputs, OSM scaling 0 .. 8, options menu and main screen
-#   py      doc/dev-ntsc/tools/w2_checks.py: framework clock select, MMCM table of
-#           CLK_SEL "110", OSM table of spec 7.3 (integer transcription)
+#   py      doc/dev-ntsc/tools/w2_checks.py: framework clock select, MMCM tables of
+#           every CLK_SEL that a mode record uses, the exact frame rates of the raw
+#           records, OSM table of spec 7.3 (integer transcription)
 #
 # Environment: GHDL (default /usr/local/bin/ghdl), JOBS (default 2, max 3).
 # Prints every bench output and a final "RESULT: PASS" or "RESULT: FAIL ..."
@@ -62,6 +64,34 @@ if want window; then
       --retype vga_cfg_shift_i=integer || fail "stand-in video_overlay"
    python3 "$TOOLS/w2_standin.py" "$REPO/M2M/vhdl/controllers/HDMI/serialiser_10to1_selectio.vhd" \
       serialiser_10to1_selectio "$BUILD/serialiser_standin.vhd" || fail "stand-in serialiser"
+   # stand-in for the genlock of the raw modes with the ports of doc/dev-hdmi-raw/SPEC.md
+   # section 5.1: it passes the line length through (the genlock has its own benches)
+   cat > "$BUILD/hdmi_genlock_standin.vhd" <<'EOF2'
+library ieee;
+use ieee.std_logic_1164.all;
+entity hdmi_genlock is
+   port (
+      clk_i     : in  std_logic;
+      rst_i     : in  std_logic;
+      enable_i  : in  std_logic;
+      htotal_i  : in  natural range 0 to 4095;
+      target_i  : in  natural range 0 to 2**21 - 1;
+      hs_i      : in  std_logic;
+      vs_i      : in  std_logic;
+      de_i      : in  std_logic;
+      ref_i     : in  std_logic;
+      htotal_o  : out natural range 0 to 4095;
+      locked_o  : out std_logic;
+      stretch_o : out natural range 0 to 4095
+   );
+end entity hdmi_genlock;
+architecture standin of hdmi_genlock is
+begin
+   htotal_o  <= htotal_i;
+   locked_o  <= '0';
+   stretch_o <= 0;
+end architecture standin;
+EOF2
    cat > "$BUILD/csync_standin.vhd" <<'EOF2'
 -- stand-in for M2M/vhdl/controllers/MiSTer/csync.sv (SystemVerilog)
 library ieee;
@@ -82,6 +112,7 @@ EOF2
       "$AV/clk_synthetic_enable.vhd" "$AV/video_counters.vhd" "$AV/crop.vhd"
       "$AV/digital_pipeline.vhd" "$AV/analog_pipeline.vhd" "$AV/av_pipeline.vhd"
       "$BUILD/ascal_standin.vhd" "$BUILD/video_overlay_standin.vhd" "$BUILD/serialiser_standin.vhd"
+      "$BUILD/hdmi_genlock_standin.vhd"
       "$HERE/tb_window_av.vhd")
    # Local copy of the xpm stub whose array synchronizer output starts at all ones instead
    # of 'U' / all zeros: an OSM scaling vector without a '1' makes first_nonzero_bit return 9,
@@ -116,7 +147,9 @@ EOF2
                  i_analog_pipeline/video_osm_cfg_scaling_i; do echo "$AVSIG/$sig"; done
       for sig in hdmi_hmin hdmi_hmax hdmi_vmin hdmi_vmax hdmi_htotal hdmi_vtotal hdmi_shift hdmi_osm_vshift \
                  audio_pcm_cts hdmi_osm_cfg_scaling_i i_vga_to_hdmi/vic i_vga_to_hdmi/aspect \
-                 i_vga_to_hdmi/hs_pol i_vga_to_hdmi/vs_pol; do echo "$DPSIG/$sig"; done
+                 i_vga_to_hdmi/hs_pol i_vga_to_hdmi/vs_pol \
+                 hdmi_hsstart hdmi_hsend hdmi_hdisp hdmi_vsstart hdmi_vsend hdmi_vdisp \
+                 hdmi_raw hdmi_ascal_htotal hdmi_genlock_target; do echo "$DPSIG/$sig"; done
    } > "$BUILD/window.opt"
 fi
 
