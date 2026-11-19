@@ -126,11 +126,11 @@ constant HELP_1 : string :=
    "   /c64 folder so that your menu settings\n" &
    "   are being saved\n" &
    " * If you use any analog display device\n" &
-   "   via the VGA port, disable HDMI:\n" &
-   "   Flicker-free to avoid glitches\n" &
+   "   via the VGA port, set HDMI Frame Sync\n" &
+   "   to Off to avoid glitches\n" &
    " * If you use HDMI, then absolutely make\n" &
-   "   sure that you enable HDMI: Flicker-free\n" &
-   "   for PAL (50 Hz) and NTSC (59.94 Hz)\n" &
+   "   sure that HDMI Frame Sync is set to\n" &
+   "   Flicker-free or Raw for PAL and NTSC\n" &
    " * To use hardware cartridges, you need to\n" &
    "   have a MEGA65 core #0 from at least mid\n" &
    "   2023; so you might need to upgrade\n\n" &
@@ -394,7 +394,7 @@ constant OPTM_S_SAVING     : string := "<Saving>";          -- the internal writ
 --             Do use a lower case \n. If you forget one of them or if you use upper case, you will run into undefined behavior.
 --          2. Start each line that contains an actual menu item (multi- or single-select) with a Space character,
 --             otherwise you will experience visual glitches.
-constant OPTM_SIZE         : natural := 325; -- amount of items including empty lines:
+constant OPTM_SIZE         : natural := 333; -- amount of items including empty lines:
                                              -- needs to be equal to the number of lines in OPTM_ITEMS and amount of items in OPTM_GROUPS
                                              -- IMPORTANT: If SAVE_SETTINGS is true and OPTM_SIZE changes: Make sure to re-generate and
                                              -- and re-distribute the config file. You can make a new one using M2M/tools/make_config.sh
@@ -484,8 +484,17 @@ constant OPTM_ITEMS        : string :=
    " 5:4  576p 50 Hz\n"         &
    " 5:4  480p 59.94 Hz\n"      &
    "\n"                         &
-   " HDMI: Flicker-free\n"      &
-   " HDMI: Flicker-free\n"      &  -- NTSC twin of the line above; only the one of the active machine mode is shown
+   " HDMI Frame Sync\n"         &  -- two radio groups (#184): PAL and NTSC each remember their own choice;
+   "\n"                         &  -- only the items of the active machine mode are shown
+   " Off\n"                     &  -- PAL: original core clock, HDMI at 50 Hz
+   " Off\n"                     &  -- NTSC: original core clock, HDMI at 59.94 Hz
+   " Flicker-free\n"            &  -- PAL (default): core clock follows the HDMI frame rate
+   " Flicker-free\n"            &  -- NTSC (default)
+   " Raw 50.1 Hz\n"             &  -- PAL: original core clock, HDMI at the frame rate of the C64
+   " Raw 59.8 Hz\n"             &  -- NTSC
+   "\n"                         &
+   " HDMI Options\n"            &
+   "\n"                         &
    " HDMI: DVI (no sound)\n"    &
 
    " HDMI: %s\n"                &  -- HDMI Filter submenu, nested inside the HDMI submenu
@@ -503,7 +512,6 @@ constant OPTM_ITEMS        : string :=
    " Back\n"                    &  -- returns to the HDMI submenu
 
    " HDMI: Zoom-in\n"           &
-   " HDMI: Raw 50.1 Hz\n"       &  -- not yet wired in mega65.vhd
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
@@ -777,7 +785,7 @@ constant OPTM_G_CIA_8521      : integer := 10;
 constant OPTM_G_IEC           : integer := 11;
 constant OPTM_G_KERNAL_MODES  : integer := 12;
 constant OPTM_G_HDMI_MODES_PAL : integer := 13; -- PAL HDMI display modes (the NTSC modes are a group of their own, see below)
-constant OPTM_G_HDMI_FF       : integer := 14;
+constant OPTM_G_HDMI_FF       : integer := 14;  -- HDMI Frame Sync of PAL (#184): Off / Flicker-free / Raw 50.1 Hz
 constant OPTM_G_HDMI_DVI      : integer := 15;
 constant OPTM_G_HDMI_FILTER   : integer := 16;
 constant OPTM_G_HDMI_ZOOM     : integer := 17;
@@ -789,8 +797,8 @@ constant OPTM_G_MACHINE_MODE  : integer := 22;  -- PAL/NTSC (#181): VIC-II, core
 constant OPTM_G_TURBO_MODE    : integer := 23;  -- Off / C128 / Smart (#87); no reset on change
 constant OPTM_G_TURBO_SPEED   : integer := 24;  -- 2x / 3x / 4x (#87); hidden while the turbo mode is Off
 constant OPTM_G_HDMI_MODES_NTSC : integer := 25; -- NTSC HDMI display modes (59.94 Hz), see #181/#105
-constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- NTSC twin of OPTM_G_HDMI_FF
-constant OPTM_G_HDMI_RAW50    : integer := 27;  -- not yet wired
+constant OPTM_G_HDMI_FF_NTSC  : integer := 26;  -- HDMI Frame Sync of NTSC (#184): Off / Flicker-free / Raw 59.8 Hz
+-- 27 is unused: the raw HDMI frame rate is an item of OPTM_G_HDMI_FF and OPTM_G_HDMI_FF_NTSC
 constant OPTM_G_VOLUME        : integer := 28;  -- master volume, 5% steps (#85); decoded in mega65.vhd, applied in main.vhd
 constant OPTM_G_RTC_GEOS      : integer := 29;  -- GEOS Real-Time-Clock; off by default, see #133, #164 and #187
 -- 30 is unused: it belonged to the VIC-II model submenu, which was removed again because we stick
@@ -910,8 +918,17 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_HDMI_MODES_PAL                  + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- 5:4  576p 50 Hz
                                              OPTM_G_HDMI_MODES_NTSC                 + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- 5:4  480p 59.94 Hz
                                              OPTM_G_LINE,
-                                             OPTM_G_HDMI_FF       + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Flicker-free (PAL)
-                                             OPTM_G_HDMI_FF_NTSC  + OPTM_G_SINGLESEL + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Flicker-free (NTSC)
+                                             OPTM_G_HEADLINE,                         -- HDMI Frame Sync
+                                             OPTM_G_LINE,
+                                             OPTM_G_HDMI_FF                         + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Off (PAL)
+                                             OPTM_G_HDMI_FF_NTSC                    + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Off (NTSC)
+                                             OPTM_G_HDMI_FF         + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Flicker-free (PAL)
+                                             OPTM_G_HDMI_FF_NTSC    + OPTM_G_STDSEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Flicker-free (NTSC)
+                                             OPTM_G_HDMI_FF                         + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Raw 50.1 Hz (PAL)
+                                             OPTM_G_HDMI_FF_NTSC                    + OPTM_DEP(OPTM_G_MACHINE_MODE, 1), -- Raw 59.8 Hz (NTSC)
+                                             OPTM_G_LINE,
+                                             OPTM_G_HEADLINE,                         -- HDMI Options
+                                             OPTM_G_LINE,
                                              OPTM_G_HDMI_DVI      + OPTM_G_SINGLESEL,
 
                                              OPTM_G_SUBMENU,                          -- open "HDMI: %s" (filter), nested
@@ -929,7 +946,6 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (filter)
 
                                              OPTM_G_HDMI_ZOOM     + OPTM_G_SINGLESEL,
-                                             OPTM_G_HDMI_RAW50    + OPTM_G_SINGLESEL + OPTM_DEP(OPTM_G_MACHINE_MODE, 0), -- Raw 50.1 Hz (PAL only)
                                              OPTM_G_LINE,
                                              OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (settings)
 

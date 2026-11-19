@@ -77,7 +77,7 @@ G = dict(
     KERNAL_MODES=12, HDMI_MODES_PAL=13, HDMI_FF=14, HDMI_DVI=15,
     HDMI_FILTER=16, HDMI_ZOOM=17, VGA_MODES=18, OSM_MODE=19, ABOUT_HELP=20,
     REU=21, MACHINE_MODE=22, TURBO_MODE=23, TURBO_SPEED=24,
-    HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, HDMI_RAW50=27, VOLUME=28,
+    HDMI_MODES_NTSC=25, HDMI_FF_NTSC=26, VOLUME=28,
     RTC_GEOS=29, DRV8_MODE=31, DRV8_UNMOUNT=32,
     DRV9_MODE=33, DRV9_UNMOUNT=34, SIM_RRNET=35, STEREO_MIX=36,
     SC_F9=37, SC_F10=38, SC_F11=39, SC_F12=40, SC_F13=41, SC_F14=42,
@@ -155,8 +155,17 @@ V6_MENU = [
     (" 5:4  576p 50 Hz",         "HDMI_MODES_PAL", []),
     (" 5:4  480p 59.94 Hz",      "HDMI_MODES_NTSC", []),
     ("",                         None, ["LINE"]),
-    (" HDMI: Flicker-free",      "HDMI_FF", ["SINGLESEL", "STDSEL"]),
-    (" HDMI: Flicker-free",      "HDMI_FF_NTSC", ["SINGLESEL", "STDSEL"]),
+    (" HDMI Frame Sync",         None, ["HEADLINE"]),     # #184
+    ("",                         None, ["LINE"]),
+    (" Off",                     "HDMI_FF", []),          # PAL
+    (" Off",                     "HDMI_FF_NTSC", []),     # NTSC
+    (" Flicker-free",            "HDMI_FF", ["STDSEL"]),  # PAL
+    (" Flicker-free",            "HDMI_FF_NTSC", ["STDSEL"]),  # NTSC
+    (" Raw 50.1 Hz",             "HDMI_FF", []),          # PAL
+    (" Raw 59.8 Hz",             "HDMI_FF_NTSC", []),     # NTSC
+    ("",                         None, ["LINE"]),
+    (" HDMI Options",            None, ["HEADLINE"]),
+    ("",                         None, ["LINE"]),
     (" HDMI: DVI (no sound)",    "HDMI_DVI", ["SINGLESEL"]),
     (" HDMI: %s",                None, OPEN),            # region 4 (in 3)
     (" HDMI Filter",             None, ["HEADLINE"]),
@@ -172,7 +181,6 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 4
     (" HDMI: Zoom-in",           "HDMI_ZOOM", ["SINGLESEL"]),
-    (" HDMI: Raw 50.1 Hz",       "HDMI_RAW50", ["SINGLESEL"]),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 3
     (" VGA: %s",                 None, OPEN),            # region 5
@@ -440,7 +448,8 @@ def dep_value(gid, mask):
 
 # flat index -> (mother group name, 4-bit item mask); the dependent lines of
 # the V6 menu: the per-drive mount lines + internal-1581 status lines (#93)
-# and the PAL/NTSC HDMI variants, flicker-free twins + Raw 50.1 (#229), plus
+# and the PAL/NTSC HDMI variants: display modes (#229) and the items of the
+# two Frame Sync radio groups Off / Flicker-free / Raw (#184), plus
 # the "Turbo speed" block (separator, headline, 2x/3x/4x) that is only visible
 # while the turbo mode is C128 or Smart (#87): a mother in the same submenu;
 # and the switch "MEGA+left = right" of each port in the Mouse submenu, only
@@ -454,9 +463,10 @@ V6_DEPS = {
     57: ("MACHINE_MODE", 0b0001), 58: ("MACHINE_MODE", 0b0010),
     59: ("MACHINE_MODE", 0b0001), 60: ("MACHINE_MODE", 0b0010),
     61: ("MACHINE_MODE", 0b0001), 62: ("MACHINE_MODE", 0b0010),
-    64: ("MACHINE_MODE", 0b0001), 65: ("MACHINE_MODE", 0b0010),
-    81: ("MACHINE_MODE", 0b0001),
-    302: ("MOUSE_P1", 0b0010), 306: ("MOUSE_P2", 0b0010),
+    66: ("MACHINE_MODE", 0b0001), 67: ("MACHINE_MODE", 0b0010),
+    68: ("MACHINE_MODE", 0b0001), 69: ("MACHINE_MODE", 0b0010),
+    70: ("MACHINE_MODE", 0b0001), 71: ("MACHINE_MODE", 0b0010),
+    310: ("MOUSE_P1", 0b0010), 314: ("MOUSE_P2", 0b0010),
 }
 
 
@@ -1293,8 +1303,9 @@ def deps_minhid_fixtures():
     """(name, groups, raw) -> expected sum via deps_minhid."""
     fx = []
     # the real V6 arrays: DRV8_MODE min 1 + DRV9_MODE min 1 + MACHINE_MODE
-    # min 4 (in the PAL state the four NTSC HDMI lines are hidden) + TURBO_MODE
-    # min 0 (C128 and Smart show the whole Turbo speed block) = 6
+    # min 6 (each machine mode hides the six HDMI lines of the other one) +
+    # TURBO_MODE min 0 (C128 and Smart show the whole Turbo speed block) +
+    # MOUSE_P1 and MOUSE_P2 min 0 (Amiga shows the switch) = 8
     fx.append(("v6 real menu", menu_masked(V6_MENU),
                menu_deps_raw(V6_MENU, V6_DEPS)))
     # no dependencies at all -> 0
@@ -1756,21 +1767,25 @@ def summ_fixtures():
         return s
 
     hdmi = flat_index(" HDMI: %s")               # 54: the HDMI submenu opener
-    vol = flat_index(" Volume: %s")              # 131: the Volume opener
-    adv = flat_index(" Advanced Settings")       # 167: the Advanced opener
-    osm = flat_index(" OSM: %s")                 # 171: the OSM scaling opener
+    vol = flat_index(" Volume: %s")              # 139: the Volume opener
+    adv = flat_index(" Advanced Settings")       # 175: the Advanced opener
+    osm = flat_index(" OSM: %s")                 # 179: the OSM scaling opener
     fx = []
-    # HDMI heading: nothing selected of its own; child skipped; the selected
-    # Scanlines line inside the child must NOT leak: ends at own closer
+    # HDMI heading: nothing selected of its own (neither a display mode nor
+    # a Frame Sync item, #184); child skipped; the selected Scanlines line
+    # inside the child must NOT leak: ends at own closer
+    ffd = [i for i in group_members(V6_MENU, "HDMI_FF")
+           + group_members(V6_MENU, "HDMI_FF_NTSC") if base[i]]
+    assert ffd == [68, 69]                       # the two Flicker-free items
     fx.append(("HDMI region empty -> own closer", hdmi, v6g,
-               sel(i57=0, i58=0, i64=0, i65=0)))
+               sel(i57=0, i58=0, i68=0, i69=0)))
     # HDMI heading with 4:3 576p 50 Hz selected -> found 59
     fx.append(("HDMI region finds 4:3 PAL", hdmi, v6g, sel(i57=0, i59=1)))
     # Advanced Settings: no radio group of its own at all
     fx.append(("Advanced has no own radio group", adv, v6g, base))
-    # OSM scaling: default -> 174
+    # OSM scaling: default -> 182
     fx.append(("OSM scaling default", osm, v6g, base))
-    # Volume (#247): default -> " 100%" (134), found before the nested Stereo
+    # Volume (#247): default -> " 100%" (142), found before the nested Stereo
     # region; with no volume item selected the scan must skip the nested
     # Stereo region (whose " Full Stereo" stays selected) and end at its own
     # closer instead of leaking the stereo selection into "Volume: %s"
@@ -1781,7 +1796,7 @@ def summ_fixtures():
     fx.append(("Volume empty, nested Stereo must not leak", vol, v6g, novol))
     # the nested Stereo opener itself: default " Full Stereo", and " Mono"
     smix = group_members(V6_MENU, "STEREO_MIX")
-    stereo = flat_index(" Stereo: %s")           # 156: the nested opener
+    stereo = flat_index(" Stereo: %s")           # 164: the nested opener
     fx.append(("Stereo default", stereo, v6g, base))
     mono = list(base)
     mono[smix[0]], mono[smix[3]] = 0, 1
@@ -1791,10 +1806,12 @@ def summ_fixtures():
     f9 = flat_index(" F9:  %s")
     f11 = flat_index(" F11: %s")
     f12 = flat_index(" F12: %s")
-    # the items of the F12 picker (f12 + 3 .. f12 + 13) straddle OSM control
-    # bit 255/256: its default " Load PRG" (f12 + 9) is below the boundary,
-    # " Volume up" (f12 + 13) above it
-    assert f12 + 3 <= 255 and f12 + 13 >= 256
+    # OSM control bit 255/256: the items of the F11 picker (f11 + 3 ..
+    # f11 + 13) are below the boundary, the opener of the F12 picker is at
+    # or below it and its items (f12 + 3 .. f12 + 13) are above it, so the
+    # walk from the F12 opener to its default " Load PRG" (f12 + 9) or to
+    # " Volume up" (f12 + 13) crosses the boundary
+    assert f11 + 13 <= 255 and f12 <= 255 and f12 + 3 >= 256
     fx.append(("Keyboard Shortcuts has no own radio group",
                flat_index(" Keyboard Shortcuts"), v6g, base))
     fx.append(("F9 picker default Freeze", f9, v6g, base))
@@ -1999,68 +2016,84 @@ def nav_script():
     s.feed(KEY_SELECT)              # enter region 3
     assert (s.level, s.cursor) == (3, 57)
     s.feed(0x8000 | KEY_DOWN)       # background redraw + down
-    s.until(KEY_DOWN, 67)           # to nested "HDMI: %s" (filter)
+    # the Frame Sync radio groups (#184): PAL Off 66 / Flicker-free 68 /
+    # Raw 50.1 Hz 70, NTSC Off 67 / Flicker-free 69 / Raw 59.8 Hz 71
+    assert group_members(V6_MENU, "HDMI_FF") == [66, 68, 70]
+    assert group_members(V6_MENU, "HDMI_FF_NTSC") == [67, 69, 71]
+    assert [s.sel[i] for i in range(66, 72)] == [0, 0, 1, 1, 0, 0]
+    s.until(KEY_DOWN, 70)           # to " Raw 50.1 Hz"
+    s.feed(KEY_SELALT)              # radio-select it via Space
+    assert [s.sel[i] for i in range(66, 72)] == [0, 0, 0, 1, 1, 0]
+    s.until(KEY_UP, 66)             # back to the " Off" of PAL
+    s.feed(KEY_SELECT)              # radio-select it via Return
+    assert [s.sel[i] for i in range(66, 72)] == [1, 0, 0, 1, 0, 0]
+    s.until(KEY_DOWN, 71)           # to " Raw 59.8 Hz"
+    s.feed(KEY_SELECT)              # radio-select it: the PAL group stays
+    assert [s.sel[i] for i in range(66, 72)] == [1, 0, 0, 0, 0, 1]
+    s.until(KEY_DOWN, 76)           # to nested "HDMI: %s" (filter)
     s.feed(KEY_SELECT)              # enter region 4 (depth 2)
-    assert (s.level, s.cursor) == (4, 70)
-    s.feed(KEY_LAST)                # last item of the nested view: " Back"
     assert (s.level, s.cursor) == (4, 79)
+    s.feed(KEY_LAST)                # last item of the nested view: " Back"
+    assert (s.level, s.cursor) == (4, 88)
     s.feed(0x8000 | KEY_FIRST)      # background redraw + first item
-    assert (s.level, s.cursor) == (4, 70)
-    s.until(KEY_DOWN, 79)           # to the " Back" closer line
+    assert (s.level, s.cursor) == (4, 79)
+    s.until(KEY_DOWN, 88)           # to the " Back" closer line
     s.feed(KEY_SELECT)              # leave via the closer
-    assert (s.level, s.cursor) == (3, 67)
+    assert (s.level, s.cursor) == (3, 76)
     s.feed(KEY_MENUUP)              # pop to main
     assert (s.level, s.cursor) == (0, 54)
-    s.until(KEY_DOWN, 131)          # to "Volume: %s" - entering this region
+    s.until(KEY_DOWN, 139)          # to "Volume: %s" - entering this region
     s.feed(KEY_SELECT)              # is the regression case for the percent-
-    assert (s.level, s.cursor) == (8, 134)   # terminated-label scanner bug
+    assert (s.level, s.cursor) == (8, 142)   # terminated-label scanner bug
     s.feed(KEY_LAST)                # last item of the Volume view: " Back"
     last_vol = s.cursor
-    assert s.level == 8 and last_vol > 134 and s.g[last_vol] == 0xC0FF
+    assert s.level == 8 and last_vol > 142 and s.g[last_vol] == 0xC0FF
     s.feed(KEY_FIRST)               # first item: " 100%"
-    assert (s.level, s.cursor) == (8, 134)
-    s.until(KEY_DOWN, 156)          # to the nested "Stereo: %s" (#247)
+    assert (s.level, s.cursor) == (8, 142)
+    s.until(KEY_DOWN, 164)          # to the nested "Stereo: %s" (#247)
     s.feed(KEY_SELECT)              # enter region 9 (depth 2)
-    assert (s.level, s.cursor) == (9, 159)   # " Full Stereo"
+    assert (s.level, s.cursor) == (9, 167)   # " Full Stereo"
     s.feed(KEY_DOWN)                # " Wide Stereo"
     s.feed(KEY_SELALT)              # radio-select it via Space
-    assert s.sel[160] == 1 and s.sel[159] == 0
+    assert s.sel[168] == 1 and s.sel[167] == 0
     s.feed(KEY_LAST)                # last item of the nested view: " Back"
-    assert (s.level, s.cursor) == (9, 164)
+    assert (s.level, s.cursor) == (9, 172)
     s.feed(KEY_SELECT)              # leave via the closer: back in Volume,
-    assert (s.level, s.cursor) == (8, 156)   # cursor on the nested opener
+    assert (s.level, s.cursor) == (8, 164)   # cursor on the nested opener
     s.feed(KEY_MENUUP)              # back to main, cursor on the opener
-    assert (s.level, s.cursor) == (0, 131)
-    s.until(KEY_DOWN, 167)          # to "Advanced Settings"
+    assert (s.level, s.cursor) == (0, 139)
+    s.until(KEY_DOWN, 175)          # to "Advanced Settings"
     s.feed(KEY_SELECT)              # enter region 10
-    assert (s.level, s.cursor) == (10, 170)
+    assert (s.level, s.cursor) == (10, 178)
     s.feed(KEY_SELECT)              # single-select GEOS Real-Time-Clock on
     s.feed(KEY_SELECT)              # and off again
-    s.until(KEY_DOWN, 171)          # to "OSM: %s"
+    s.until(KEY_DOWN, 179)          # to "OSM: %s"
     s.feed(KEY_SELECT)              # enter region 11 (depth 2)
-    assert (s.level, s.cursor) == (11, 174)
+    assert (s.level, s.cursor) == (11, 182)
     s.feed(0x8000 | KEY_UP)         # redraw + up: wraps within the view
-    assert s.cursor == 184          # lands on the closer line
+    assert s.cursor == 192          # lands on the closer line
     s.feed(KEY_FIRST)               # first item of the depth-2 OSM view
-    assert (s.level, s.cursor) == (11, 174)
+    assert (s.level, s.cursor) == (11, 182)
     s.feed(0x8000 | KEY_LAST)       # background redraw + last item
-    assert (s.level, s.cursor) == (11, 184)
+    assert (s.level, s.cursor) == (11, 192)
     r = s.feed(KEY_CLOSE)           # Help: close the OSM
     assert r == "close"
     # reopen: same level and cursor (persistence)
-    assert (s.level, s.cursor) == (11, 184)
+    assert (s.level, s.cursor) == (11, 192)
     s.run_start()                   # the testbed draws before OPTM_RUN
     s.feed(KEY_MENUUP)              # pop to region 10
-    assert (s.level, s.cursor) == (10, 171)
+    assert (s.level, s.cursor) == (10, 179)
     s.feed(KEY_MENUUP)              # pop to main
-    assert (s.level, s.cursor) == (0, 167)
+    assert (s.level, s.cursor) == (0, 175)
     # Keyboard Shortcuts (#142): pickers two submenu levels below Advanced
-    # Settings; the F12 picker straddles OSM control bit 255/256
+    # Settings; the items of the F11 picker are below OSM control bit 256,
+    # the opener of the F12 picker is at bit 255 and its items above it
     ks = flat_index(" Keyboard Shortcuts")       # opener of region 12
     f11 = flat_index(" F11: %s")                 # opener of region 15
     f12 = flat_index(" F12: %s")                 # opener of region 16
+    assert f11 + 13 <= 255 and f12 <= 255 and f12 + 3 >= 256
     s.feed(KEY_SELECT)              # enter region 10 again
-    assert (s.level, s.cursor) == (10, 170)
+    assert (s.level, s.cursor) == (10, 178)
     s.until(KEY_DOWN, ks)           # to "Keyboard Shortcuts"
     s.feed(KEY_SELECT)              # enter region 12 (depth 2)
     assert s.level == 12 and ks < s.cursor < f11
@@ -2149,7 +2182,7 @@ def nav_script():
     s.feed(KEY_DOWN)                # the closer of Advanced Settings
     assert s.cursor == adv_close
     s.feed(KEY_SELECT)              # leave via the closer: main menu,
-    assert (s.level, s.cursor) == (0, 167)       # cursor on the opener
+    assert (s.level, s.cursor) == (0, 175)       # cursor on the opener
     r = s.feed(KEY_MENUUP)          # Run/Stop at main: close
     assert r == "close"
     return s.keys, s.trace
@@ -2310,6 +2343,7 @@ def menu_layout_errors():
     except AssertionError as e:
         errors.append("turbo toggle walk on the V6 menu: %s" % e)
     errors += input_devices_errors()
+    errors += hdmi_sync_errors()
     return errors
 
 
@@ -2858,8 +2892,14 @@ C_MENU = [
     ("C_MENU_HDMI_16_9_5994", "HDMI_MODES_NTSC", 0),
     ("C_MENU_HDMI_4_3_5994",  "HDMI_MODES_NTSC", 1),
     ("C_MENU_HDMI_5_4_5994",  "HDMI_MODES_NTSC", 2),
-    ("C_MENU_HDMI_FF",      "HDMI_FF", 0),
-    ("C_MENU_HDMI_FF_NTSC", "HDMI_FF_NTSC", 0),
+    # the Frame Sync radio groups (#184), pinned to their labels and their
+    # machine mode by hdmi_sync_errors() below
+    ("C_MENU_HDMI_SYNC_OFF",      "HDMI_FF", 0),        # Off (PAL)
+    ("C_MENU_HDMI_SYNC_OFF_NTSC", "HDMI_FF_NTSC", 0),   # Off (NTSC)
+    ("C_MENU_HDMI_FF",            "HDMI_FF", 1),        # Flicker-free (PAL)
+    ("C_MENU_HDMI_FF_NTSC",       "HDMI_FF_NTSC", 1),   # Flicker-free (NTSC)
+    ("C_MENU_HDMI_RAW",           "HDMI_FF", 2),        # Raw 50.1 Hz (PAL)
+    ("C_MENU_HDMI_RAW_NTSC",      "HDMI_FF_NTSC", 2),   # Raw 59.8 Hz (NTSC)
     ("C_MENU_HDMI_DVI",     "HDMI_DVI", 0),
     ("C_MENU_HDMI_FLT_NO_FILTER", "HDMI_FILTER", 0),
     ("C_MENU_HDMI_FLT_SHARP",     "HDMI_FILTER", 1),
@@ -2870,7 +2910,6 @@ C_MENU = [
     ("C_MENU_HDMI_FLT_CRT_SVIDEO", "HDMI_FILTER", 6),
     ("C_MENU_HDMI_FLT_CRT_COMPOSITE", "HDMI_FILTER", 7),
     ("C_MENU_HDMI_ZOOM",    "HDMI_ZOOM", 0),
-    ("C_MENU_HDMI_RAW50",   "HDMI_RAW50", 0),
     ("C_MENU_VGA_STD",      "VGA_MODES", 0),
     ("C_MENU_VGA_15KHZHSVS", "VGA_MODES", 1),
     ("C_MENU_VGA_15KHZCS",  "VGA_MODES", 2),
@@ -3126,6 +3165,92 @@ def input_rclick_errors():
     except (AssertionError, ValueError, IndexError, StopIteration) as e:
         errors.append("walk through the Mouse submenu (scenario 4): %s: %s"
                       % (type(e).__name__, e))
+    return errors
+
+
+# The Frame Sync radio groups of the HDMI submenu (#184): one group per
+# machine mode, three items each in the order Off, Flicker-free (default),
+# Raw, and every item is a dependent line of its own machine mode. mega65.vhd
+# decodes the Flicker-free and the Raw item of the active machine mode, so a
+# constant that points to another item or to the other machine mode silently
+# changes the core clock or the HDMI mode.
+HDMI_SYNC = [
+    # (constant, item label, group, item of MACHINE_MODE (0 = PAL,
+    # 1 = NTSC) that shows it, on by default)
+    ("C_MENU_HDMI_SYNC_OFF",      " Off",          "HDMI_FF",      0, False),
+    ("C_MENU_HDMI_SYNC_OFF_NTSC", " Off",          "HDMI_FF_NTSC", 1, False),
+    ("C_MENU_HDMI_FF",            " Flicker-free", "HDMI_FF",      0, True),
+    ("C_MENU_HDMI_FF_NTSC",       " Flicker-free", "HDMI_FF_NTSC", 1, True),
+    ("C_MENU_HDMI_RAW",           " Raw 50.1 Hz",  "HDMI_FF",      0, False),
+    ("C_MENU_HDMI_RAW_NTSC",      " Raw 59.8 Hz",  "HDMI_FF_NTSC", 1, False),
+]
+
+# the view of the HDMI submenu in each machine mode (0 = PAL, 1 = NTSC)
+_HDMI_VIEW_HEAD = [" HDMI Display Mode", ""]
+_HDMI_VIEW_TAIL = ["", " HDMI Options", "", " HDMI: DVI (no sound)",
+                   " HDMI: %s", " HDMI: Zoom-in", "", " Back"]
+HDMI_VIEW = {
+    0: _HDMI_VIEW_HEAD + [" 16:9 720p 50 Hz", " 4:3  576p 50 Hz",
+                          " 5:4  576p 50 Hz", "", " HDMI Frame Sync", "",
+                          " Off", " Flicker-free", " Raw 50.1 Hz"]
+    + _HDMI_VIEW_TAIL,
+    1: _HDMI_VIEW_HEAD + [" 16:9 720p 59.94 Hz", " 4:3  480p 59.94 Hz",
+                          " 5:4  480p 59.94 Hz", "", " HDMI Frame Sync", "",
+                          " Off", " Flicker-free", " Raw 59.8 Hz"]
+    + _HDMI_VIEW_TAIL,
+}
+
+
+def hdmi_sync_errors():
+    """Checks of the Frame Sync radio groups (see HDMI_SYNC) on the golden
+    model: the items, their groups, defaults, submenu and dependency, and the
+    view of the HDMI submenu in both machine modes. Returns a list of error
+    strings."""
+    errors = []
+    menu = V6_MENU
+    vals = c_menu_values()
+    path = [" HDMI: %s"]
+    machine = group_members(menu, "MACHINE_MODE")
+    if [menu[i][0] for i in machine] != [" PAL", " NTSC"]:
+        errors.append("MACHINE_MODE items %r, expected PAL and NTSC"
+                      % [menu[i][0] for i in machine])
+        return errors
+    for name, label, gname, mode, default in HDMI_SYNC:
+        if name not in vals:
+            errors.append("%s cannot be resolved in the golden model (see the "
+                          "C_MENU errors)" % name)
+            continue
+        v = vals[name]
+        t, grp, f = menu[v]
+        flags = ["STDSEL"] if default else []
+        if (t, grp, list(f)) != (label, gname, flags):
+            errors.append("%s = %d is %r (group %s, flags %r), expected %r of "
+                          "%s with the flags %r" % (name, v, t, grp, list(f),
+                                                    label, gname, flags))
+        if submenu_path(menu, v) != path:
+            errors.append("%s = %d is in the submenu path %r, expected %r"
+                          % (name, v, submenu_path(menu, v), path))
+        if V6_DEPS.get(v) != ("MACHINE_MODE", 1 << mode):
+            errors.append("%s = %d depends on %r, expected item %d of "
+                          "MACHINE_MODE only" % (name, v, V6_DEPS.get(v), mode))
+    for gname in ("HDMI_FF", "HDMI_FF_NTSC"):
+        mem = group_members(menu, gname)
+        if len(mem) != 3 or any("SINGLESEL" in menu[i][2] for i in mem):
+            errors.append("group %s has the members %r, expected a radio group "
+                          "of three items" % (gname, mem))
+    if errors:
+        return errors
+    g = menu_masked(menu)
+    res = resolve_deps(g, menu_deps_raw(menu, V6_DEPS))
+    level = build_new(g, 0)["arr"][flat_index(" HDMI: %s")] & 0x7FFF
+    for mode in (0, 1):
+        s = menu_stdsel(menu)
+        for j, i in enumerate(machine):
+            s[i] = int(j == mode)
+        labels = [menu[i][0] for i in visible_lines(g, level, res, s)]
+        if labels != HDMI_VIEW[mode]:
+            errors.append("HDMI view with the machine mode %s: %r, expected %r"
+                          % ("NTSC" if mode else "PAL", labels, HDMI_VIEW[mode]))
     return errors
 
 
@@ -3785,6 +3910,8 @@ def verify():
     print("  switches MEGA+left = right: %s, Mouse view in 16 states, "
           "walk of scenario 4"
           % " ".join("%s=%d" % (r[0], c_menu_values()[r[0]]) for r in INPUT_RCLICK))
+    print("  HDMI Frame Sync: %s, HDMI view in PAL and NTSC"
+          % " ".join("%s=%d" % (r[0], c_menu_values()[r[0]]) for r in HDMI_SYNC))
     print("  " + heap_summary(hnum))
     # additionally drive the real SEL_OPTM_DEPS decoder through ghdl, if present
     return vhdl_check()
@@ -3915,9 +4042,9 @@ def run():
 # ---------------------------------------------------------------------------
 
 # the lines of m2m-rom.asm that the heap mutants below edit
-_MHS = "MENU_HEAP_SIZE  .EQU 5696"
-_HS_DBG = "HEAP_SIZE       .EQU 1472                       ; 7168 - 5696 = 1472"
-_HS_REL = "HEAP_SIZE       .EQU 24512                      ; 30208 - 5696 = 24512"
+_MHS = "MENU_HEAP_SIZE  .EQU 5760"
+_HS_DBG = "HEAP_SIZE       .EQU 1408                       ; 7168 - 5760 = 1408"
+_HS_REL = "HEAP_SIZE       .EQU 24448                      ; 30208 - 5760 = 24448"
 
 
 def _heap_sizes(mhs):
@@ -3945,19 +4072,19 @@ _CFG_ITM_R2 = ('   " #2: MEGA+left = right\\n"   &  -- right click with the MEGA
                'only shown while port 2 is "Amiga"')
 _CFG_GRP_A1 = "OPTM_G_MOUSE_P1,                         -- Port 1: Amiga"
 _CFG_GRP_A2 = "OPTM_G_MOUSE_P2,                         -- Port 2: Amiga"
-_MEGA_R1 = "constant C_MENU_MOUSE_P1_RCLICK  : natural := 302;"
-_MEGA_R2 = "constant C_MENU_MOUSE_P2_RCLICK  : natural := 306;"
-_MEGA_A1 = "constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;"
-_MEGA_A2 = "constant C_MENU_MOUSE_P2_AMIGA   : natural := 305;"
-_MEGA_PA1 = "constant C_MENU_PADDLES_P1_ATARI : natural := 313;"
-_MEGA_PA2 = "constant C_MENU_PADDLES_P2_ATARI : natural := 316;"
+_MEGA_R1 = "constant C_MENU_MOUSE_P1_RCLICK  : natural := 310;"
+_MEGA_R2 = "constant C_MENU_MOUSE_P2_RCLICK  : natural := 314;"
+_MEGA_A1 = "constant C_MENU_MOUSE_P1_AMIGA   : natural := 309;"
+_MEGA_A2 = "constant C_MENU_MOUSE_P2_AMIGA   : natural := 313;"
+_MEGA_PA1 = "constant C_MENU_PADDLES_P1_ATARI : natural := 321;"
+_MEGA_PA2 = "constant C_MENU_PADDLES_P2_ATARI : natural := 324;"
 _MEGA_D0 = "main_mouse_rclick_o(0) <= main_osm_control_i(C_MENU_MOUSE_P1_RCLICK);"
 _MEGA_D1 = "main_mouse_rclick_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_RCLICK);"
 _MDL_A1 = '(" Port 1: Amiga",' + " " * 11 + '"MOUSE_P1", []),'
 _MDL_R1 = ('(" #1: MEGA+left' + ' = right",   "MOUSE_P1_RCLICK", ["SINGLE'
            'SEL"]),   # dependent, #190')
-_MDL_D1 = '302: ("MOUSE_P1", 0b' + '0010)'
-_MDL_D2 = '306: ("MOUSE_P2", 0b' + '0010)'
+_MDL_D1 = '310: ("MOUSE_P1", 0b' + '0010)'
+_MDL_D2 = '314: ("MOUSE_P2", 0b' + '0010)'
 _MDL_F1 = '"MOUSE_P1_RCLICK", ["SINGLE' + 'SEL"])'
 _MDL_F2 = '"MOUSE_P2_RCLICK", ["SINGLE' + 'SEL"])'
 _I16 = " " * 16                 # the indentation of an instruction
@@ -3967,27 +4094,27 @@ _CFG, _MEGA, _MDL = ("CORE/vhdl/config.vhd", "CORE/vhdl/mega65.vhd",
 RCLICK_MUTANTS = [
     # mega65.vhd: every new and every moved constant one line off or stale
     ("mega65.vhd  C_MENU_MOUSE_P1_RCLICK points to Port 1: Amiga", _MEGA,
-     _MEGA_R1, _MEGA_R1.replace("302", "301"), "verify"),
+     _MEGA_R1, _MEGA_R1.replace("310", "309"), "verify"),
     ("mega65.vhd  C_MENU_MOUSE_P1_RCLICK points to the separator behind it", _MEGA,
-     _MEGA_R1, _MEGA_R1.replace("302", "303"), "verify"),
+     _MEGA_R1, _MEGA_R1.replace("310", "311"), "verify"),
     ("mega65.vhd  C_MENU_MOUSE_P2_RCLICK points to Port 2: Amiga", _MEGA,
-     _MEGA_R2, _MEGA_R2.replace("306", "305"), "verify"),
+     _MEGA_R2, _MEGA_R2.replace("314", "313"), "verify"),
     ("mega65.vhd  C_MENU_MOUSE_P2_RCLICK points to the switch of port 1", _MEGA,
-     _MEGA_R2, _MEGA_R2.replace("306", "302"), "verify"),
+     _MEGA_R2, _MEGA_R2.replace("314", "310"), "verify"),
     ("mega65.vhd  C_MENU_MOUSE_P1_AMIGA points to the switch behind it", _MEGA,
-     _MEGA_A1, _MEGA_A1.replace("301", "302"), "verify"),
-    ("mega65.vhd  C_MENU_MOUSE_P2_AMIGA keeps its old value 304 (Port 2: C64)", _MEGA,
-     _MEGA_A2, _MEGA_A2.replace("305", "304"), "verify"),
+     _MEGA_A1, _MEGA_A1.replace("309", "310"), "verify"),
+    ("mega65.vhd  C_MENU_MOUSE_P2_AMIGA points to Port 2: C64", _MEGA,
+     _MEGA_A2, _MEGA_A2.replace("313", "312"), "verify"),
     ("mega65.vhd  C_MENU_MOUSE_P2_AMIGA points to the switch behind it", _MEGA,
-     _MEGA_A2, _MEGA_A2.replace("305", "306"), "verify"),
-    ("mega65.vhd  C_MENU_PADDLES_P1_ATARI keeps its old value 311 (a separator)", _MEGA,
-     _MEGA_PA1, _MEGA_PA1.replace("313", "311"), "verify"),
+     _MEGA_A2, _MEGA_A2.replace("313", "314"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P1_ATARI points to a separator", _MEGA,
+     _MEGA_PA1, _MEGA_PA1.replace("321", "319"), "verify"),
     ("mega65.vhd  C_MENU_PADDLES_P1_ATARI points to Port 1: C64", _MEGA,
-     _MEGA_PA1, _MEGA_PA1.replace("313", "312"), "verify"),
-    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI keeps its old value 314 (a separator)", _MEGA,
-     _MEGA_PA2, _MEGA_PA2.replace("316", "314"), "verify"),
+     _MEGA_PA1, _MEGA_PA1.replace("321", "320"), "verify"),
+    ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to a separator", _MEGA,
+     _MEGA_PA2, _MEGA_PA2.replace("324", "322"), "verify"),
     ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to Port 2: C64", _MEGA,
-     _MEGA_PA2, _MEGA_PA2.replace("316", "315"), "verify"),
+     _MEGA_PA2, _MEGA_PA2.replace("324", "323"), "verify"),
     # mega65.vhd: the decoding and the drivers of main_mouse_rclick_o
     ("mega65.vhd  main_mouse_rclick_o(0) decodes the switch of port 2", _MEGA,
      _MEGA_D0, _MEGA_D0.replace("P1_RCLICK", "P2_RCLICK"), "verify"),
@@ -4039,9 +4166,9 @@ RCLICK_MUTANTS = [
      (_CFG_ITM_R2 + "\n" + _CFG_ITM_A2, _CFG_R2 + _CFG_IND + _CFG_GRP_A2), "verify"),
     ("config.vhd  the text of #2 says #1", _CFG,
      _CFG_ITM_R2, _CFG_ITM_R2.replace("#2: MEGA", "#1: MEGA"), "verify"),
-    ("config.vhd  OPTM_SIZE stays 323", _CFG,
-     "constant OPTM_SIZE         : natural := 325;",
-     "constant OPTM_SIZE         : natural := 323;", "verify"),
+    ("config.vhd  OPTM_SIZE stays 325", _CFG,
+     "constant OPTM_SIZE         : natural := 333;",
+     "constant OPTM_SIZE         : natural := 325;", "verify"),
     # the same defects consistently in config.vhd, mega65.vhd and the golden
     # model: only the checks of the intended layout (INPUT_DEVICES,
     # INPUT_RCLICK, the Mouse views and the walk of scenario 4) can catch them
@@ -4072,8 +4199,8 @@ RCLICK_MUTANTS = [
       (_MEGA_A1, _MEGA_R1),
       (_MDL_A1 + "\n    " + _MDL_R1, _MDL_D1)),
      ((_CFG_ITM_R1 + "\n" + _CFG_ITM_A1, _CFG_R1 + _CFG_IND + _CFG_GRP_A1),
-      (_MEGA_A1.replace("301", "302"), _MEGA_R1.replace("302", "301")),
-      (_MDL_R1 + "\n    " + _MDL_A1, _MDL_D1.replace("302", "301"))), "verify"),
+      (_MEGA_A1.replace("309", "310"), _MEGA_R1.replace("310", "309")),
+      (_MDL_R1 + "\n    " + _MDL_A1, _MDL_D1.replace("310", "309"))), "verify"),
     # the decoders of config.vhd: only the ghdl testbench reads them
     ("config.vhd  SEL_OPTM_STDSEL reads the line flag (bit 9)", _CFG,
      "when SEL_OPTM_STDSEL       => data_o <= x\"000\" & \"000\" & "
@@ -4351,12 +4478,12 @@ MUTANTS = [
     # only "verify" reads (fifth element: the gate that must catch them)
     ("mega65.vhd  C_MENU_MOUSE_P1_AMIGA points to Port 1: C64",
      "CORE/vhdl/mega65.vhd",
-     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;",
-     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 300;", "verify"),
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 309;",
+     "constant C_MENU_MOUSE_P1_AMIGA   : natural := 308;", "verify"),
     ("mega65.vhd  C_MENU_PADDLES_P2_ATARI points to the item of port 1",
      "CORE/vhdl/mega65.vhd",
-     "constant C_MENU_PADDLES_P2_ATARI : natural := 316;",
-     "constant C_MENU_PADDLES_P2_ATARI : natural := 313;", "verify"),
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 324;",
+     "constant C_MENU_PADDLES_P2_ATARI : natural := 321;", "verify"),
     ("mega65.vhd  main_mouse_amiga_o(1) decodes the mouse of port 1",
      "CORE/vhdl/mega65.vhd",
      "main_mouse_amiga_o(1) <= main_osm_control_i(C_MENU_MOUSE_P2_AMIGA);",
@@ -4395,39 +4522,39 @@ MUTANTS = [
     # caught by verify and by run
     (desc, "CORE/m2m-rom/m2m-rom.asm", old, new, ("verify", "run"))
     for desc, old, new in (
-        ("H1  the sizes of the menu of 323 lines (5632 / 24576 / 1536)",
-         (_MHS, _HS_DBG, _HS_REL), _heap_sizes(5632)),
-        ("H2  HEAP_SIZE 24576 with MENU_HEAP_SIZE 5696 (into the stack area)",
+        ("H1  the sizes of the menu of 325 lines (5696 / 24512 / 1472)",
+         (_MHS, _HS_DBG, _HS_REL), _heap_sizes(5696)),
+        ("H2  HEAP_SIZE 24512 with MENU_HEAP_SIZE 5760 (into the stack area)",
          _HS_REL,
-         "HEAP_SIZE       .EQU 24576                      ; 30208 - 5696 = 24512"),
-        ("H3  MENU_HEAP_SIZE 5632, consistent everywhere (158 words headroom)",
+         "HEAP_SIZE       .EQU 24512                      ; 30208 - 5760 = 24448"),
+        ("H3  MENU_HEAP_SIZE 5696, consistent everywhere (143 words headroom)",
          (_MHS, _HS_DBG, _HS_REL,
+          "write 30208-5760=24448", "; 5760 words comfortably fit",
+          "leaving 207 words of"),
+         _heap_sizes(5696) + (
           "write 30208-5696=24512", "; 5696 words comfortably fit",
-          "leaving 222 words of"),
-         _heap_sizes(5632) + (
-          "write 30208-5632=24576", "; 5632 words comfortably fit",
-          "leaving 158 words of")),
-        ("H4  MENU_HEAP_SIZE 5653, consistent everywhere (179 words headroom)",
+          "leaving 143 words of")),
+        ("H4  MENU_HEAP_SIZE 5732, consistent everywhere (179 words headroom)",
          (_MHS, _HS_DBG, _HS_REL,
-          "write 30208-5696=24512", "; 5696 words comfortably fit",
-          "leaving 222 words of"),
-         _heap_sizes(5653) + (
-          "write 30208-5653=24555", "; 5653 words comfortably fit",
+          "write 30208-5760=24448", "; 5760 words comfortably fit",
+          "leaving 207 words of"),
+         _heap_sizes(5732) + (
+          "write 30208-5732=24476", "; 5732 words comfortably fit",
           "leaving 179 words of")),
-        ("H5  HEAP_SIZE of the branch without RELEASE left at 1536",
+        ("H5  HEAP_SIZE of the branch without RELEASE left at 1472",
          _HS_DBG,
-         "HEAP_SIZE       .EQU 1536                       ; 7168 - 5696 = 1472"),
+         "HEAP_SIZE       .EQU 1472                       ; 7168 - 5760 = 1408"),
         ("H6  stale line count in the comment at the stack",
-         "; line (325 lines today),", "; line (323 lines today),"),
+         "; line (333 lines today),", "; line (325 lines today),"),
         ("H7  stale submenu count in the comment above MENU_HEAP_SIZE",
-         "325 items, 20 submenus and a", "325 items, 18 submenus and a"),
+         "333 items, 20 submenus and a", "333 items, 18 submenus and a"),
         ("H8  stale item count in the comment above MENU_HEAP_SIZE",
-         "fit the current menu: 325 items", "fit the current menu: 323 items"),
+         "fit the current menu: 333 items", "fit the current menu: 325 items"),
         ("H9  stale length of OPTM_ITEMS in the comment above MENU_HEAP_SIZE",
-         "(3450 now)", "(3402 now)"),
+         "(3497 now)", "(3450 now)"),
         ("H10 stale peak in the comment above MENU_HEAP_SIZE",
-         "Peak use is 4772 + 702 = 5474, leaving 222",
-         "Peak use is 4716 + 702 = 5418, leaving 278"),
+         "Peak use is 4851 + 702 = 5553, leaving 207",
+         "Peak use is 4772 + 702 = 5474, leaving 286"),
     )
 ] + RCLICK_MUTANTS
 

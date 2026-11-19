@@ -456,77 +456,83 @@ constant C_MENU_TURBO_4X      : natural := 50;
 constant C_MENU_FLIP_JOYS     : natural := 53;
 -- HDMI submenu: the PAL display modes (50 Hz) and the NTSC display modes
 -- (59.94 Hz) are separate groups with their own default, and so are the PAL
--- flicker-free switch and its NTSC twin; raw 50.1 Hz is not yet wired
+-- and the NTSC radio group of "HDMI Frame Sync" (#184): Off, Flicker-free
+-- (default) and Raw (HDMI at the frame rate of the C64: 50.1 Hz, 59.8 Hz).
+-- The hardware decodes only the Flicker-free and the Raw item of the active
+-- machine mode (main_hdmi_ff, qnice_video_mode_o); Off is "neither of them"
 constant C_MENU_HDMI_16_9_50  : natural := 57;
 constant C_MENU_HDMI_16_9_5994 : natural := 58;
 constant C_MENU_HDMI_4_3_50   : natural := 59;
 constant C_MENU_HDMI_4_3_5994 : natural := 60;
 constant C_MENU_HDMI_5_4_50   : natural := 61;
 constant C_MENU_HDMI_5_4_5994 : natural := 62;
-constant C_MENU_HDMI_FF       : natural := 64;
-constant C_MENU_HDMI_FF_NTSC  : natural := 65;
-constant C_MENU_HDMI_DVI      : natural := 66;
+constant C_MENU_HDMI_SYNC_OFF : natural := 66;
+constant C_MENU_HDMI_SYNC_OFF_NTSC : natural := 67;
+constant C_MENU_HDMI_FF       : natural := 68;
+constant C_MENU_HDMI_FF_NTSC  : natural := 69;
+constant C_MENU_HDMI_RAW      : natural := 70;
+constant C_MENU_HDMI_RAW_NTSC : natural := 71;
+constant C_MENU_HDMI_DVI      : natural := 75;
 -- HDMI Filter submenu (nested inside the HDMI submenu; replaces V1's CRT
 -- emulation single-toggle). The selection is interpreted entirely by the
 -- core's m2m-rom.asm (LOAD_HDMI_FILTER), which writes M2M$ASCAL_MODE for
 -- native modes and loads the matching (H, V) coefficient pair via
 -- M2M$LOAD_POLYPHASE for polyphase modes. ASCAL_USAGE=1 in config.vhd
 -- routes mode control to QNICE directly.
-constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 70;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
-constant C_MENU_HDMI_FLT_SHARP         : natural := 71;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
-constant C_MENU_HDMI_FLT_BICUBIC       : natural := 72;  -- ascal native BICUBIC
-constant C_MENU_HDMI_FLT_SMOOTH        : natural := 73;
-constant C_MENU_HDMI_FLT_LANCZOS       : natural := 74;
-constant C_MENU_HDMI_FLT_SCANLINES     : natural := 75;  -- default; bit-identical to V1's CRT emulation
-constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 76;
-constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 77;
-constant C_MENU_HDMI_ZOOM     : natural := 80;
-constant C_MENU_HDMI_RAW50    : natural := 81;           -- not yet wired
+constant C_MENU_HDMI_FLT_NO_FILTER     : natural := 79;  -- ascal native NEAREST (intentional #223 wonky-pixel look)
+constant C_MENU_HDMI_FLT_SHARP         : natural := 80;  -- ascal native SBILINEAR (cubic-warped Sharp Bilinear)
+constant C_MENU_HDMI_FLT_BICUBIC       : natural := 81;  -- ascal native BICUBIC
+constant C_MENU_HDMI_FLT_SMOOTH        : natural := 82;
+constant C_MENU_HDMI_FLT_LANCZOS       : natural := 83;
+constant C_MENU_HDMI_FLT_SCANLINES     : natural := 84;  -- default; bit-identical to V1's CRT emulation
+constant C_MENU_HDMI_FLT_CRT_SVIDEO    : natural := 85;
+constant C_MENU_HDMI_FLT_CRT_COMPOSITE : natural := 86;
+constant C_MENU_HDMI_ZOOM     : natural := 89;
 -- VGA submenu
-constant C_MENU_VGA_STD       : natural := 87;
-constant C_MENU_VGA_15KHZHSVS : natural := 91;
-constant C_MENU_VGA_15KHZCS   : natural := 92;
+constant C_MENU_VGA_STD       : natural := 95;
+constant C_MENU_VGA_15KHZHSVS : natural := 99;
+constant C_MENU_VGA_15KHZCS   : natural := 100;
 -- SID submenu
-constant C_MENU_MONO_6581     : natural := 100;
-constant C_MENU_MONO_8580     : natural := 101;
-constant C_MENU_STEREO_L6R6   : natural := 105;
-constant C_MENU_STEREO_L6R8   : natural := 106;
-constant C_MENU_STEREO_L8R6   : natural := 107;
-constant C_MENU_STEREO_L8R8   : natural := 108;
-constant C_MENU_STEREO_R_D420 : natural := 112;
-constant C_MENU_STEREO_R_D500 : natural := 113;
-constant C_MENU_STEREO_R_DE00 : natural := 114;
-constant C_MENU_STEREO_R_DF00 : natural := 115;
-constant C_MENU_IMPROVE_AUDIO : natural := 118;
-constant C_MENU_IEC           : natural := 121;
+constant C_MENU_MONO_6581     : natural := 108;
+constant C_MENU_MONO_8580     : natural := 109;
+constant C_MENU_STEREO_L6R6   : natural := 113;
+constant C_MENU_STEREO_L6R8   : natural := 114;
+constant C_MENU_STEREO_L8R6   : natural := 115;
+constant C_MENU_STEREO_L8R8   : natural := 116;
+constant C_MENU_STEREO_R_D420 : natural := 120;
+constant C_MENU_STEREO_R_D500 : natural := 121;
+constant C_MENU_STEREO_R_DE00 : natural := 122;
+constant C_MENU_STEREO_R_DF00 : natural := 123;
+constant C_MENU_IMPROVE_AUDIO : natural := 126;
+constant C_MENU_IEC           : natural := 129;
 -- Kernal submenu
-constant C_MENU_KERNAL        : natural := 122; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
-constant C_MENU_KERNAL_STD    : natural := 125;
-constant C_MENU_KERNAL_GS     : natural := 126;
-constant C_MENU_KERNAL_JAPAN  : natural := 127;
-constant C_MENU_KERNAL_JIFFY  : natural := 128;
+constant C_MENU_KERNAL        : natural := 130; -- flat index of the " Kernal: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
+constant C_MENU_KERNAL_STD    : natural := 133;
+constant C_MENU_KERNAL_GS     : natural := 134;
+constant C_MENU_KERNAL_JAPAN  : natural := 135;
+constant C_MENU_KERNAL_JIFFY  : natural := 136;
 -- Volume submenu (master volume slider, 5% steps): decoded into main_volume and
 -- applied as a perceptual attenuation in main.vhd (see volume_decode_proc below)
-constant C_MENU_VOLUME_OPENER : natural := 131; -- flat index of the " Volume: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
-subtype C_MENU_VOLUME is natural range 154 downto 134;
+constant C_MENU_VOLUME_OPENER : natural := 139; -- flat index of the " Volume: %s" submenu opener used by the custom SUBMENU_SUMMARY callback in m2m-rom.asm
+subtype C_MENU_VOLUME is natural range 162 downto 142;
 -- First item (100%) of the Volume radio group, i.e. C_MENU_VOLUME'low (checked by an assertion in
 -- the architecture body); the Shell needs it for the "Volume down" and "Volume up" shortcuts
-constant C_MENU_VOLUME_100    : natural := 134;
+constant C_MENU_VOLUME_100    : natural := 142;
 -- Stereo Mix submenu (issue #247), nested inside the Volume submenu: MiSTer's
 -- "Stereo Mix" crossfeed, decoded into main_stereo_mix below and applied in main.vhd
-constant C_MENU_STEREO_MIX_FULL   : natural := 159;  -- Full Stereo (default): MiSTer "None"
-constant C_MENU_STEREO_MIX_WIDE   : natural := 160;  -- Wide Stereo:   MiSTer "25%"
-constant C_MENU_STEREO_MIX_NARROW : natural := 161;  -- Narrow Stereo: MiSTer "50%"
-constant C_MENU_STEREO_MIX_MONO   : natural := 162;  -- Mono:          MiSTer "100%"
+constant C_MENU_STEREO_MIX_FULL   : natural := 167;  -- Full Stereo (default): MiSTer "None"
+constant C_MENU_STEREO_MIX_WIDE   : natural := 168;  -- Wide Stereo:   MiSTer "25%"
+constant C_MENU_STEREO_MIX_NARROW : natural := 169;  -- Narrow Stereo: MiSTer "50%"
+constant C_MENU_STEREO_MIX_MONO   : natural := 170;  -- Mono:          MiSTer "100%"
 -- Advanced Settings submenu
-constant C_MENU_RTC_GEOS      : natural := 170;         -- GEOS Real-Time-Clock, see #133, #164 and #187
-subtype C_MENU_OSM_SCALING is natural range 182 downto 174;
-constant C_MENU_8521          : natural := 185;
+constant C_MENU_RTC_GEOS      : natural := 178;         -- GEOS Real-Time-Clock, see #133, #164 and #187
+subtype C_MENU_OSM_SCALING is natural range 190 downto 182;
+constant C_MENU_8521          : natural := 193;
 -- There is deliberately no VIC-II model selection: we stick to the hardcoded old-HMOS variant
 -- of fpga64_sid_iec.vhd. See issue #120 and doc/vic_ii_variants.md
--- Simulated RR-Net (issue #234): the RR-Net radio group runs 189 .. 192, with "Off" first at
--- 189. Only the three "On" items are sliced here; "Off" is encoded as "none of them selected"
-subtype R_MENU_RRNET is natural range 192 downto 190;
+-- Simulated RR-Net (issue #234): the RR-Net radio group runs 197 .. 200, with "Off" first at
+-- 197. Only the three "On" items are sliced here; "Off" is encoded as "none of them selected"
+subtype R_MENU_RRNET is natural range 200 downto 198;
 -- Keyboard Shortcuts submenu (GitHub issue #142): one key picker for each of the function keys
 -- F9 to F14 (F10, F12 and F14 are Shift+F9, Shift+F11 and Shift+F13). Each picker is a radio group
 -- of 11 items in a fixed order; the constants below are the flat index of its first item ("Off"),
@@ -536,12 +542,12 @@ subtype R_MENU_RRNET is natural range 192 downto 190;
 --    10 = Volume up
 -- Freeze is handled in VHDL (main_sc_freeze, keyboard.vhd and main.vhd), all other actions are
 -- handled by the Shell (m2m-rom.asm).
-constant C_MENU_SC_F9         : natural := 202;
-constant C_MENU_SC_F10        : natural := 218;
-constant C_MENU_SC_F11        : natural := 234;
-constant C_MENU_SC_F12        : natural := 250;
-constant C_MENU_SC_F13        : natural := 266;
-constant C_MENU_SC_F14        : natural := 282;
+constant C_MENU_SC_F9         : natural := 210;
+constant C_MENU_SC_F10        : natural := 226;
+constant C_MENU_SC_F11        : natural := 242;
+constant C_MENU_SC_F12        : natural := 258;
+constant C_MENU_SC_F13        : natural := 274;
+constant C_MENU_SC_F14        : natural := 290;
 -- Ordinal of the Freeze item within a key picker. Deliberately not named with the menu index prefix:
 -- make_rom.sh exports every menu index constant to the Shell, and this is an ordinal, not an index.
 constant C_SC_FREEZE          : natural := 1;
@@ -553,12 +559,12 @@ constant C_SC_FREEZE          : natural := 1;
 -- single-select item per port, "MEGA+left = right" (off by default), directly behind the Amiga item
 -- of its port and only shown while that item is selected: C_MENU_MOUSE_P1_RCLICK and
 -- C_MENU_MOUSE_P2_RCLICK are their flat indices (see main_mouse_rclick_o)
-constant C_MENU_MOUSE_P1_AMIGA   : natural := 301;
-constant C_MENU_MOUSE_P1_RCLICK  : natural := 302;
-constant C_MENU_MOUSE_P2_AMIGA   : natural := 305;
-constant C_MENU_MOUSE_P2_RCLICK  : natural := 306;
-constant C_MENU_PADDLES_P1_ATARI : natural := 313;
-constant C_MENU_PADDLES_P2_ATARI : natural := 316;
+constant C_MENU_MOUSE_P1_AMIGA   : natural := 309;
+constant C_MENU_MOUSE_P1_RCLICK  : natural := 310;
+constant C_MENU_MOUSE_P2_AMIGA   : natural := 313;
+constant C_MENU_MOUSE_P2_RCLICK  : natural := 314;
+constant C_MENU_PADDLES_P1_ATARI : natural := 321;
+constant C_MENU_PADDLES_P2_ATARI : natural := 324;
 
 -- HyperRAM-backed disk-image mount buffer. QNICE 4k-window byte protocol.
 signal qnice_mnt_qnice_ce           : std_logic;
@@ -854,7 +860,7 @@ begin
       if rising_edge(main_clk_o) then
          for b in C_MENU_VOLUME'low to C_MENU_VOLUME'high loop
             if main_osm_control_i(b) = '1' then
-               main_volume <= C_MENU_VOLUME'high - b;           -- bit 134 -> 20 (100%) .. bit 154 -> 0 (0%)
+               main_volume <= C_MENU_VOLUME'high - b;           -- bit 142 -> 20 (100%) .. bit 162 -> 0 (0%)
             end if;
          end loop;
       end if;
