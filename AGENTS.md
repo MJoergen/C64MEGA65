@@ -143,7 +143,9 @@ guide are the authority; upstream wiki text is background at best.
 │   │   │                  ascal.vhd (the MiSTer scaler — input → HyperRAM →
 │   │   │                  HDMI), analog_pipeline.vhd, digital_pipeline.vhd,
 │   │   │                  vga_controller.vhd, vga_osm.vhd, video_overlay.vhd,
-│   │   │                  video_modes_pkg.vhd, frame_buffer.vhd, crop.vhd
+│   │   │                  video_modes_pkg.vhd, frame_buffer.vhd, crop.vhd,
+│   │   │                  hdmi_genlock.vhd (locks the HDMI output to the C64's
+│   │   │                  picture in the HDMI Raw modes, section 3.5)
 │   │   ├── memory/        Avalon arbiters, caches, FIFOs (avm_*.vhd)
 │   │   ├── controllers/   HDMI/, M65/ (keyboard etc.; mouse_input.vhdl is the
 │   │   │                  paddle measurement), MiSTer/, SDRAM/, hyperram/
@@ -332,8 +334,10 @@ on `main_clk`). M2M splits it:
   out at the chosen HDMI mode (PAL: 720p50/576p50, NTSC: 720p59.94/480p59.94).
   Defaults to 1280x720@50 with 4:3 letterboxing. CRT emulation, zoom,
   polyphase filters live here. The pipeline learns the machine standard only
-  from the HDMI mode (a `*_5994` mode if and only if the machine is NTSC).
-- **Flicker-free (HDMI)**: the C64 native frame rate is 50.124 Hz (PAL) or
+  from the HDMI mode (`video_mode_is_ntsc`: a `*_5994` or `*_5994_RAW` mode if
+  and only if the machine is NTSC).
+- **Flicker-free (HDMI)** (menu `HDMI Frame Sync` > `Flicker-free`, the
+  default): the C64 native frame rate is 50.124 Hz (PAL) or
   59.826 Hz (NTSC); HDMI is exactly 50.000 Hz or 59.94 Hz. A fixed PLL can't
   hit the exact clock that would match, so M2M continuously monitors ascal's
   FIFO level and pulses `hr_high_i` / `hr_low_i` to mega65.vhd, whose
@@ -341,8 +345,31 @@ on `main_clk`). M2M splits it:
   clock of the active standard via a glitch-free clock mux: PAL 50.124 Hz /
   49.999 Hz, NTSC 59.826 Hz / 59.940 Hz. The polarity is inverted in NTSC
   (there the flicker-free clock is the *faster* one). Average → HDMI rate
-  exactly. Disable on VGA/CRT (it can flicker analog displays). See
-  `doc/ntsc.md`.
+  exactly. Not for VGA/CRT (it can flicker analog displays; `Off` or `Raw`
+  there). With `Off` the core stays on the original clock against the
+  standard HDMI rate: ascal runs with a single frame buffer (direct mode), so
+  the read position overtakes the write position every 8 to 9 s and a tear
+  line wanders through the picture; whole frames are not dropped or repeated.
+  See `doc/ntsc.md`.
+- **Raw modes (HDMI at the C64's frame rate, issue #184)**: menu
+  `HDMI Frame Sync` > `Raw 50.1 Hz` (PAL) / `Raw 59.8 Hz` (NTSC). The core
+  stays on the original clock (`main_hdmi_ff` = bit of `Flicker-free` AND NOT
+  bit of `Raw`), and `qnice_video_mode_o` selects the raw twin of the display
+  mode: six `*_RAW` members of `video_mode_type` (codes `"1010"` to `"1111"`,
+  `video_mode_is_raw`) with the records `C_HDMI_*_RAW` in
+  `video_modes_pkg.vhd`. 720p keeps the CTA totals at 74.444 MHz (PAL) or
+  74.0625 MHz (NTSC); 576p has 624 lines at 27.024 MHz, 480p 526 lines at
+  27.000 MHz. The pixel clock tables `"1000"` to `"1010"` are in
+  `M2M/vhdl/controllers/HDMI/video_out_clock.vhd` (`sel` is 4 bits; generator
+  `doc/dev-hdmi-raw/tools/mmcm_tables.py`). The genlock
+  `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` (HDMI clock domain) lengthens 16
+  lines of the vertical back porch through ascal's `htotal` input until the
+  HDMI picture starts 2.0 ms after the core's picture (reference pulse from
+  `digital_pipeline.vhd`: the first visible pixel after the core's vsync);
+  in 720p it also adds the 197 (PAL) or 463 (NTSC) pixel clocks per frame
+  that the HDMI frame is short. The CTS of the audio clock regeneration
+  alternates between two values (`CTS_FRAC_N` / `CTS_FRAC_D` of the record).
+  See `doc/hdmi.md` and `doc/dev-hdmi-raw/SPEC.md`.
 
 ### 3.6 Memory
 
@@ -1226,6 +1253,7 @@ hardware saw the code.
 | Symptom area              | Files to look at first                                    |
 | ------------------------- | --------------------------------------------------------- |
 | HDMI tearing / flicker    | `clk.vhd`, `mega65.vhd` (hr_core_speed), `hdmi_flicker_free.vhd`, `ascal.vhd` |
+| HDMI Raw mode: no picture, tear line, stutter, sound dropouts | `M2M/vhdl/av_pipeline/hdmi_genlock.vhd`, `digital_pipeline.vhd` (reference pulse, `htotal` multiplexer, CTS), `video_modes_pkg.vhd` (the `*_RAW` records), `video_out_clock.vhd` (tables `"1000"` to `"1010"`), `mega65.vhd` (`C_MENU_HDMI_RAW*`, `qnice_video_mode_o`), `doc/dev-hdmi-raw/`, benches `CORE/vhdl/test/tb_hdmi_genlock/` and `CORE/vhdl/test/tb_hdmi_raw/`. No picture on one display but a picture on another: the display does not accept the rate. A tear line that stays longer than about 8 s after a change: the genlock does not lock (`locked_o`). The measured pixel clock is at `M2M$SYS_HDMI` (`0x0011`) offsets 3 and 4 |
 | NTSC / PAL switch         | `clk.vhd` (four MMCMs, mux tree), `mega65.vhd` (`hr_core_speed`, `qnice_video_mode_o`), `main.vhd` (`mode_change_reset_proc`), `video_modes_pkg.vhd`, `doc/ntsc.md` |
 | Turbo mode (C128 / Smart) | `fpga64_sid_iec.vhd` `cpu_cyc` (turbo slots, clean-cycle rule for hardware carts) and the turbo decision (`turbo_m`, `cs_io`, `dma_req`), `fpga64_buslogic.vhd` `cs_turbo_eligible_o`, `main.vhd` `turbo_smart_iec_detector_proc`, `mega65.vhd` (`c64_turbo_mode`, `c64_turbo_speed`; the Caps Lock override `main_kb_capslock_n_i`, issue #261), `M2M/vhdl/m2m_keyb.vhd` (`capslock_n_o`), `doc/dev-turbo/`, benches `CORE/vhdl/test/tb_turbo/` and `CORE/vhdl/test/tb_capslock/` |
 | VGA / scandoubler / CSYNC | `analog_pipeline.vhd`, `vga_controller.vhd`               |
