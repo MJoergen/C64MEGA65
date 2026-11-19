@@ -174,13 +174,13 @@ The scaler takes `htotal` over in every clock cycle and uses it only to end a li
 
 ### 5.3 Control
 
-- A counter (22 bits, saturating) counts the pixel clocks since the last `ref_i`.
+- A counter (22 bits, saturating) counts the pixel clocks since the last `ref_i`. A measurement is valid only if a `ref_i` arrived since the previous one; without it the genlock does not act on the stale value (a single missing reference must not start a pull-in).
 - At the first rising edge of `de_i` after a falling edge of `vs_i` (the first line of the HDMI picture begins) its value is the distance `d`: so many pixel clocks after the core has begun its picture, the HDMI side begins its picture.
 - `target_i` = 2 x `CLK_KHZ` of the mode = 2.0 ms. The stretch for the next vertical blanking:
 
 | Condition | Stretch `k` |
 |---|---|
-| counter saturated (no reference for more than two frames: core paused or in reset) | 0 |
+| no `ref_i` since the previous measurement (the core is paused or in reset, or a reference is missing) | 0 |
 | `d <= target_i` | `min(target_i - d, 4080)` |
 | `target_i < d < target_i + 4096` | 0 |
 | otherwise | 4080 |
