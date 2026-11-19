@@ -22,6 +22,12 @@ create_generated_clock -name audio_clk       [get_pins i_framework/i_clk_m2m/i_c
 create_generated_clock -name tmds_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT0]
 create_generated_clock -name hdmi_clk        [get_pins i_framework/i_video_out_clock/MMCM/CLKOUT1]
 
+## The HDMI pixel clock is reprogrammed at run time (video_out_clock.vhd), and the timing
+## analysis derives hdmi_clk from the static attributes of the MMCM: 74.25 MHz, 13.468 ns.
+## The pixel clock of the raw PAL 720p mode (CLK_SEL 1000) is 74.444 MHz, 13.433 ns, i.e.
+## 35 ps shorter; this setup uncertainty makes the analysis cover it.
+set_clock_uncertainty -setup 0.050 [get_clocks hdmi_clk]
+
 ## The following constraints are needed by M2M/vhdl/controllers/HDMI/video_out_clock.vhd
 create_generated_clock -name div_clk -source [get_ports {clk_i}] -divide_by 2 [get_pins i_framework/i_video_out_clock/clki_div_reg/Q]
 set_case_analysis 1 [get_pins i_framework/i_video_out_clock/clk_mux_reg/Q]
