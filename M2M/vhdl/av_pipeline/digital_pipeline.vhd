@@ -107,6 +107,8 @@ architecture synthesis of digital_pipeline is
    signal audio_pcm_cts             : std_logic_vector(19 downto 0); -- HDMI ACR CTS value
    signal audio_pcm_audio_counter   : integer := 0;
    signal audio_pcm_acr_counter     : integer range 0 to AUDIO_PCM_ACR_CNT_RANGE := 0;
+   signal audio_cts_acc             : natural range 0 to 255 := 0;   -- CTS accumulator in units of 1/CTS_FRAC_D kHz
+   signal audio_cts_inc             : natural range 0 to 1 := 0;     -- 1: this packet carries CLK_KHZ + 1
 
    signal vs_hsync               : std_logic;
    signal vs_vsync               : std_logic;
@@ -233,6 +235,12 @@ begin
    assert G_VIDEO_MODE_VECTOR(9).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(9).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(14).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(14).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(15).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(15).V_PIXELS = 480;
+   -- The CTS accumulator of p_pcm_acr holds values below CTS_FRAC_D
+   g_assert_cts_frac : for i in G_VIDEO_MODE_VECTOR'range generate
+      assert G_VIDEO_MODE_VECTOR(i).CTS_FRAC_N >= 0 and
+             G_VIDEO_MODE_VECTOR(i).CTS_FRAC_N < G_VIDEO_MODE_VECTOR(i).CTS_FRAC_D and
+             G_VIDEO_MODE_VECTOR(i).CTS_FRAC_D <= 256;
+   end generate g_assert_cts_frac;
 
    -- In HDMI 4:3 mode, ignore crop (zoom-in).
    -- A raw mode (HDMI at the C64 frame rate) has the window of the mode it is derived from.
@@ -351,10 +359,22 @@ begin
 
    -- N and CTS values for HDMI Audio Clock Regeneration.
    -- depends on pixel clock and audio sample rate
+   -- With N = 6144 at 48 kHz, CTS is the pixel clock in kHz: CLK_KHZ, plus 1 in the fraction
+   -- CTS_FRAC_N / CTS_FRAC_D of the packets (see p_pcm_acr).
    audio_pcm_n   <= std_logic_vector(to_unsigned((HDMI_PCM_SAMPLING * 128) / 1000, audio_pcm_n'length)); -- 6144 is correct according to HDMI spec.
-   audio_pcm_cts <= std_logic_vector(to_unsigned(hdmi_video_mode.CLK_KHZ, audio_pcm_cts'length));
+   audio_pcm_cts <= std_logic_vector(to_unsigned(hdmi_video_mode.CLK_KHZ + audio_cts_inc, audio_pcm_cts'length));
 
    -- ACR packet rate should be 128fs/N = 1kHz
+   -- The raw modes have a pixel clock of CLK_KHZ + CTS_FRAC_N / CTS_FRAC_D kHz. Once per
+   -- packet the accumulator audio_cts_acc adds CTS_FRAC_N; when it reaches CTS_FRAC_D, it is
+   -- reduced by CTS_FRAC_D and the packet carries CLK_KHZ + 1, otherwise CLK_KHZ, so the
+   -- average CTS is the exact pixel clock in kHz. The accumulator steps half a packet period
+   -- before the strobe, so CTS is stable for 0.5 ms before and after the moment at which
+   -- vga_to_hdmi takes it into a packet. With CTS_FRAC_N = 0 (every mode that is not a raw
+   -- mode) the accumulator stays cleared and every packet carries CLK_KHZ.
+   -- CTS_FRAC_N and CTS_FRAC_D come from the HDMI clock domain; they change only together
+   -- with the video mode, and an accumulator value that is out of range after a change of
+   -- the mode is cleared.
    p_pcm_acr : process (audio_clk_i)
    begin
       if rising_edge(audio_clk_i) then
@@ -367,6 +387,22 @@ begin
                audio_pcm_acr <= '1';
                audio_pcm_acr_counter <= 0;
             end if;
+
+            -- CTS of the next packet
+            if audio_pcm_acr_counter = AUDIO_PCM_ACR_CNT_RANGE / 2 - 1 then
+               if audio_cts_acc + hdmi_video_mode.CTS_FRAC_N >= hdmi_video_mode.CTS_FRAC_D then
+                  audio_cts_acc <= audio_cts_acc + hdmi_video_mode.CTS_FRAC_N - hdmi_video_mode.CTS_FRAC_D;
+                  audio_cts_inc <= 1;
+               else
+                  audio_cts_acc <= audio_cts_acc + hdmi_video_mode.CTS_FRAC_N;
+                  audio_cts_inc <= 0;
+               end if;
+            end if;
+         end if;
+
+         if hdmi_video_mode.CTS_FRAC_N = 0 or audio_cts_acc >= hdmi_video_mode.CTS_FRAC_D then
+            audio_cts_acc <= 0;
+            audio_cts_inc <= 0;
          end if;
       end if;
    end process p_pcm_acr;
