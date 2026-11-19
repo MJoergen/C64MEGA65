@@ -72,7 +72,7 @@ So "Raw" consists of:
 - **The core** on its original clock, exactly as with flicker-free off.
 - **New HDMI modes** (one per existing mode), with the sync positions, polarities and VIC of the mode they come from:
   - 720p: the standard totals and a pixel clock that is a little faster than the ideal one.
-  - 576p and 480p: one line less (PAL) or more (NTSC) in the vertical back porch and a pixel clock that makes the frame exactly as long as the core's frame.
+  - 576p and 480p: one line less (PAL, in the vertical front porch) or more (NTSC, in the vertical back porch) and a pixel clock that makes the frame exactly as long as the core's frame.
 - **A genlock** in the HDMI clock domain that makes 16 lines of the vertical back porch longer. It does two things with that: it brings the start of the HDMI picture to 2.0 ms behind the start of the core's picture (after a mode change, a reset or a pause of the core), and in 720p it adds in every frame exactly the pixel clocks that the HDMI frame is shorter than the core's frame. In 576p and 480p it has nothing to do once the phase is reached: the signal is static. Every line that carries picture has the standard length in every mode.
 
 ## 3. Core side (`CORE/vhdl/mega65.vhd`)
@@ -104,9 +104,11 @@ So "Raw" consists of:
 | Record | Derived from | Change of the timing | `CLK_SEL` | `CLK_KHZ` | `CTS_FRAC_N / CTS_FRAC_D` |
 |---|---|---|---|---|---|
 | `C_HDMI_720p_50_RAW` | `C_HDMI_720p_50` | none | "1000" | 74444 | 4 / 9 |
-| `C_HDMI_576p_50_RAW` | `C_HDMI_576p_50` | `V_BP` 38 instead of 39 (624 lines) | "1001" | 27023 | 17 / 21 |
+| `C_HDMI_576p_50_RAW` | `C_HDMI_576p_50` | `V_FP` 4 instead of 5 (624 lines) | "1001" | 27023 | 17 / 21 |
 | `C_HDMI_720p_5994_RAW` | `C_HDMI_720p_5994` | none | "1010" | 74062 | 1 / 2 |
 | `C_HDMI_720x480p_5994_RAW` | `C_HDMI_720x480p_5994` | `V_BP` 31 instead of 30 (526 lines) | "0001" (the existing 27.000 MHz table) | 27000 | 0 / 1 |
+
+The two changed timings are the ones of the Ultimate 64 (720 + 12 + 64 + 68 by 576 + 4 + 5 + 39 at 27.024 MHz with VIC 17, and 720 + 16 + 62 + 60 by 480 + 9 + 6 + 31 at 27.000 MHz), which has a long field record on HDMI displays.
 
 ### 4.2 `M2M/vhdl/controllers/HDMI/video_out_clock.vhd`
 
@@ -167,7 +169,7 @@ end entity hdmi_genlock;
 The scaler takes `htotal` over in every clock cycle and uses it only to end a line; a longer line gets its extra pixels at the end of the horizontal back porch. `hs_i`, `vs_i` and `de_i` are the scaler's outputs (10 clock cycles behind its counters).
 
 - The genlock acts at every rising edge of `hs_i` (more than 100 clock cycles before the end of the line in every mode).
-- The 16 lines that begin with the line in which `vs_i` falls are the stretch lines: lines 730 to 745 in 720p, 586 to 601 in 576p, 495 to 510 in 480p. They lie in the vertical back porch and end before the scaler fetches the first lines of the next picture (three lines before the picture).
+- The 16 lines that begin with the line in which `vs_i` falls are the stretch lines: lines 730 to 745 in 720p, 585 to 600 in 576p, 495 to 510 in 480p. They lie in the vertical back porch and end before the scaler fetches the first lines of the next picture (three lines before the picture).
 - A frame with the stretch `k` (0 to 4080 pixel clocks): the first `k mod 16` stretch lines are `htotal_i + k / 16 + 1` long, the others `htotal_i + k / 16`. All other lines are `htotal_i` long. No line is ever shorter than `htotal_i`, none longer than `htotal_i + 256`.
 
 ### 5.3 Control
