@@ -6,9 +6,11 @@ Python 3, standard library only. Run from anywhere; paths default to this repo.
 
 Usage:
   mmcm_tables.py check [--vhdl FILE] [-v]
-      Parse every table of M2M/vhdl/controllers/HDMI/video_out_clock.vhd,
-      regenerate it from the parameters in its comment header and compare
-      address, mask and data of every row bit by bit (style "m2m"). Also
+      Parse every table of M2M/vhdl/controllers/HDMI/video_out_clock.vhd (the
+      functions cfg_tbl, clk_sel 0000 to 0111, and cfg_tbl_raw, clk_sel 1000 and
+      up: bit 8 of the table address selects the function), regenerate each table
+      from the parameters in its comment header and compare address, mask and
+      data of every row bit by bit (style "m2m"). Also
       lists every word in which the pure XAPP888 reference ROM (style
       "xapp888") differs, and decodes every table with the independent
       decoder doc/dev-ntsc/tools/w2_checks.py. Exit code 0 only if all match.
@@ -25,6 +27,8 @@ Usage:
       PAL 576p, NTSC 720p for the clk_sel codes 1000, 1001, 1010), with limit
       checks, a w2_checks.py decode, the closest existing table and the frame
       rates. --alternatives adds the settings that were considered and not used.
+      The default labels (--addr-style hex) are those of the function cfg_tbl_raw
+      (table address bits 7..0); hex9 and int print the full 9-bit address.
 
   mmcm_tables.py limits M D O0 O1
       MMCM limit checks for xc7a200t speed grade -2 (DS181 Table 37, UG472 Table 3-7).
@@ -357,12 +361,26 @@ HDR_RE = {
 }
 
 
+# The table functions of video_out_clock.vhd and the table address bit 8 that selects each
+# one (cfg_tbl_data <= cfg_tbl(...) when cfg_tbl_addr(8) = '0', else cfg_tbl_raw(...)).
+FUNC_RE = re.compile(r"\bfunction\s+(\w+)\s*\(", re.I)
+FUNC_OFFSET = {"cfg_tbl": 0x000, "cfg_tbl_raw": 0x100}
+
+
 def parse_vhdl(path):
-    """Return a list of tables: {base, params (from the comment), rows [(tbl_addr, daddr_byte, data, mask)]}."""
+    """Return a list of tables: {base, params (from the comment), rows [(tbl_addr, daddr_byte, data, mask)]}.
+
+    tbl_addr is the 9-bit table address: the label of the row plus 0x100 inside cfg_tbl_raw."""
     tables = []
     cur_hdr = {}
     cur = None
+    offset = 0
     for line in open(path, errors="replace"):
+        fm = FUNC_RE.search(line.split("--")[0])
+        if fm:
+            offset = FUNC_OFFSET.get(fm.group(1).lower(), 0)
+            cur_hdr = {}
+            cur = None
         for k, r in HDR_RE.items():
             mm = r.search(line)
             if mm:
@@ -373,6 +391,8 @@ def parse_vhdl(path):
         mm = ROW_RE.search(line)
         if mm:
             addr = int(mm.group(1) or mm.group(2), 16)
+            if addr <= 0xFF:
+                addr += offset
             row = (addr, int(mm.group(3), 16), int(mm.group(4), 16), int(mm.group(5), 16))
             if cur is None:
                 cur = {"base": addr & ~0x1F, "params": dict(cur_hdr), "rows": []}
@@ -464,9 +484,14 @@ def cmd_check(args):
     print("%-7s %-8s %-7s %-4s %-6s %-4s %-5s %-11s %-11s %-12s %-30s" % (
         "clk_sel", "base", "M", "D", "O0", "O1", "rows", "m2m match", "xapp888", "pixel MHz", "w2_checks decode of file rows"))
     xapp_notes = []
+    bases = [t["base"] for t in tables]
+    for b in sorted(set(bases)):
+        if bases.count(b) > 1:
+            print("clk_sel %s: %d tables at table address 0x%03X" % (format(b >> 5, "04b"), bases.count(b), b))
+            ok = False
     for t in tables:
         p = t["params"]
-        sel = format(t["base"] >> 5, "03b")
+        sel = format(t["base"] >> 5, "04b")
         try:
             gen = table(p["mult"], p["divclk"], p["o0"], p["o1"], "m2m")
             xap = table(p["mult"], p["divclk"], p["o0"], p["o1"], "xapp888")
@@ -508,7 +533,7 @@ def cmd_check(args):
                 ok = False
         match = "yes" if not mism else "NO (%d)" % len(mism)
         ok = ok and not mism
-        print("%-7s 0x%02X     %-7s %-4s %-6s %-4s %-5d %-11s %-11s %-12.6f %s" % (
+        print("%-7s 0x%03X    %-7s %-4s %-6s %-4s %-5d %-11s %-11s %-12.6f %s" % (
             sel, t["base"], p["mult"], p["divclk"], p["o0"], p["o1"], len(rows), match,
             "%d words" % nx, float(pixel_mhz(p["mult"], p["divclk"], p["o1"])), dec))
         if args.verbose or mism:
@@ -645,7 +670,7 @@ def closest_existing(rows, vhdl):
         diff = [(i, r[1] & 0x7F, r[2], g[1]) for i, (r, g) in enumerate(zip(t["rows"], rows))
                 if (r[1] & 0x7F, r[2], r[3]) != (g[0], g[1], g[2])]
         if best is None or len(diff) < len(best[1]):
-            best = (format(t["base"] >> 5, "03b"), diff, t["params"])
+            best = (format(t["base"] >> 5, "04b"), diff, t["params"])
     return best
 
 
@@ -688,7 +713,9 @@ def cmd_new(args):
                 print("      %-20s data %04X / %04X  mask %04X / %04X" % (nm, dv, xv, mk, xm))
         note = "%s at the C64 frame rate: %.6f Hz" % (name, float(fr))
         print()
-        print(vhdl_block(m, d, o0, o1, sel * 0x20, args.style, "OPTIMIZED", None, note, args.addr_style))
+        # labels of cfg_tbl_raw (bit 8 of the table address selects that function) or 9-bit addresses
+        base = (sel * 0x20) & 0xFF if args.addr_style == "hex" else sel * 0x20
+        print(vhdl_block(m, d, o0, o1, base, args.style, "OPTIMIZED", None, note, args.addr_style))
         print()
     return rc
 
@@ -715,7 +742,7 @@ def main():
     n = sub.add_parser("new")
     n.add_argument("--style", choices=("m2m", "xapp888"), default="m2m")
     n.add_argument("--first-sel", type=int, default=8)
-    n.add_argument("--addr-style", choices=("hex", "hex9", "int"), default="hex9")
+    n.add_argument("--addr-style", choices=("hex", "hex9", "int"), default="hex")
     n.add_argument("--vhdl", default=VHDL_DEFAULT)
     n.add_argument("--alternatives", action="store_true", help="also the settings that are not used")
     args = ap.parse_args()

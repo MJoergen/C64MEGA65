@@ -32,6 +32,10 @@
 -- 4. Use the spreadsheet https://github.com/amb5l/tyto2/blob/main/src/common/video/xilinx_7series/video_out_clock.xls
 --    type in the Clock Wizard values, and generate the tcl command.
 -- 5. In Vivado, run the tcl command. This outputs the values for the table below.
+-- The tables of the second ROM (cfg_tbl_raw: sel 1000, 1001 and 1010) come from
+-- doc/dev-hdmi-raw/tools/mmcm_tables.py, a transcription of the XAPP888 functions that
+-- reproduces every table of the first ROM bit for bit ("mmcm_tables.py check" compares
+-- all tables of this file with it).
 
 library ieee;
   use ieee.std_logic_1164.all;
@@ -48,17 +52,23 @@ entity video_out_clock is
 
     rsti    : in    std_logic;                    -- input (reference) clock synchronous reset
     clki    : in    std_logic;                    -- input (reference) clock
-    sel     : in    std_logic_vector(2 downto 0); -- output clock select:
-          -- 000 =  25.200 MHz. E.g.  640x480 @ 60.00 Hz
-          -- 001 =  27.000 MHz. E.g.  720x480 @ 59.94 Hz
-          -- 010 =  74.250 MHz. E.g. 1280x720 @ 60.00 Hz
-          -- 011 = 148.500 MHz.
-          -- 100 =  25.175 MHz. E.g.  640x480 @ 59.94 Hz
-          -- 101 =  27.027 MHz. E.g.  720x480 @ 60.00 Hz
-          -- 110 =  74.176 MHz. E.g. 1280x720 @ 59.94 Hz
-          --        74.176 MHz nominal, 74.1667 MHz actual (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3),
-          --        i.e. 1280x720 @ 59.9327 Hz
-          -- 111 = undefined
+    sel     : in    std_logic_vector(3 downto 0); -- output clock select:
+          -- 0000 =  25.200 MHz. E.g.  640x480 @ 60.00 Hz
+          -- 0001 =  27.000 MHz. E.g.  720x480 @ 59.94 Hz
+          -- 0010 =  74.250 MHz. E.g. 1280x720 @ 60.00 Hz
+          -- 0011 = 148.500 MHz.
+          -- 0100 =  25.175 MHz. E.g.  640x480 @ 59.94 Hz
+          --         25.175 MHz nominal, 25.1786 MHz actual
+          -- 0101 =  27.027 MHz. E.g.  720x480 @ 60.00 Hz
+          --         27.027 MHz nominal, 27.0313 MHz actual
+          -- 0110 =  74.176 MHz. E.g. 1280x720 @ 59.94 Hz
+          --         74.176 MHz nominal, 74.1667 MHz actual (CLKFBOUT_MULT_F 22.25, DIVCLK_DIVIDE 3),
+          --         i.e. 1280x720 @ 59.9327 Hz
+          -- 0111 =  40.000 MHz. E.g.  800x600 @ 60.32 Hz
+          -- 1000 =  74.4444 MHz (100 MHz x 67 / 90).  1280x720 (1980 x 750) @ 50.1309 Hz
+          -- 1001 =  27.0238 MHz (100 MHz x 227 / 840). 720x576 (864 x 624) @ 50.1243 Hz
+          -- 1010 =  74.0625 MHz (100 MHz x 237 / 320). 1280x720 (1650 x 750) @ 59.8485 Hz
+          -- 1011 to 1111 = 74.250 MHz (no table of their own: they load the table of 0010)
     rsto    : out   std_logic;                    -- output clock synchronous reset
     clko    : out   std_logic;                    -- pixel clock
     clko_x5 : out   std_logic                     -- serialiser clock (5x pixel clock)
@@ -68,7 +78,7 @@ end entity video_out_clock;
 
 architecture synth of video_out_clock is
 
-  signal sel_s        : std_logic_vector(2 downto 0);  -- sel, synchronised to clki
+  signal sel_s        : std_logic_vector(3 downto 0);  -- sel, synchronised to clki
 
   signal rsto_req     : std_logic;                     -- rsto request, synchronous to clki
 
@@ -76,7 +86,7 @@ architecture synth of video_out_clock is
   signal locked       : std_logic;                     -- MMCM locked output
   signal locked_s     : std_logic;                     -- above, synchronised to clki
 
-  signal sel_prev     : std_logic_vector(3 downto 0);  -- to detect changes
+  signal sel_prev     : std_logic_vector(4 downto 0);  -- to detect changes
   signal clk_fb       : std_logic;                     -- feedback clock
   signal clku_fb      : std_logic;                     -- unbuffered feedback clock
   signal clko_u       : std_logic;                     -- unbuffered pixel clock
@@ -85,7 +95,7 @@ architecture synth of video_out_clock is
 
   signal clki_div     : std_logic;                     -- Input clock divided by 2
 
-  signal cfg_tbl_addr : std_logic_vector(7 downto 0);  -- 8 x 32 entries
+  signal cfg_tbl_addr : std_logic_vector(8 downto 0);  -- 2 ROMs (bit 8) x 8 tables x 32 entries
   signal cfg_tbl_data : std_logic_vector(39 downto 0); -- 8 bit address + 16 bit write data + 16 bit read mask
 
   signal cfg_cnt      : std_logic_vector(1 downto 0);  -- Delay reset
@@ -375,10 +385,141 @@ begin
       return data;
     end function cfg_tbl;
 
+    -- Second synchronous ROM, read when bit 8 of cfg_tbl_addr is set: the tables of the
+    -- HDMI modes at the C64 frame rate (sel 1000, 1001, 1010), in the format of cfg_tbl;
+    -- the labels are cfg_tbl_addr(7 downto 0). The loader uses the rows of a table only
+    -- up to its last entry (bit 39), and every sel code selects a table (tbl_sel below),
+    -- so the loader never uses a row of "when others" of cfg_tbl. "when others" of this
+    -- ROM is a harmless last entry nevertheless (the power register, which every table
+    -- writes with x"FFFF"): an address without a table would end the load at once instead
+    -- of writing register 0 for ever.
+    function cfg_tbl_raw (addr : std_logic_vector) return std_logic_vector is
+      -- bits 39..32 = cfg_daddr (MSB = 1 for last entry)
+      -- bits 31..16 = cfg write data
+      -- bits 15..0 = cfg read mask
+      variable data : std_logic_vector(39 downto 0);
+    begin
+      data := x"0000000000";
+      -- values below generated by doc/dev-hdmi-raw/tools/mmcm_tables.py
+      if fref = 100.0 then
+        case addr is
+          -- PAL 720p (1280x720, 1980 x 750 total) at the C64 frame rate: 50.130939 Hz
+          -- Desired frequency = 74.444 MHz
+          -- CLKFBOUT_MULT_F   = 33.500
+          -- DIVCLK_DIVIDE     = 3
+          -- CLKOUT0_DIVIDE_F  = 3.000
+          -- CLKOUT1_DIVIDE    = 15
+          -- Actual frequency  = 74.444 MHz
+          when x"00" => data := x"06" & x"1145" & x"1000";  -- CLKOUT5 Register 1
+          when x"01" => data := x"07" & x"0000" & x"8000";  -- CLKOUT5 Register 2
+          when x"02" => data := x"08" & x"1042" & x"1000";  -- CLKOUT0 Register 1
+          when x"03" => data := x"09" & x"0080" & x"8000";  -- CLKOUT0 Register 2
+          when x"04" => data := x"0A" & x"11C8" & x"1000";  -- CLKOUT1 Register 1
+          when x"05" => data := x"0B" & x"0080" & x"8000";  -- CLKOUT1 Register 2
+          when x"06" => data := x"0C" & x"1145" & x"1000";  -- CLKOUT2 Register 1
+          when x"07" => data := x"0D" & x"0000" & x"8000";  -- CLKOUT2 Register 2
+          when x"08" => data := x"0E" & x"1145" & x"1000";  -- CLKOUT3 Register 1
+          when x"09" => data := x"0F" & x"0000" & x"8000";  -- CLKOUT3 Register 2
+          when x"0A" => data := x"10" & x"1145" & x"1000";  -- CLKOUT4 Register 1
+          when x"0B" => data := x"11" & x"0000" & x"8000";  -- CLKOUT4 Register 2
+          when x"0C" => data := x"12" & x"1145" & x"1000";  -- CLKOUT6 Register 1
+          when x"0D" => data := x"13" & x"3000" & x"8000";  -- CLKOUT6 Register 2
+          when x"0E" => data := x"14" & x"1410" & x"1000";  -- CLKFBOUT Register 1
+          when x"0F" => data := x"15" & x"4800" & x"8000";  -- CLKFBOUT Register 2
+          when x"10" => data := x"16" & x"0042" & x"C000";  -- DIVCLK Register
+          when x"11" => data := x"18" & x"002C" & x"FC00";  -- Lock Register 1
+          when x"12" => data := x"19" & x"7C01" & x"8000";  -- Lock Register 2
+          when x"13" => data := x"1A" & x"7DE9" & x"8000";  -- Lock Register 3
+          when x"14" => data := x"28" & x"FFFF" & x"0000";  -- Power Register
+          when x"15" => data := x"4E" & x"0900" & x"66FF";  -- Filter Register 1
+          when x"16" => data := x"CF" & x"1000" & x"666F";  -- Filter Register 2
+
+          -- PAL 576p (720x576, 864 x 624 total) at the C64 frame rate: 50.124291 Hz
+          -- Desired frequency = 27.024 MHz
+          -- CLKFBOUT_MULT_F   = 28.375
+          -- DIVCLK_DIVIDE     = 3
+          -- CLKOUT0_DIVIDE_F  = 7.000
+          -- CLKOUT1_DIVIDE    = 35
+          -- Actual frequency  = 27.024 MHz
+          when x"20" => data := x"06" & x"1145" & x"1000";  -- CLKOUT5 Register 1
+          when x"21" => data := x"07" & x"0000" & x"8000";  -- CLKOUT5 Register 2
+          when x"22" => data := x"08" & x"10C4" & x"1000";  -- CLKOUT0 Register 1
+          when x"23" => data := x"09" & x"0080" & x"8000";  -- CLKOUT0 Register 2
+          when x"24" => data := x"0A" & x"1452" & x"1000";  -- CLKOUT1 Register 1
+          when x"25" => data := x"0B" & x"0080" & x"8000";  -- CLKOUT1 Register 2
+          when x"26" => data := x"0C" & x"1145" & x"1000";  -- CLKOUT2 Register 1
+          when x"27" => data := x"0D" & x"0000" & x"8000";  -- CLKOUT2 Register 2
+          when x"28" => data := x"0E" & x"1145" & x"1000";  -- CLKOUT3 Register 1
+          when x"29" => data := x"0F" & x"0000" & x"8000";  -- CLKOUT3 Register 2
+          when x"2A" => data := x"10" & x"1145" & x"1000";  -- CLKOUT4 Register 1
+          when x"2B" => data := x"11" & x"0000" & x"8000";  -- CLKOUT4 Register 2
+          when x"2C" => data := x"12" & x"1145" & x"1000";  -- CLKOUT6 Register 1
+          when x"2D" => data := x"13" & x"0C00" & x"8000";  -- CLKOUT6 Register 2
+          when x"2E" => data := x"14" & x"134D" & x"1000";  -- CLKFBOUT Register 1
+          when x"2F" => data := x"15" & x"3C00" & x"8000";  -- CLKFBOUT Register 2
+          when x"30" => data := x"16" & x"0042" & x"C000";  -- DIVCLK Register
+          when x"31" => data := x"18" & x"005E" & x"FC00";  -- Lock Register 1
+          when x"32" => data := x"19" & x"7C01" & x"8000";  -- Lock Register 2
+          when x"33" => data := x"1A" & x"7DE9" & x"8000";  -- Lock Register 3
+          when x"34" => data := x"28" & x"FFFF" & x"0000";  -- Power Register
+          when x"35" => data := x"4E" & x"0900" & x"66FF";  -- Filter Register 1
+          when x"36" => data := x"CF" & x"1000" & x"666F";  -- Filter Register 2
+
+          -- NTSC 720p (1280x720, 1650 x 750 total) at the C64 frame rate: 59.848485 Hz
+          -- Desired frequency = 74.062 MHz
+          -- CLKFBOUT_MULT_F   = 29.625
+          -- DIVCLK_DIVIDE     = 4
+          -- CLKOUT0_DIVIDE_F  = 2.000
+          -- CLKOUT1_DIVIDE    = 10
+          -- Actual frequency  = 74.062 MHz
+          when x"40" => data := x"06" & x"1145" & x"1000";  -- CLKOUT5 Register 1
+          when x"41" => data := x"07" & x"0000" & x"8000";  -- CLKOUT5 Register 2
+          when x"42" => data := x"08" & x"1041" & x"1000";  -- CLKOUT0 Register 1
+          when x"43" => data := x"09" & x"0000" & x"8000";  -- CLKOUT0 Register 2
+          when x"44" => data := x"0A" & x"1145" & x"1000";  -- CLKOUT1 Register 1
+          when x"45" => data := x"0B" & x"0000" & x"8000";  -- CLKOUT1 Register 2
+          when x"46" => data := x"0C" & x"1145" & x"1000";  -- CLKOUT2 Register 1
+          when x"47" => data := x"0D" & x"0000" & x"8000";  -- CLKOUT2 Register 2
+          when x"48" => data := x"0E" & x"1145" & x"1000";  -- CLKOUT3 Register 1
+          when x"49" => data := x"0F" & x"0000" & x"8000";  -- CLKOUT3 Register 2
+          when x"4A" => data := x"10" & x"1145" & x"1000";  -- CLKOUT4 Register 1
+          when x"4B" => data := x"11" & x"0000" & x"8000";  -- CLKOUT4 Register 2
+          when x"4C" => data := x"12" & x"1145" & x"1000";  -- CLKOUT6 Register 1
+          when x"4D" => data := x"13" & x"3000" & x"8000";  -- CLKOUT6 Register 2
+          when x"4E" => data := x"14" & x"138E" & x"1000";  -- CLKFBOUT Register 1
+          when x"4F" => data := x"15" & x"5800" & x"8000";  -- CLKFBOUT Register 2
+          when x"50" => data := x"16" & x"0082" & x"C000";  -- DIVCLK Register
+          when x"51" => data := x"18" & x"0045" & x"FC00";  -- Lock Register 1
+          when x"52" => data := x"19" & x"7C01" & x"8000";  -- Lock Register 2
+          when x"53" => data := x"1A" & x"7DE9" & x"8000";  -- Lock Register 3
+          when x"54" => data := x"28" & x"FFFF" & x"0000";  -- Power Register
+          when x"55" => data := x"4E" & x"0900" & x"66FF";  -- Filter Register 1
+          when x"56" => data := x"CF" & x"1000" & x"666F";  -- Filter Register 2
+
+          when others => data := x"A8" & x"FFFF" & x"0000";  -- Power Register, last entry
+        end case;
+      end if;
+      return data;
+    end function cfg_tbl_raw;
+
+    -- Table of a sel code: the codes 1011 to 1111 have no table of their own and load
+    -- the table of 0010 (74.25 MHz)
+    function tbl_sel (s : std_logic_vector(3 downto 0)) return std_logic_vector is
+    begin
+      if unsigned(s) > 10 then
+        return "0010";
+      end if;
+      return s;
+    end function tbl_sel;
+
   begin
     if rising_edge(clki) then
 
-      cfg_tbl_data <= cfg_tbl(cfg_tbl_addr);               -- synchronous ROM
+      if cfg_tbl_addr(8) = '0' then                        -- synchronous ROM
+        cfg_tbl_data <= cfg_tbl(cfg_tbl_addr(7 downto 0));
+      else
+        cfg_tbl_data <= cfg_tbl_raw(cfg_tbl_addr(7 downto 0));
+      end if;
 
       -- defaults
       cfg_den <= '0';
@@ -404,7 +545,7 @@ begin
           end if;
         when RESET =>                                      -- put MMCM into reset
           sel_prev     <= '0' & sel;
-          cfg_tbl_addr <= sel & "00000";
+          cfg_tbl_addr <= tbl_sel(sel) & "00000";
           cfg_state    <= TBL;
         when TBL =>                                        -- get table entry from sychronous ROM
           cfg_state <= RD;
@@ -461,7 +602,7 @@ begin
 
   SYNC1 : entity work.cdc_stable
     generic map (
-      G_DATA_SIZE => 4
+      G_DATA_SIZE => 5
     )
     port map (
       dst_clk_i     => clki,
@@ -469,10 +610,12 @@ begin
       src_data_i(1) => sel(0),
       src_data_i(2) => sel(1),
       src_data_i(3) => sel(2),
+      src_data_i(4) => sel(3),
       dst_data_o(0) => locked_s,
       dst_data_o(1) => sel_s(0),
       dst_data_o(2) => sel_s(1),
-      dst_data_o(3) => sel_s(2)
+      dst_data_o(3) => sel_s(2),
+      dst_data_o(4) => sel_s(3)
     );
 
   SYNC2 : entity work.cdc_stable
@@ -489,6 +632,9 @@ begin
 
   -- For Static Timing Analysis it is necessary
   -- that the default configuration corresponds to the fastest clock speed.
+  -- The static configuration is the 74.25 MHz table (0010). The tables 1000 (74.444 MHz,
+  -- 0.26 % faster) and 1010 are covered by a clock uncertainty on hdmi_clk in
+  -- M2M/common.xdc; the 148.5 MHz table (0011) is not timed and not used.
   MMCM: component mmcme2_adv
     generic map (
       bandwidth            => "OPTIMIZED",
