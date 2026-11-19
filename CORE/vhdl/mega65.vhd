@@ -788,9 +788,13 @@ begin
    -- flicker-free clock (see the comment above iec_drive_ce_proc in main.vhd)
    c64_clock_speed   <= CORE_CLK_SPEED_NTSC when c64_ntsc = '1' else CORE_CLK_SPEED_PAL;
 
-   -- HDMI flicker-free switch of the active standard: each standard has its own menu item
-   main_hdmi_ff      <= main_osm_control_i(C_MENU_HDMI_FF_NTSC) when c64_ntsc = '1' else
-                        main_osm_control_i(C_MENU_HDMI_FF);
+   -- HDMI flicker-free switch of the active standard: each standard has its own "HDMI Frame Sync"
+   -- radio group, and only its item "Flicker-free" lets hr_core_speed switch to the flicker-free
+   -- clock; "Off" and "Raw" keep the core on the original clock of the standard. The Shell writes
+   -- the menu bits bank by bank, so "Flicker-free" and "Raw" can be set together for a moment:
+   -- then "Raw" wins, here and in qnice_video_mode_o
+   main_hdmi_ff      <= main_osm_control_i(C_MENU_HDMI_FF_NTSC) and not main_osm_control_i(C_MENU_HDMI_RAW_NTSC) when c64_ntsc = '1' else
+                        main_osm_control_i(C_MENU_HDMI_FF)      and not main_osm_control_i(C_MENU_HDMI_RAW);
 
    -- Mode selection for Expansion Port (aka Cartridge Port):
    -- bit 0 = 0: Use the MEGA65's actual hardware slot
@@ -1217,9 +1221,18 @@ begin
    -- NTSC-rate modes (59.94 Hz) are used by the NTSC machine mode only.
    -- The PAL and the NTSC display modes are separate OSM groups, each with its own default, so
    -- each standard remembers its own HDMI mode and switching the machine mode switches to it.
-   -- The video pipeline relies on this invariant: qnice_video_mode_o is one of the *_5994 modes
-   -- if and only if the machine mode is NTSC.
+   -- The video pipeline relies on this invariant: qnice_video_mode_o is one of the *_5994 and
+   -- *_5994_RAW modes if and only if the machine mode is NTSC.
+   -- "HDMI Frame Sync" (#184): while the item "Raw" of the active standard is selected, the first
+   -- six lines choose the raw twin of the selected display mode (HDMI at the frame rate of the
+   -- C64); otherwise the last six lines choose the standard mode ("Off" and "Flicker-free").
    qnice_video_mode_o <=
+      C_VIDEO_HDMI_5_4_5994_RAW  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_RAW_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_5_4_5994) = '1' else
+      C_VIDEO_HDMI_4_3_5994_RAW  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_RAW_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_4_3_5994) = '1' else
+      C_VIDEO_HDMI_16_9_5994_RAW when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_RAW_NTSC) = '1' else
+      C_VIDEO_HDMI_5_4_50_RAW    when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '0' and qnice_osm_control_i(C_MENU_HDMI_RAW) = '1' and qnice_osm_control_i(C_MENU_HDMI_5_4_50) = '1' else
+      C_VIDEO_HDMI_4_3_50_RAW    when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '0' and qnice_osm_control_i(C_MENU_HDMI_RAW) = '1' and qnice_osm_control_i(C_MENU_HDMI_4_3_50) = '1' else
+      C_VIDEO_HDMI_16_9_50_RAW   when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '0' and qnice_osm_control_i(C_MENU_HDMI_RAW) = '1' else
       C_VIDEO_HDMI_5_4_5994  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_5_4_5994) = '1' else
       C_VIDEO_HDMI_4_3_5994  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' and qnice_osm_control_i(C_MENU_HDMI_4_3_5994) = '1' else
       C_VIDEO_HDMI_16_9_5994 when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1' else      -- C_MENU_HDMI_16_9_5994 (group default)
