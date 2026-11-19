@@ -114,17 +114,22 @@ authentic image.
   devices work flawlessly. Learn more in the dedicated documentation
   about [using analog retro cathode ray tubes](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes).
   
-Important: If you use VGA displays or analog retro monitors, please switch off
-"HDMI: Flicker-free" as described
+Important: If you use VGA displays or analog retro monitors, please select
+`Off` under `HDMI Frame Sync` in the HDMI submenu instead of the default
+`Flicker-free`, as described
 [here](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
+The third choice, `Raw 50.1 Hz` (`Raw 59.8 Hz` in NTSC), also keeps the C64 at
+its original speed and runs HDMI at the C64's own frame rate, which is smooth
+on HDMI displays that accept this rate (see the
+[FAQ](FAQ.md#25-which-hdmi-frame-sync-should-i-choose-off-flicker-free-or-raw)).
 
 ### PAL and NTSC
 
 *This applies from WIP-V6-A22 on.* The core is a PAL C64 by default. To turn it into an NTSC C64, open the on-screen menu with <kbd>Help</kbd>, go to "Model" and choose "NTSC"; choose "PAL" to switch back. The choice is saved in the C64MEGA65 config file like all other settings, so the core starts directly in NTSC again the next time you switch the MEGA65 on.
 
 * The C64 resets automatically when you switch between PAL and NTSC, so that the C64 and your software detect the new mode. This is the same as a short press of the reset button: cartridges start again, and mounted disk images are unmounted unless you switched off "Unmount on reset" for the drive.
-* HDMI: NTSC has its own display modes at 59.94 Hz: "16:9 720p 59.94 Hz" (default), "4:3 480p 59.94 Hz" and "5:4 480p 59.94 Hz", and its own "HDMI: Flicker-free" switch (on by default). The HDMI menu only shows the modes of the active mode, and PAL and NTSC each remember their own choice.
-* VGA: the analog output carries the true NTSC frame rate of 59.83 Hz (31.47 kHz in "Standard", 15.73 kHz in the retro 15 kHz modes), which older VGA monitors that only accept 60 Hz handle fine. Switch "HDMI: Flicker-free" off when you use the analog output: with it on, the core is nudged to 59.94 Hz to match HDMI (in PAL to 50.00 Hz instead of the true 50.12 Hz).
+* HDMI: NTSC has its own display modes at 59.94 Hz: "16:9 720p 59.94 Hz" (default), "4:3 480p 59.94 Hz" and "5:4 480p 59.94 Hz", and its own `HDMI Frame Sync` choice (`Flicker-free` by default, `Raw 59.8 Hz` instead of `Raw 50.1 Hz`). The HDMI menu only shows the modes of the active mode, and PAL and NTSC each remember their own choice.
+* VGA: the analog output carries the true NTSC frame rate of 59.83 Hz (31.47 kHz in "Standard", 15.73 kHz in the retro 15 kHz modes), which older VGA monitors that only accept 60 Hz handle fine. Select `Off` or `Raw 59.8 Hz` under `HDMI Frame Sync` when you use the analog output: with `Flicker-free`, the core is nudged to 59.94 Hz to match HDMI (in PAL to 50.00 Hz instead of the true 50.12 Hz).
 * In NTSC on VGA and on the two 480p HDMI modes, the on-screen menu looks slightly smaller (89 %) so that it fits on the screen.
 
 ### Writing to real disks with the Internal 1581

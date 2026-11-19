@@ -11,7 +11,7 @@ use a horizontal+vertical syncronization signal or a composite syncronization si
 2. **Always use the right cable.** Particularly when you use SCART, the voltages need to be correct and therefore
    you need to [buy a cable with a built-in resistor](#scart).
 
-3. When using retro gear via the MEGA65' VGA port: **Make sure that you disable HDMI: Flicker-free** otherwise you might run into a bunch of
+3. When using retro gear via the MEGA65' VGA port: **Make sure that you select `Off` (or `Raw`) under `HDMI Frame Sync` instead of `Flicker-free`** otherwise you might run into a bunch of
 problems. Learn more in the [user's manual](../README.md#important-advice-for-users-of-analog-vga-and-retro-15-khz-rgb-over-vga).
 
 ## BNC
@@ -40,7 +40,7 @@ Connect the opposite end of the cable to the MEGA65's VGA port.
 ### Configuring the C64 for MEGA65 core
 
 Look at the screenshot and choose the following options in VGA and HDMI display modes.
-Turn off flicker-free and switch the standard mode to 15 Khz with CSYNC.
+Select `Off` under `HDMI Frame Sync` and switch the standard mode to 15 Khz with CSYNC.
 
 ![core-config](assets/coresettings.jpg)
 

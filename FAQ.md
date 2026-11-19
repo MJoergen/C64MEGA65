@@ -80,6 +80,9 @@ and then scroll down to "A game or demo does not run correctly".
 
 ## 9) No image or no sound via HDMI
 
+If the picture went away right after you selected `Raw` under `HDMI Frame Sync`,
+see [question 25](#25-which-hdmi-frame-sync-should-i-choose-off-flicker-free-or-raw).
+
 1. Make sure you are running [Version 6](https://files.mega65.org?id=896a012f-59e4-456c-b91f-7e989b958241)
    of the core.
 
@@ -96,12 +99,15 @@ and then scroll down to "A game or demo does not run correctly".
 Always try the "auto-adjust" (or similarly named feature) of your screen
 first. This resolves 90% of all issues.
 
-It is highly recommended to switch off
-[HDMI: Flicker-free](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option)
+It is highly recommended to select `Off` under `HDMI Frame Sync` in the HDMI
+submenu (instead of the default
+[`Flicker-free`](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option))
 when using analog VGA monitors or monitors that work with the
 [retro 15 kHZ RGB over VGA" signal](https://c64.mega65.org/hdmi-and-analog-output.html#retro-15-khz-for-cathode-ray-tubes).
+`Raw 50.1 Hz` (`Raw 59.8 Hz` in NTSC) is just as good for the analog output,
+because it also leaves the C64 at its original speed.
 
-Otherwise you might encounter strange visual effects that range from a blurry
+With `Flicker-free` you might encounter strange visual effects that range from a blurry
 image over "underwater" blurry movement of your screen to sporadic flickers
 and sometimes to a complete loss of VGA sync every few seconds or minutes.
 
@@ -117,8 +123,9 @@ for MEGA65 core.
 
 ### LCD or TFT devices
 
-Make sure that you have 
-[switched-off HDMI: Flicker-free](https://kugelblitz360.github.io/C64MEGA65DOCS/hdmi-and-analog-output.html#the-hdmi-flicker-free-option)
+Make sure that you have selected `Off` or `Raw` under `HDMI Frame Sync`
+instead of
+[`Flicker-free`](https://kugelblitz360.github.io/C64MEGA65DOCS/hdmi-and-analog-output.html#the-hdmi-flicker-free-option)
 when using retro monitors via the MEGA65's VGA out.
 
 ## 12) My mouse does not work
@@ -260,24 +267,28 @@ that all the device numbers you use are correct.
 sure you activate the feature using the menu item "IEC: Use hardware port"
 if you want to use.
 
-### Switch-off HDMI: Flicker-free
+### Select Off or Raw under HDMI Frame Sync
 
-The "HDMI: Flicker-free" mode
+The `Flicker-free` mode (the default of `HDMI Frame Sync` in the HDMI submenu)
 [very slightly changes the timing of the C64](https://c64.mega65.org/hdmi-and-analog-output.html#the-hdmi-flicker-free-option).
 While this is not a problem most of the time, it does lead to timing problems
 with certain games (for example Rainbow Arts games on original 5 1/4"
 disks) that are loaded via real 1541 floppys connected via the IEC port
 to the MEGA65. Just to make sure that there are no misunderstandings: 
 We are talking about real 1541 hardware here. Loading games via `*.d64`
-disk images is **not** affected by "HDMI: Flicker-free" and also loading
+disk images is **not** affected by `Flicker-free` and also loading
 games via an SD2IEC connected to the IEC port of the MEGA65 is also
 not affected.
 
 If you encounter incompatibilities when you load via real devices
-connected to the IEC port, then switch-off "HDMI: Flicker-free" mode.
+connected to the IEC port, then select `Raw` or `Off` under
+`HDMI Frame Sync`: both leave the C64 at its original speed.
 
-But in this case we would advise you heavily to also use an analog
-retro monitor, because with "HDMI: Flicker-free" OFF, the output on HDMI
+`Raw` runs the HDMI output at the C64's own frame rate, which is smooth on
+displays that accept this rate (see
+[question 25](#25-which-hdmi-frame-sync-should-i-choose-off-flicker-free-or-raw)).
+With `Off` we would advise you heavily to also use an analog
+retro monitor, because with `Off`, the output on HDMI
 will be slightly jerky due to the misalignment of the C64's retro
 output frequency and the frequencies that modern HDMI monitors are
 actually able to display.
@@ -409,9 +420,23 @@ From WIP-V6-A21X1 on, yes: in "Internal 1581" mode the built-in drive writes lik
 From WIP-V6-A22 on, yes: open the on-screen menu with <kbd>Help</kbd>, go to "Model" and choose "NTSC" ("PAL" is the default). The C64 then is an NTSC machine with the newer VIC-II 6567R8 and the exact NTSC clock speed.
 
 * The C64 resets automatically when you switch between PAL and NTSC, just like after a short press of the reset button, so that the C64 and your software detect the new mode.
-* HDMI: NTSC uses its own display modes at 59.94 Hz ("16:9 720p 59.94 Hz", "4:3 480p 59.94 Hz", "5:4 480p 59.94 Hz") and its own "HDMI: Flicker-free" switch; the menu only shows the ones that belong to the active mode.
-* VGA: the analog output carries the true NTSC frame rate of 59.83 Hz, which older VGA monitors that only accept 60 Hz handle fine. Switch "HDMI: Flicker-free" off when you use the analog output; with it on, the core is nudged to 59.94 Hz to match HDMI.
+* HDMI: NTSC uses its own display modes at 59.94 Hz ("16:9 720p 59.94 Hz", "4:3 480p 59.94 Hz", "5:4 480p 59.94 Hz") and its own `HDMI Frame Sync` choice, with `Raw 59.8 Hz` instead of `Raw 50.1 Hz`; the menu only shows the ones that belong to the active mode.
+* VGA: the analog output carries the true NTSC frame rate of 59.83 Hz, which older VGA monitors that only accept 60 Hz handle fine. Select `Off` or `Raw 59.8 Hz` under `HDMI Frame Sync` when you use the analog output; with `Flicker-free`, the core is nudged to 59.94 Hz to match HDMI.
 * The on-screen menu looks slightly smaller in NTSC on VGA and on the 480p HDMI modes, so that it fits on the screen.
 * Your choice is saved in the C64MEGA65 config file, so the core starts directly in NTSC the next time you switch the MEGA65 on.
 
 [Learn more](README.md#pal-and-ntsc).
+
+## 25) Which HDMI Frame Sync should I choose: Off, Flicker-free or Raw?
+
+A C64 does not produce exactly the frame rate of standard HDMI: a PAL C64 makes 50.12 frames per second instead of 50, an NTSC C64 59.83 instead of 59.94. `HDMI Frame Sync` in the HDMI submenu decides how the core deals with that:
+
+* `Flicker-free` (default): the C64 runs 0.25 % slower (PAL) or 0.19 % faster (NTSC), so that its frames match the HDMI output. The picture is smooth, and HDMI keeps its standard frame rate. If you are not sure, keep this one.
+* `Raw 50.1 Hz` (PAL) or `Raw 59.8 Hz` (NTSC): the C64 runs at its original speed, and the HDMI output runs at the C64's own frame rate. The picture is smooth as well, but this is not a standard HDMI frame rate, and not every display accepts it: some show no picture or a message such as "not supported", some show the picture but still jump every few seconds. Choose `Raw` if your display shows it smoothly.
+* `Off`: the C64 runs at its original speed and HDMI at the standard 50 Hz or 59.94 Hz. A tear line crosses the HDMI picture every 8 to 9 seconds, and scrolling games jump at that moment. Choose `Off` for analog displays on the VGA port or when the HDMI picture does not matter. (For the analog output, `Raw` is just as good as `Off`.)
+
+If your display shows nothing after you selected `Raw`: the menu is still open and the selection bar is still on the `Raw` line. Press <kbd>Cursor Up</kbd> and then <kbd>Return</kbd>: `Flicker-free` is selected again and the picture comes back. A VGA monitor on the analog output shows the menu in any case.
+
+Right after you selected `Raw`, after a reset of the C64 and after a pause (for example while the file browser is open), a tear line can be visible for a few seconds until the HDMI output is in step with the C64 again. When you switch between `Raw` and the other two choices, most displays go black for 1 to 3 seconds, because the frame rate changes.
+
+Which displays accept `Raw` is not known yet. If you try it, please tell us in [issue #184](https://github.com/MJoergen/C64MEGA65/issues/184) which display you use and what you see.
