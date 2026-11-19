@@ -162,7 +162,7 @@ entity hdmi_genlock is
 end entity hdmi_genlock;
 ```
 
-`digital_pipeline.vhd` produces `ref_i`: the vertical blanking of the core as the scaler gets it (`video_vblank_i`, after the crop) crosses into the HDMI clock domain through `xpm_cdc_single` (source register on `video_clk_i`), and its falling edge (the first visible line of the core begins) gives one pulse. The scaler gets `htotal => hdmi_htotal` in every mode that is not a raw mode (a multiplexer in `digital_pipeline.vhd`, not inside the genlock) and `htotal_o` of the genlock in the raw modes. `enable_i` is `'1'` exactly in the raw modes; with `enable_i = '0'` the genlock holds `htotal_o = htotal_i`.
+`digital_pipeline.vhd` produces `ref_i` from the event that the scaler itself takes as the start of a picture: the first rising edge of its input data enable (`not (video_hblank_i or video_vblank_i)`) after a rising edge of `video_vs_i`. (The falling edge of `video_vblank_i` alone is not usable: with zoom-in the crop also blanks the left and right border through this signal, so it falls in every line.) A register in the core's clock domain is cleared by the rising edge of `video_vs_i` and set by the first visible pixel after it; this level crosses into the HDMI clock domain through `xpm_cdc_single`, and its rising edge there is the pulse. The scaler gets `htotal => hdmi_htotal` in every mode that is not a raw mode (a multiplexer in `digital_pipeline.vhd`, not inside the genlock) and `htotal_o` of the genlock in the raw modes. `enable_i` is `'1'` exactly in the raw modes; with `enable_i = '0'` the genlock holds `htotal_o = htotal_i`.
 
 ### 5.2 Line stretching
 
