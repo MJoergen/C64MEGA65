@@ -122,7 +122,7 @@ architecture synthesis of digital_pipeline is
 
    constant C_AVM_ADDRESS_SIZE   : integer := 19;
    constant C_AVM_DATA_SIZE      : integer := 128;
-   signal hdmi_htotal            : integer;
+   signal hdmi_htotal            : natural range 0 to 4095;  -- line length of the mode record
    signal hdmi_hsstart           : integer;
    signal hdmi_hsend             : integer;
    signal hdmi_hdisp             : integer;
@@ -132,6 +132,17 @@ architecture synthesis of digital_pipeline is
    signal hdmi_vdisp             : integer;
    signal hdmi_shift             : integer;
    signal hdmi_osm_vshift        : natural;
+
+   -- Genlock of the raw modes (HDMI at the frame rate of the C64, hdmi_genlock.vhd)
+   signal video_ref_vs_d         : std_logic := '0';
+   signal video_ref              : std_logic := '0';      -- '1' from the first visible pixel after vsync
+   signal hdmi_ref_s             : std_logic;             -- video_ref in hdmi_clk
+   signal hdmi_ref_d             : std_logic := '0';
+   signal hdmi_ref               : std_logic;             -- one clock cycle: the core starts a picture
+   signal hdmi_raw               : std_logic;             -- '1' in the raw modes
+   signal hdmi_genlock_target    : natural range 0 to 2**21 - 1;
+   signal hdmi_genlock_htotal    : natural range 0 to 4095;
+   signal hdmi_ascal_htotal      : integer;               -- line length for the scaler
 
    -- Auto-calculate display dimensions based on an 4:3 aspect ratio
    signal hdmi_hmin              : integer;
@@ -179,7 +190,13 @@ begin
    sys_info_hdmi_o(47 downto 32) <=
       std_logic_vector(to_unsigned((G_VGA_DX/G_FONT_DX) * 256 + (G_VGA_DY/G_FONT_DY), 16));
 
-   hdmi_video_mode <= G_VIDEO_MODE_VECTOR(9) when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994  else
+   hdmi_video_mode <= G_VIDEO_MODE_VECTOR(15) when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
+                      G_VIDEO_MODE_VECTOR(14) when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                      G_VIDEO_MODE_VECTOR(13) when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                      G_VIDEO_MODE_VECTOR(12) when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                      G_VIDEO_MODE_VECTOR(11) when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                      G_VIDEO_MODE_VECTOR(10) when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                      G_VIDEO_MODE_VECTOR(9) when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994  else
                       G_VIDEO_MODE_VECTOR(8) when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994  else
                       G_VIDEO_MODE_VECTOR(7) when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                       G_VIDEO_MODE_VECTOR(6) when hdmi_video_mode_i = C_VIDEO_SVGA_800_60    else
@@ -206,12 +223,19 @@ begin
    assert G_VIDEO_MODE_VECTOR(4).H_PIXELS <= G_VIDEO_MODE_VECTOR(4).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(6).H_PIXELS <= G_VIDEO_MODE_VECTOR(6).V_PIXELS*4/3;
    assert G_VIDEO_MODE_VECTOR(7).H_PIXELS >= G_VIDEO_MODE_VECTOR(7).V_PIXELS*4/3;
-   -- 5, 8 and 9 are a 720x480 (3:2) container that is signaled as 4:3, so the 4:3 rule does not apply
+   assert G_VIDEO_MODE_VECTOR(10).H_PIXELS >= G_VIDEO_MODE_VECTOR(10).V_PIXELS*4/3;
+   assert G_VIDEO_MODE_VECTOR(11).H_PIXELS <= G_VIDEO_MODE_VECTOR(11).V_PIXELS*4/3;
+   assert G_VIDEO_MODE_VECTOR(12).H_PIXELS <= G_VIDEO_MODE_VECTOR(12).V_PIXELS*4/3;
+   assert G_VIDEO_MODE_VECTOR(13).H_PIXELS >= G_VIDEO_MODE_VECTOR(13).V_PIXELS*4/3;
+   -- 5, 8, 9, 14 and 15 are a 720x480 (3:2) container that is signaled as 4:3, so the 4:3 rule does not apply
    assert G_VIDEO_MODE_VECTOR(5).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(5).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(8).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(8).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(9).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(9).V_PIXELS = 480;
+   assert G_VIDEO_MODE_VECTOR(14).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(14).V_PIXELS = 480;
+   assert G_VIDEO_MODE_VECTOR(15).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(15).V_PIXELS = 480;
 
    -- In HDMI 4:3 mode, ignore crop (zoom-in).
+   -- A raw mode (HDMI at the C64 frame rate) has the window of the mode it is derived from.
    -- We are using constants here to avoid that large networks are synthesized.
    -- The C64 picture is framed 4:3 in PAL and in NTSC, which is what MiSTer's "Original"
    -- aspect ratio (video_freak ARX/ARY = 400:300 in c64.sv) does in both standards, too.
@@ -230,6 +254,12 @@ begin
                 (G_VIDEO_MODE_VECTOR(7).H_PIXELS-G_VIDEO_MODE_VECTOR(7).V_PIXELS*4/3)/2   when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                 0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994 else
                 0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994 else
+                (G_VIDEO_MODE_VECTOR(10).H_PIXELS-G_VIDEO_MODE_VECTOR(10).V_PIXELS*4/3)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                (G_VIDEO_MODE_VECTOR(13).H_PIXELS-G_VIDEO_MODE_VECTOR(13).V_PIXELS*4/3)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
                 0; -- Not used
 
    hdmi_hmax <= hdmi_video_mode.H_PIXELS-1                                                when hdmi_crop_mode_i = '1' else
@@ -243,6 +273,12 @@ begin
                 (G_VIDEO_MODE_VECTOR(7).H_PIXELS+G_VIDEO_MODE_VECTOR(7).V_PIXELS*4/3)/2-1 when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                 hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994 else
                 hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994 else
+                (G_VIDEO_MODE_VECTOR(10).H_PIXELS+G_VIDEO_MODE_VECTOR(10).V_PIXELS*4/3)/2-1 when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                (G_VIDEO_MODE_VECTOR(13).H_PIXELS+G_VIDEO_MODE_VECTOR(13).V_PIXELS*4/3)/2-1 when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                hdmi_video_mode.H_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
                 hdmi_video_mode.H_PIXELS-1; -- Not used
 
    hdmi_vmin <= 0                                                                         when hdmi_crop_mode_i = '1' else
@@ -256,6 +292,12 @@ begin
                 0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                 0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994 else
                 (G_VIDEO_MODE_VECTOR(9).V_PIXELS-G_VIDEO_MODE_VECTOR(9).V_PIXELS*15/16)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994 else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                (G_VIDEO_MODE_VECTOR(12).V_PIXELS-G_VIDEO_MODE_VECTOR(12).H_PIXELS*3/4)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                0                                                                         when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                (G_VIDEO_MODE_VECTOR(15).V_PIXELS-G_VIDEO_MODE_VECTOR(15).V_PIXELS*15/16)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
                 0; -- Not used
 
    hdmi_vmax <= hdmi_video_mode.V_PIXELS-1                                                when hdmi_crop_mode_i = '1' else
@@ -269,6 +311,12 @@ begin
                 hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                 hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994 else
                 (G_VIDEO_MODE_VECTOR(9).V_PIXELS+G_VIDEO_MODE_VECTOR(9).V_PIXELS*15/16)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994 else
+                hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                (G_VIDEO_MODE_VECTOR(12).V_PIXELS+G_VIDEO_MODE_VECTOR(12).H_PIXELS*3/4)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                hdmi_video_mode.V_PIXELS-1                                                when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                (G_VIDEO_MODE_VECTOR(15).V_PIXELS+G_VIDEO_MODE_VECTOR(15).V_PIXELS*15/16)/2 when hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
                 hdmi_video_mode.V_PIXELS-1; -- Not used
 
    -- Deprecated. Will be removed in future release
@@ -282,8 +330,10 @@ begin
    -- around canvas row DY*8 (264 for the 33-row main screen), which is below the screen
    -- center 240. Moving the OSM 24 rows up keeps the options menu and the main screen
    -- fully visible for every OSM scaling (doc/dev-ntsc/NTSC-SPEC.md, section 7).
-   hdmi_osm_vshift <= 24 when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994 or
-                              hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994 else
+   hdmi_osm_vshift <= 24 when hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994     or
+                              hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994     or
+                              hdmi_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW or
+                              hdmi_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW else
                       0;
 
    ---------------------------------------------------------------------------------------------
@@ -326,6 +376,78 @@ begin
    ---------------------------------------------------------------------------------------------
 
    reset_na <= not (video_rst_i or hr_rst_i);
+
+   -- Genlock of the raw modes (HDMI at the frame rate of the C64): hdmi_genlock lengthens
+   -- 16 lines of the vertical back porch so that the scaler's output picture starts 2.0 ms
+   -- after the core's picture (target_i: 2 x CLK_KHZ pixel clocks) and stays there.
+
+   -- Reference of the genlock: the event that the scaler itself takes as the start of a
+   -- picture of the core, the first visible pixel (rising edge of its input data enable,
+   -- not (video_hblank_i or video_vblank_i)) after a rising edge of video_vs_i. The falling
+   -- edge of video_vblank_i alone is not usable: with zoom-in, crop.vhd also blanks the left
+   -- and right border through it, so it falls in every line. video_ref is cleared by the
+   -- rising edge of video_vs_i and set by the first cycle after it in which video_hblank_i
+   -- and video_vblank_i are '0'. This registered level crosses into the HDMI clock domain,
+   -- where its rising edge is the one-cycle pulse hdmi_ref. No reset is needed: the level
+   -- synchronizes itself with the next vsync of the core.
+   p_video_ref : process (video_clk_i)
+   begin
+      if rising_edge(video_clk_i) then
+         video_ref_vs_d <= video_vs_i;
+         if video_vs_i = '1' and video_ref_vs_d = '0' then
+            video_ref <= '0';
+         elsif video_hblank_i = '0' and video_vblank_i = '0' then
+            video_ref <= '1';
+         end if;
+      end if;
+   end process p_video_ref;
+
+   -- Clock domain crossing: VIDEO to HDMI (the source is a register already)
+   i_video2hdmi_ref : xpm_cdc_single
+      generic map (
+         DEST_SYNC_FF   => 2,
+         INIT_SYNC_FF   => 0,
+         SIM_ASSERT_CHK => 0,
+         SRC_INPUT_REG  => 0
+      )
+      port map (
+         src_clk  => video_clk_i,
+         src_in   => video_ref,
+         dest_clk => hdmi_clk_i,
+         dest_out => hdmi_ref_s
+      ); -- i_video2hdmi_ref
+
+   p_hdmi_ref : process (hdmi_clk_i)
+   begin
+      if rising_edge(hdmi_clk_i) then
+         hdmi_ref_d <= hdmi_ref_s;
+      end if;
+   end process p_hdmi_ref;
+
+   hdmi_ref            <= hdmi_ref_s and not hdmi_ref_d;
+   hdmi_raw            <= '1' when video_mode_is_raw(hdmi_video_mode_i) else '0';
+   hdmi_genlock_target <= 2 * hdmi_video_mode.CLK_KHZ;      -- 2.0 ms in pixel clocks
+
+   i_hdmi_genlock : entity work.hdmi_genlock
+      port map (
+         clk_i     => hdmi_clk_i,
+         rst_i     => hdmi_rst_i,
+         enable_i  => hdmi_raw,
+         htotal_i  => hdmi_htotal,
+         target_i  => hdmi_genlock_target,
+         hs_i      => hdmi_hs,
+         vs_i      => hdmi_vs,
+         de_i      => hdmi_de,
+         ref_i     => hdmi_ref,
+         htotal_o  => hdmi_genlock_htotal,
+         locked_o  => open,
+         stretch_o => open
+      ); -- i_hdmi_genlock
+
+   -- Line length for the scaler: in every mode that is not a raw mode exactly hdmi_htotal
+   -- of the mode record, in the raw modes the line length of the genlock
+   hdmi_ascal_htotal <= hdmi_htotal when hdmi_raw = '0' else
+                        hdmi_genlock_htotal;
 
    i_ascal : entity work.ascal
       generic map (
@@ -422,7 +544,7 @@ begin
          -- DE    |""""""""""""""""""\________________________|
          -- RGB   |    <#IMAGE#>      ^HDISP                  |
          --            ^HMIN   ^HMAX        ^HSSTART  ^HSEND  ^HTOTAL
-         htotal            => hdmi_htotal,                  -- input
+         htotal            => hdmi_ascal_htotal,            -- input
          hsstart           => hdmi_hsstart,                 -- input
          hsend             => hdmi_hsend,                   -- input
          hdisp             => hdmi_hdisp,                   -- input

@@ -279,17 +279,23 @@ architecture synthesis of framework is
 ---------------------------------------------------------------------------------------------
 
 -- The index is the position of the member in video_mode_type (video_modes_pkg.vhd)
-constant VIDEO_MODE_VECTOR    : video_modes_vector(0 to 9) := (
-   C_HDMI_720p_50,        -- HDMI 1280x720   @ 50 Hz
-   C_HDMI_720p_60,        -- 1280x720        @ 60 Hz
-   C_HDMI_576p_50,        -- PAL 576p in 4:3 @ 50 Hz
-   C_HDMI_576p_50,        -- PAL 576p in 5:4 @ 50 Hz
-   C_HDMI_640x480p_60,    -- HDMI 640x480    @ 60 Hz
-   C_HDMI_720x480p_5994,  -- HDMI 720x480    @ 59.94 Hz
-   C_SVGA_800_600_60,     -- SVGA 800x600    @ 60 Hz
-   C_HDMI_720p_5994,      -- 7: NTSC 720p in 16:9 @ 59.94 Hz
-   C_HDMI_720x480p_5994,  -- 8: NTSC 480p in 4:3  @ 59.94 Hz
-   C_HDMI_720x480p_5994); -- 9: NTSC 480p in 5:4  @ 59.94 Hz
+constant VIDEO_MODE_VECTOR    : video_modes_vector(0 to 15) := (
+   C_HDMI_720p_50,            -- HDMI 1280x720   @ 50 Hz
+   C_HDMI_720p_60,            -- 1280x720        @ 60 Hz
+   C_HDMI_576p_50,            -- PAL 576p in 4:3 @ 50 Hz
+   C_HDMI_576p_50,            -- PAL 576p in 5:4 @ 50 Hz
+   C_HDMI_640x480p_60,        -- HDMI 640x480    @ 60 Hz
+   C_HDMI_720x480p_5994,      -- HDMI 720x480    @ 59.94 Hz
+   C_SVGA_800_600_60,         -- SVGA 800x600    @ 60 Hz
+   C_HDMI_720p_5994,          --  7: NTSC 720p in 16:9 @ 59.94 Hz
+   C_HDMI_720x480p_5994,      --  8: NTSC 480p in 4:3  @ 59.94 Hz
+   C_HDMI_720x480p_5994,      --  9: NTSC 480p in 5:4  @ 59.94 Hz
+   C_HDMI_720p_50_RAW,        -- 10: PAL  720p in 16:9 at the C64 frame rate
+   C_HDMI_576p_50_RAW,        -- 11: PAL  576p in 4:3  at the C64 frame rate
+   C_HDMI_576p_50_RAW,        -- 12: PAL  576p in 5:4  at the C64 frame rate
+   C_HDMI_720p_5994_RAW,      -- 13: NTSC 720p in 16:9 at the C64 frame rate
+   C_HDMI_720x480p_5994_RAW,  -- 14: NTSC 480p in 4:3  at the C64 frame rate
+   C_HDMI_720x480p_5994_RAW); -- 15: NTSC 480p in 5:4  at the C64 frame rate
 
 signal video_mode : video_modes_t;
 
@@ -367,7 +373,7 @@ signal qnice_osm_cfg_xy       : std_logic_vector(15 downto 0);
 signal qnice_osm_cfg_dxdy     : std_logic_vector(15 downto 0);
 signal qnice_hdmax            : std_logic_vector(11 downto 0);
 signal qnice_vdmax            : std_logic_vector(11 downto 0);
-signal qnice_clk_sel          : std_logic_vector( 2 downto 0);
+signal qnice_clk_sel          : std_logic_vector( 3 downto 0);
 
 signal qnice_h_pixels         : std_logic_vector(11 downto 0); -- horizontal visible display width in pixels
 signal qnice_v_pixels         : std_logic_vector(11 downto 0); -- horizontal visible display width in pixels
@@ -520,11 +526,17 @@ begin
                  C_HDMI_720p_5994     when qnice_video_mode_i = C_VIDEO_HDMI_16_9_5994 else
                  C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_4_3_5994  else
                  C_HDMI_720x480p_5994 when qnice_video_mode_i = C_VIDEO_HDMI_5_4_5994  else
+                 C_HDMI_720p_50_RAW       when qnice_video_mode_i = C_VIDEO_HDMI_16_9_50_RAW   else
+                 C_HDMI_576p_50_RAW       when qnice_video_mode_i = C_VIDEO_HDMI_4_3_50_RAW    else
+                 C_HDMI_576p_50_RAW       when qnice_video_mode_i = C_VIDEO_HDMI_5_4_50_RAW    else
+                 C_HDMI_720p_5994_RAW     when qnice_video_mode_i = C_VIDEO_HDMI_16_9_5994_RAW else
+                 C_HDMI_720x480p_5994_RAW when qnice_video_mode_i = C_VIDEO_HDMI_4_3_5994_RAW  else
+                 C_HDMI_720x480p_5994_RAW when qnice_video_mode_i = C_VIDEO_HDMI_5_4_5994_RAW  else
                  C_HDMI_720p_50;                              -- C_VIDEO_HDMI_16_9_50
 
    qnice_clk_sel <= video_mode.CLK_SEL;
 
-   -- reconfigurable MMCM: 25.2MHz, 27MHz, 74.25MHz or 148.5MHz
+   -- reconfigurable MMCM: the pixel clock of the mode record (CLK_SEL, see video_out_clock.vhd)
    i_video_out_clock : entity work.video_out_clock
       generic map (
          fref    => 100.0 -- Clock speed in MHz of the input clk_i

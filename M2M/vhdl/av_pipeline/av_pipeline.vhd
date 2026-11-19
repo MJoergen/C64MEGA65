@@ -287,7 +287,8 @@ begin
    ---------------------------------------------------------------------------------------------
 
    -- The machine standard reaches the video pipeline only through the video mode: mega65.vhd
-   -- selects one of the 59.94 Hz NTSC modes if and only if the machine runs in NTSC.
+   -- selects one of the NTSC modes (the 59.94 Hz modes and their raw modes, see
+   -- video_mode_is_ntsc) if and only if the machine runs in NTSC.
    -- The bit is quasi-static (it only changes together with the mode-change reset of the
    -- core), so the array synchronizer below is sufficient.
    qnice_ntsc <= '1' when video_mode_is_ntsc(slv_to_video_mode(qnice_video_mode_i)) else '0';
@@ -532,8 +533,10 @@ begin
       ); -- i_qnice2hdmi
 
    -- 480p shows only 480 of the 540 OSM rows: see osm_scaling and digital_pipeline (vertical shift)
-   hdmi_osm_ntsc480 <= '1' when slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_4_3_5994 or
-                                slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_5_4_5994 else
+   hdmi_osm_ntsc480 <= '1' when slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_4_3_5994     or
+                                slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_5_4_5994     or
+                                slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_4_3_5994_RAW or
+                                slv_to_video_mode(hdmi_video_mode) = C_VIDEO_HDMI_5_4_5994_RAW else
                        '0';
 
 
