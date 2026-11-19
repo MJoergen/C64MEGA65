@@ -11,7 +11,7 @@ burst crystal 14.31818 MHz x 16 / 7.
 | Real PAL C64                             | 31.527956 MHz | 985.249 kHz                |                     |
 | MiSTer                                   | 31.527954 MHz | 985.249 kHz                | -0.05 ppm           |
 | C64MEGA65 original clock                 | 31.527778 MHz | 985.243 kHz                | -5.6 ppm            |
-| C64MEGA65 "HDMI: Flicker-free" clock     | 31.448993 MHz | 982.781 kHz                | -0.25 %             |
+| C64MEGA65 `Flicker-free` clock           | 31.448993 MHz | 982.781 kHz                | -0.25 %             |
 
 ### NTSC (VIC-II 6567R8)
 
@@ -20,11 +20,11 @@ burst crystal 14.31818 MHz x 16 / 7.
 | Real NTSC C64                            | 32.727273 MHz | 1022.727 kHz               |                     |
 | MiSTer                                   | 32.727264 MHz | 1022.727 kHz               | -0.27 ppm           |
 | C64MEGA65 original clock                 | 32.727273 MHz | 1022.727 kHz               | 0 ppm (exact)       |
-| C64MEGA65 "HDMI: Flicker-free" clock     | 32.789700 MHz | 1024.678 kHz               | +0.19 %             |
+| C64MEGA65 `Flicker-free` clock           | 32.789700 MHz | 1024.678 kHz               | +0.19 %             |
 
 ### What the flicker-free clock does
 
-With "HDMI: Flicker-free" switched on, the core alternates between the original clock and the
+With `Flicker-free` selected under `HDMI Frame Sync`, the core alternates between the original clock and the
 flicker-free clock of the active standard so that the C64 produces frames exactly as fast as the
 HDMI output consumes them. The flicker-free clock is the one the core runs on almost all the time:
 
@@ -37,3 +37,12 @@ The CIA time-of-day clock, the simulated 1541/1581 drives and the GEOS real-time
 nominal clock of the active standard (31.527778 MHz in PAL, 32.727273 MHz in NTSC) as their
 reference, so they move together with the C64 and the C64-to-drive speed ratio stays exact
 (see [issue #2](https://github.com/MJoergen/C64MEGA65/issues/2)). Details in [ntsc.md](ntsc.md).
+
+### `Off` and `Raw`
+
+With `Off` and with `Raw 50.1 Hz` / `Raw 59.8 Hz` the C64 runs on the original clock of the
+tables above all the time, at 50.124 Hz (PAL) or 59.826 Hz (NTSC). With `Off` the HDMI output
+stays at its standard rate, so a tear line crosses the HDMI picture every 8 to 9 seconds. With
+`Raw` the HDMI side follows the C64 instead: its pixel clock and timing give the C64's own frame
+rate, and a genlock keeps the HDMI picture at a fixed distance behind the C64's picture (see
+[hdmi.md](hdmi.md#frame-rates-off-flicker-free-and-raw)).

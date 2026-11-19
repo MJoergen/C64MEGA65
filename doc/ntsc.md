@@ -19,12 +19,13 @@ protocol is the `Version WIP-V6-A22` section of [`tests/README.md`](../tests/REA
 * Every change of the machine mode resets the C64 automatically (a soft reset, like a short
   press of the reset button), so that the KERNAL detects the new region.
 * HDMI: in NTSC the `HDMI Display Mode` submenu offers `16:9 720p 59.94 Hz`, `4:3 480p 59.94 Hz`
-  and `5:4 480p 59.94 Hz` instead of the three 50 Hz modes, plus its own `HDMI: Flicker-free`
-  switch (on by default).
+  and `5:4 480p 59.94 Hz` instead of the three 50 Hz modes, plus its own `HDMI Frame Sync`
+  group: `Off`, `Flicker-free` (default) and `Raw 59.8 Hz` (HDMI at the C64's own 59.826 Hz,
+  see [hdmi.md](hdmi.md#frame-rates-off-flicker-free-and-raw)).
 * VGA: the analog output is the live VIC-II signal, so it carries the true NTSC frame rate of
-  59.83 Hz as long as `HDMI: Flicker-free` is off (with it on, the whole core is nudged to
-  59.94 Hz to match HDMI, as it is nudged to 50.00 Hz in PAL). Analog users should switch
-  flicker-free off, as the help page says. The `Standard` mode (31.47 kHz) suits VGA
+  59.83 Hz with `Off` and with `Raw 59.8 Hz` (with `Flicker-free`, the whole core is nudged to
+  59.94 Hz to match HDMI, as it is nudged to 50.00 Hz in PAL). Analog users should select
+  `Off` or `Raw`, as the help page says. The `Standard` mode (31.47 kHz) suits VGA
   monitors that only accept 60 Hz; the two retro 15 kHz modes produce 15.73 kHz for CRTs.
 * The on-screen menu is shown at 89 % of its size on VGA and on the two 480p HDMI modes in
   NTSC, because these outputs have fewer lines than the menu canvas.
@@ -43,7 +44,7 @@ MiSTer core through `main.vhd`:
 | 1541 / 1581 chip enable | 16 MHz from the NTSC core clock | `main.vhd` `iec_drive_ce_proc` |
 | GEOS real-time clock | counts the 16 MHz drive chip enable, like MiSTer | `main.vhd` `rtcf83_inst` |
 | Core clock | the two NTSC MMCMs | `clk.vhd`, `mega65.vhd` `hr_core_speed` |
-| HDMI mode | the three 59.94 Hz modes | `mega65.vhd` `qnice_video_mode_o` |
+| HDMI mode | the three 59.94 Hz modes (or their `Raw 59.8 Hz` twins) | `mega65.vhd` `qnice_video_mode_o` |
 
 `clk_main_speed_i` always carries the nominal clock of the active standard
 (`CORE_CLK_SPEED_PAL = 31_527_778` or `CORE_CLK_SPEED_NTSC = 32_727_273` in `globals.vhd`),
@@ -104,8 +105,8 @@ The complete list is in section 10.4 of `doc/dev-ntsc/NTSC-SPEC.md`.
 
 ## HDMI flicker-free in NTSC
 
-A C64 never produces exactly the frame rate of an HDMI mode. With `HDMI: Flicker-free` on, the
-core alternates between the original and the flicker-free clock of its standard so that the
+A C64 never produces exactly the frame rate of an HDMI mode. With `Flicker-free` (in the group
+`HDMI Frame Sync`), the core alternates between the original and the flicker-free clock of its standard so that the
 average frame rate equals the HDMI frame rate. `M2M/vhdl/hdmi_flicker_free.vhd` watches how far
 the C64 is ahead of the HDMI output in the ascal frame buffer and pulses `hr_high_i` (core too
 fast) or `hr_low_i` (core too slow); the `hr_core_speed` process in `mega65.vhd` switches the
@@ -128,10 +129,12 @@ come from the same oscillator, so their ratio is exact and the small margin is e
 
 While the flicker-free clock runs, the whole C64 including SID pitch, TOD, the drives and the
 GEOS clock runs 0.19 % fast in NTSC (0.25 % slow in PAL): over 10 minutes TOD gains about 1.1 s
-in NTSC and loses about 1.5 s in PAL, so TOD accuracy is measured with `HDMI: Flicker-free` off.
+in NTSC and loses about 1.5 s in PAL, so TOD accuracy is measured with `Off` or `Raw`.
 TOD and the drives keep the nominal clock as their reference on purpose, so the speed ratio between C64 and drive stays that of a
-real machine ([issue #2](https://github.com/MJoergen/C64MEGA65/issues/2)). With flicker-free off,
-a 59.826 Hz C64 on a 59.94 Hz display shows a short stutter about every 9 seconds.
+real machine ([issue #2](https://github.com/MJoergen/C64MEGA65/issues/2)). With `Off`, a
+59.826 Hz C64 on a 59.94 Hz output shows a tear line that crosses the picture about every
+9 seconds (the scaler has one frame buffer; scrollers jump there). `Raw 59.8 Hz` runs the HDMI
+output at 59.826 Hz instead, locked to the C64 by a genlock (see [hdmi.md](hdmi.md)).
 
 
 ## HDMI modes and framing
@@ -147,8 +150,9 @@ letterboxes it so that a 5:4 display, which shows any signal as 5:4, shows a 4:3
 (`V x 15/16` of the height). The new mode record is `C_HDMI_720p_5994` in
 `M2M/vhdl/av_pipeline/video_modes_pkg.vhd`; its `CLK_KHZ` is the true 74167 kHz because the
 HDMI audio clock regeneration uses it. The machine standard reaches the M2M video pipeline only
-through the HDMI mode: `qnice_video_mode_o` is one of the three `*_5994` modes exactly when the
-machine is NTSC. [hdmi.md](hdmi.md) lists all six modes.
+through the HDMI mode: `qnice_video_mode_o` is one of the three `*_5994` modes or their
+`*_5994_RAW` twins exactly when the machine is NTSC (`video_mode_is_ntsc`). [hdmi.md](hdmi.md)
+lists all six modes and their raw timing.
 
 The scaler input in NTSC is 404 x 250 pixels at 59.826 Hz (PAL: 382 x 270 at 50.124 Hz), the
 same blanking that MiSTer's `video_sync.vhd` produces ("NTSC mode has 250 visible lines only").
@@ -170,8 +174,8 @@ keep the frame buffer in SDRAM.
 ## Analog VGA in NTSC
 
 The analog pipeline recovers its geometry from the sync and blanking signals and contains no PAL
-constant, so it needs no NTSC code (rates with `HDMI: Flicker-free` off; with it on, the frame
-rate is about 59.94 Hz):
+constant, so it needs no NTSC code (rates with `Off` or `Raw 59.8 Hz`; with `Flicker-free`, the
+frame rate is about 59.94 Hz):
 
 | VGA mode | Line rate | Frame rate | Visible |
 |---|---|---|---|
@@ -181,7 +185,8 @@ rate is about 59.94 Hz):
 The 31 kHz mode is within the range of any VGA monitor that accepts 640 x 480 at 60 Hz, which is
 the use case of old 60 Hz-only VGA monitors. MiSTer's NTSC `video_sync` starts the vertical sync
 on the first blanked line (no vertical front porch); the core keeps that for parity.
-"HDMI: Flicker-free" should stay off when an analog display is used, exactly as in PAL.
+`Flicker-free` should not be selected when an analog display is used (`Off` or `Raw` instead),
+exactly as in PAL.
 
 
 ## On-screen menu in NTSC
@@ -251,7 +256,7 @@ it, and the submodule needed no change:
 | Pixel clock | `clk_sys / 4` | same |
 | Core clock | one PLL, fractional `K` reprogrammed on a mode change | four fixed MMCMs and a glitch-free mux tree (flicker-free needs two running clocks per standard) |
 | Reset on mode change | about 3 ms reset while the PLL relocks, optionally clearing RAM | 1024-cycle soft reset, deferred during a disk write-back |
-| HDMI rate | chosen by `MiSTer.ini`, optionally bent with `vsync_adjust` | fixed 59.94 Hz modes plus flicker-free core clock switching |
+| HDMI rate | chosen by `MiSTer.ini`, optionally bent with `vsync_adjust` | fixed 59.94 Hz modes plus flicker-free core clock switching, or `Raw 59.8 Hz`: fixed 59.826 Hz modes with a genlock |
 | Vertical crop | `vcrop` / `video_freak` | not present; "HDMI: Zoom-in" has NTSC constants instead |
 
 
@@ -260,7 +265,6 @@ it, and the submodule needed no change:
 * No PAL-N (6572) and no old NTSC (6567R56A, 64 cycles x 262 lines). Both would be further
   entries of the same `Model` group with their own clocks; see [vic_ii_variants.md](vic_ii_variants.md).
 * No 60.00 Hz HDMI modes, no 640x480 and no variable pixel clock (see below).
-* No "HDMI: Raw 50.1 Hz" and no NTSC raw mode.
 * The keyboard scanner and the joystick debouncer use the PAL clock constant in both standards
   (harmless, see above).
 
@@ -273,8 +277,10 @@ it, and the submodule needed no change:
 video identification code for the 60 Hz and the 59.94 Hz variant of a format, and displays treat
 both as standard modes. A real NTSC C64 produces 59.826 Hz, so neither rate is native, but
 59.94 Hz is the closer one: matching it needs the C64 0.19 % faster, matching 60.00 Hz would
-need 0.29 %. A truly native 59.826 Hz output would need a variable pixel clock (MiSTer's
-`vsync_adjust`, which MiSTer itself marks as not supported by every display).
+need 0.29 %. A native 59.826 Hz output is not a standard rate, and not every display accepts it
+(MiSTer's `vsync_adjust` does this with a variable pixel clock and marks it as not supported by
+every display). The core offers it as an option, `Raw 59.8 Hz`, with a fixed pixel clock per
+mode and a genlock, see [hdmi.md](hdmi.md#frame-rates-off-flicker-free-and-raw).
 
 ### 720x480 instead of 640x480
 
@@ -300,10 +306,11 @@ shows, framed as 4:3.
 ### HDMI clocks that already existed
 
 `M2M/vhdl/controllers/HDMI/video_out_clock.vhd` provides the NTSC-family pixel clocks through its
-`CLK_SEL` values; `"001"` (27.000 MHz, 720x480p59.94) and `"110"` (labeled 74.176 MHz, 1280x720p59.94)
-are the ones the NTSC modes use. `"110"` really produces 74.1667 MHz (`CLKFBOUT_MULT_F` 22.25,
+`CLK_SEL` values; `"0001"` (27.000 MHz, 720x480p59.94) and `"0110"` (labeled 74.176 MHz, 1280x720p59.94)
+are the ones the NTSC modes use. `"0110"` really produces 74.1667 MHz (`CLKFBOUT_MULT_F` 22.25,
 `DIVCLK_DIVIDE` 3, `CLKOUT1` 10); no single-MMCM configuration with the 5:1 serializer ratio does
-better, and the -124 ppm are well within the HDMI tolerance.
+better, and the -124 ppm are well within the HDMI tolerance. The raw NTSC modes use `"1010"`
+(74.0625 MHz) for 720p and `"0001"` for 480p.
 
 References:
 

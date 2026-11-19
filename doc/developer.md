@@ -568,11 +568,14 @@ point of view, this is still very close.
 ### Visual artifacts and dynamic HDMI flicker-fix
 
 The official C64 has a frame rate of 985248/312/63 = 50.125 Hz. Since this is not exactly
-50 Hz, this will inevitably lead to flickering and/or screen tearing when viewing on a
-HDMI monitor. The reason is that HDMI only allows a pre-defined set of screen resolutions
-and frame rates. The difference between the C64 frame rate of 50.125 Hz and the monitor
-frequency of 50 Hz leads to tearing at a frequency of 0.125 Hz, i.e.  roughly every eight
-seconds.
+50 Hz, this will inevitably lead to screen tearing when viewing on a HDMI monitor in a
+standard HDMI mode. The reason is that HDMI displays are made for a pre-defined set of
+screen resolutions and frame rates, and the standard HDMI modes of the core run at exactly
+50 Hz (59.94 Hz in NTSC). The scaler `ascal.vhd` has a single frame buffer: the core writes
+the picture into it while the HDMI side reads it. The difference between the C64 frame rate
+of 50.125 Hz and the monitor frequency of 50 Hz lets the read position overtake the write
+position at a frequency of 0.125 Hz, i.e. roughly every eight seconds, and each time a tear
+line wanders through the picture. Whole frames are not dropped or repeated.
 
 The "Dynamic HDMI flicker-fix" is meant to eliminate this screen tearing. This is done by
 slowing down the core by approx 0.125/50.125 = 0.25%. The goal is to have the core
@@ -580,8 +583,8 @@ generate a frame rate of exactly 50 Hz. However, this requires a PLL frequency o
 50\*63\*312\*32 = 31.449600 MHz, which unfortunately is not synthesizable on the Xilinx FPGA
 in the MEGA65 (due to the before-mentioned limitations of the PLL).
 
-The solution chosen is therefore to dynamically alternate the core frame rate between 50.1
-Hz and 49.9 Hz. On average the core frame rate will be exactly 50 Hz, and this average is
+The solution chosen is therefore to dynamically alternate the core frame rate between 50.124
+Hz and 49.999 Hz. On average the core frame rate will be exactly 50 Hz, and this average is
 achieved by continuously monitoring the input and output frame rates. More specifically,
 the VGA-to-HDMI conversion is done by MiSTer's `ascal.vhd` module. Here the input frame
 data is written to HyperRAM, and the output frame data is read from HyperRAM.
@@ -602,17 +605,27 @@ multiplexer is subsequently used to dynamically switch between the two frequenci
 
 The M2M framework takes care of the FIFO level monitoring and the hysteresis, and outputs
 two signals to the core, indicating when to switch over to the other clock frequency.  The
-core may choose to ignore these signals, if the "Dynamic HDMI flicker-free" option is not
-wanted.
+core ignores these signals when `Off` or `Raw` is selected under `HDMI Frame Sync` in the
+HDMI submenu (`main_hdmi_ff` in `mega65.vhd` is the bit of `Flicker-free` and not the bit
+of `Raw`); then it stays on the original clock.
 
 Even though this "switching between two frame rates" works perfectly on the HDMI output,
 it can lead to flickering on some VGA monitors. So for this reason, it is important to
-have the option of disabling this feature.
+have the option of disabling this feature (`Off` or `Raw`).
 
 The same mechanism works in NTSC, with two more clocks: the NTSC C64 produces 59.826 Hz,
 the NTSC HDMI modes run at 59.94 Hz, so there the flicker-free clock is the *faster* one
 (32.789700 MHz instead of 32.727273 MHz) and the switching polarity is inverted. See
 [ntsc.md](ntsc.md) and [speed.md](speed.md).
+
+`Raw 50.1 Hz` and `Raw 59.8 Hz` solve the problem from the other side: the core stays on its
+original clock, and the HDMI output runs at the C64's frame rate. Each display mode has a raw
+twin in `video_modes_pkg.vhd` with its own pixel clock (and in 576p and 480p one line less or
+more), and the genlock `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` lengthens 16 lines of the
+vertical back porch so that the HDMI picture starts at a fixed distance (2.0 ms) behind the
+core's picture. This is not a standard HDMI frame rate, so it only helps on displays that
+accept it. See [hdmi.md](hdmi.md#frame-rates-off-flicker-free-and-raw) and
+[`dev-hdmi-raw/SPEC.md`](dev-hdmi-raw/SPEC.md).
 
 ### Keyboard
 
