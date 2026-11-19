@@ -175,7 +175,7 @@ foreach a $attempts {
         continue
     }
 
-    set gate [signoff_gates]
+    set gate [concat [signoff_gates] [signoff_bus_skew "BUS-SKEW $board:"]]
     if {[llength $gate] > 0} {
         signoff_failed $board $gate "on the design of attempt $n/$total ($what)"
     }
@@ -184,6 +184,7 @@ foreach a $attempts {
         write_checkpoint -force $run/mega65_${b}_reroll.dcp
         report_timing_summary -max_paths 10 -report_unconstrained \
             -file $run/mega65_${b}_reroll_timing.rpt
+        report_bus_skew -file $run/mega65_${b}_reroll_bus_skew.rpt
         catch {write_mem_info -force -no_partial_mmi $run/mega65_${b}_reroll.mmi}
         write_bitstream -force $run/mega65_${b}_reroll.bit
     } err]

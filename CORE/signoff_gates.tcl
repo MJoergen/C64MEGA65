@@ -7,6 +7,10 @@
 # gate passed. Each check mirrors a CORE.xdc line that turns into a silent
 # no-op if the object it names has been renamed. When you add or rename
 # hierarchy that CORE.xdc references, update this list in the same commit.
+#
+# signoff_bus_skew does the same for the bus skew constraints, which need a
+# routed design: build_bitstream.tcl and reroll_bitstream.tcl call it after
+# signoff_gates on the design that the bitstream is written from.
 
 proc signoff_gates {} {
     set gate {}
@@ -51,6 +55,86 @@ proc signoff_gates {} {
         if {[llength [get_pins -quiet $pat]] == 0} {
             lappend gate "false_path target for $desc resolves to 0 pins ($pat)"
         }
+    }
+
+    # Bus skew constraint of the paddle crossing (CORE.xdc, set_bus_skew): both
+    # ends need to resolve to all 32 flip-flops, otherwise a part of the bus is
+    # not checked. The result of the check itself is signoff_bus_skew below.
+    foreach {desc pat} {
+        "paddle crossing, source registers"      {i_framework/i_qnice2main_paddles/input_reg_gen.src_data_reg[*]}
+        "paddle crossing, destination registers" {i_framework/i_qnice2main_paddles/cdc_stable_gen.dst_data_d_reg[*]}
+    } {
+        set n [llength [get_cells -quiet $pat]]
+        if {$n != 32} {
+            lappend gate "set_bus_skew: $desc resolve to $n cells instead of 32 ($pat)"
+        }
+    }
+    return $gate
+}
+
+# Bus skew sign-off, for a ROUTED design only (the numbers of an unrouted
+# design are estimates). A bus skew violation appears neither in WNS nor in
+# WHS and does not fail a build by itself, so this proc reads report_bus_skew:
+#
+#   * no constraint of the design may be violated (this includes the ones
+#     that the XPM FIFOs bring along), and
+#   * the constraint of the paddle crossing (CORE.xdc) needs to be there with
+#     its 32 endpoints, its requirement of 10 ns and a slack that is met.
+#
+# It returns a list of problems like signoff_gates and prints one line with
+# the measured numbers of the paddle crossing, prefixed with $tag.
+proc signoff_bus_skew {tag} {
+    if {[catch {report_bus_skew -return_string} rpt]} {
+        return [list "report_bus_skew failed: $rpt"]
+    }
+    return [signoff_bus_skew_parse $tag $rpt]
+}
+
+# The part of signoff_bus_skew that works on the text of the report (section
+# "Bus Skew Report Per Constraint": one block per constraint, starting with a
+# line "Id: <n>", followed by the constraint, "Requirement: <r>ns",
+# "Endpoints: <n>" and, for the worst endpoint, "Slack (MET|VIOLATED) : <s>ns").
+proc signoff_bus_skew_parse {tag rpt} {
+    set gate {}
+    set ids {}
+    set id ""
+    foreach line [split $rpt \n] {
+        if {[regexp {^Id: +(\d+) *$} $line -> i]} {
+            set id $i
+            lappend ids $id
+            set blk($id) ""
+        } elseif {$id ne ""} {
+            append blk($id) $line \n
+        }
+    }
+
+    set paddles 0
+    foreach id $ids {
+        set b $blk($id)
+        set req "?"; set ends "?"; set verdict ""; set slack "?"
+        regexp -line {^Requirement: +([-0-9.]+)ns} $b -> req
+        regexp -line {^Endpoints: +(\d+)} $b -> ends
+        regexp -line {^Slack \((\w+)\) *: +([-0-9.]+)ns} $b -> verdict slack
+        set is_paddles [expr {[string first "i_qnice2main_paddles" $b] >= 0}]
+
+        if {$verdict eq "VIOLATED"} {
+            lappend gate "bus skew constraint $id is violated: requirement $req ns, slack $slack ns ([string range [string trim [lindex [split $b \n] 0]] 0 150] ...)"
+        }
+        if {!$is_paddles} { continue }
+        incr paddles
+        puts "$tag paddle crossing: requirement $req ns, $ends endpoints, slack $slack ns ($verdict)"
+        if {$verdict eq ""} {
+            lappend gate "bus skew of the paddle crossing: report_bus_skew shows no slack for it"
+        }
+        if {$ends ne "32"} {
+            lappend gate "bus skew of the paddle crossing: $ends endpoints instead of 32"
+        }
+        if {$req eq "?" || abs($req - 10.0) > 0.0005} {
+            lappend gate "bus skew of the paddle crossing: requirement $req ns instead of 10 ns"
+        }
+    }
+    if {$paddles != 1} {
+        lappend gate "bus skew of the paddle crossing: $paddles constraints in report_bus_skew instead of 1 (CORE.xdc set_bus_skew)"
     }
     return $gate
 }

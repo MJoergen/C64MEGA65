@@ -1017,7 +1017,8 @@ router directives; the winner replaces `mega65_r?.bit` and
 needs the post-route `phys_opt_design` checkpoint, so keep all four `.xpr` on
 the same strategy, `Performance_ExplorePostRoutePhysOpt`. The `CORE.xdc`
 sign-off gates live in `signoff_gates.tcl`, shared by `build_bitstream.tcl`
-and `reroll_bitstream.tcl`. `debug.tcl` is the stock Xilinx ILA-insertion
+and `reroll_bitstream.tcl`; the same file checks the bus skew constraints
+(`signoff_bus_skew`: a violation shows neither in WNS nor in WHS). `debug.tcl` is the stock Xilinx ILA-insertion
 helper, invoked only by the `debug` build mode.
 
 **Config file (saves user menu choices to SD):**

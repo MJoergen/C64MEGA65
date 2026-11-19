@@ -63,3 +63,12 @@ set_false_path -to [get_pins CORE/i_main/iec_drive_inst/c1581/drives[*].c1581_dr
 set_false_path -from [get_clocks qnice_clk] -to [get_clocks main_clk]
 set_false_path -from [get_clocks main_clk]  -to [get_clocks qnice_clk]
 
+## The four paddle values cross from qnice_clk to main_clk as one 32-bit bus through a
+## cdc_stable (i_qnice2main_paddles in M2M/vhdl/framework.vhd, issues #190 and #193). The
+## false path above leaves these 32 paths untimed, and it outranks the set_max_delay of
+## M2M/common.xdc. cdc_stable hands a new value on only if all of its bits arrive within one
+## main_clk period (30 ns) of each other, so limit the spread between the 32 paths. A bus skew
+## constraint is not a timing exception: no false path overrides it. A violation shows neither
+## in WNS nor in WHS, only in report_bus_skew, which signoff_bus_skew (signoff_gates.tcl) checks.
+set_bus_skew -from [get_cells {i_framework/i_qnice2main_paddles/input_reg_gen.src_data_reg[*]}] -to [get_cells {i_framework/i_qnice2main_paddles/cdc_stable_gen.dst_data_d_reg[*]}] 10.000
+

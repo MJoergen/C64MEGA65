@@ -4,8 +4,9 @@ Amiga mouse and Atari CX30 paddles, selectable per port in the on-screen menu, a
 
 ## 0. State
 
-* Branch `mh_implement_190_193`, branched from `develop` at `6845596` (WIP-V6-A25). The version of this work is WIP-V6-A26. Pushed, not merged into `develop`.
-* Everything is implemented, simulated and reviewed, and the Vivado build of R3 and R6 from `69d0f51` passed (section 6). Nothing of it has run on hardware: section 7 says what the hardware test needs to show.
+* The work is WIP-V6-A26. It was developed on the branch `mh_implement_190_193` (branched from `develop` at `6845596`, WIP-V6-A25), merged into `develop` on 2026-11-18 as `f87e0cb` and released as Alpha 26; the branch is deleted.
+* Everything is implemented, simulated and reviewed, and the Vivado build of R3 and R6 from `69d0f51` passed (section 6). On hardware the owner tested the release, and the reporters of both issues confirmed it: Amiga mice work in the setting "Amiga" (issue #190, closed), and Atari paddles use twice the rotation in the setting "Atari CX30" (issue #193, closed on 2026-11-19; section 7).
+* After the release, `develop` got a bus skew constraint for the crossing of the paddle values with a sign-off check in the build scripts (section 8); the build of 2026-11-19 confirms it (section 6). It changes no logic and comes with the next version.
 
 | Part | Files | State |
 |---|---|---|
@@ -118,7 +119,27 @@ For R3 and R6 at least:
 * Timing is met in every clock domain. The new logic is small: about 285 flip-flops more in the core clock domain, about 100 fewer in the QNICE clock domain, no block RAM, no new clock. The paddle values pass two or three more LUT levels on their way from a register to the data bus of the CPU, and the up line and the fire line of each port one more.
 * `report_cdc` (if run) shows the new crossing `i_framework/i_qnice2main_paddles` as a 32-bit bus between the QNICE clock and the core clock that is covered by the false path of `CORE.xdc`; section 8 says what that means.
 
-The build of 2026-11-17 from `69d0f51` (R3 and R6, `build_all.sh`) shows it:
+For the bus skew constraint of the paddle crossing (section 8):
+
+* The build prints `BUS-SKEW <board>: paddle crossing: requirement 10.000 ns, 32 endpoints, slack <s> ns (MET)` before its result line, and the result line is `RESULT <board> OK`. A `GATE <board>:` line and `SIGNOFF-FAILED` instead say what is wrong: the constraint is missing from `report_bus_skew`, it covers fewer than 32 bits, or a bus skew constraint of the design is violated.
+* Neither the synthesis log nor the implementation log has a warning or critical warning that names `set_bus_skew` or `i_qnice2main_paddles` (a pattern of the constraint that matches no cell would show there).
+* `mega65_r?_bus_skew_postroute_physopted.rpt` in `CORE-R?.runs/impl_1/` has one constraint more than before (21 instead of 20 on R6), the one that names `i_qnice2main_paddles`, with `Endpoints: 32`.
+* WNS and WHS stay in the range of the table below: the router has one more goal, on 32 short paths.
+
+The build of 2026-11-19 (R3 and R6, `build_all.sh`, Vivado 2022.2) shows it:
+
+| | R3 | R6 |
+|---|---|---|
+| Line of the bus skew check | `requirement 10.000 ns, 32 endpoints, slack 8.744 ns (MET)` | `requirement 10.000 ns, 32 endpoints, slack 8.832 ns (MET)` |
+| Spread between the 32 paths | 1.26 ns | 1.17 ns |
+| Constraints in the bus skew report | 21, none violated | 21, none violated |
+| Result line of the build script | `RESULT R3 OK` | `RESULT R6 OK` |
+| WNS / WHS | 0.074 ns / 0.036 ns | 0.052 ns / 0.026 ns |
+| Critical warnings of synthesis and implementation | 0 | 0 |
+
+WNS and WHS are the same as in the build of 2026-11-17: the constraint was met by the routing that Vivado found before, so it changed nothing. No build has shown the failing branch of the check; the reaction of its parser to a violated constraint, a missing one and one with 31 endpoints is tested with `tclsh` on altered copies of a real report.
+
+The build of 2026-11-17 from `69d0f51` (R3 and R6, `build_all.sh`) shows the list at the top of this section:
 
 | | R3 | R6 |
 |---|---|---|
@@ -134,9 +155,11 @@ Both builds print the two firmware lines above. The synthesis logs have no infer
 
 The test steps are the section "Version WIP-V6-A26" of `tests/README.md`; the background of each is in section 8 of `RESEARCH-amiga-mouse.md` and section 8 of `RESEARCH-paddles.md`. The most informative ones: the directions and the feel of an Amiga mouse in GEOS; that the keyboard stays undisturbed with the mouse in port 1; the right click with the MEGA key in the input monitor (the up line instead of the fire line, also when the key is released before the button); how much of the rotation of a CX30 the setting "Atari CX30" uses; the values of known resistors in both paddle settings; a 1351 in one port while the other port is set to "Atari CX30".
 
+Results so far: a tank mouse and a mouSTer work in the setting "Amiga" (issue #190). Atari paddles reach the value 255 after 130 of their 300 degrees in the setting "C64" and after 260 degrees in the setting "Atari CX30" (Kugelblitz360 in issue #193): the factor 2 of the design, and the 40 degrees that remain are its margin for the spread of the potentiometers. A third setting without that margin was offered and declined.
+
 ## 8. Open points
 
-* **Timing of the paddle crossing.** `CORE/CORE.xdc` declares the QNICE clock and the core clock a false path in both directions, which outranks the `set_max_delay` that `M2M/common.xdc` attaches to every `cdc_stable`. The 32 paths of `i_qnice2main_paddles` are therefore not timed (neither were the per-bit synchronizers before). `cdc_stable` delivers consistent values as long as the 32 bits arrive within one core clock period (30 ns) of each other, which the routes of a small bus satisfy by a wide margin. A `set_bus_skew` on these paths, or a narrower false path, would make that a checked property; it needs a Vivado run to validate. Agreed with the owner: after his first test build of the branch, a `set_bus_skew` of 10 ns for these 32 paths comes as a commit of its own, with `report_bus_skew` in the build script and a check in `signoff_gates.tcl` (a violation does not show in WNS or WHS and does not fail a build by itself); a second build then tests it.
+* **Timing of the paddle crossing: settled by a bus skew constraint.** `CORE/CORE.xdc` declares the QNICE clock and the core clock a false path in both directions, which outranks the `set_max_delay` that `M2M/common.xdc` attaches to every `cdc_stable`. The 32 paths of `i_qnice2main_paddles` are therefore not timed (neither were the per-bit synchronizers before). `cdc_stable` delivers consistent values as long as the 32 bits arrive within one core clock period (30 ns) of each other, which the routes of a small bus satisfy by a wide margin: in the R6 build of 2026-11-17 the two paths that the timing report lists are 0.1 ns of wire between neighboring slices. As agreed with the owner, that margin is a checked property now: `CORE/CORE.xdc` has a `set_bus_skew` of 10 ns from the 32 source registers (`input_reg_gen.src_data_reg[*]`) to the 32 first destination registers (`cdc_stable_gen.dst_data_d_reg[*]`). A bus skew constraint is an assertion and not a timing exception, so the false path does not override it; only `route_design` works on it; and a violation shows neither in WNS nor in WHS, only in `report_bus_skew` (the project runs already write that report after routing and after the last `phys_opt_design`, for the 20 constraints that the XPM FIFOs bring along). Therefore `CORE/signoff_gates.tcl` has two checks: `signoff_gates` wants both patterns of the constraint to match 32 cells, and the new `signoff_bus_skew` reads `report_bus_skew` of the routed design and fails the sign-off if any bus skew constraint is violated or if the one of the paddle crossing is missing, covers fewer than 32 endpoints or has another requirement than 10 ns. `build_bitstream.tcl` and `reroll_bitstream.tcl` call it on the design the bitstream is written from. Section 6 has the numbers of the build that confirms it: a spread of about 1.2 ns. No other `cdc_stable` is instantiated directly between these two clocks.
 * **The right click with the MEGA key on C64 port 1.** The up line of port 1 is a line of the keyboard matrix, so every right button of a 1351 in port 1 looks like the keys of one matrix row to a program that scans the keyboard. With the MEGA key held, the C64 sees them together with its Commodore key: at the BASIC prompt a right click changes the text color instead of typing a digit. Programs that use the mouse read the port themselves; the hardware test has a step for it. Port 2 has no such effect.
 * **The state of the MEGA key is not filtered** against a disturbed frame of the keyboard link (D16); the rate of such frames on the hardware is not known.
 * **USB adapters with a polled wheel protocol** (Micro Tom) may make the pointer twitch, because every discharge of the paddle pins looks like a request to them; the Amiga core has the same effect and the cure (wire 5 cut).

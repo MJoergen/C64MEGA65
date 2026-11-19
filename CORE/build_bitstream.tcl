@@ -26,9 +26,11 @@
 #
 # On a release build the routed design is re-opened and the CORE.xdc sign-off
 # gates are checked, because those constraints silently constrain nothing when
-# an instance name drifts. One machine-readable "RESULT <board> ..." line is
-# printed and the script exits non-zero on any failure (distinct code per
-# class): 1 build failed, 2 timing failed, 3 sign-off failed.
+# an instance name drifts, and so are the bus skew constraints, whose violation
+# shows neither in WNS nor in WHS (both: signoff_gates.tcl). One
+# machine-readable "RESULT <board> ..." line is printed and the script exits
+# non-zero on any failure (distinct code per class): 1 build failed, 2 timing
+# failed, 3 sign-off failed.
 
 # The CORE.xdc sign-off gates (proc signoff_gates) live in their own file so
 # that reroll_bitstream.tcl checks a re-rolled bitstream against the very
@@ -107,7 +109,7 @@ if {$wns eq "" || $whs eq "" || $wns < 0 || $whs < 0} {
 }
 
 open_run impl_1
-set gate [signoff_gates]
+set gate [concat [signoff_gates] [signoff_bus_skew "BUS-SKEW $board:"]]
 if {[llength $gate] > 0} {
     foreach g $gate { puts "GATE $board: $g" }
     puts "RESULT $board SIGNOFF-FAILED WNS=$wns WHS=$whs"
