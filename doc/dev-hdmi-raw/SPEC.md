@@ -63,14 +63,17 @@ The welcome screen in `config.vhd` names the menu item "HDMI: Flicker-free". It 
 Three facts decide the design (details in `research/`):
 
 1. The scaler (ascal) runs with one frame buffer: the HDMI side reads the picture while the core writes it. A different frame rate on the two sides therefore shows as a tear line that wanders through the picture. Equal frame rates are not enough: the reader also has to stay behind the writer by a suitable distance. Flicker-free does both from the core's side (it switches the core clock so that the writer stays 7 to 14 lines ahead of the reader).
-2. The HDMI clock generator cannot produce a pixel clock that gives exactly the C64's frame rate with the standard totals; the nearest settings are 74 to 463 pixel clocks per frame too fast (section 4). Exactly equal rates with static timing exist only with totals far from the standard (720p) or with a different number of lines.
-3. MiSTer keeps the standard totals and moves only the pixel clock. That signal is the one that is known to work on displays that accept the odd rates, and with a deviation of 0.15 to 0.27 % it stays inside the 0.5 % that CTA-861 allows for the pixel clock.
+2. The HDMI clock generator cannot produce a pixel clock that gives exactly the C64's frame rate with the standard totals of 720p; the nearest settings are 197 (PAL) and 463 (NTSC) pixel clocks per frame too fast (section 4).
+3. For 720p, MiSTer and the Ultimate 64 Elite II keep the standard totals and move only the pixel clock. That signal is the one that is known to work on displays that accept the odd rates, and with a deviation of 0.15 to 0.26 % it stays inside the 0.5 % that CTA-861 allows for the pixel clock.
+4. For 576p and 480p there is a timing that gives the C64's frame rate exactly and that the displays of MEGA65 owners already know: two HDMI lines per C64 raster line, which is 624 lines instead of 625 (PAL) and 526 lines instead of 525 (NTSC). The MEGA65's own core and the Ultimate 64 output exactly these line counts.
 
 So "Raw" consists of:
 
 - **The core** on its original clock, exactly as with flicker-free off.
-- **New HDMI modes** (one per existing mode) with the standard totals, sync positions, polarities and VIC, and a pixel clock that is a little faster than the ideal one.
-- **A genlock** in the HDMI clock domain that makes 16 lines of the vertical back porch a few pixels longer in every frame, by exactly the amount that makes the HDMI frame as long as the core's frame and holds the start of the HDMI picture 2.0 ms behind the start of the core's picture. Every line that carries picture has the standard length.
+- **New HDMI modes** (one per existing mode), with the sync positions, polarities and VIC of the mode they come from:
+  - 720p: the standard totals and a pixel clock that is a little faster than the ideal one.
+  - 576p and 480p: one line less (PAL) or more (NTSC) in the vertical back porch and a pixel clock that makes the frame exactly as long as the core's frame.
+- **A genlock** in the HDMI clock domain that makes 16 lines of the vertical back porch longer. It does two things with that: it brings the start of the HDMI picture to 2.0 ms behind the start of the core's picture (after a mode change, a reset or a pause of the core), and in 720p it adds in every frame exactly the pixel clocks that the HDMI frame is shorter than the core's frame. In 576p and 480p it has nothing to do once the phase is reached: the signal is static. Every line that carries picture has the standard length in every mode.
 
 ## 3. Core side (`CORE/vhdl/mega65.vhd`)
 
@@ -98,34 +101,33 @@ So "Raw" consists of:
 - The record `video_modes_t`: `CLK_SEL` becomes 4 bits (existing values get a leading `'0'`). Two new fields `CTS_FRAC_N` and `CTS_FRAC_D` (integers): the fraction of a kilohertz that the true pixel clock has above `CLK_KHZ` (section 6); `0` and `1` in every existing record.
 - Four new records. Everything that is not listed equals the record it is derived from.
 
-| Record | Derived from | `CLK_SEL` | `CLK_KHZ` | `CTS_FRAC_N / CTS_FRAC_D` |
-|---|---|---|---|---|
-| `C_HDMI_720p_50_RAW` | `C_HDMI_720p_50` | "1000" | 74444 | 4 / 9 |
-| `C_HDMI_576p_50_RAW` | `C_HDMI_576p_50` | "1001" | 27071 | 3 / 7 |
-| `C_HDMI_720p_5994_RAW` | `C_HDMI_720p_5994` | "1010" | 74062 | 1 / 2 |
-| `C_HDMI_720x480p_5994_RAW` | `C_HDMI_720x480p_5994` | "1011" | 26953 | 1 / 8 |
+| Record | Derived from | Change of the timing | `CLK_SEL` | `CLK_KHZ` | `CTS_FRAC_N / CTS_FRAC_D` |
+|---|---|---|---|---|---|
+| `C_HDMI_720p_50_RAW` | `C_HDMI_720p_50` | none | "1000" | 74444 | 4 / 9 |
+| `C_HDMI_576p_50_RAW` | `C_HDMI_576p_50` | `V_BP` 38 instead of 39 (624 lines) | "1001" | 27023 | 17 / 21 |
+| `C_HDMI_720p_5994_RAW` | `C_HDMI_720p_5994` | none | "1010" | 74062 | 1 / 2 |
+| `C_HDMI_720x480p_5994_RAW` | `C_HDMI_720x480p_5994` | `V_BP` 31 instead of 30 (526 lines) | "0001" (the existing 27.000 MHz table) | 27000 | 0 / 1 |
 
 ### 4.2 `M2M/vhdl/controllers/HDMI/video_out_clock.vhd`
 
-`sel` becomes 4 bits; the eight existing tables keep their content and are selected by "0000" to "0111". Four new tables:
+`sel` becomes 4 bits; the eight existing tables keep their content and are selected by "0000" to "0111". Three new tables:
 
 | `sel` | CLKFBOUT_MULT_F | DIVCLK_DIVIDE | CLKOUT0 (5x) | CLKOUT1 (pixel) | VCO | Pixel clock |
 |---|---|---|---|---|---|---|
 | "1000" | 33.500 | 3 | 3 | 15 | 1116.667 MHz | 74.444444 MHz (100 MHz x 67 / 90) |
-| "1001" | 47.375 | 7 | 5 | 25 | 676.786 MHz | 27.071429 MHz (100 MHz x 379 / 1400) |
+| "1001" | 28.375 | 3 | 7 | 35 | 945.833 MHz | 27.023810 MHz (100 MHz x 227 / 840) |
 | "1010" | 29.625 | 4 | 2 | 10 | 740.625 MHz | 74.062500 MHz (100 MHz x 237 / 320) |
-| "1011" | 43.125 | 4 | 8 | 40 | 1078.125 MHz | 26.953125 MHz (100 MHz x 69 / 256) |
 
-The tables come from the generator `tools/mmcm_tables.py`, which is accepted only if it reproduces the existing tables bit by bit (`research/R5-mmcm-tables.md`). The static attributes of the MMCM and the state machine do not change. The four unused codes "1100" to "1111" select a copy of table "0010" (74.25 MHz).
+The tables come from the generator `tools/mmcm_tables.py`, which is accepted only if it reproduces the existing tables bit by bit (`research/R5-mmcm-tables.md`). The static attributes of the MMCM and the state machine do not change. The five unused codes "1011" to "1111" select a copy of table "0010" (74.25 MHz).
 
-What the numbers mean per frame (core frame length in pixel clocks minus the standard totals; the genlock supplies this number of extra pixel clocks per frame):
+What the numbers mean per frame (core frame length in pixel clocks minus the totals of the record; in 720p the genlock supplies this number of extra pixel clocks per frame):
 
-| Mode | Core frame in pixel clocks | Standard totals | Surplus per frame |
+| Mode | Core frame in pixel clocks | Totals of the record | Surplus per frame |
 |---|---|---|---|
 | PAL 720p | 1485196.969 | 1980 x 750 = 1485000 | 196.969 |
-| PAL 576p | 540086.019 | 864 x 625 = 540000 | 86.019 |
+| PAL 576p | 539136 | 864 x 624 = 539136 | 0 (exact) |
 | NTSC 720p | 1237962.917 | 1650 x 750 = 1237500 | 462.917 |
-| NTSC 480p | 450524.479 | 858 x 525 = 450450 | 74.479 |
+| NTSC 480p | 451308 | 858 x 526 = 451308 | 0 (exact) |
 
 ### 4.3 Every place that lists the modes
 
@@ -181,9 +183,12 @@ The scaler takes `htotal` over in every clock cycle and uses it only to end a li
 | `target_i < d < target_i + 4096` | 0 |
 | otherwise | 4080 |
 
-- Without stretch the HDMI frame is shorter than the core's frame by the surplus of section 4.2, so `d` falls by that amount per frame; a stretch `k` raises it by `k`. In the steady state `k` alternates between the two integers around the surplus and `d` stays within a few pixel clocks of `target_i` minus the surplus. From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most about 8 seconds in PAL 720p, 6 in NTSC 720p, 3 in 576p and 2 in 480p. During that time a tear line can be visible, as it is today while flicker-free pulls in.
-- `locked_o` is `'1'` after 8 frames in a row with `d <= target_i` and `k < 1024`, and `'0'` after a frame that violates this, after `rst_i` and with `enable_i = '0'`.
-- `rst_i` (the reset of the HDMI domain, active while the pixel clock is reconfigured) clears all state: stretch 0.
+- Without stretch the HDMI frame is shorter than the core's frame by the surplus of section 4.2, so `d` falls by that amount per frame; a stretch `k` raises it by `k`.
+  - 720p: in the steady state `k` alternates between the two integers around the surplus and `d` stays within a few pixel clocks of `target_i` minus the surplus.
+  - 576p and 480p (surplus 0): the stretch ends as soon as `d` has reached `target_i`; from then on `k` is 0, every frame is the static timing of the record, and `d` does not move any more.
+  - From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most about 8 seconds in PAL 720p, 6 in NTSC 720p, 3 in 576p and 2 in 480p. During that time a tear line can be visible, as it is today while flicker-free pulls in.
+- `locked_o` is `'1'` after 8 frames in a row with `target_i - 1024 <= d < target_i + 4096`, and `'0'` after a frame that violates this, after `rst_i` and with `enable_i = '0'`.
+- `rst_i` (the reset of the HDMI domain, active while the pixel clock is reconfigured) clears all state: stretch 0. `enable_i = '0'` does the same (a change between a standard mode and its raw mode does not always reconfigure the pixel clock: NTSC 480p uses the same clock in both).
 
 ### 5.4 Why 2.0 ms
 
@@ -192,17 +197,17 @@ The reader must stay behind the writer everywhere in the picture and must not fa
 | Mode | Reader behind writer at the top | at the bottom |
 |---|---|---|
 | PAL 720p | 1.86 ms | 3.75 ms |
-| PAL 576p 4:3 | 1.84 ms | 2.96 ms |
-| PAL 576p 5:4 | 2.41 ms | 2.39 ms |
+| PAL 576p 4:3 | 1.84 ms | 2.99 ms |
+| PAL 576p 5:4 | 2.42 ms | 2.42 ms |
 | NTSC 720p | 1.87 ms | 2.03 ms |
-| NTSC 480p 4:3 | 1.84 ms | 1.23 ms |
-| NTSC 480p 5:4 | 2.32 ms | 0.76 ms |
+| NTSC 480p 4:3 | 1.84 ms | 1.20 ms |
+| NTSC 480p 5:4 | 2.32 ms | 0.73 ms |
 
-One line of the core takes 0.064 ms. The smallest value, 0.76 ms, is 12 lines; flicker-free works with 7 to 14 lines at the top of the picture, MiSTer with 4. With zoom-in the core's picture has fewer lines and the distance at the bottom grows; it stays far below a frame (20 ms, 16.7 ms).
+These are estimates from the line times; the bench with the real scaler measures them. One line of the core takes 0.064 ms. The smallest value, 0.73 ms, is 11 lines; flicker-free works with 7 to 14 lines at the top of the picture, MiSTer with 4. With zoom-in the core's picture has fewer lines and the distance at the bottom grows; it stays far below a frame (20 ms, 16.7 ms).
 
 ## 6. Audio clock regeneration (`digital_pipeline.vhd`)
 
-N stays 6144; the exact CTS is the pixel clock in kHz, which is not an integer for the raw clocks. In the process that produces the 1 kHz strobe of the regeneration packets (`audio_clk`), an accumulator adds `CTS_FRAC_N` at every strobe; when it reaches `CTS_FRAC_D` it is reduced by `CTS_FRAC_D` and this packet carries `CLK_KHZ + 1`, otherwise `CLK_KHZ`. The average is exact. With `CTS_FRAC_N = 0` (every existing mode) the value is `CLK_KHZ` in every packet, as today.
+N stays 6144; the exact CTS is the pixel clock in kHz, which is not an integer for the three new clocks (74444.444, 27023.810, 74062.5). In the process that produces the 1 kHz strobe of the regeneration packets (`audio_clk`), an accumulator adds `CTS_FRAC_N` at every strobe; when it reaches `CTS_FRAC_D` it is reduced by `CTS_FRAC_D` and this packet carries `CLK_KHZ + 1`, otherwise `CLK_KHZ`. The average is exact. With `CTS_FRAC_N = 0` (every existing mode) the value is `CLK_KHZ` in every packet, as today.
 
 ## 7. Verification
 

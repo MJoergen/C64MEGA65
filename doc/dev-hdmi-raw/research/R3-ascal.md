@@ -6,11 +6,13 @@ Subject: how `M2M/vhdl/av_pipeline/ascal.vhd` (TEMLIB 2018 to 2020, 2915 lines) 
 
 1. **Our ascal runs in direct mode (one frame buffer), not triple buffering.** The firmware writes only the mode words 0 to 4 (`M2M$ASCAL_NEAREST` ... `M2M$ASCAL_POLYPHASE`, `CORE/m2m-rom/m2m-rom.asm` `HDMI_FLT_TABLE`, about line 1644), never `M2M$ASCAL_TRIPLEBUF` (`0x0008`, `M2M/rom/sysdef.asm:130`), and the register stores exactly what is written (`M2M/vhdl/QNICE/qnice.vhd:610-611`). So `mode(3) = '0'` and every buffer index is forced to 0 (1946-1952). **[code]** Today's 50.000 Hz output therefore does not drop or repeat whole frames: it reads the buffer that the core is writing, and about every 8 s (PAL, 1/0.124 Hz) the read pointer and the write pointer cross inside the picture, which is a tear line that moves through the image. Flicker-free exists to prevent exactly that crossing. **[inference from the code]**
 2. **Triple buffering** (`mode(3) = '1'`) decides once per output frame, at the falling edge of the output vsync (output line `vsend`, pixel `hsstart`), whether a newer input frame is complete; the input side switches buffers at the rising edge of the input vsync. At exactly equal frame periods and constant phase every input frame is shown exactly once, with a latency of 1 to 2 frames depending on the phase. The decision point is one specific output clock edge; only an input event that falls within the capture uncertainty of one flip-flop around it (sub-nanosecond, call it plus or minus one output clock to be safe) can flip from frame to frame. **[code + sim]**
-3. **Direct mode** at equal rates is tear-free if, for every input line, the output fetches it after the core wrote it and before the core writes it again one frame later. Because input and output sweep the picture at different speeds, the gap changes across the picture by `A - B` (output image duration minus input image duration): 1.89 ms in PAL 720p, 1.12 ms in PAL 576p 4:3, 0.16 ms in NTSC 720p, -0.61 ms in NTSC 480p 4:3. Everything else of the frame is a safe phase. A free-running phase at exactly equal rates has a chance of about `(|A - B| + margin) / T` (PAL 720p: about 10 %) to sit in the unsafe zone, which then gives a **static** tear line. Direct mode therefore needs a phase controller; it then gives the lowest latency (PAL 720p: about 0.3 ms at the top of the picture to 2.2 ms at the bottom). **[inference from the code]**
+3. **Direct mode** at equal rates is tear-free if, for every input line, the output fetches it after the core wrote it and before the core writes it again one frame later. Because input and output sweep the picture at different speeds, the gap changes across the picture by `A - B` (output image duration minus input image duration): 1.89 ms in PAL 720p, 1.12 ms in PAL 576p 4:3, 0.16 ms in NTSC 720p, -0.61 ms in NTSC 480p 4:3. Everything else of the frame is a safe phase. A free-running phase at exactly equal rates has a chance of about `(|A - B| + margin) / T` (PAL 720p: about 10 %) to sit in the unsafe zone, which then gives a **static** tear line. Direct mode therefore needs a phase controller; it then gives the lowest latency (PAL 720p: about 0.3 ms at the top of the picture to 2.2 ms at the bottom). **[inference from the code, tear window confirmed by sim]**
 4. **`htotal` and `vtotal` may be changed at run time, line by line or frame by frame.** Inside ascal they are used only by the wrap of the output counters (2679, 2683). The changed pixel or line lands at the end of the horizontal or vertical back porch; the pixel pipeline, the line buffers and the moment at which a line is fetched (the start of hsync) are unaffected. **[code + sim]** They are sampled every clock without synchronizer (1878, 1885), so the controller must sit in the output (HDMI) clock domain.
 5. **No VRR in our version** (nor in the MiSTer copy `CORE/C64_MiSTerMEGA65/sys/ascal.vhd`). The current upstream ascal has it: the output waits in the vertical front porch until the input frame ends and then jumps straight to vsync start. That is a ready-made line-granular genlock. **[code, upstream]**
 6. **`hdmi_flicker_free.vhd` is a usable phase detector for direct mode**: it samples the core's last write address (HyperRAM word address) at the moment the output fetches the first burst of a frame. Linear over the input's active lines (resolution one 128-byte burst, 7.1 µs PAL), saturated during the input's vertical blanking, valid only in direct mode. **[code]**
 7. **Memory traffic** does not depend on the output totals; reads scale with the output frame rate (one fetch per input line per output frame). PAL: about 15.6 MB/s writes plus 15.7 MB/s reads, NTSC about 19.1 plus 19.3 MB/s. **[code + inference]**
+8. **Triple buffering cannot simply be switched on on R3:** with `RAMSIZE` = 2 MB the third buffer starts at 4 MB, inside the SIMCRT pool (section 10, item 2). On R4 to R6 it fits. **[code + inference]**
+9. **Side finding:** in the NTSC 480p modes the output sweeps the picture faster than the core writes it, so today's flicker-free band (writer 7 to 14 lines ahead at the top) leaves a negative gap near the bottom: probably a tear in the lower part of the picture, permanent in 480p 5:4 (section 9.1). **[inference]**
 
 ## 1. Our configuration (question 8)
 
@@ -63,18 +65,18 @@ IF o_iendframe0='1' AND o_iendframe02='0' THEN      -- input frame complete
   o_ibuf0<=buf_next(o_ibuf0,o_obuf0,o_freeze);       -- write the next one into the free buffer
   o_bufup0<='1';
 END IF;
-...
+-- ...
 IF o_vsv(1)='1' AND o_vsv(0)='0' AND o_bufup0='1' THEN  -- output VS falling edge
   o_obuf0<=buf_next(o_obuf0,o_ibuf0,o_freeze);         -- show the latest complete frame
   o_bufup0<='0';
 END IF;
-...
+-- ...
 IF o_vsv(1)='1' AND o_vsv(0)='0' AND                 -- both in the same clock
   o_iendframe0='1' AND o_iendframe02='0' THEN
   o_bufup0<='0';
   o_obuf0<=o_ibuf0;                                  -- show the frame that just completed
 END IF;
-...
+-- ...
 IF o_mode(3)='0' THEN                                -- direct mode
   o_obuf0<=0; o_obuf1<=0; o_ibuf0<=0; o_ibuf1<=0;
 END IF;
@@ -203,7 +205,7 @@ ELSIF o_vrr_sync2 THEN
 ELSE
   o_vcpt_pre3<=(o_vcpt_pre3+1) MOD 4096;
 END IF;
-...
+-- ...
 IF o_isync2='1' THEN                -- input frame end (2 clocks after detection)
   o_vcpt_sync<=0;                   -- output lines since the last input frame end
   o_sync_max<=o_vrr_max2;           -- that count was below vrrmax
@@ -295,11 +297,11 @@ Consequences:
 ```vhdl
 if hr_write_i = '1' then last_core_address <= hr_address_i; end if;  -- the core writes
 if hr_read_i  = '1' then last_hdmi_address <= hr_address_i; end if;  -- the HDMI side reads
-...
+-- ...
 if last_hdmi_address = 0 then
    last_diff <= last_core_address;   -- core write position while the HDMI read is at 0
 end if;
-...
+-- ...
 if last_diff < G_THRESHOLD_LOW  then low_o  <= '1'; end if;   -- core too slow
 if last_diff > G_THRESHOLD_HIGH then high_o <= '1'; end if;   -- core too fast
 ```
@@ -313,6 +315,10 @@ if last_diff > G_THRESHOLD_HIGH then high_o <= '1'; end if;   -- core too fast
 - Limits: (1) it works only in direct mode: with triple buffering the addresses carry the buffer offsets (`RAMSIZE` = 2 MB = 0x100000 words per buffer), `last_hdmi_address = 0` only matches when buffer 0 is shown, and the difference is meaningless; (2) it measures only the top of the picture, not the gap at the bottom (which matters for NTSC 480p, where the output reader gains on the writer, `A < B`); (3) it lives in the HyperRAM clock domain, so a controller in the HDMI clock domain needs a CDC for it; (4) the resolution of 7 µs is coarse for a line-length genlock (one 720p pixel is 13.4 ns), so it suits a slow outer loop, not a fine phase lock.
 - A finer detector: count output clocks from the output's `o_vss` rising edge (or `o_vs`) to the synchronized input vsync (or `o_lltune(0)` rising), in the HDMI clock domain. Resolution one output clock, plus or minus one clock of synchronizer uncertainty.
 
+### 9.1 Side finding: flicker-free in the NTSC 480p modes **[inference, not checked on hardware]**
+
+Flicker-free keeps the writer 7.1 to 14.2 input lines ahead **at the top** of the picture. In NTSC 480p the output sweeps the picture faster than the core writes it (250 of 263 input lines are active, but only 480 of 525 output lines): the gap shrinks towards the bottom by `A - B`, about 9.7 input lines in 480p 4:3 (`vmin` 0 to `vmax` 479) and about 24 input lines in 480p 5:4 (451 lines, `vmin` 15 to `vmax` 465); the same holds for 640 x 480 at 60 Hz. At the bottom the gap is therefore about -2.6 to +4.5 lines (4:3) or -17 to -10 lines (5:4). A negative gap means those lines are fetched before the core has written them in this frame: they show the previous frame, i.e. a tear in the lower part of the picture (4:3: only while the phase sits near the lower threshold, in the lowest quarter of the picture; 5:4: always, with the tear line wandering between about input line 73 and 146 as the phase moves through the band, the picture below it one frame late). Worth a look on hardware with scrolling content; the fix would be a mode-dependent band (or measuring the gap at the bottom). PAL modes and NTSC 720p are not affected (`A >= B`).
+
 ## 10. What a genlock or an exactly-equal-rate mode has to respect
 
 1. **Pick the buffering mode first.** Triple buffering: any constant phase works, the controller only needs to keep the phase away from one boundary (and the latency is 1 to 2 frames). Direct mode (today's setting): the phase must be held inside a window of at least 89 % of the frame, but the latency is a fraction of a frame.
@@ -322,6 +328,10 @@ if last_diff > G_THRESHOLD_HIGH then high_o <= '1'; end if;   -- core too fast
 5. **Direct mode target:** keep the gap between writer and reader positive at the critical end of the picture (top for 720p and 576p; bottom for NTSC 480p) by a few input lines (MiSTer: 4, flicker-free today: 7 to 14), and below one frame at the other end.
 6. **Expect a re-acquisition after a core reset or a PAL/NTSC change;** during it direct mode tears and triple mode drops or repeats a frame.
 7. **The HDMI audio clock regeneration value follows the mode's nominal clock** (`audio_pcm_cts <= hdmi_video_mode.CLK_KHZ`, `digital_pipeline.vhd:305`); a mode with a different pixel clock needs its own `CLK_KHZ`. (Outside ascal, noted because it travels with the totals.)
+8. **`hdmi_flicker_free` is meaningless with triple buffering** (buffer offsets in the addresses) and saturates while the input is in vertical blanking; it measures only the top of the picture (see 9.1 for NTSC 480p).
+9. **The input end of frame crosses into the output domain through a single flip-flop** (`o_iendframe0`, 1901) that feeds both the edge detector and the "simultaneous" branch. A metastable capture exactly at the boundary could in theory set `o_obuf0` to the old `o_ibuf0` without moving `o_ibuf0`; `buf_next(1, 1)` returns 1, so the pair (1, 1) would then stay stuck and the output would read the buffer being written until `mode(3)` is toggled. With the resolution time of a whole output clock this is practically impossible, but it is one more reason to keep the phase away from the boundary. **[inference]**
+10. **`o_lltune(6)` and `o_lltune(7)` are the clocks themselves**; use them only as clocks, not as data. The bit list in the header of `pll_hdmi_adj.vhd` has bits 0 and 1 swapped (the code is right).
+11. **Mode bit 3 switches immediately**: setting it to 0 forces all indices to 0 in the next output clock (the output may show half a frame of the buffer being written once); setting it to 1 starts from (0, 0): the first input frame end moves the writer to buffer 1 (the completed frame is in buffer 0, which is also the shown one), and the next output vsync end moves the output to `buf_next(0, 1)` = 2, a buffer that has not been written yet, so one output frame shows stale content; from the next input frame end on everything is regular. No reset is needed. **[code, the stale frame is inference from `buf_next`]**
 
 ## 11. GHDL experiment
 
@@ -332,4 +342,6 @@ Results:
 - **Equal periods, constant phase** (`S - E` = 1.712 µs): every output frame shows exactly one input frame, in order (frame numbers 1, 2, 3, ... with `bmin = bmax` in every frame), checksum of red and green identical in every frame. **[sim]**
 - **`htotal` pseudo-random 124/125/126 per line and `vtotal` alternating 80/81 per frame** (changed at the falling edge of `o_hs` / `o_vs`, in the output clock domain): 96 x 60 pixels in every frame, the red/green checksum identical to the unmodulated run in every frame, one input frame per output frame, no mixed frame. **[sim]**
 - **Slow drift through the triple-buffer boundary** (output clock 7.999 ns, so each output frame is 10 ns shorter than an input frame; `S - E` steps down by one or two output clocks per frame): while `E` came one output clock before `S` (`S - E` = 8 ns) or in the same clock (0 ns, the "simultaneous" branch), the frame just completed was shown in the next output frame. In the first frame in which `E` came one clock after `S`, the previous frame was shown again (input frame 20 twice); from then on every frame was shown once, one output frame later than before. Exactly one repetition, no skip, no other disturbance. **[sim]**
-- RESULT_DIRECT_PLACEHOLDER
+- **Direct mode** (`mode` 0) with a picture window of 48 output lines (`vmax` 47), so the output image lasts 48 µs against 60 µs of input image (`A - B` = -12 µs, the reader gains on the writer):
+  - Exactly equal frame periods at the bench's default phase: no tear, one input frame per output frame, constant checksum. **[sim]**
+  - Output frame 82 µs against 80 µs (the phase moves 2 µs per frame, sweeping 84 % of a frame in the run): tearing only in 5 consecutive frames, i.e. inside a phase window of 8 to 12 µs, matching `|A - B|` = 12 µs; the tear line moved through the picture (output lines 5, 13, 21, 29, 42 of 48) as the phase moved; one input frame was lost there; all other frames clean with one input frame each. With a constant phase inside the window the tear line therefore stands still at the line given by the phase. **[sim; "stands still" is inference from the deterministic phase-to-line relation]**
