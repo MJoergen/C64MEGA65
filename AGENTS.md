@@ -360,18 +360,39 @@ on `main_clk`). M2M splits it:
   mode: six `*_RAW` members of `video_mode_type` (codes `"1010"` to `"1111"`,
   `video_mode_is_raw`) with the records `C_HDMI_*_RAW` in
   `video_modes_pkg.vhd`. 720p keeps the CTA totals at 74.444 MHz (PAL) or
-  74.0625 MHz (NTSC); 576p has 624 lines at 27.024 MHz, 480p 526 lines at
-  27.000 MHz. The pixel clock tables `"1000"` to `"1010"` are in
+  74.0625 MHz (NTSC); 576p and 480p take the timing of the Ultimate 64
+  (576 + 4 + 5 + 39 = 624 lines at 27.024 MHz, 480 + 9 + 6 + 31 = 526 lines
+  at 27.000 MHz; the MEGA65's own core uses the same line counts). The pixel
+  clock tables `"1000"` to `"1010"` are in
   `M2M/vhdl/controllers/HDMI/video_out_clock.vhd` (`sel` is 4 bits; generator
-  `doc/dev-hdmi-raw/tools/mmcm_tables.py`). The genlock
+  and checker `doc/dev-hdmi-raw/tools/mmcm_tables.py`). `M2M/common.xdc` sets
+  `set_clock_uncertainty -setup 0.100` on `hdmi_clk`, because Vivado times the
+  domain at the 74.25 MHz of the MMCM's static attributes. The genlock
   `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` (HDMI clock domain) lengthens 16
   lines of the vertical back porch through ascal's `htotal` input until the
   HDMI picture starts 2.0 ms after the core's picture (reference pulse from
   `digital_pipeline.vhd`: the first visible pixel after the core's vsync);
   in 720p it also adds the 197 (PAL) or 463 (NTSC) pixel clocks per frame
-  that the HDMI frame is short. The CTS of the audio clock regeneration
-  alternates between two values (`CTS_FRAC_N` / `CTS_FRAC_D` of the record).
-  See `doc/hdmi.md` and `doc/dev-hdmi-raw/SPEC.md`.
+  that the HDMI frame is short. No stretch while the HDMI picture starts up
+  to 2.5 ms later than the target (`band = target + target / 4`), so switching
+  zoom-in off needs no new search; while locked, a missing reference (a
+  paused core) keeps the stretch of the last frame. Pull-in from the worst
+  phase: 6.9 s (PAL 720p), 5.0 s (NTSC 720p), 2.5 s (576p), 1.7 s (480p),
+  with a tear line during less than a second of it. The CTS of the audio
+  clock regeneration alternates between two values (`CTS_FRAC_N` /
+  `CTS_FRAC_D` of the record). Benches: `tb_hdmi_genlock` (the entity
+  against a cycle-exact model of the scaler's timing, all four raw timings,
+  mutants), `tb_hdmi_raw` (the real `ascal.vhd` with crop and genlock: no
+  tear, one core frame per HDMI frame, distances; uses nvc if installed),
+  `tb_hdmi_raw_wiring` (the real `digital_pipeline` with the real genlock:
+  reference pulse, multiplexer, mode changes), `tb_hdmi_raw_clock` (DRP
+  sequences of `video_out_clock`, CTS), `tb_hdmi_raw_menu` (truth table of
+  the two decoders in `mega65.vhd`), all in `CORE/vhdl/test/`; tools in
+  `doc/dev-hdmi-raw/tools/`: `mmcm_tables.py`, `old_modes_diff.sh` (the ten
+  standard modes unchanged), `loop_model.py` (frame-level model of the
+  control law), `clock_search.py` (HDMI MMCM settings for the core clocks).
+  See `doc/hdmi.md` and
+  `doc/dev-hdmi-raw/SPEC.md`.
 
 ### 3.6 Memory
 
@@ -1255,7 +1276,7 @@ hardware saw the code.
 | Symptom area              | Files to look at first                                    |
 | ------------------------- | --------------------------------------------------------- |
 | HDMI tearing / flicker    | `clk.vhd`, `mega65.vhd` (hr_core_speed), `hdmi_flicker_free.vhd`, `ascal.vhd` |
-| HDMI Raw mode: no picture, tear line, stutter, sound dropouts | `M2M/vhdl/av_pipeline/hdmi_genlock.vhd`, `digital_pipeline.vhd` (reference pulse, `htotal` multiplexer, CTS), `video_modes_pkg.vhd` (the `*_RAW` records), `video_out_clock.vhd` (tables `"1000"` to `"1010"`), `mega65.vhd` (`C_MENU_HDMI_RAW*`, `qnice_video_mode_o`), `doc/dev-hdmi-raw/`, benches `CORE/vhdl/test/tb_hdmi_genlock/` and `CORE/vhdl/test/tb_hdmi_raw/`. No picture on one display but a picture on another: the display does not accept the rate. A tear line that stays longer than about 8 s after a change: the genlock does not lock (`locked_o`). The measured pixel clock is at `M2M$SYS_HDMI` (`0x0011`) offsets 3 and 4 |
+| HDMI Raw mode: no picture, tear line, stutter, sound dropouts | `M2M/vhdl/av_pipeline/hdmi_genlock.vhd`, `digital_pipeline.vhd` (reference pulse, `htotal` multiplexer, CTS), `video_modes_pkg.vhd` (the `*_RAW` records), `video_out_clock.vhd` (tables `"1000"` to `"1010"`), `mega65.vhd` (`C_MENU_HDMI_RAW*`, `qnice_video_mode_o`), `doc/dev-hdmi-raw/` (tools `mmcm_tables.py`, `old_modes_diff.sh`, `loop_model.py`, `clock_search.py`), benches in `CORE/vhdl/test/`: `tb_hdmi_genlock` (the entity against a cycle-exact model of the scaler's timing, all four raw timings, mutants), `tb_hdmi_raw` (the real `ascal.vhd` with crop and genlock: no tear, one core frame per HDMI frame, distances; nvc if installed), `tb_hdmi_raw_wiring` (the real `digital_pipeline` with the real genlock: reference pulse, multiplexer, mode changes), `tb_hdmi_raw_clock` (DRP sequences of `video_out_clock`, CTS), `tb_hdmi_raw_menu` (truth table of the two decoders in `mega65.vhd`). No picture on one display but a picture on another: the display does not accept the rate (a picture in 576p/480p but not in 720p: most likely the display minds the stretched back porch lines of 720p). A tear line that comes back, or a search that takes longer than 7 s after a change: the genlock does not lock (`locked_o`). The measured pixel clock is at `M2M$SYS_HDMI` (`0x0011`) offsets 3 and 4 |
 | NTSC / PAL switch         | `clk.vhd` (four MMCMs, mux tree), `mega65.vhd` (`hr_core_speed`, `qnice_video_mode_o`), `main.vhd` (`mode_change_reset_proc`), `video_modes_pkg.vhd`, `doc/ntsc.md` |
 | Turbo mode (C128 / Smart) | `fpga64_sid_iec.vhd` `cpu_cyc` (turbo slots, clean-cycle rule for hardware carts) and the turbo decision (`turbo_m`, `cs_io`, `dma_req`), `fpga64_buslogic.vhd` `cs_turbo_eligible_o`, `main.vhd` `turbo_smart_iec_detector_proc`, `mega65.vhd` (`c64_turbo_mode`, `c64_turbo_speed`; the Caps Lock override `main_kb_capslock_n_i`, issue #261), `M2M/vhdl/m2m_keyb.vhd` (`capslock_n_o`), `doc/dev-turbo/`, benches `CORE/vhdl/test/tb_turbo/` and `CORE/vhdl/test/tb_capslock/` |
 | VGA / scandoubler / CSYNC | `analog_pipeline.vhd`, `vga_controller.vhd`               |

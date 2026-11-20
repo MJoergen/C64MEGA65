@@ -622,8 +622,8 @@ the NTSC HDMI modes run at 59.94 Hz, so there the flicker-free clock is the *fas
 original clock, and the HDMI output runs at the C64's frame rate. Each display mode has a raw
 twin in `video_modes_pkg.vhd` with its own pixel clock (and in 576p and 480p one line less or
 more), and the genlock `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` lengthens 16 lines of the
-vertical back porch so that the HDMI picture starts at a fixed distance (2.0 ms) behind the
-core's picture. This is not a standard HDMI frame rate, so it only helps on displays that
+vertical back porch so that the HDMI picture starts at a fixed distance behind the core's
+picture (2.0 ms, or up to 2.5 ms more, a range in which it does not need to act). This is not a standard HDMI frame rate, so it only helps on displays that
 accept it. See [hdmi.md](hdmi.md#frame-rates-off-flicker-free-and-raw) and
 [`dev-hdmi-raw/SPEC.md`](dev-hdmi-raw/SPEC.md).
 
