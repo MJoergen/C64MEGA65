@@ -790,9 +790,10 @@ begin
 
    -- HDMI flicker-free switch of the active standard: each standard has its own "HDMI Frame Sync"
    -- radio group, and only its item "Flicker-free" lets hr_core_speed switch to the flicker-free
-   -- clock; "Off" and "Raw" keep the core on the original clock of the standard. The Shell writes
-   -- the menu bits bank by bank, so "Flicker-free" and "Raw" can be set together for a moment:
-   -- then "Raw" wins, here and in qnice_video_mode_o
+   -- clock; "Off" and "Raw" keep the core on the original clock of the standard. The Shell changes
+   -- the menu bits one at a time, in rising order of their index, so from "Raw" to "Flicker-free"
+   -- the group passes through "both set", where "Raw" wins, here and in qnice_video_mode_o, and
+   -- from "Flicker-free" to "Raw" through "Off"; either way each decoder changes its output once
    main_hdmi_ff      <= main_osm_control_i(C_MENU_HDMI_FF_NTSC) and not main_osm_control_i(C_MENU_HDMI_RAW_NTSC) when c64_ntsc = '1' else
                         main_osm_control_i(C_MENU_HDMI_FF)      and not main_osm_control_i(C_MENU_HDMI_RAW);
 
