@@ -22,7 +22,17 @@
 --
 -- ghdl cannot elaborate some sub-entities that are not under test (ascal,
 -- video_overlay, serialiser_10to1_selectio, see doc/dev-ntsc/tools/w2_standin.py);
--- run.sh replaces them and hdmi_genlock with stand-ins.
+-- run.sh replaces them with stand-ins. The genlock is the real hdmi_genlock.vhd.
+--
+-- G_PACKET = true: the CTS inside the regeneration packet. The HDMI clock runs
+-- (the period of raw 576p), the HDMI domain leaves its reset after 2 us, and the
+-- stimulus is raw 576p (CTS_FRAC 17 / 21) for 63 packets, then 576p for 5. run.sh
+-- builds this variant with the output timing generator of the scaler
+-- (CORE/vhdl/test/tb_hdmi_raw_wiring/ascal_timing.vhd) and the real
+-- video_overlay, so that vga_to_hdmi gets syncs and sends its data islands;
+-- check_cts.py --packet takes the CTS of every ACR packet from pcm_cts_s of
+-- vga_to_hdmi, the register whose bytes are copied into the packet when it is
+-- sent (data_ack(1)).
 --
 -- Prints "SIMULATION DONE" at the end.
 -------------------------------------------------------------------------------
@@ -39,7 +49,8 @@ use work.video_modes_pkg.all;
 
 entity tb_hdmi_raw_cts is
    generic (
-      G_FONT_FILE : string
+      G_FONT_FILE : string;
+      G_PACKET    : boolean := false
    );
 end entity tb_hdmi_raw_cts;
 
@@ -73,15 +84,34 @@ architecture sim of tb_hdmi_raw_cts is
       (0, 20), (10, 252), (0, 20), (1, 20), (2, 20), (11, 252), (2, 20), (3, 20), (12, 252), (3, 20),
       (4, 20), (5, 20), (6, 20), (7, 20), (13, 252), (7, 20), (8, 20), (14, 20), (8, 20), (9, 20),
       (15, 20), (9, 20), (13, 20), (10, 20), (11, 60), (10, 20), (13, 20), (11, 60), (0, 20));
+   constant C_STEPS_PACKET : step_vector := ((11, 63), (2, 5));
+
+   function steps return step_vector is
+   begin
+      if G_PACKET then
+         return C_STEPS_PACKET;
+      end if;
+      return C_STEPS;
+   end function steps;
+
+   constant C_RUN : step_vector := steps;
 
    signal audio_clk  : std_logic := '0';
    signal running    : boolean := true;
    signal video_mode : video_mode_type := C_VIDEO_HDMI_16_9_50;
    signal tb_phase   : natural := 0;
+   signal hdmi_clk   : std_logic := '0';
+   signal hdmi_rst   : std_logic := '1';
 
 begin
 
    audio_clk <= not audio_clk after 40.69 ns when running else '0';   -- 12.288 MHz
+
+   -- G_PACKET: the HDMI clock of raw 576p (37.0041 ns) and the end of the HDMI reset after 2 us
+   g_packet : if G_PACKET generate
+      hdmi_clk <= not hdmi_clk after 18502050 fs when running else '0';
+      hdmi_rst <= '0' after 2 us;
+   end generate g_packet;
 
    i_dp : entity work.digital_pipeline
       generic map (
@@ -108,8 +138,8 @@ begin
          audio_rst_i            => '0',
          audio_left_i           => (others => '0'),
          audio_right_i          => (others => '0'),
-         hdmi_clk_i             => '0',
-         hdmi_rst_i             => '1',
+         hdmi_clk_i             => hdmi_clk,
+         hdmi_rst_i             => hdmi_rst,
          tmds_clk_i             => '0',
          tmds_data_p_o          => open,
          tmds_data_n_o          => open,
@@ -148,10 +178,10 @@ begin
    p_stim : process
       variable l : line;
    begin
-      for i in C_STEPS'range loop
-         video_mode <= video_mode_type'val(C_STEPS(i).mode);
-         tb_phase   <= C_STEPS(i).mode;
-         wait for C_STEPS(i).packets * 1 ms;
+      for i in C_RUN'range loop
+         video_mode <= video_mode_type'val(C_RUN(i).mode);
+         tb_phase   <= C_RUN(i).mode;
+         wait for C_RUN(i).packets * 1 ms;
       end loop;
       tb_phase <= 99;
       wait for 100 ns;

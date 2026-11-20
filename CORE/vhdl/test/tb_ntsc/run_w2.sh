@@ -64,34 +64,6 @@ if want window; then
       --retype vga_cfg_shift_i=integer || fail "stand-in video_overlay"
    python3 "$TOOLS/w2_standin.py" "$REPO/M2M/vhdl/controllers/HDMI/serialiser_10to1_selectio.vhd" \
       serialiser_10to1_selectio "$BUILD/serialiser_standin.vhd" || fail "stand-in serialiser"
-   # stand-in for the genlock of the raw modes with the ports of doc/dev-hdmi-raw/SPEC.md
-   # section 5.1: it passes the line length through (the genlock has its own benches)
-   cat > "$BUILD/hdmi_genlock_standin.vhd" <<'EOF2'
-library ieee;
-use ieee.std_logic_1164.all;
-entity hdmi_genlock is
-   port (
-      clk_i     : in  std_logic;
-      rst_i     : in  std_logic;
-      enable_i  : in  std_logic;
-      htotal_i  : in  natural range 0 to 4095;
-      target_i  : in  natural range 0 to 2**21 - 1;
-      hs_i      : in  std_logic;
-      vs_i      : in  std_logic;
-      de_i      : in  std_logic;
-      ref_i     : in  std_logic;
-      htotal_o  : out natural range 0 to 4095;
-      locked_o  : out std_logic;
-      stretch_o : out natural range 0 to 4095
-   );
-end entity hdmi_genlock;
-architecture standin of hdmi_genlock is
-begin
-   htotal_o  <= htotal_i;
-   locked_o  <= '0';
-   stretch_o <= 0;
-end architecture standin;
-EOF2
    cat > "$BUILD/csync_standin.vhd" <<'EOF2'
 -- stand-in for M2M/vhdl/controllers/MiSTer/csync.sv (SystemVerilog)
 library ieee;
@@ -111,8 +83,8 @@ EOF2
       "$REPO/M2M/vhdl/controllers/HDMI/vga_to_hdmi.vhd" "$REPO/M2M/vhdl/memory/avm_decrease.vhd"
       "$AV/clk_synthetic_enable.vhd" "$AV/video_counters.vhd" "$AV/crop.vhd"
       "$AV/digital_pipeline.vhd" "$AV/analog_pipeline.vhd" "$AV/av_pipeline.vhd"
+      "$AV/hdmi_genlock.vhd"
       "$BUILD/ascal_standin.vhd" "$BUILD/video_overlay_standin.vhd" "$BUILD/serialiser_standin.vhd"
-      "$BUILD/hdmi_genlock_standin.vhd"
       "$HERE/tb_window_av.vhd")
    # Local copy of the xpm stub whose array synchronizer output starts at all ones instead
    # of 'U' / all zeros: an OSM scaling vector without a '1' makes first_nonzero_bit return 9,

@@ -2,6 +2,7 @@
 """Checker of tb_hdmi_raw_cts (issue #184, doc/dev-hdmi-raw/SPEC.md section 6).
 
     check_cts.py VCD REPO
+    check_cts.py --packet VCD REPO
 
 The CTS of a packet is the value of audio_pcm_cts at the rising edge of the packet
 strobe audio_pcm_acr. Expected values come from the mode records of
@@ -19,6 +20,15 @@ Checks:
     exactly CLK_KHZ + CTS_FRAC_N / CTS_FRAC_D kHz; that is the pixel clock of the
     table that the record selects (exact fraction printed)
   * CTS never changes less than 0.4 ms before or after a strobe
+
+--packet (tb_hdmi_raw_cts with G_PACKET, the HDMI clock running): the CTS of an
+ACR packet is the value of pcm_cts_s of vga_to_hdmi when the packet is sent
+(rising edge of data_ack(1): its bytes are copied from pb(1), which holds
+pcm_cts_s of the clock cycle before). Checks: every ACR request (vga_acr) is
+sent as one packet within 100 us; pcm_cts_s does not change in the 0.4 ms before
+a packet; in raw 576p (17 / 21) at least 42 packets after the first two, every
+window of 21 of them has exactly 17 packets with 27024 and 4 with 27023 (average
+567500/21 kHz); in 576p every packet carries 27000.
 
 Prints "RESULT: PASS" or "RESULT: FAIL ...".
 """
@@ -38,7 +48,75 @@ def check(cond, what):
         print("  MISMATCH: " + what)
 
 
+def load_w2(repo):
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("w2_checks", os.path.join(repo, "doc", "dev-ntsc", "tools", "w2_checks.py"))
+    w2 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(w2)
+    return w2
+
+
+def packet_main(vcd, repo):
+    w2 = load_w2(repo)
+    pkg = w2.read(repo, "M2M/vhdl/av_pipeline/video_modes_pkg.vhd")
+    recs = w2.parse_records(pkg)
+    members = w2.parse_members(pkg)
+    _, vector, _, _ = w2.parse_framework(w2.read(repo, "M2M/vhdl/framework.vhd"))
+    ch = w2.parse_vcd(vcd)
+    state = {}
+    acr, sent, cts_ch = [], [], []
+    for t, name, v in ch:
+        prev = state.get(name)
+        state[name] = v
+        if name == "vga_acr" and v == "1" and prev == "0":
+            acr.append(t)
+        elif name == "data_ack" and prev is not None and len(v) == 4 and v[1] == "1" and prev[1] == "0":
+            sent.append((t, int(state["tb_phase"], 2), int(state["pcm_cts_s"], 2)))
+        elif name == "pcm_cts_s" and prev is not None and prev != v:
+            cts_ch.append(t)
+    print("%d ACR requests, %d ACR packets sent, %d changes of pcm_cts_s" % (len(acr), len(sent), len(cts_ch)))
+    check(len(acr) == len(sent) and len(sent) >= 60, "requests and packets do not match")
+    for i, (ts, _, _) in enumerate(sent):
+        if i < len(acr):
+            check(0 <= ts - acr[i] <= 100 * 10 ** 9, "packet %d sent %s fs after its request" % (i, ts - acr[i]))
+        near = [t for t in cts_ch if ts - 400 * 10 ** 9 <= t <= ts]
+        # the first packets after the end of the HDMI reset and the mode change are exempt
+        if i >= 2 and sent[i - 2][1] == sent[i][1]:
+            check(not near, "pcm_cts_s changes %s fs before packet %d" % (ts - near[-1] if near else 0, i))
+    steps = []
+    for ts, ph, cts in sent:
+        if not steps or steps[-1][0] != ph:
+            steps.append((ph, []))
+        steps[-1][1].append(cts)
+    for ph, ctss in steps:
+        rec = recs[vector[ph]]
+        k, n, d = rec["CLK_KHZ"], rec["CTS_FRAC_N"], rec["CTS_FRAC_D"]
+        if n == 0:
+            check(all(c == k for c in ctss), "%s: packets carry %s" % (members[ph], sorted(set(ctss))))
+            print("%-26s %3d packets, every one with CTS %d" % (members[ph], len(ctss), k))
+            continue
+        body = ctss[2:]
+        check(len(body) >= 42, "%s: only %d packets" % (members[ph], len(body)))
+        check(all(c in (k, k + 1) for c in body), "%s: CTS values %s" % (members[ph], sorted(set(body))))
+        inc = [c - k for c in body]
+        bad = [i for i in range(len(inc) - d + 1) if sum(inc[i:i + d]) != n]
+        check(not bad, "%s: windows of %d packets with other than %d increments at %s" % (members[ph], d, n, bad[:3]))
+        whole = (len(body) // d) * d
+        avg = Fraction(sum(body[:whole]), whole)
+        check(avg == k + Fraction(n, d), "%s: average %s" % (members[ph], avg))
+        print("%-26s %3d packets (after the first two): %d with %d, %d with %d; every window of %d packets has %d "
+              "with %d; average %s = %.6f kHz" % (members[ph], len(body), inc.count(0), k, inc.count(1), k + 1,
+                                                  d, n, k + 1, avg, float(avg)))
+    if FAILS:
+        print("RESULT: FAIL %d mismatch(es)" % len(FAILS))
+        return 1
+    print("RESULT: PASS")
+    return 0
+
+
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--packet":
+        return packet_main(sys.argv[2], sys.argv[3])
     if len(sys.argv) != 3:
         print(__doc__)
         return 2

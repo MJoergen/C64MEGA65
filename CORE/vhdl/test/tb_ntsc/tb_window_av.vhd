@@ -24,10 +24,11 @@
 -- doc/dev-ntsc/tools/w2_standin.py); run_w2.sh replaces them with generated
 -- stand-ins that keep their entity declarations, and csync (SystemVerilog)
 -- with an XOR of the two syncs. The real video_overlay and vga_osm are
--- simulated by tb_osm_place.vhd. The genlock of the raw modes (hdmi_genlock)
--- is a stand-in with the ports of doc/dev-hdmi-raw/SPEC.md section 5.1 that
--- passes htotal_i through (the genlock has its own benches), so the line length
--- that reaches the scaler can be compared with the mode record in every mode.
+-- simulated by tb_osm_place.vhd. The genlock of the raw modes is the real
+-- hdmi_genlock.vhd; the scaler stand-in gives it no syncs, so it never
+-- stretches a line and the line length that reaches the scaler is the one of
+-- the mode record in every mode (the genlock has benches of its own, and
+-- tb_hdmi_raw_wiring runs it with a model of the scaler's output timing).
 --
 -- Prints "SIMULATION DONE" at the end.
 -------------------------------------------------------------------------------

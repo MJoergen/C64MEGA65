@@ -393,8 +393,8 @@ def window_checks(repo, vcd):
                       iv("hdmi_vsstart") == r["V_PIXELS"] + r["V_FP"] and
                       iv("hdmi_vsend") == r["V_PIXELS"] + r["V_FP"] + r["V_PULSE"] and
                       iv("hdmi_vdisp") == r["V_PIXELS"], "mode %d: sync positions" % m)
-                # the scaler gets hdmi_htotal unchanged outside the raw modes (and from the
-                # pass-through stand-in of the genlock in the raw modes)
+                # the scaler gets hdmi_htotal unchanged outside the raw modes; in the raw modes the
+                # real genlock gets no syncs from the scaler stand-in and adds nothing to it
                 check(iv("hdmi_ascal_htotal") == htotal(r), "mode %d: scaler htotal %s" % (m, iv("hdmi_ascal_htotal")))
                 check(st["hdmi_raw"] == ("1" if is_raw else "0"), "mode %d: hdmi_raw %s" % (m, st["hdmi_raw"]))
                 check(iv("hdmi_genlock_target") == 2 * r["CLK_KHZ"], "mode %d: genlock target" % m)
