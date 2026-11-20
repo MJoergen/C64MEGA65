@@ -5,7 +5,7 @@ Bench of the genlock wiring in `M2M/vhdl/av_pipeline/digital_pipeline.vhd` (issu
 ```
 CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh            # all scenarios, about 10 minutes with JOBS=2
 CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh C E        # some of them
-CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh mutants    # the mutant table below, about 15 minutes
+CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh mutants    # the mutant table below, about 20 minutes
 ```
 
 ## What runs

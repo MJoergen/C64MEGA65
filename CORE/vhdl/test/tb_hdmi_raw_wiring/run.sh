@@ -14,7 +14,7 @@
 # Environment: GHDL (default /usr/local/bin/ghdl), JOBS (parallel simulations,
 # default 2), KEEP (keep the build directory). Prints the checker output and a
 # final "RESULT: PASS" or "RESULT: FAIL ..." line; exit status 0 only on PASS.
-# About 10 minutes for "all" with two jobs.
+# About 10 minutes for "all" and 20 minutes for "mutants" with two jobs.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO="$(cd "$HERE/../../../.." && pwd -P)"
