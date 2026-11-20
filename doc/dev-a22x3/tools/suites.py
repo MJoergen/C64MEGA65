@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Runs test suites of C64MEGA65 one after the other and prints one line per
-suite. Usage: suites.py <step-name> <suite> [<suite> ...]   (or "fw", "all")
+suite. Usage: suites.py <step-name> <suite> [<suite> ...]   (a suite can also be one of the groups
+"fw0", "fw", "tb", "hdmi_raw" and "all", see GROUPS)
 
 Logs go to <system temp folder>/c64mega65-suites/<step-name>/<suite>.log. The clipboard tools are
 replaced by no-ops (make_rom.sh and the asm wrapper of QNICE call pbcopy).
@@ -42,9 +43,17 @@ SUITES = {
     "tb_shortcuts":  (".", ["bash", "CORE/vhdl/test/tb_shortcuts/run.sh", "all"], r"^RESULT: PASS", 1800),
     "tb_amiga_mouse": (".", ["bash", "CORE/vhdl/test/tb_amiga_mouse/run.sh", "all", "--jobs", JOBS], r"^RESULT: PASS", 3600),
     "tb_paddles":    (".", ["bash", "CORE/vhdl/test/tb_paddles/run.sh", "all"], r"^RESULT: PASS", 3600),
+    # HDMI at the frame rate of the C64 (#184); a new bench needs one line here and its name in
+    # the group "hdmi_raw" below
+    "tb_hdmi_raw_menu": (".", ["bash", "CORE/vhdl/test/tb_hdmi_raw_menu/run.sh", "all"], r"^RESULT: PASS", 600),
 }
 GROUPS = {
     "fw0": ["make_rom", "menu_run", "menu_verify", "strrom", "strrom_tool", "rosm", "jiffy"],
+    "hdmi_raw": ["tb_hdmi_raw_menu"],
+    # derived from SUITES, so that a new suite is part of them without a change here
+    "fw": [n for n in SUITES if not n.startswith("tb_")],
+    "tb": [n for n in SUITES if n.startswith("tb_")],
+    "all": list(SUITES),
 }
 
 
