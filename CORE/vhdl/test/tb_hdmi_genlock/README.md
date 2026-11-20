@@ -10,7 +10,7 @@ CORE/vhdl/test/tb_hdmi_genlock/run.sh [pal720|pal576|ntsc720|ntsc480|modes|quick
 
 * `pal720`, `pal576`, `ntsc720`, `ntsc480`: the complete simulation of the mode with all instances of the entity (section "Instances").
 * `modes`: the four complete simulations.
-* `quick`: a smoke test for work on the entity: the four modes with a reduced set, then `synth`. The reduced set has the start phases whose pull-in is short (`target - 4081`, `target - 1025`, `target - 1`, `target`, `target + 4095`, `target - 300` in the aperture; in 576p and 480p also `1`, `frame - 1`, `frame` and `0`), pauses of the reference of 12 instead of 150 frames and 31 instead of 311 locked frames; of the disturbance instances in 576p and 480p all except the two that come back near the end of the frame, in 720p only `1 ref missing`, `pause, back at the same phase`, `1 ref missing in the pull-in`, `rst in a long line, mid, at d` and `htotal_i short, then 4045`.
+* `quick`: a smoke test for work on the entity: the four modes with a reduced set, then `synth`. The reduced set has the start phases whose pull-in is short (`target - 4081`, `target - 1025`, `target - 1`, `target`, `target + 4095`, `target - 300` in the aperture; in 576p and 480p also `1`, `frame - 1`, `frame` and `0`), pauses of the reference of 12 instead of 150 frames and 31 instead of 311 locked frames; of the disturbance instances in 576p and 480p all except the two that come back near the end of the frame, in 720p only `1 ref missing`, `pause, back at the same phase`, `1 ref missing in the pull-in`, `1 ref missing while locking`, `small jump, then 3 refs gone`, `rst in a long line, mid, at d` and `htotal_i short, then 4045`.
 * `xcheck`: the cross-check of the stepped scaler models (section "The model of the scaler").
 * `synth`: `ghdl --synth` of `hdmi_genlock` must run without error and without latch (a mutant with a latch must fail); prints the flip-flop count of the GHDL netlist: 57 flip-flops in 11 registers.
 * `mutants`: the mutants below; each must make the bench fail.
@@ -35,7 +35,7 @@ For each instance a reference level rises once per core frame (the first visible
 
 ## Instances
 
-The complete simulation runs 33 instances of the entity side by side on the pixel clock of its mode. All start in reset; the reset ends right after the first falling edge of vsync, and the reference of each instance is placed so that its first measurement (the picture start of the second frame) is its distance `d0`.
+The complete simulation runs 35 instances of the entity side by side on the pixel clock of its mode. All start in reset; the reset ends right after the first falling edge of vsync, and the reference of each instance is placed so that its first measurement (the picture start of the second frame) is its distance `d0`.
 
 Start phases (the first measured distance; `target` = `target_i` = 2 x `CLK_KHZ`, `frame` = the core frame):
 
@@ -64,7 +64,9 @@ Disturbance instances start at `target - 2000`, lock, and then execute their lis
 | pause, back at another phase | no reference for 150 frames (the core is paused: 3 s in PAL, 2.5 s in NTSC), then back near the end of the frame: normal pull-in |
 | pause, back at the same phase | no reference for 150 frames, back at the same phase: the genlock stays locked through it all and keeps the stretch of the last valid frame (the flywheel), no pull-in |
 | 1 ref missing, 2 refs missing | back at the same phase: stays locked; after the single missing reference the next valid `d` is within twice the uncertainty of `target - surplus` |
-| 1 ref missing in the pull-in | start at `target - 20000`, one reference missing before the lock: no stretch in that frame (no flywheel while not locked) |
+| 1 ref missing in the pull-in | start at `target - 20000`, one reference missing before the lock (lock counter 0): no stretch in that frame (no flywheel while not locked) |
+| 1 ref missing while locking | one reference missing while the lock counter is 3 (in 720p the stretch of the frame before is the surplus, not 0): no stretch in that frame, the counter neither counts nor clears, the lock comes one valid measurement later |
+| small jump, then 3 refs gone | while locked, the reference moves so that `d` lands 960 below the target (inside the lock window: 763 pixel clocks later in PAL 720p, 497 in NTSC 720p, 960 in 576p and 480p), and the next 3 references are missing: the flywheel holds the catch-up stretch of about 960 for the whole outage, `d` moves by the jump per frame of it into the band, and the genlock stays locked |
 | ref jumps 40000 later | the reference moves by a part of a frame while locked |
 | ref jumps to frame end | the reference moves so that `d` is near the end of the frame |
 | enable off in a long line | a jump, then `enable_i = '0'` inside the extension of a stretch line of 255 extra clock cycles, 3 frames later back on |
@@ -106,7 +108,9 @@ Steady state. In 720p `|d - (target - surplus)| < 1 + aperture / period` and `k`
 
 Pull-in. Beyond the band (`d >= target + band`) the picture start falls behind by `4080 - surplus` per frame until it comes round to the target from below. A frame-level model of the control law (every 523rd phase of the frame, and every phase of the first 4200 pixel clocks beyond the band) finds the longest pull-in a few hundred pixel clocks beyond the band: 343, 124, 299 and 102 measurements until `locked_o` (6.84, 2.47, 5.00 and 1.70 s); the bench's start at `target + band` needs exactly as many. Below the target the pull-in is at most `ceil(target / (4080 - surplus))` frames plus the 8 frames of the lock rule; inside the band the genlock is locked after 8 frames and stretches nothing.
 
-Missing reference. While locked, a frame without a new reference keeps the stretch `k(n)` of the last valid frame instead of `k(n+1) = surplus + delta(n+1) - delta(n)`; after one missing reference `d` therefore differs from `target - surplus` by less than twice the uncertainty (two differences of crossing delays). During a long pause the held stretch differs from the surplus by less than one pixel clock per frame (in 720p it is one of the integers around the surplus), so `d` moves by less than one pixel clock per frame of the pause: 150 frames move it by less than 150 pixel clocks, far inside the lock window; in 576p and 480p the held stretch is 0 and `d` does not move.
+Missing reference. While locked, a frame without a new reference keeps the stretch `k(n)` of the last valid frame instead of `k(n+1) = surplus + delta(n+1) - delta(n)`; after one missing reference in the steady state `d` therefore differs from `target - surplus` by less than twice the uncertainty (two differences of crossing delays). In the steady state the held stretch differs from the surplus by less than one pixel clock per frame (in 720p it is one of the integers around the surplus), so `d` moves by less than one pixel clock per frame of a pause: 150 frames move it by less than 150 pixel clocks, far inside the lock window; in 576p and 480p the held stretch is 0 and `d` does not move.
+
+This holds only in the steady state. If the references stop right after a valid measurement that is inside the lock window but below `target - surplus` (for example after a small jump of the core's phase), the catch-up stretch of that frame (up to 1024 plus the surplus) is held for the whole outage, and `d` moves by its difference to the surplus in every frame of it: the instance `small jump, then 3 refs gone` holds about 960 for 3 frames and ends inside the band. A long outage after such a frame can carry `d` beyond the band (in 576p a held stretch of 1000 for 100 frames moves `d` by 3.7 ms), and when the references come back the genlock has to come round the whole frame. Nothing is known that would stop the core's references right after such a jump; the behavior is accepted.
 
 ## Results
 
@@ -124,13 +128,15 @@ From the complete run (`run.sh all`), per mode:
 | sum of 300 locked HDMI frames minus 300 core frames | 0.991 (bound 1.037) | 0 (bound 1.014) | 0.833 (bound 1.037) | 0 (bound 1.014) |
 | first valid `d` after one missing reference, from `target - surplus` | 0.031 (bound 2.074) | 0 | 0.083 (bound 2.074) | 0 |
 | pause of 150 frames at the same phase | locked throughout | locked | locked | locked |
+| a reference missing while the lock counter is 3 | stretch 0 in that frame, lock one valid measurement later | the same | the same | the same |
+| small jump, then 3 references gone: `d` at the return, from the target | +2092 (3 x 763 - 197), locked | +2880 (3 x 960), locked | +1028 (3 x 497 - 463), locked | +2880, locked |
 | 4096-clock sections of the frame where a start measured `d` before lock | 320 of 363 | 118 of 132 | 263 of 303 | 98 of 111 |
 
 The sections that no start crosses are those of the band (45 in 720p, 16 to 17 in 576p and 480p): nothing is stretched there, a phase inside the band is locked at once and glides back (720p) or stays (576p, 480p); the bench has starts at `target + 4096` and `target + band - 1` inside it. Every lock came within the bound, every line had the length of SPEC section 5.2, and the cross-check found the stepped scaler models equal to models stepped at every edge (NTSC 480p, 45 frames, 21.2 M edges; PAL 720p, 7 frames, 13.4 M edges).
 
 ## Mutants
 
-Each mutant is an exact text replacement in `hdmi_genlock.vhd`; it runs in NTSC 480p (`no_hold` in NTSC 720p) with the start or the disturbance instances and stops at its first error. All are rejected:
+Each mutant is an exact text replacement in `hdmi_genlock.vhd`; it runs in NTSC 480p (`no_hold` and `hold_unless_zero` in NTSC 720p) with the start or the disturbance instances and stops at its first error. A mutant counts as rejected only if its run fails with an error of the bench (`TB_ERROR`, for `no_saturation` the bound check of GHDL); a run that fails in any other way (crash, timeout, killed) is a failure of the runner. All are rejected:
 
 | Mutant | Change | First error |
 |---|---|---|
@@ -153,8 +159,11 @@ Each mutant is an exact text replacement in `hdmi_genlock.vhd`; it runs in NTSC 
 | `band_4096` | the band of the first draft (4096 pixel clocks) | start `target + 4096`: `stretch_o` 4080, expected 0 |
 | `band_no_quarter` | `band = target_i` | start `target + band - 1`: `stretch_o` 4080, expected 0 |
 | `no_hold` | no flywheel: stretch 0 without a new reference also while locked (runs in NTSC 720p, where the held stretch is not 0) | 3 references missing: `stretch_o` 0, expected 463 (the held stretch) |
-| `gap_clears_lock` | a measurement without a new reference clears the lock counter | 3 references missing: `locked_o` '0', expected '1' |
+| `gap_clears_lock` | a measurement without a new reference clears the lock counter | 1 reference missing while locking: `locked_o` '0' after 8 valid good frames |
 | `hold_unlocked` | the stretch is held without a new reference also while not locked | 1 reference missing in the pull-in: `stretch_o` 4080, expected 0 |
+| `hold_unless_zero` | the stretch is held without a new reference unless the lock counter is 0 | 1 reference missing while locking (NTSC 720p): `stretch_o` 463, expected 0 |
+| `gap_counts_good` | a measurement without a new reference counts as inside the lock window | 1 reference missing while locking: `locked_o` '1' after 7 valid good frames |
+| `hold_max_470` | the flywheel keeps only stretches up to 470 | small jump, then 3 references gone: `stretch_o` 0, expected 960 (the held catch-up stretch) |
 
 `synth` adds a mutant with a latch, which `ghdl --synth` rejects.
 
@@ -162,13 +171,13 @@ Mutants that cannot be told apart from the entity, and why: clearing `ref_new` o
 
 ## Runtime
 
-Measured on the development machine (8 cores, shared with other simulations: load average about 9), with two simulations at a time:
+Measured on the development machine (8 cores, shared with other simulations), with two simulations at a time:
 
 | Part | Wall time | Simulations |
 |---|---|---|
-| `quick` | 6 min (360 s; 689 s CPU) | the four modes with the reduced set (PAL 720p 223 s, NTSC 720p 190 s, PAL 576p 153 s, NTSC 480p 129 s), synthesis |
-| `mutants` | about 4 min | 21 mutants, each until its first error |
-| `xcheck` | about 4 min | NTSC 480p 243 s, PAL 720p 188 s |
-| `all` | 39.5 min (2369 s; 4138 s CPU) | PAL 720p 1382 s, NTSC 720p 970 s, PAL 576p 466 s, NTSC 480p 383 s, the cross-check, synthesis, the mutants |
+| `quick` | 5 min (301 s) | the four modes with the reduced set (PAL 720p 170 s, NTSC 720p 141 s, PAL 576p 143 s, NTSC 480p 125 s), synthesis |
+| `mutants` | 8 min (476 s) | 24 mutants, each until its first error |
+| `xcheck` | about 3 min | NTSC 480p 185 s, PAL 720p 153 s |
+| `all` | 36.4 min (2184 s; 3911 s CPU) | PAL 720p 1430 s, NTSC 720p 1100 s, PAL 576p 380 s, NTSC 480p 287 s, the cross-check, synthesis, the mutants |
 
 The complete run is long because it simulates every clock cycle of every pull-in and of the 300 locked frames: in PAL 720p 525.6 M pixel clock edges. GHDL needs about 0.6 µs per clock edge for the clock and the bench, and every active instance adds about 0.25 µs, most of it in the signal updates of the entity itself; the bench gives an instance the clock only while it still has something to prove, and steps its scaler model only at the edges where something can change.
