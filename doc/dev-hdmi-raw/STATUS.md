@@ -67,6 +67,9 @@ Consequence: standard totals and an exact match need a mechanism that absorbs th
 | D8 | The static attributes of the HDMI MMCM stay; `set_clock_uncertainty -setup 0.050` on `hdmi_clk` covers the 0.26 % faster clock in the timing analysis. | The clock tables are written read-modify-write, so changed static attributes could change bits of the existing modes. |
 | D9 | Menu: headline `HDMI Frame Sync` with `Off`, `Flicker-free` (default), `Raw 50.1 Hz` / `Raw 59.8 Hz`; second headline `HDMI Options`; a line below each headline as below `HDMI Display Mode`; the order of the remaining items as before (DVI, filter, zoom-in). PAL and NTSC keep separate groups. | The user's layout; the names are a proposal and easy to change. |
 | D10 | No triple buffering. | It does not fit into the HyperRAM region of R3, and direct mode has the lower latency. |
+| D11 | No stretch while the HDMI picture start is up to 2.5 ms later than the target (`band = target + target / 4`). | The range without a tear is much wider than the target (about 1.2 ms below to 12 ms above it). With a narrow band every jump of the core's phase above it costs a roll through the whole frame; switching zoom-in off is such a jump (2.0 ms PAL, 1.4 ms NTSC). |
+| D12 | While locked, a measurement without a new reference keeps the stretch of the previous frame. | In 720p a frame without stretch is shorter than the core's frame, so a missing reference or a paused core would move a locked picture. |
+| D13 | The largest stretch stays 255 pixel clocks per line in every mode (not scaled with the line length). | A faster pull-in is worth more than a gentler one: a display that minds the longer lines minds them at 13 % as well as at 30 %. |
 
 Rejected: totals far from the standard for 720p (1872 x 756 at 70.94 MHz would be exact); an H total that alternates on lines with picture; a new core clock; continuous phase shifting of the MMCM (not possible with a fractional multiplier); slips every few minutes without a genlock.
 
@@ -100,7 +103,7 @@ Three independent reviewers, each on a fresh clone with the specification and th
 
 **Menu** (menu, decoders, golden model, heap, version): no defect; all 90 constants and subtypes confirmed with an independent parser; the firmware differs in exactly the explained words. 19 of 22 reviewer mutants caught; the 3 survivors are clock-domain mix-ups that the truth table bench could not see. Follow-up: a lint for the domains, the base commit of the bench moved to `669e75d`, mutants for the new groups in `menu_test.py`, the NTSC view in the firmware fixture, the wording of the help text and of a comment.
 
-**Genlock entity**: running.
+**Genlock entity**: no defect. The reviewer's own cycle model (compared with the entity in GHDL: identical in every measurement, stretch and line length) confirms: lock from every start phase (1500 to 3000 phases per mode; worst case 389 frames in PAL 720p, 348 in NTSC 720p, 138 in 576p, 117 in 480p), in 720p the sum of the frame lengths within 0.54 pixel clocks of the core's frames over 5400 frames, static timing in 576p and 480p, no line ever shorter than nominal or more than 255 longer under 1000 random enable and reset toggles, and the distances of `SPEC.md` 5.4 (0.77 ms at the bottom of NTSC 480p 5:4 is the smallest). Two improvements of the control law adopted (D11, D12). Its two risks are properties of the design, not of the code, and are the first things the hardware test has to show: the 16 back porch lines of 720p are 12 or 29 pixel clocks longer than standard in every frame, and during a pull-in the stretch lines are 255 pixel clocks longer for up to 8 seconds.
 
 ## 5. How to resume
 
