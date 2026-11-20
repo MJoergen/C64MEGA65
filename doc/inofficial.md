@@ -46,7 +46,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A22X3  | 11/14/26 | bcd4992 | Stereo Mix for stereo SIDs in the Volume submenu: Full Stereo, Wide Stereo, Narrow Stereo, Mono (issue #247); bank cache for simulated cartridges holds 32 instead of 8 banks: fixes the flickering of "Eye of the Beholder" and other bank-heavy `.crt` games (issue #255); Space on the `CRT:` line of the on-screen menu unloads a simulated cartridge (issue #153); a `.crt` after Super Snapshot V5 starts again; keyboard shortcuts F9 to F14 (issue #142); fixed: after a rejected disk image in the file browser the next save could go into the rejected file; message strings of the QNICE firmware moved from the firmware ROM into a string ROM, which frees about 8700 of the 28672 firmware ROM words
 | WIP-V6-A25    | 11/14/26 | 6845596 | Internal 1581: the first access after inserting a disk works (it could fail with 74 DRIVE NOT READY); reading a track takes one revolution instead of ten, so a format takes about 1 min 45 s instead of 6 min 43 s; the drive LED blinks when a 1581 reports an error (issue #257)
 | WIP-V6-A26    | 11/17/26 | 69d0f51 | Amiga mouse support incl. right click via MEGA + left button (issue #190); Atari CX30 paddle support (issue #193); fixed rare wrong paddle and 1351 values
-| WIP-V6-A27    | TBD      | TBD     | HDMI Frame Sync `Raw`: HDMI at the C64's own frame rate (issues #184 and #148)
+| WIP-V6-A27    | 11/20/26 | c20a7f3 | HDMI Frame Sync `Raw`: HDMI at the C64's own frame rate (issues #184 and #148)
 
 ## Version 5.2
 
