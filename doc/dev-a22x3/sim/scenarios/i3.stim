@@ -2,8 +2,8 @@
 # sd/card_empty.blk in the bottom tray (no config file: the firmware sets the menu from the
 # defaults instead of from a file and saves nothing).
 # Every key: hold it 3 ms, then wait until neither the UART nor the video RAM was active for
-# 20 ms. Menu bits = flat indices: Mouse 300/301 (port 1), 304/305 (port 2), the switches
-# 302 and 306; Paddles 312/313 (port 1), 315/316 (port 2).
+# 20 ms. Menu bits = flat indices: Mouse 308/309 (port 1), 312/313 (port 2), the switches
+# 310 and 314; Paddles 320/321 (port 1), 323/324 (port 2).
 #   Help; Right (last item), Up, Up, Return: Advanced Settings; Right, Up, Up, Return: Mouse
 #   (both ports C64, no switch); Right, Return: Back (the cursor is on Mouse); Down, Return:
 #   Paddles; Run/Stop; Help closes the menu

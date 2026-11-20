@@ -3,8 +3,8 @@
 # again instead of editing this file. Each switch is a single-select item directly behind
 # Port n: Amiga and is only visible while that item is selected; a hidden switch keeps its state.
 # Every key: hold it 3 ms, then wait until neither the UART nor the video RAM was active for
-# 20 ms. Menu bits = flat indices: Port 1: C64 / Amiga 300/301, switch of port 1 302, Port 2:
-# C64 / Amiga 304/305, switch of port 2 306, Back of Mouse 308, opener Mouse 297.
+# 20 ms. Menu bits = flat indices: Port 1: C64 / Amiga 308/309, switch of port 1 310, Port 2:
+# C64 / Amiga 312/313, switch of port 2 314, Back of Mouse 316, opener Mouse 305.
 # Visibility states of the switches: none, port 1 only, both, port 2 only; each is left once
 # with Back and once with Run/Stop.
 #   A  Help; Right, Up, Up, Return: Advanced Settings; Right, Up, Up, Return: Mouse (no switch);
@@ -12,12 +12,12 @@
 #      Amiga (switch 1 appears, off); Down: switch 1; Space: on; Return: off; Return: on;
 #      Right, Return: Back; Return; Run/Stop; Return; Right, Up, Return: Port 2: Amiga (switch 2
 #      appears, off); Down: switch 2; Return: on; Space: off; Space: on; Right, Return: Back;
-#      Return; Run/Stop; Help closes the menu and saves (300, 301, 302, 304, 305, 306 change)
+#      Return; Run/Stop; Help closes the menu and saves (308, 309, 310, 312, 313, 314 change)
 #   B  Help: Advanced Settings, cursor on Mouse; Return: Mouse (both switches on); Left,
-#      Return: Port 1: C64 (switch 1 disappears, bit 302 stays set); Right, Return: Back;
-#      Return; Run/Stop; Help closes the menu and saves (300, 301 change)
+#      Return: Port 1: C64 (switch 1 disappears, bit 310 stays set); Right, Return: Back;
+#      Return; Run/Stop; Help closes the menu and saves (308, 309 change)
 #   C  Help; Return: Mouse; Left, Down, Space: Port 1: Amiga (switch 1 appears, on); Down:
-#      switch 1; Run/Stop; Help closes the menu and saves (300, 301 change)
+#      switch 1; Run/Stop; Help closes the menu and saves (308, 309 change)
 set sd_int 1
 reset
 wait_uart 1500 MHz
