@@ -4,23 +4,18 @@ This file is the running memory of the work: the order, the decisions, the numbe
 
 ## 0. State
 
-**Phase: IMPLEMENTATION (since 2026-11-20, 00:10).** Branch `mh_implement_184` (from `develop` = `669e75d`). Version to become `WIP-V6-A27`. The research is done (`research/R1` to `R4`), the design is decided (section 4) and specified (`SPEC.md`).
+**Phase: REVIEW AND FOLLOW-UP (since 2026-11-20, 02:00).** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`. The implementation of all parts is on the branch and passes its own tests; three independent reviews are done or running and their findings are being closed.
 
 | Item | State |
 |---|---|
-| Issues #148 and #184 read, links followed | done (section 2; the Discord link of #148 needs a login and was not readable) |
-| Research R1 to R4 | done, notes in `research/` |
-| Number search: which pixel clocks and totals are possible | done (section 3, scripts in `tools/`) |
-| Design decision, specification `SPEC.md` | done |
-| R5: generator for the tables of the HDMI clock (`tools/mmcm_tables.py`, `research/R5-mmcm-tables.md`) | running |
-| Work package "menu": menu, `mega65.vhd`, golden model, firmware tests, version | running |
-| Work package "genlock": `hdmi_genlock.vhd` and its unit bench | running |
-| Work package "rtl": mode package, clock tables, pipeline wiring, CTS, constraints, project files | running |
-| Work package "bench": bench with the real scaler | running |
-| Integration of the four work packages on the branch | open |
-| Independent reviews (one per work package), fixes | open |
-| Documents (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, `AGENTS.md`, `FAQ.md`, `doc/hdmi.md`) | open |
-| Vivado build, hardware test | the user |
+| Research R1 to R5, design, specification `SPEC.md` | done |
+| HDMI hardware: mode package, clock tables, pipeline wiring, CTS, constraint, project files, benches | on the branch; reviewed (no defect, section 7); follow-up running |
+| Menu, `mega65.vhd`, golden model, version, bench `tb_hdmi_raw_menu` | on the branch; reviewed (no defect, section 7); follow-up running |
+| Genlock entity `hdmi_genlock.vhd` | on the branch; its unit bench `tb_hdmi_genlock` is being finished; review running |
+| Bench with the real scaler `tb_hdmi_raw` | running (full-size frames are slow) |
+| Stack depth of the firmware with 333 menu lines | computed (717 of 768 words); the measurement in the full-system simulation is running |
+| Documents (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, `FAQ.md`, `README.md`, `doc/hdmi.md`, `doc/speed.md`, `doc/ntsc.md`, `doc/developer.md`, `AGENTS.md`) | on the branch |
+| Vivado build, hardware test | the user (`tests/README.md`, section `Version WIP-V6-A27`) |
 
 ## 1. The order (the user, 2026-11-19, 23:15)
 
@@ -76,6 +71,36 @@ Consequence: standard totals and an exact match need a mechanism that absorbs th
 Rejected: totals far from the standard for 720p (1872 x 756 at 70.94 MHz would be exact); an H total that alternates on lines with picture; a new core clock; continuous phase shifting of the MMCM (not possible with a fractional multiplier); slips every few minutes without a genlock.
 
 Found on the way (not part of this work, to be told to the user): in the standard NTSC 480p modes the HDMI side sweeps the picture faster than the core writes it, so flicker-free's distance of 7 to 14 lines at the top may not be enough at the bottom (`research/R3`, last section): a tear in the lower part of the picture is possible there, worst in 5:4. Not verified on hardware.
+
+## 6. Verification record
+
+State of 2026-11-20, 02:00, on the integrated tree (commit `17d61be` plus documents):
+
+| What | Result |
+|---|---|
+| `CORE/vhdl/test/tb_hdmi_raw_clock/run.sh all` | PASS: the eight old clock codes give the DRP sequences of the unchanged file (448 events identical), the three new codes decode to the settings of `SPEC.md` 4.2, the unused codes load the table of "0010"; CTS average exact for the three new clocks, constant for every other record |
+| `doc/dev-hdmi-raw/tools/old_modes_diff.sh` | PASS: the ten existing modes give the same 23 derived signals as before |
+| `doc/dev-hdmi-raw/tools/mmcm_tables.py check` | PASS: 11 tables |
+| `CORE/vhdl/test/tb_ntsc`: `run.sh all`, `run_w1.sh`, `run_w2.sh all`, `run_w3.sh` | PASS |
+| Differential GHDL analysis of the seven changed design files against `669e75d` | PASS, no new diagnostics |
+| `CORE/vhdl/test/tb_hdmi_raw_menu/run.sh all` | PASS: 16384 menu states; without a Raw bit both decoders equal the previous version |
+| `M2M/rom/tests/menu_test.py verify`, `run`, `mutate` | VERIFY OK, ALL TESTS PASSED, 122 mutants killed |
+| Firmware suites (`doc/dev-a22x3/tools/suites.py`, 16 suites) | all green on the menu branch; `tb_capslock` reports a false alarm on the integrated tree (its pinned base of `framework.vhd`), being fixed |
+| Firmware ROM | 20284 words, 47 words differ from before (17 heap sizes, 30 menu indices); string ROM identical |
+| Genlock, frame-level model (`tools/loop_model.py`) and the reviewer's independent cycle model | lock from every phase: at most 389 frames (PAL 720p), 348 (NTSC 720p), 138 (576p), 117 (480p); static timing after lock in 576p and 480p |
+| Real scaler, first full-size run (480p raw) | no tear; reader behind writer 1.883 ms at the top, 1.213 ms at the bottom (`SPEC.md` 5.4 estimated 1.84 and 1.20) |
+
+Numbers of the menu change: `OPTM_SIZE` 325 to 333; the six Frame Sync items are the menu lines 66 to 71; every constant behind them moved by 8 (DVI and the filters by 9). Menu heap 4851 + 702 = 5553 words of `MENU_HEAP_SIZE` 5760 (was 5696); the heap of the file browser is 64 words smaller (24448 words in the release build). Stack: 717 of 768 words on the deepest chain (computed: 701 + 2 x 8).
+
+## 7. Reviews
+
+Three independent reviewers, each on a fresh clone with the specification and the commits only.
+
+**HDMI hardware** (modes, clock, pipeline, CTS, constraint, project files): no defect; no path that changes an existing mode. 11 of 18 reviewer mutants caught; the 7 survivors are all in the wiring of the genlock, which no bench exercised with the real entity. Follow-up: a wiring bench with the real `digital_pipeline` and the real genlock, the benches switched to the real entity, a change of the clock selector during a table load in the DRP bench, the clock uncertainty raised to 0.100 ns, two comments. A raw code that is visible for one clock cycle during a change between two standard modes is harmless (`SPEC.md` 5.1) and gets a test in the genlock bench.
+
+**Menu** (menu, decoders, golden model, heap, version): no defect; all 90 constants and subtypes confirmed with an independent parser; the firmware differs in exactly the explained words. 19 of 22 reviewer mutants caught; the 3 survivors are clock-domain mix-ups that the truth table bench could not see. Follow-up: a lint for the domains, the base commit of the bench moved to `669e75d`, mutants for the new groups in `menu_test.py`, the NTSC view in the firmware fixture, the wording of the help text and of a comment.
+
+**Genlock entity**: running.
 
 ## 5. How to resume
 
