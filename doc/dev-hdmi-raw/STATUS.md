@@ -4,18 +4,18 @@ This file is the running memory of the work: the order, the decisions, the numbe
 
 ## 0. State
 
-**Phase: REVIEW AND FOLLOW-UP (since 2026-11-20, 02:00).** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`. The implementation of all parts is on the branch and passes its own tests; three independent reviews are done or running and their findings are being closed.
+**Implemented, reviewed and verified in simulation; not yet built with Vivado, not yet on hardware.** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`.
 
 | Item | State |
 |---|---|
 | Research R1 to R5, design, specification `SPEC.md` | done |
-| HDMI hardware: mode package, clock tables, pipeline wiring, CTS, constraint, project files, benches | on the branch; reviewed (no defect, section 7); follow-up running |
-| Menu, `mega65.vhd`, golden model, version, bench `tb_hdmi_raw_menu` | on the branch; reviewed (no defect, section 7); follow-up running |
-| Genlock entity `hdmi_genlock.vhd` | on the branch; its unit bench `tb_hdmi_genlock` is being finished; review running |
-| Bench with the real scaler `tb_hdmi_raw` | running (full-size frames are slow) |
-| Stack depth of the firmware with 333 menu lines | computed (717 of 768 words); the measurement in the full-system simulation is running |
-| Documents (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, `FAQ.md`, `README.md`, `doc/hdmi.md`, `doc/speed.md`, `doc/ntsc.md`, `doc/developer.md`, `AGENTS.md`) | on the branch |
-| Vivado build, hardware test | the user (`tests/README.md`, section `Version WIP-V6-A27`) |
+| HDMI hardware: mode package, three new clock tables, pipeline wiring, CTS, constraint, project files | done, reviewed, follow-ups closed |
+| Genlock `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` | done, reviewed twice, follow-ups closed |
+| Menu, `mega65.vhd`, golden model, version | done, reviewed, follow-ups closed |
+| Benches `tb_hdmi_genlock`, `tb_hdmi_raw`, `tb_hdmi_raw_wiring`, `tb_hdmi_raw_clock`, `tb_hdmi_raw_menu` | done (section 6) |
+| Stack depth of the firmware with 333 menu lines | measured: 717 of 768 words, as computed |
+| Documents (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, `FAQ.md`, `README.md`, `doc/hdmi.md`, `doc/speed.md`, `doc/ntsc.md`, `doc/developer.md`, `AGENTS.md`) | done |
+| Vivado build of R3 and R6, hardware test on displays | the user (section 8) |
 
 ## 1. The order (the user, 2026-11-19, 23:15)
 
@@ -75,36 +75,71 @@ Rejected: totals far from the standard for 720p (1872 x 756 at 70.94 MHz would b
 
 Found on the way (not part of this work, to be told to the user): in the standard NTSC 480p modes the HDMI side sweeps the picture faster than the core writes it, so flicker-free's distance of 7 to 14 lines at the top may not be enough at the bottom (`research/R3`, last section): a tear in the lower part of the picture is possible there, worst in 5:4. Not verified on hardware.
 
+## 5. How the work was organized, how to resume
+
+A controller session wrote the specification and integrated; work packages ran in private clones of this repository (menu, genlock, HDMI hardware, bench with the real scaler, documents), each followed by an independent review on a fresh clone. To continue: read section 0 and section 8, then `SPEC.md`. To re-run the verification: the commands of section 6 (the READMEs of the benches give the runtimes; `tb_hdmi_raw` uses the simulator nvc if it is installed and GHDL otherwise; `tb_hdmi_genlock/run.sh all` takes about 40 minutes, `quick` about 6).
+
 ## 6. Verification record
 
-State of 2026-11-20, 02:00, on the integrated tree (commit `17d61be` plus documents):
+All on the integrated tree of the branch. Nothing here replaces the Vivado build and the test on real displays.
+
+**The existing modes are unchanged**
 
 | What | Result |
 |---|---|
-| `CORE/vhdl/test/tb_hdmi_raw_clock/run.sh all` | PASS: the eight old clock codes give the DRP sequences of the unchanged file (448 events identical), the three new codes decode to the settings of `SPEC.md` 4.2, the unused codes load the table of "0010"; CTS average exact for the three new clocks, constant for every other record |
-| `doc/dev-hdmi-raw/tools/old_modes_diff.sh` | PASS: the ten existing modes give the same 23 derived signals as before |
-| `doc/dev-hdmi-raw/tools/mmcm_tables.py check` | PASS: 11 tables |
-| `CORE/vhdl/test/tb_ntsc`: `run.sh all`, `run_w1.sh`, `run_w2.sh all`, `run_w3.sh` | PASS |
+| `CORE/vhdl/test/tb_hdmi_raw_clock/run.sh all` | PASS: the eight old clock codes write the DRP sequences of the unchanged file (448 events identical); the three new codes decode to the settings of `SPEC.md` 4.2; the unused codes load the table of "0010"; a selector change during a load ends with the complete table of the final code; the CTS in the packets is exact on average for the three new clocks and constant for every other record |
+| `doc/dev-hdmi-raw/tools/old_modes_diff.sh` | PASS: the ten existing modes give the same 23 derived signals as before (totals, sync positions, window, OSM shift, CTS, VIC, aspect, polarities, clock code) |
+| `doc/dev-hdmi-raw/tools/mmcm_tables.py check` | PASS: the generator reproduces the eight existing tables bit by bit; 11 tables checked |
+| `CORE/vhdl/test/tb_hdmi_raw/` (real scaler), standard mode with and without genlock and multiplexer | identical output in every clock cycle |
+| `CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh all` | PASS: in the ten standard modes the scaler's `htotal` is the record's value in every clock cycle, also with a hostile stand-in for the genlock; 12 of 13 wiring mutants rejected (the 13th is harmless by design: the multiplexer protects the scaler) |
+| `CORE/vhdl/test/tb_hdmi_raw_menu/run.sh all` | PASS: 16384 menu states; without a Raw bit both decoders equal the previous version; 11 mutants rejected |
+| `M2M/rom/tests/menu_test.py verify`, `run`, `mutate` | VERIFY OK, ALL TESTS PASSED, all mutants killed |
+| Firmware suites (`doc/dev-a22x3/tools/suites.py`) | all green |
+| `CORE/vhdl/test/tb_ntsc`: `run.sh all`, `run_w1.sh`, `run_w2.sh all`, `run_w3.sh` | PASS (`hr_core_speed` identical to its copy) |
 | Differential GHDL analysis of the seven changed design files against `669e75d` | PASS, no new diagnostics |
-| `CORE/vhdl/test/tb_hdmi_raw_menu/run.sh all` | PASS: 16384 menu states; without a Raw bit both decoders equal the previous version |
-| `M2M/rom/tests/menu_test.py verify`, `run`, `mutate` | VERIFY OK, ALL TESTS PASSED, 122 mutants killed |
-| Firmware suites (`doc/dev-a22x3/tools/suites.py`, 16 suites) | all green on the menu branch; `tb_capslock` reports a false alarm on the integrated tree (its pinned base of `framework.vhd`), being fixed |
-| Firmware ROM | 20284 words, 47 words differ from before (17 heap sizes, 30 menu indices); string ROM identical |
-| Genlock, frame-level model (`tools/loop_model.py`) and the reviewer's independent cycle model | lock from every phase: at most 389 frames (PAL 720p), 348 (NTSC 720p), 138 (576p), 117 (480p); static timing after lock in 576p and 480p |
-| Real scaler, first full-size run (480p raw) | no tear; reader behind writer 1.883 ms at the top, 1.213 ms at the bottom (`SPEC.md` 5.4 estimated 1.84 and 1.20) |
+| Firmware ROM | 20284 words; 47 words differ from before (17 heap sizes, 30 menu indices); string ROM identical |
 
-Numbers of the menu change: `OPTM_SIZE` 325 to 333; the six Frame Sync items are the menu lines 66 to 71; every constant behind them moved by 8 (DVI and the filters by 9). Menu heap 4851 + 702 = 5553 words of `MENU_HEAP_SIZE` 5760 (was 5696); the heap of the file browser is 64 words smaller (24448 words in the release build). Stack: 717 of 768 words on the deepest chain (computed: 701 + 2 x 8).
+**The raw modes work**
+
+| What | Result |
+|---|---|
+| `CORE/vhdl/test/tb_hdmi_genlock/run.sh all` (the entity against a cycle-exact model of the scaler's timing, 35 instances per mode) | PASS. Lock from every start phase; worst case 343 frames = 6.84 s (PAL 720p), 299 = 5.00 s (NTSC 720p), 124 = 2.47 s (576p), 102 = 1.70 s (480p). Steady state in 720p: stretch 196/197 (PAL) and 462/463 (NTSC) pixel clocks per frame, 300 frames within one pixel clock of 300 core frames. 576p and 480p: no stretch at all after lock, static timing. No line shorter than nominal, none more than 255 longer, only the 16 stretch lines. 24 mutants and the latch mutant rejected. 57 flip-flops |
+| The reviewer's independent cycle model (C, compared with the entity in GHDL) | the same numbers; zoom-in off while locked: no roll, no stretch; 10 s without a reference: the picture moves by 15 (PAL) or 42 (NTSC) pixel clocks in 720p, not at all in 576p and 480p |
+| `CORE/vhdl/test/tb_hdmi_raw/run.sh full` (the real `ascal.vhd`, `crop.vhd`, the genlock; every pixel of every frame checked) | PASS in all six raw modes: every HDMI frame shows exactly one core frame, in order, no tear. Zoom-in on and off, toggled while locked: the genlock stays locked. Three bench mutants fail as they must |
+| Reader behind writer at the top / bottom of the picture, measured with the real scaler | PAL 720p 1.890 / 3.706 ms, NTSC 720p 1.894 / 1.998, 576p 4:3 1.881 / 3.000, 576p 5:4 2.457 / 2.457, 480p 4:3 1.881 / 1.214, 480p 5:4 2.357 / 0.768 (`SPEC.md` 5.4 within 0.05 ms). No tear from 0.77 ms below the target to at least 12.8 ms above it |
+
+Numbers of the menu change: `OPTM_SIZE` 325 to 333; the six Frame Sync items are the menu lines 66 to 71; every constant behind them moved by 8 (DVI and the filters by 9). Menu heap 4851 + 702 = 5553 words of `MENU_HEAP_SIZE` 5760 (was 5696); the heap of the file browser is 64 words smaller (24448 words in the release build). Stack, measured in the full-system simulation: 717 of 768 words on the deepest chain (a CRT load in the visible menu; 49 words free), 673 on the shortcut chain; register banks 23 and 34, unchanged.
 
 ## 7. Reviews
 
-Three independent reviewers, each on a fresh clone with the specification and the commits only.
+Three independent reviewers, each on a fresh clone with the specification and the commits only, with mutants of their own.
 
-**HDMI hardware** (modes, clock, pipeline, CTS, constraint, project files): no defect; no path that changes an existing mode. 11 of 18 reviewer mutants caught; the 7 survivors are all in the wiring of the genlock, which no bench exercised with the real entity. Follow-up: a wiring bench with the real `digital_pipeline` and the real genlock, the benches switched to the real entity, a change of the clock selector during a table load in the DRP bench, the clock uncertainty raised to 0.100 ns, two comments. A raw code that is visible for one clock cycle during a change between two standard modes is harmless (`SPEC.md` 5.1) and gets a test in the genlock bench.
+**HDMI hardware** (modes, clock, pipeline, CTS, constraint, project files): no defect; no path that changes an existing mode. 11 of 18 reviewer mutants were caught at first; the 7 survivors were all in the wiring of the genlock, which no bench exercised with the real entity. Closed with the bench `tb_hdmi_raw_wiring`, the real entity in all benches, a selector change during a table load in the DRP bench, the CTS observed in the packet, the clock uncertainty raised to 0.100 ns, an assertion on the vertical back porch of the raw records and corrected comments. A raw code that is visible for one clock cycle during a change between two standard modes is harmless (`SPEC.md` 5.1) and tested in the genlock bench.
 
-**Menu** (menu, decoders, golden model, heap, version): no defect; all 90 constants and subtypes confirmed with an independent parser; the firmware differs in exactly the explained words. 19 of 22 reviewer mutants caught; the 3 survivors are clock-domain mix-ups that the truth table bench could not see. Follow-up: a lint for the domains, the base commit of the bench moved to `669e75d`, mutants for the new groups in `menu_test.py`, the NTSC view in the firmware fixture, the wording of the help text and of a comment.
+**Menu** (menu, decoders, golden model, heap, version): no defect; all 90 constants and subtypes confirmed with an independent parser; the firmware differs in exactly the explained words. 19 of 22 reviewer mutants were caught at first; the 3 survivors were clock-domain mix-ups in the decoders. Closed with separate vectors per clock domain in `tb_hdmi_raw_menu`, its base commit moved to `669e75d`, mutants for the new groups in `menu_test.py`, the NTSC view in the firmware fixture, and better wording of the help text and of a comment.
 
-**Genlock entity**: no defect. The reviewer's own cycle model (compared with the entity in GHDL: identical in every measurement, stretch and line length) confirms: lock from every start phase (1500 to 3000 phases per mode; worst case 389 frames in PAL 720p, 348 in NTSC 720p, 138 in 576p, 117 in 480p), in 720p the sum of the frame lengths within 0.54 pixel clocks of the core's frames over 5400 frames, static timing in 576p and 480p, no line ever shorter than nominal or more than 255 longer under 1000 random enable and reset toggles, and the distances of `SPEC.md` 5.4 (0.77 ms at the bottom of NTSC 480p 5:4 is the smallest). Two improvements of the control law adopted (D11, D12). Its two risks are properties of the design, not of the code, and are the first things the hardware test has to show: the 16 back porch lines of 720p are 12 or 29 pixel clocks longer than standard in every frame, and during a pull-in the stretch lines are 255 pixel clocks longer for up to 8 seconds.
+**Genlock entity**, two rounds: no defect. The reviewer's own cycle model (compared with the entity in GHDL: identical in every measurement, stretch and line length) confirmed lock from every start phase, the exact average frame length in 720p, the static timing in 576p and 480p and the line length bounds under 1000 random enable and reset toggles. Two improvements of the control law came from the first round (D11, D12) and were verified in the second. Three reviewer mutants that the entity's bench did not catch (all in the rule for a measurement without a new reference) led to more bench cases. One accepted limit: if the reference stops in the very frame after a small backward jump of the core's phase, the catch-up stretch of that frame is held, and the return costs a pull-in; no trigger for this is known.
 
-## 5. How to resume
+The reviews name two risks that are properties of the design, not of the code, and that only displays can answer: in 720p the 16 back porch lines are 12 (PAL) or 29 (NTSC) pixel clocks longer than standard in every frame, and during a pull-in the stretch lines are 255 pixel clocks longer for up to 7 seconds. The 576p and 480p raw modes have neither in the steady state.
 
-Read section 0, then `SPEC.md`. The controller session keeps its live checkpoint also in the memory file `project_active_task_state.md` (clone paths, agents). Work packages run in private clones under the scratchpad of the controller session (`.../scratchpad/w/menu`, `w/genlock`, `w/rtl`, `w/bench`, each on a local branch of the same name that starts at the branch tip); their commits are fetched into the main folder and integrated there. Helper scripts in the scratchpad: `mkclone.sh <name> [toolchain]`, `toolchain.sh`, the clipboard shim `shim/`.
+## 8. What is open
+
+**For the user**
+
+1. Vivado build of R3 and R6 (`CORE/build_all.sh`). New in the timing analysis: `set_clock_uncertainty -setup 0.100` on `hdmi_clk` in `M2M/common.xdc`; a new source file `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` in the four project files. The new CDC of the reference in `digital_pipeline.vhd` is an `xpm_cdc_single` (constrained by the macro).
+2. Hardware test as in `tests/README.md`, section `Version WIP-V6-A27`. The first things to look at: does the display show `Raw` at all in 720p (the modified blanking lines) and in 4:3 576p (the timing of the MEGA65 core and the Ultimate 64 with a pixel clock 0.09 % higher); is the scroller smooth for minutes; is the sound free of dropouts; does the picture come back after Cursor Up and Return if the display stays black.
+3. The names in the menu are a proposal: `HDMI Frame Sync` with `Off`, `Flicker-free`, `Raw 50.1 Hz` / `Raw 59.8 Hz`, and `HDMI Options`. A line follows each headline, as below `HDMI Display Mode`.
+4. Date and commit in the `WIP-V6-A27` row of `doc/inofficial.md` after the build.
+
+**Found on the way, not part of this work**
+
+- **Standard NTSC 480p with flicker-free tears in the lower part of the picture, in simulation.** In these modes the HDMI side sweeps the picture faster than the core writes it, and flicker-free holds the writer only 7 to 14 lines ahead at the top. The bench with the real scaler shows: `5:4 480p 59.94 Hz` tears in every frame (from line 256 or 377 of 480, depending on the phase), `4:3 480p 59.94 Hz` tears when the phase sits in the lower part of the window (from line 303) and not in the upper part. Existing behavior since NTSC was added; not verified on hardware; `tests/README.md` has a step for it. A fix would be thresholds of `hdmi_flicker_free` that depend on the mode. `Raw` in the same display modes does not have the problem.
+- The scaler shows two or three wrong frames after a change of the picture size (zoom-in on or off), and in 576p and 480p its first frame after its own reset is wrong when the core's lines have 9 memory bursts (PAL, zoom-in). Both are properties of `ascal.vhd` in every mode.
+- The old comment of the 27 MHz clock table in `video_out_clock.vhd` says "74.250 MHz"; the table is right.
+- The Discord link of issue #148 needs a login and could not be read.
+
+**Ideas for later**
+
+- A pixel clock that needs no stretch in 720p: the HDMI MMCM would have to produce the pixel clock from its fractional output and a second MMCM the 5x clock (`research/R1-mister.md`): within a few ppm of the ideal clock.
+- Triple buffering on the boards with SDRAM (R4 to R6) would make the phase irrelevant, at the price of one to two frames of delay.
+
