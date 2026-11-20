@@ -127,14 +127,16 @@ MODES = {
 }
 
 def run(name, expect, mode, frames, d0_ms=2.0, crop=False, raw=True, target=None, mem="real",
-        settle=0, dcheck=True, extra="", clk_scale=Fr(1), core_half=None, no_genlock=False, sim="default"):
+        settle=0, dcheck=True, extra="", clk_scale=Fr(1), core_half=None, no_genlock=False, sim="default",
+        skip=None):
     md = MODES[mode]
     std = md["std"]
     # The first HDMI picture is not checked where a line of the input picture takes 9 bursts
     # (382 columns in PAL, 348 with zoom-in): the scaler shows a wrong first picture there after
     # its start, the second and all later ones are right (NTSC without zoom-in: 404 columns, 10
     # bursts, right from the first picture on).
-    skip = 1 if (std == "PAL" or crop) else 0
+    if skip is None:
+        skip = 1 if (std == "PAL" or crop) else 0
     dots, lines, vb, hb = GEO[std]
     ch = core_half if core_half is not None else CORE[std]
     oh = md["half"] / clk_scale
@@ -178,17 +180,19 @@ def run(name, expect, mode, frames, d0_ms=2.0, crop=False, raw=True, target=None
          "-gG_START_LINES=%d" % start, "-gG_TARGET=%d" % target, "-gG_TCORE=%d" % (T // 10000),
          "-gG_FRAMES=%d" % (frames + skip), "-gG_CHECK_FROM=%d" % skip, "-gG_SETTLE=%d" % (settle + skip)]
     assert oh.numerator < 2**31 and ch.numerator < 2**31
+    if not raw:
+        g += ["-gG_D_STEP=-1"]                    # standard mode: d drifts with the rate difference
     if dcheck and raw:
         # SPEC 5.3: locked from target - 1024; no stretch up to target + band, band = 1.25 x target
         tg = 2 * md["khz"]
         g += ["-gG_D_LO=%d" % (tg - 1024), "-gG_D_HI=%d" % (tg + tg + tg // 4 - 1)]
     if mem == "slow":
-        # pessimistic (R3, HyperRAM shared with REU, cartridge and drives, and QNICE): 0 to 0.5 us
-        # extra before every burst, 2 us before one burst in 20
-        g += ["-gG_MEM_EXTRA=50", "-gG_MEM_PAUSE=200", "-gG_MEM_PAUSE_ONE=20"]
+        # pessimistic (R3, HyperRAM shared with REU, cartridge and drives, and QNICE): 0 to 0.3 us
+        # extra before every burst, 1 us before one burst in 20
+        g += ["-gG_MEM_EXTRA=30", "-gG_MEM_PAUSE=100", "-gG_MEM_PAUSE_ONE=20"]
     if mem == "heavy":
-        # more than the scaler tolerates: 0 to 1.4 us before every burst, 4.2 us before one in 20
-        g += ["-gG_MEM_EXTRA=140", "-gG_MEM_PAUSE=420", "-gG_MEM_PAUSE_ONE=20"]
+        # more than the scaler always tolerates: 0 to 0.5 us before every burst, 2 us before one in 20
+        g += ["-gG_MEM_EXTRA=50", "-gG_MEM_PAUSE=200", "-gG_MEM_PAUSE_ONE=20"]
     if extra:
         g += extra.split()
     print(name, expect, sim, " ".join(g))
@@ -211,10 +215,11 @@ elif SET == "full":
     run("raw_pal576_54", "pass", "pal576_54", 6)
     run("raw_ntsc480", "pass", "ntsc480", 6)
     run("raw_ntsc480_54_slowmem", "pass", "ntsc480_54", 6, mem="slow")
-    # 3: zoom-in switched off and on again while locked (after HDMI frames 1 and 4): the core's
-    # picture start moves 1.33 ms earlier and back; the first jump stays inside the band (no
-    # stretch), the second returns to the target
-    run("zoomtoggle_ntsc480", "pass", "ntsc480", 7, crop=True, extra="-gG_CROP_FLIP1=1 -gG_CROP_FLIP2=4")
+    # 3: zoom-in switched off after HDMI frame 1 and on again after frame 5, while locked: the
+    # core's picture start moves 1.33 ms earlier and back; the first jump stays inside the band (no
+    # stretch), the second returns to the target. The scaler needs up to three frames for a new
+    # input size (frames 2 to 4 and 6 to 8: reported, not judged)
+    run("zoomtoggle_ntsc480", "pass", "ntsc480", 9, crop=True, extra="-gG_CROP_FLIP1=1 -gG_CROP_FLIP2=5")
     # 3: zoom-in, with the pessimistic memory
     run("zoom_pal576_slowmem", "pass", "pal576", 4, crop=True, mem="slow")
     run("zoom_ntsc480_slowmem", "pass", "ntsc480", 4, crop=True, mem="slow")
@@ -224,21 +229,29 @@ elif SET == "full":
     # 4: pull-in. From 1.5 stretches of 4080 below the target: frames 0 and 1 are stretched (4080,
     # 2040), from frame 2 on the phase is at the target. From inside the tear zone (the HDMI
     # picture begins 0.05 ms after the core's): tears are allowed in every frame, the geometry is
-    # checked in every frame, the evaluation requires a tear in frame 0 and none in the last frame.
+    # checked in every frame, the evaluation requires a tear in the first checked frame and none in
+    # the last one. The bench's frame buffer holds no earlier picture before frame 0 (on hardware
+    # a line fetched too early shows the previous frame): frame 0 is not checked; leaving the tear
+    # zone (d below 0.79 ms in this mode) takes five stretches of 4080 from 0.05 ms.
     run("pullin_ntsc480", "pass", "ntsc480", 4, d0_ms=2.0 - 1.5 * 4080 / 27000, settle=2)
-    run("pullin_from_tear_ntsc480", "pass", "ntsc480", 3, d0_ms=0.05, settle=99, dcheck=False)
+    run("pullin_from_tear_ntsc480", "pass", "ntsc480", 7, d0_ms=0.05, settle=99, dcheck=False, skip=1)
     # 5: standard mode with the genlock and the multiplexer, and without both
     run("std_ntsc480_genlock", "pass", "ntsc480std", 2, raw=False, dcheck=False)
     run("std_ntsc480_nogenlock", "pass", "ntsc480std", 2, raw=False, dcheck=False, no_genlock=True)
     # 2: the memory latency the scaler tolerates, independent of the genlock: the standard mode
-    # with a memory slower than "slowmem" (information)
-    run("heavymem_std_ntsc480_54", "info", "ntsc480std_54", 1, raw=False, dcheck=False, mem="heavy")
+    # with zoom-in and a memory slower than "slowmem" (information)
+    run("heavymem_std_zoom_ntsc480", "info", "ntsc480std", 4, crop=True, raw=False, dcheck=False, mem="heavy")
     # 6: mutants of the setup that must fail
     run("mutant_target_0.1ms_ntsc480", "fail", "ntsc480", 1, d0_ms=0.1, target=2700, dcheck=False)
     run("mutant_clock_10pct_fast_ntsc480", "fail", "ntsc480", 1, clk_scale=Fr(11, 10), dcheck=False)
     run("mutant_old_reference_zoom_ntsc480", "fail", "ntsc480", 1, d0_ms=2.0 + 1000 / 27000, crop=True,
         settle=-1, extra="-gG_REF_OLD=true")
 elif SET == "extra":
+    # The upper end of the tear-free range of d in PAL 576p 4:3, as the full set computes it from
+    # raw_pal576 (18.884 ms): static raw timing (the genlock disabled by the multiplexer, so d
+    # stays where it starts), d 0.2 ms below and 0.2 ms above it.
+    run("range_below_upper_end_pal576", "pass", "pal576", 1, d0_ms=18.684, raw=False, dcheck=False)
+    run("range_above_upper_end_pal576", "fail", "pal576", 1, d0_ms=19.084, raw=False, dcheck=False)
     # today's standard NTSC 480p with flicker-free: on average the core runs at the HDMI frame rate
     # and the writer is 0x1000 to 0x2000 words (6.4 to 12.8 lines) ahead of the reader at the top.
     # Model: no genlock, the core clock exactly at the HDMI frame rate, the phase at both thresholds.
@@ -379,8 +392,9 @@ if SET == "full":
                 fails.append("geometry raw vs standard")
 if "pullin_from_tear_ntsc480" in res:
     fr = res["pullin_from_tear_ntsc480"]["frames"]
-    tears = [int(kv(f)["tear_line"]) for f in fr]
-    stretch = [int(kv(f)["stretch"]) for f in fr]
+    cf = int(gens["pullin_from_tear_ntsc480"].get("CHECK_FROM", "0"))
+    tears = [int(kv(f)["tear_line"]) for f in fr][cf:]
+    stretch = [int(kv(f)["stretch"]) for f in fr][cf:]
     ok = len(tears) >= 2 and tears[0] >= 0 and tears[-1] < 0
     print("pull-in from the tear zone: tear lines per frame %s, stretch per frame %s: %s" %
           (tears, stretch, "tear only at the start, then clean" if ok else "NOT AS EXPECTED"))

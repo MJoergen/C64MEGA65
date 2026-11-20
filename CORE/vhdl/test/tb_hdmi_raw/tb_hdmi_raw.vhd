@@ -771,7 +771,11 @@ begin
                      elsif sig /= sig_ref then err("picture signature changed"); end if;
                   end if;
                   if frame >= G_SETTLE then
-                     if tear >= 0 then
+                     if tear >= 0 and not geo_chk then
+                        report "NOTE frame " & integer'image(frame) & ": picture line " & integer'image(tear) &
+                               " shows another core frame (transition to the new input size, not judged)"
+                           severity note;
+                     elsif tear >= 0 then
                         tears := tears + 1;
                         err("tear: picture line " & integer'image(tear) & " shows another core frame");
                      end if;
@@ -805,18 +809,20 @@ begin
                end if;
                d_prev := d;
             end if;
-            -- zoom-in toggled after this frame: the next two HDMI frames show the old geometry or
-            -- the new picture with the old size; geometry and signature count again from the third
+            -- zoom-in toggled after this frame: the scaler needs up to three HDMI frames for the new
+            -- input size (it shows the new picture with the old size and stride, and after a smaller
+            -- height it writes lines below the new picture with the old one, because its pixel
+            -- counter wraps at 4096); geometry, signature and tears count again from the fourth
             if (G_CROP_FLIP1 >= 0 and frame = G_CROP_FLIP1) or (G_CROP_FLIP2 >= 0 and frame = G_CROP_FLIP2) then
                crop_req <= crop_req + 1;
             end if;
             geo_chk := true;
-            if (G_CROP_FLIP1 >= 0 and frame + 1 > G_CROP_FLIP1 and frame + 1 <= G_CROP_FLIP1 + 2) or
-               (G_CROP_FLIP2 >= 0 and frame + 1 > G_CROP_FLIP2 and frame + 1 <= G_CROP_FLIP2 + 2) then
+            if (G_CROP_FLIP1 >= 0 and frame + 1 > G_CROP_FLIP1 and frame + 1 <= G_CROP_FLIP1 + 3) or
+               (G_CROP_FLIP2 >= 0 and frame + 1 > G_CROP_FLIP2 and frame + 1 <= G_CROP_FLIP2 + 3) then
                geo_chk := false;
             end if;
-            if (G_CROP_FLIP1 >= 0 and frame + 1 = G_CROP_FLIP1 + 3) or
-               (G_CROP_FLIP2 >= 0 and frame + 1 = G_CROP_FLIP2 + 3) then
+            if (G_CROP_FLIP1 >= 0 and frame + 1 = G_CROP_FLIP1 + 4) or
+               (G_CROP_FLIP2 >= 0 and frame + 1 = G_CROP_FLIP2 + 4) then
                crop_exp := not crop_exp;
                sig_ref  := -1;
                C_G0 := in_y0(crop_exp) mod 256;

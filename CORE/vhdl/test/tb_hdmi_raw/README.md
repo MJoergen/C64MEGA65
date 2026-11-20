@@ -8,9 +8,13 @@ Simulation bench for the "Raw" HDMI modes of `doc/dev-hdmi-raw/SPEC.md`: the sca
 CORE/vhdl/test/tb_hdmi_raw/run.sh [quick|full|extra] [--keep]
 ```
 
-The runner builds in a temporary directory, prints one result line per simulation, the measured distances and the cross-checks between simulations, and ends with `RESULT: PASS` or `RESULT: FAIL ...`; the exit status is 0 only on PASS. `--keep` keeps the build directory (logs) and prints its path. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl` or `GHDL`), python3. `JOBS` (default 3) sets the number of parallel simulations, `GENLOCK` another file for the genlock entity.
+The runner builds in a temporary directory, prints one result line per simulation, the measured distances and the cross-checks between simulations, and ends with `RESULT: PASS` or `RESULT: FAIL ...`; the exit status is 0 only on PASS. `--keep` keeps the build directory (logs) and prints its path. Requirements: GHDL 5.1.1 (`/usr/local/bin/ghdl` or `GHDL`), python3, and optionally nvc 1.21 (`nvc` in the path or `NVC`). `JOBS` (default 3) sets the number of parallel simulations, `GENLOCK` another file for the genlock entity.
 
-Runtimes on this machine (one simulation per core): `quick` 2 simulations, about 14 minutes with `JOBS=2`; `full` and `extra`: see the results below. A 480p or 576p frame costs 9 to 12 minutes of simulation, a 720p frame about 25 (the scaler's HDMI clock domain dominates).
+### Two simulators
+
+The bench is plain VHDL-2008 and runs with GHDL and with nvc. nvc is about ten times faster here (one 480p frame in about 50 s instead of 9 minutes), so `run.sh` takes nvc when it is installed; `SIM=ghdl` runs everything with GHDL. The full set then also runs one configuration (`raw_ntsc480`, one frame) with both simulators and requires the same hash over `o_hs`, `o_vs`, `o_de`, `o_r`, `o_g`, `o_b` of the scaler in every clock and the same picture signature; both simulators also gave the identical hash for `mutant_target_0.1ms_ntsc480`. Both use the same copy of `ascal.vhd` (see below).
+
+Runtimes on this machine with nvc and `JOBS=3`: `quick` (3 simulations) 2 minutes, `full` and `extra`: see the results below. One HDMI frame costs about 50 s of simulation in 480p and 576p and about 3 minutes in 720p with nvc, 9 to 12 and about 25 minutes with GHDL; the scaler's HDMI clock domain dominates (all its interpolators compute in every clock).
 
 ## Files
 
@@ -33,7 +37,7 @@ The picture as `CORE/C64_MiSTerMEGA65/rtl/video_sync.vhd` delivers it to the sca
 
 The real `M2M/vhdl/av_pipeline/ascal.vhd`, configured as in `digital_pipeline.vhd`: `MASK x"ff"`, `RAMBASE 0`, `RAMSIZE` 2 MB, `INTER`, `HEADER`, `DOWNSCALE` false, `DOWNSCALE_NN` true, `BYTESWAP`, `ADAPTIVE` true, no palettes, `FRAC 6`, `OHRES 2048`, `IHRES 1024`, 128-bit Avalon with 19 address bits, 128-byte bursts, `iauto '1'`, `run '1'`, `freeze '0'`, 24 bpp, `mode "00000"` (nearest neighbor, no triple buffering), the output timing and window (`hmin` to `vmax`) of the mode as `digital_pipeline.vhd` computes them. Nearest neighbor passes the input pixels unchanged, so every output pixel tells which core frame, line and column it comes from. The other interpolators read the frame buffer at the same moments (the fetch of a line depends only on the vertical position).
 
-GHDL needs one change of the scaler: two expressions are negative for a short time after the start, because they are computed from values that are still 0 before the scaler has seen its first input picture (`o_pshift <= o_off(0) - 1` with `o_pshift` of range 0 to 15, `o_ihsizem <= o_ihsize + o_off(0) - 2` with range 0 to 4095). GHDL stops there with a bound check failure; the hardware simply wraps (4 and 12 bits). `run.sh` writes a copy of `ascal.vhd` into the build directory in which exactly these two expressions are written with that wrap (`(o_off(0) + 15) MOD 16`, `(o_ihsize + o_off(0) + 4094) MOD 4096`), and stops if the original text is not found exactly once. The results are identical whenever the original expressions are in range; nothing else of the file changes, and the bench adds no ports.
+The simulators need one change of the scaler: two expressions are negative for a short time after the start, because they are computed from values that are still 0 before the scaler has seen its first input picture (`o_pshift <= o_off(0) - 1` with `o_pshift` of range 0 to 15, `o_ihsizem <= o_ihsize + o_off(0) - 2` with range 0 to 4095). GHDL and nvc stop there with a bound check failure; the hardware simply wraps (4 and 12 bits). `run.sh` writes a copy of `ascal.vhd` into the build directory in which exactly these two expressions are written with that wrap (`(o_off(0) + 15) MOD 16`, `(o_ihsize + o_off(0) + 4094) MOD 4096`), and stops if the original text is not found exactly once. The results are identical whenever the original expressions are in range; nothing else of the file changes, and the bench adds no ports.
 
 ### Startup
 
@@ -41,7 +45,7 @@ A real system runs long before anything is looked at; a simulation starts from n
 
 * The core picture starts a few lines before its vsync (PAL in raster line 300, NTSC in line 0 with the vsync at its beginning): the scaler counts its input lines from the first visible line after a vsync. Without a vsync in front of the first picture it counts one line too many in that picture, takes 271 lines as the input height and, because its horizontal pixel counter wraps at 4096 (`MOD 4096`), writes a 271st line of blanking 8 lines after the picture; the last two output lines would show it.
 * The HDMI clock runs for 16 periods from the start, through the reset of the scaler (its output side takes the reset with this clock), pauses, and resumes 50 µs before the vsync that ends the core's first complete picture: the scaler notices the end of an input picture only with a running output clock, and only then takes over the size of the input picture, at the next falling edge of its output vsync.
-* The first pass of the HDMI timing is short (40 to 190 lines, computed by `run.sh`), without data enable, with a vsync that ends three lines before the first picture's preload, and with the vertical window out of reach (`vmin` 4000): the scaler fetches nothing before it knows the size of its input picture. The bench applies the real window in the horizontal blanking one line before the scaler's lead counter wraps, and the real `vtotal`, `vsstart`, `vsend`, `vdisp` in the horizontal blanking of the last line before the first picture (the scaler takes these inputs over in every clock).
+* The first pass of the HDMI timing is short (40 to about 700 lines, computed by `run.sh` from the wanted start phase), without data enable, with a vsync that ends three lines before the first picture's preload, and with the vertical window out of reach (`vmin` 4000): the scaler fetches nothing before it knows the size of its input picture. The bench applies the real window in the horizontal blanking one line before the scaler's lead counter wraps, and the real `vtotal`, `vsstart`, `vsend`, `vdisp` in the horizontal blanking of the last line before the first picture (the scaler takes these inputs over in every clock).
 * The resume time is chosen so that the first HDMI picture begins the wanted distance after a core picture (2.0 ms unless stated otherwise), so the genlock starts in its steady state.
 
 From the first picture on, all inputs of the scaler are constant except `htotal` from the genlock.
@@ -54,10 +58,10 @@ The real `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` of the repository, wired as in 
 
 On the scaler's 128-bit Avalon port, in order (a read sees every write accepted before it), with the latencies of the R3 path (HyperRAM behind `avm_decrease` and the arbiter, 100 MHz, 16 bits per clock): a burst is accepted 12 clocks after it is requested and after the previous burst has left the memory; a write burst takes one 128-bit beat every 8 clocks (eight 16-bit words); a read delivers its first beat 28 clocks after acceptance and then one every 8 clocks. A 128-byte burst therefore takes about 0.8 µs (write) or 1.0 µs (read). On R4 to R6 the scaler has an SDRAM of its own, which is faster.
 
-* "Pessimistic" (`slowmem`, other users of the R3 HyperRAM: REU, cartridge, drives, QNICE): in addition every burst waits a random 0 to 0.5 µs, and one burst in 20 another 2 µs.
-* "Heavy" (`heavymem`, information only): 0 to 1.4 µs before every burst (one burst of another master) and 4.2 µs before one in 20 (one burst of each of the three others).
+* "Pessimistic" (`slowmem`, other users of the R3 HyperRAM: REU, cartridge, drives, QNICE): in addition every burst waits a random 0 to 0.3 µs, and one burst in 20 another 1 µs.
+* "Heavy" (`heavymem`, information only): 0 to 0.5 µs before every burst and 2 µs before one in 20.
 
-The scaler fetches an input line (9 or 10 bursts) between the start of the hsync of an output line and the display of the output line two lines later: about 36 µs in 480p and 576p, about 26 µs in 720p. With the heavy model a fetch takes up to 50 µs, and the scaler shows stale data in some lines, in every mode with or without genlock (`heavymem_std_ntsc480_54` shows it in the standard mode); this is a limit of the scaler and the memory, not of the raw modes. The Avalon monitor reports the longest fetch of a line per frame (`fetch_max`).
+The scaler fetches an input line (9 or 10 bursts) between the start of the hsync of an output line and the display of the output line two lines later: about 36 µs in 480p and 576p, about 26 µs in 720p; the two lines at the top of the picture are fetched together, three lines before it. With the realistic model a line fetch takes 13 µs (720p) to 24 µs (480p, `fetch_max` of the Avalon monitor). With the heavy model some fetches come too late, and single lines show the previous picture, in the standard mode exactly as in the raw modes (`heavymem_std_zoom_ntsc480`, no genlock); with 0 to 1.4 µs before every burst and 4.2 µs before one in 20 a fetch takes up to 50 µs and many lines break. This is a limit of the scaler and the memory, independent of the raw modes and of the genlock; the distances between writer and reader do not change with the memory latency.
 
 ### Measurements
 
@@ -73,21 +77,24 @@ Every run starts the HDMI picture 2.0 ms after a core picture (the target of SPE
 
 | Simulation | Set | Mode, checked frames | Purpose | Expected |
 |---|---|---|---|---|
-| `raw_pal720` | full | PAL 720p raw, 1 (after a first, unchecked one) | check 1 and 2; the genlock adds the surplus in every frame | pass |
-| `raw_ntsc720` | full | NTSC 720p raw, 2 | check 1 and 2; the genlock adds the surplus in every frame | pass |
-| `raw_pal576`, `raw_pal576_54` | full | PAL 576p raw 4:3 and 5:4, 1 | check 1 and 2 | pass |
-| `raw_ntsc480` | quick (1), full (2) | NTSC 480p raw 4:3 | check 1 and 2; its geometry signature is compared with `std_ntsc480_genlock` | pass |
-| `raw_ntsc480_54_slowmem` | full | NTSC 480p raw 5:4, 2, pessimistic memory | check 1 and 2 in the mode with the smallest distance at the bottom | pass |
-| `zoom_pal576_slowmem`, `zoom_ntsc480_slowmem` | full | 576p and 480p raw with zoom-in, 1, pessimistic memory | check 3 | pass |
-| `zoomtoggle_ntsc480` | full | NTSC 480p raw, zoom-in switched off after frame 1 and on again after frame 4, 6 | check 3: no tear and no repeated or skipped frame at any time; geometry with zoom-in in frame 1, without in frame 4, `d` inside the band (no stretch) while zoom-in is off, back at the target after it is on again | pass |
-| `inband_ntsc480`, `inband_zoom_ntsc480` | full | NTSC 480p raw without and with zoom-in, 1, start 2.4 ms above the target (inside the band) | check 2: no stretch, the reader 2.4 ms further behind, no tear also at the bottom | pass |
-| `pullin_ntsc480` | full | NTSC 480p raw, 3; start 1.5 x 4080 clocks below the target | check 4: frames 0 and 1 are stretched (4080, 2040), from frame 2 on `d` is at the target | pass |
-| `pullin_from_tear_ntsc480` | full | NTSC 480p raw, 2; start 0.05 ms after the core's picture | check 4: tears are allowed, the geometry and the line lengths are checked in every frame; the evaluation requires a tear in frame 0 and none in the last frame | pass |
-| `std_ntsc480_genlock`, `std_ntsc480_nogenlock` | full | standard NTSC 480p (525 lines, 27.000 MHz), 1; genlock disabled by the multiplexer, and a build without genlock and multiplexer | check 5: the hash over all outputs of the scaler in every clock must be equal | pass, equal hash |
-| `heavymem_std_ntsc480_54` | full | standard NTSC 480p 5:4, 1, heavy memory, no genlock | the memory latency the scaler tolerates (information) | information |
+| `raw_pal720` | full | PAL 720p raw, 5 (after a first, unchecked one) | check 1 and 2; the genlock adds the surplus in every frame | pass |
+| `raw_ntsc720` | full | NTSC 720p raw, 5 | check 1 and 2; the genlock adds the surplus in every frame | pass |
+| `reference_ghdl_raw_ntsc480`, `reference_nvc_raw_ntsc480` | full (with `SIM=nvc`) | NTSC 480p raw, 1, with GHDL and with nvc | the two simulators give the same hash | pass, equal hash |
+| `raw_pal576`, `raw_pal576_54` | full | PAL 576p raw 4:3 and 5:4, 6 | check 1 and 2 | pass |
+| `raw_ntsc480` | quick (1), full (6) | NTSC 480p raw 4:3 | check 1 and 2; its geometry signature is compared with `std_ntsc480_genlock` | pass |
+| `raw_ntsc480_54_slowmem` | full | NTSC 480p raw 5:4, 6, pessimistic memory | check 1 and 2 in the mode with the smallest distance at the bottom | pass |
+| `zoom_ntsc480` | quick | NTSC 480p raw with zoom-in, 1 | check 3 | pass |
+| `zoom_pal576_slowmem`, `zoom_ntsc480_slowmem` | full | 576p and 480p raw with zoom-in, 4, pessimistic memory | check 3 | pass |
+| `zoomtoggle_ntsc480` | full | NTSC 480p raw, zoom-in switched off after frame 1 and on again after frame 5, 9 | check 3: no repeated or skipped frame; `d` jumps into the band without a stretch while zoom-in is off and returns to the target when it is on again; geometry, signature and tears judged in frame 1 (zoom-in), 5 (without) and 9 (zoom-in again). The scaler needs up to three frames for a new input size: it first shows the new picture with the old size and stride, and after a smaller height it writes lines of the blanking below the new picture with the old height (its pixel counter wraps at 4096); these frames are reported, not judged | pass |
+| `inband_ntsc480`, `inband_zoom_ntsc480` | full | NTSC 480p raw without and with zoom-in, 3, start 2.4 ms above the target (inside the band) | check 2: no stretch, the reader 2.4 ms further behind, no tear also at the bottom | pass |
+| `pullin_ntsc480` | full | NTSC 480p raw, 4; start 1.5 x 4080 clocks below the target | check 4: frames 0 and 1 are stretched (4080, 2040), from frame 2 on `d` is at the target | pass |
+| `pullin_from_tear_ntsc480` | full | NTSC 480p raw, 7 (after frame 0: before it the bench's frame buffer holds no picture, on hardware a line fetched too early shows the previous one); start 0.05 ms after the core's picture | check 4: tears are allowed, the geometry and the line lengths are checked in every frame; the evaluation requires a tear in the first checked frame and none in the last; the stretch is 4080 per frame until the tear zone (up to 0.79 ms in this mode) is left | pass |
+| `std_ntsc480_genlock`, `std_ntsc480_nogenlock` | full | standard NTSC 480p (525 lines, 27.000 MHz), 2; genlock disabled by the multiplexer, and a build without genlock and multiplexer | check 5: the hash over all outputs of the scaler in every clock must be equal (`d` drifts by a line per frame, the rates differ) | pass, equal hash |
+| `heavymem_std_zoom_ntsc480` | full | standard NTSC 480p with zoom-in, 4, heavy memory, no genlock | the memory latency the scaler tolerates (information) | information |
 | `mutant_target_0.1ms_ntsc480` | quick, full | NTSC 480p raw, 1; target 0.1 ms | check 6: the reader overtakes the writer at the top | fail (tear) |
 | `mutant_clock_10pct_fast_ntsc480` | full | NTSC 480p raw, 1; pixel clock 10 % above the one of the totals | check 6: more surplus than the genlock can add, the reader catches up within the frame | fail (tear) |
 | `mutant_old_reference_zoom_ntsc480` | full | NTSC 480p raw with zoom-in, 1, start 1000 clocks above the target; reference from the falling edge of the cropped vblank (the first wiring of SPEC 5.1) | check 6: with zoom-in that edge comes in every line, the genlock measures a tiny `d` and stretches by 4080 in every frame | fail (`d` changes by 4080 per frame) |
+| `range_below_upper_end_pal576`, `range_above_upper_end_pal576` | extra | PAL 576p raw timing with the genlock disabled (static, so `d` stays where it starts), 1; `d` 0.2 ms below and 0.2 ms above the upper end of the tear-free range that the full set computes for `raw_pal576` (18.884 ms) | confirms the computed range | pass, fail (tear) |
 | `ff_ntsc480std_low`, `ff_ntsc480std_high`, `ff_ntsc480std_54_low`, `ff_ntsc480std_54_high` | extra | standard NTSC 480p 4:3 and 5:4, 2; no genlock, the core clock at the HDMI frame rate, the phase at the lower and the upper threshold of `hdmi_flicker_free` | today's behavior with flicker-free (the runner reports tears) | information |
 
 ## Not covered
@@ -99,4 +106,70 @@ Every run starts the HDMI picture 2.0 ms after a core picture (the target of SPE
 
 ## Results
 
-Quick set with `hdmi_genlock.vhd` at 3f2e96a: `raw_ntsc480` passes (core frame 1 in HDMI frame 0, no tear, geometry exact, `d` = 54008 clocks for a target of 54000; distance at the top 1.881 ms, at the bottom 1.214 ms; smallest margin to the next overwrite 14.77 ms, so the mode is tear-free for `d` from 0.79 ms up to one frame; longest line fetch 24.2 µs; 828 s); `mutant_target_0.1ms_ntsc480` fails as required (tear in picture line 2; 563 s).
+Measured on this machine with `hdmi_genlock.vhd` at 3f2e96a, nvc 1.21 and `JOBS=3`: `quick` 120 s, `full` 2369 s (40 minutes), `extra` 296 s, all `RESULT: PASS`. With `SIM=ghdl` every simulation takes about ten times as long (the 480p reference with one frame: 733 s with GHDL, 85 s with nvc).
+
+### Every simulation of the full set
+
+"Core frames shown" lists, per checked HDMI frame, the core frame whose pixels it shows; "Tear line" the first picture line from another core frame (-1: none). In `zoomtoggle_ntsc480` the tear lines of frames 3, 7 and 8 (core frames 4, 8, 9) are the transitions to the new input size, which the bench reports and does not judge; `pullin_from_tear_ntsc480` may tear by design, the tear line leaves the picture at the bottom while the genlock moves the phase by 4080 clocks per frame. The mutants fail as they must.
+
+| Simulation | Expected | Result | Checked frames | Core frames shown | Tear line (-1 = none) | `d` in ms | Stretch | Runtime (s) | First error |
+|---|---|---|---|---|---|---|---|---|---|
+| `raw_pal720` | pass | pass | 5 | 3, 4, 5, 6, 7 | -1, -1, -1, -1, -1 | 1.998, 1.997, 1.997, 1.997, 1.997 | 180, 197, 197, 197, 197 | 973 |  |
+| `raw_ntsc720` | pass | pass | 5 | 1, 2, 3, 4, 5 | -1, -1, -1, -1, -1 | 2.000, 1.994, 1.994, 1.994, 1.994 | 0, 446, 463, 463, 463 | 671 |  |
+| `reference_ghdl_raw_ntsc480` | pass | pass | 1 | 1 | -1 | 2.000 | 0 | 733 |  |
+| `reference_nvc_raw_ntsc480` | pass | pass | 1 | 1 | -1 | 2.000 | 0 | 85 |  |
+| `raw_pal576` | pass | pass | 6 | 3, 4, 5, 6, 7, 8 | -1, -1, -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0, 0, 0 | 524 |  |
+| `raw_pal576_54` | pass | pass | 6 | 3, 4, 5, 6, 7, 8 | -1, -1, -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0, 0, 0 | 527 |  |
+| `raw_ntsc480` | pass | pass | 6 | 1, 2, 3, 4, 5, 6 | -1, -1, -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0, 0, 0 | 362 |  |
+| `raw_ntsc480_54_slowmem` | pass | pass | 6 | 1, 2, 3, 4, 5, 6 | -1, -1, -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0, 0, 0 | 325 |  |
+| `zoomtoggle_ntsc480` | pass | pass | 9 | 2, 3, 4, 5, 6, 7, 8, 9, 10 | -1, -1, 0, -1, -1, -1, 401, 478, -1 | 2.000, 2.000, 3.339, 3.339, 3.339, 3.339, 2.000, 2.000, 2.000 | 0, 0, 0, 0, 0, 0, 0, 0, 0 | 508 |  |
+| `zoom_pal576_slowmem` | pass | pass | 4 | 3, 4, 5, 6 | -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0 | 324 |  |
+| `zoom_ntsc480_slowmem` | pass | pass | 4 | 2, 3, 4, 5 | -1, -1, -1, -1 | 2.000, 2.000, 2.000, 2.000 | 0, 0, 0, 0 | 258 |  |
+| `inband_ntsc480` | pass | pass | 3 | 1, 2, 3 | -1, -1, -1 | 4.400, 4.400, 4.400 | 0, 0, 0 | 165 |  |
+| `inband_zoom_ntsc480` | pass | pass | 3 | 2, 3, 4 | -1, -1, -1 | 4.400, 4.400, 4.400 | 0, 0, 0 | 216 |  |
+| `pullin_ntsc480` | pass | pass | 4 | 1, 2, 3, 4 | -1, -1, -1, -1 | 1.774, 2.019, 2.019, 2.019 | 4080, 0, 0, 0 | 208 |  |
+| `pullin_from_tear_ntsc480` | pass | pass | 7 | 2, 3, 4, 5, 6, 7, 8 | 136, 255, 351, 472, -1, -1, -1 | 0.296, 0.447, 0.598, 0.749, 0.900, 1.051, 1.203 | 4080, 4080, 4080, 4080, 4080, 4080, 4080 | 386 |  |
+| `std_ntsc480_genlock` | pass | pass | 2 | 1, 2 | -1, -1 | 2.000, 1.969 | 0, 0 | 110 |  |
+| `std_ntsc480_nogenlock` | pass | pass | 2 | 1, 2 | -1, -1 | 2.000, 1.969 | 0, 0 | 110 |  |
+| `heavymem_std_zoom_ntsc480` | info | fail | 4 | 2, 3, 4, 5 | -1, 67, 381, -1 | 1.969, 1.937, 1.905, 1.873 | 0, 0, 0, 0 | 234 | ERROR frame 2: tear: picture line 67 shows another core frame |
+| `mutant_target_0.1ms_ntsc480` | fail | fail | 1 | 1 | 2 | 0.100 | 0 | 62 | ERROR frame 0: picture geometry, 958 deviations |
+| `mutant_clock_10pct_fast_ntsc480` | fail | fail | 1 | 1 | 447 | 2.000 | 0 | 63 | ERROR frame 0: picture geometry, 2350 deviations |
+| `mutant_old_reference_zoom_ntsc480` | fail | fail | 1 | 2 | -1 | 2.283 | 4080 | 105 | ERROR frame 1: d changed by 6630 from the previous frame |
+
+Cross-checks of the full set: the reference configuration gives the identical hash 490050595 with GHDL and with nvc; the standard mode with genlock and multiplexer and the build without both give the identical hash 366662424 over all outputs of the scaler in every clock; raw NTSC 480p 4:3 has the same picture signature as the standard mode (111048448).
+
+### Distance between writer and reader
+
+At the target (`d` = 2.0 ms; in 720p `d` settles 197 or 463 clocks below it, the surplus). Top and bottom: from the last write burst of the first or last input line to its first fetch. The tear-free range of `d` follows from the smallest distance and the smallest margin of the same run (see "Measurements"); for `raw_pal576` the extra set confirms its upper end: no tear at 18.684 ms, a tear from line 493 at 19.084 ms.
+
+| Mode | SPEC 5.4 top / bottom (ms) | Measured top / bottom (ms) | Smallest distance (ms) | Tear-free `d` (ms), frame | Longest line fetch (µs) |
+|---|---|---|---|---|---|
+| PAL 720p | 1.86 / 3.75 | 1.890 / 3.706 | 1.842 | 0.155 to 18.175, 19.950 | 12.2 |
+| NTSC 720p | 1.87 / 2.03 | 1.894 / 1.998 | 1.834 | 0.160 to 16.644, 16.715 | 12.9 |
+| PAL 576p 4:3 | 1.84 / 2.99 | 1.881 / 3.000 | 1.849 | 0.152 to 18.884, 19.950 | 22.4 |
+| PAL 576p 5:4 | 2.42 / 2.42 | 2.457 / 2.457 | 2.424 | 0 to 19.428, 19.950 | 22.4 |
+| NTSC 480p 4:3 | 1.84 / 1.20 | 1.881 / 1.214 | 1.214 | 0.787 to one frame, 16.715 | 24.1 |
+| NTSC 480p 5:4 (pessimistic memory) | 2.32 / 0.73 | 2.357 / 0.768 | 0.768 | 1.232 to 16.288, 16.715 | 27.3 |
+| PAL 576p 4:3, zoom-in (pessimistic) | | 1.885 / 6.903 | 1.852 | 0.148 to 14.980, 19.950 | 26.2 |
+| NTSC 480p 4:3, zoom-in (pessimistic) | | 1.886 / 3.857 | 1.855 | 0.146 to 14.795, 16.715 | 26.3 |
+
+The estimates of SPEC 5.4 hold within 0.05 ms. The target of 2.0 ms has a margin of at least 0.77 ms below it (NTSC 480p 5:4, at the bottom of the picture) and of at least 12.8 ms above it (zoom-in), so the no-stretch band up to 2.5 ms above the target, the phase jump of zoom-in (1.33 ms NTSC, 1.92 ms PAL) and both together stay tear-free. With the start phase 2.4 ms above the target (`inband_*`) the distances grow by exactly that and nothing tears.
+
+### Today's flicker-free in NTSC 480p (extra set)
+
+Standard NTSC 480p, the core at the HDMI frame rate (as flicker-free holds it on average), the phase given by the core's write address at the scaler's read of address 0, the value that `hdmi_flicker_free.vhd` keeps between 0x1000 and 0x2000 words (6.4 to 12.8 lines of 1280 bytes):
+
+| Display mode | Writer ahead at the read of address 0 | First picture line from the previous core frame |
+|---|---|---|
+| 4:3 | 6.9 lines | 303 (of 480), in every frame |
+| 4:3 | 13.2 lines | none (0.154 ms left at the bottom) |
+| 5:4 | 14.2 lines | 256 (of 451) |
+| 5:4 | 20.8 lines | 377 |
+
+In 480p the HDMI side sweeps the picture faster than the core writes it, so the distance shrinks towards the bottom: with flicker-free near its lower threshold the lowest third of a 4:3 picture is one frame late, and in 5:4 it is one frame late in the whole band (already with the writer further ahead than flicker-free ever holds it). The raw modes do not have this problem: their target puts 0.77 ms (5:4) and 1.21 ms (4:3) between writer and reader at the bottom.
+
+### Observations about the scaler (independent of the genlock)
+
+* In PAL and with zoom-in (a line of the input picture takes 9 bursts) the first picture after the scaler's start is wrong in 576p and 480p; the second and all later ones are right. PAL 720p and NTSC without zoom-in are right from the first picture on.
+* A change of the input size (zoom-in on or off) costs up to three frames with wrong content: one with the new picture and the old size and stride, and after a smaller height lines of the blanking below the picture, because the scaler's pixel counter wraps at 4096 and its window still has the old height. The same happens in a standard mode.
+* The scaler needs the 9 or 10 bursts of an input line within about 36 µs (480p, 576p) or 26 µs (720p); with more memory latency than the pessimistic model single lines show the previous frame, in standard and raw modes alike.
