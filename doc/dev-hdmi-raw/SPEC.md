@@ -36,9 +36,9 @@ The flat list of the submenu (`CORE/vhdl/config.vhd`), in this order. Lines mark
 | 19 | (line) | `OPTM_G_LINE` (new) |
 | 20 | ` HDMI Options` | `OPTM_G_HEADLINE` (new) |
 | 21 | (line) | `OPTM_G_LINE` (new) |
-| 22 | ` HDMI: DVI (no sound)` | unchanged |
-| 23 to 35 | ` HDMI: %s`, the filter submenu | unchanged |
-| 36 | ` HDMI: Zoom-in` | unchanged |
+| 22 | ` DVI (no sound)` | `OPTM_G_HDMI_DVI + OPTM_G_SINGLESEL` (unchanged) |
+| 23 to 35 | ` Filter: %s`, the filter submenu with the headline ` HDMI Filter` | unchanged |
+| 36 | ` Zoom-in` | `OPTM_G_HDMI_ZOOM + OPTM_G_SINGLESEL` (unchanged) |
 | 37 | (line) | unchanged |
 | 38 | ` Back` | unchanged |
 

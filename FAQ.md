@@ -437,6 +437,6 @@ A C64 does not produce exactly the frame rate of standard HDMI: a PAL C64 makes 
 
 If your display shows nothing after you selected `Raw`: the menu is still open and the selection bar is still on the `Raw` line. Press <kbd>Cursor Up</kbd> and then <kbd>Return</kbd>: `Flicker-free` is selected again and the picture comes back. A VGA monitor on the analog output shows the menu in any case.
 
-Right after you selected `Raw`, after a reset of the C64 and after a change between PAL and NTSC, a tear line can wander through the picture for a moment while the HDMI output finds its position again; this takes at most 7 seconds. Switching `HDMI: Zoom-in` on or off does not cause this. When you switch between `Raw` and the other two choices, most displays go black for 1 to 3 seconds, because the frame rate changes.
+Right after you selected `Raw`, after a reset of the C64 and after a change between PAL and NTSC, a tear line can wander through the picture for a moment while the HDMI output finds its position again; this takes at most 7 seconds. Switching `Zoom-in` on or off does not cause this. When you switch between `Raw` and the other two choices, most displays go black for 1 to 3 seconds, because the frame rate changes.
 
 Which displays accept `Raw` is not known yet. If you try it, please tell us in [issue #184](https://github.com/MJoergen/C64MEGA65/issues/184) which display you use and what you see.

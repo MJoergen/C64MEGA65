@@ -161,7 +161,7 @@ is framed as 4:3 in both standards. That gives NTSC pixels an aspect ratio of 0.
 NTSC TV, which shows about 418 x 235 pixels as 4:3, they are 0.75. MiSTer's "Original" aspect
 (400:300) does the same.
 
-`HDMI: Zoom-in` crops the picture to the 320 x 200 screen plus 14 / 4 border pixels (348 x 208)
+`Zoom-in` crops the picture to the 320 x 200 screen plus 14 / 4 border pixels (348 x 208)
 in both standards. `crop.vhd` finds that window at `LEFT_BORDER_IN = 33`, `TOP_BORDER_IN = 35`
 in PAL and at `44`, `26` in NTSC, because the NTSC line is 16 dots longer and the visible area
 starts at a different raster line.
@@ -257,7 +257,7 @@ it, and the submodule needed no change:
 | Core clock | one PLL, fractional `K` reprogrammed on a mode change | four fixed MMCMs and a glitch-free mux tree (flicker-free needs two running clocks per standard) |
 | Reset on mode change | about 3 ms reset while the PLL relocks, optionally clearing RAM | 1024-cycle soft reset, deferred during a disk write-back |
 | HDMI rate | chosen by `MiSTer.ini`, optionally bent with `vsync_adjust` | fixed 59.94 Hz modes plus flicker-free core clock switching, or `Raw 59.8 Hz`: fixed 59.826 Hz modes with a genlock |
-| Vertical crop | `vcrop` / `video_freak` | not present; "HDMI: Zoom-in" has NTSC constants instead |
+| Vertical crop | `vcrop` / `video_freak` | not present; "Zoom-in" has NTSC constants instead |
 
 
 ## Not supported

@@ -11,9 +11,9 @@ The `HDMI: <mode>` submenu of the on-screen menu contains:
   mode, and each machine mode remembers its own choice. See
   [Frame rates: Off, Flicker-free and Raw](#frame-rates-off-flicker-free-and-raw).
 * HDMI Options:
-  * HDMI: DVI (no sound)
-  * HDMI: \<filter\> (HDMI Filter submenu: No Filter / Sharp Bilinear / Bicubic / Smooth / Lanczos / Scanlines / CRT (S-Video) / CRT (Composite); default is "Scanlines", which is bit-identical to V5's "CRT emulation" look)
-  * HDMI: Zoom-in
+  * DVI (no sound)
+  * Filter: \<filter\> (submenu HDMI Filter: No Filter / Sharp Bilinear / Bicubic / Smooth / Lanczos / Scanlines / CRT (S-Video) / CRT (Composite); default is "Scanlines", which is bit-identical to V5's "CRT emulation" look)
+  * Zoom-in
 
 The display mode and "Zoom-in" decide the actual HDMI screen resolution and the framing of the
 picture. The HDMI Filter submenu picks one of the polyphase coefficient pairs that are loaded
