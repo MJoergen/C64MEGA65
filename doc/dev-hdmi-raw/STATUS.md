@@ -94,7 +94,7 @@ All on the integrated tree of the branch. Nothing here replaces the Vivado build
 | `CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh all` | PASS: in the ten standard modes the scaler's `htotal` is the record's value in every clock cycle, also with a hostile stand-in for the genlock; 12 of 13 wiring mutants rejected (the 13th is harmless by design: the multiplexer protects the scaler) |
 | `CORE/vhdl/test/tb_hdmi_raw_menu/run.sh all` | PASS: 16384 menu states; without a Raw bit both decoders equal the previous version; 11 mutants rejected |
 | `M2M/rom/tests/menu_test.py verify`, `run`, `mutate` | VERIFY OK, ALL TESTS PASSED, all mutants killed |
-| Firmware suites (`doc/dev-a22x3/tools/suites.py`) | all green |
+| Final run of everything on the integrated tree (2026-11-20, 07:22): `doc/dev-a22x3/tools/suites.py final all` (29 suites: the 24 existing firmware and bench suites and the five new benches) and the differential checks | all PASS, no failure, no timeout |
 | `CORE/vhdl/test/tb_ntsc`: `run.sh all`, `run_w1.sh`, `run_w2.sh all`, `run_w3.sh` | PASS (`hr_core_speed` identical to its copy) |
 | Differential GHDL analysis of the seven changed design files against `669e75d` | PASS, no new diagnostics |
 | Firmware ROM | 20284 words; 47 words differ from before (17 heap sizes, 30 menu indices); string ROM identical |
