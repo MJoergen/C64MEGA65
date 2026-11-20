@@ -4,7 +4,7 @@ This file is the running memory of the work: the order, the decisions, the numbe
 
 ## 0. State
 
-**Implemented, reviewed, verified in simulation and built with Vivado (R3 and R6, timing met); not yet on hardware.** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`.
+**Implemented, reviewed, verified in simulation and built with Vivado (R3 and R6, timing met); not yet on hardware.** Merged into `develop` on 2026-11-20 by fast-forward (the work was done on the branch `mh_implement_184`, started from `develop` = `669e75d`; the branch is deleted). Version `WIP-V6-A27`.
 
 | Item | State |
 |---|---|
