@@ -1725,14 +1725,14 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; instead, but when doing the sanity check calculations, you use 30208
 ;
 ; 5760 words comfortably fit the current menu: 333 items, 20 submenus and a
-; 3497-character OPTM_ITEMS string give budget 1 = 22 + 3497 + 4*333 = 4851
+; 3487-character OPTM_ITEMS string give budget 1 = 22 + 3487 + 4*333 = 4841
 ; words (record header + item string + the groups/stdsel/lines/dependency
 ; arrays, one word per item each). Budget 2 = (2 * VDRIVES_NUM + submenus +
 ; CRTROM_MAN_NUM) * OSM width = 26 x 27 = 702 words for the "%s" replacement
 ; strings and one parking slot per virtual drive (see HELP_MENU). It does
 ; NOT depend on the item count: it grows by one OSM width (27 words) per
 ; submenu and per manually loadable CRT/ROM and by two OSM widths per virtual
-; drive. Peak use is 4851 + 702 = 5553, leaving 207 words of
+; drive. Peak use is 4841 + 702 = 5543, leaving 217 words of
 ; headroom (see LOG_HEAP1/LOG_HEAP2 on the serial console for the live
 ; numbers). The Keyboard Shortcuts submenu (#142) added 102 items and 7
 ; submenus, the Input Devices section with the submenus Mouse and Paddles
@@ -1743,7 +1743,7 @@ P1581_OSM_LDRV  .BLOCK 1                        ; status line of the drive that
 ; browser heap.
 ;
 ; The OPTM_ITEMS string is read through a 4K window of config.vhd, so it must
-; stay below 4096 characters (3497 now).
+; stay below 4096 characters (3487 now).
 MENU_HEAP_SIZE  .EQU 5760
 
 #ifndef RELEASE

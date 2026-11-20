@@ -495,9 +495,9 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " HDMI Options\n"            &
    "\n"                         &
-   " HDMI: DVI (no sound)\n"    &
+   " DVI (no sound)\n"          &
 
-   " HDMI: %s\n"                &  -- HDMI Filter submenu, nested inside the HDMI submenu
+   " Filter: %s\n"              &  -- HDMI Filter submenu, nested inside the HDMI submenu
    " HDMI Filter\n"             &
    "\n"                         &
    " No Filter\n"               &
@@ -511,7 +511,7 @@ constant OPTM_ITEMS        : string :=
    "\n"                         &
    " Back\n"                    &  -- returns to the HDMI submenu
 
-   " HDMI: Zoom-in\n"           &
+   " Zoom-in\n"                 &
    "\n"                         &
    " Back\n"                    &  -- returns to the main menu
 
@@ -931,7 +931,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_LINE,
                                              OPTM_G_HDMI_DVI      + OPTM_G_SINGLESEL,
 
-                                             OPTM_G_SUBMENU,                          -- open "HDMI: %s" (filter), nested
+                                             OPTM_G_SUBMENU,                          -- open "Filter: %s", nested
                                              OPTM_G_HEADLINE,                         -- HDMI Filter
                                              OPTM_G_LINE,
                                              OPTM_G_HDMI_FILTER,                      -- No Filter
@@ -943,7 +943,7 @@ constant OPTM_GROUPS       : OPTM_GTYPE := ( OPTM_G_HEADLINE,                   
                                              OPTM_G_HDMI_FILTER,                      -- CRT (S-Video)
                                              OPTM_G_HDMI_FILTER,                      -- CRT (Composite)
                                              OPTM_G_LINE,
-                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "HDMI: %s" (filter)
+                                             OPTM_G_CLOSE         + OPTM_G_SUBMENU,   -- close "Filter: %s"
 
                                              OPTM_G_HDMI_ZOOM     + OPTM_G_SINGLESEL,
                                              OPTM_G_LINE,

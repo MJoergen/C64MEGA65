@@ -166,8 +166,8 @@ V6_MENU = [
     ("",                         None, ["LINE"]),
     (" HDMI Options",            None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
-    (" HDMI: DVI (no sound)",    "HDMI_DVI", ["SINGLESEL"]),
-    (" HDMI: %s",                None, OPEN),            # region 4 (in 3)
+    (" DVI (no sound)",          "HDMI_DVI", ["SINGLESEL"]),
+    (" Filter: %s",              None, OPEN),            # region 4 (in 3)
     (" HDMI Filter",             None, ["HEADLINE"]),
     ("",                         None, ["LINE"]),
     (" No Filter",               "HDMI_FILTER", []),
@@ -180,7 +180,7 @@ V6_MENU = [
     (" CRT (Composite)",         "HDMI_FILTER", []),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 4
-    (" HDMI: Zoom-in",           "HDMI_ZOOM", ["SINGLESEL"]),
+    (" Zoom-in",                 "HDMI_ZOOM", ["SINGLESEL"]),
     ("",                         None, ["LINE"]),
     (" Back",                    None, CLOSE),           # close region 3
     (" VGA: %s",                 None, OPEN),            # region 5
@@ -2036,7 +2036,7 @@ def nav_script():
     s.until(KEY_DOWN, 71)           # to " Raw 59.8 Hz"
     s.feed(KEY_SELECT)              # radio-select it: the PAL group stays
     assert [s.sel[i] for i in range(66, 72)] == [1, 0, 0, 0, 0, 1]
-    s.until(KEY_DOWN, 76)           # to nested "HDMI: %s" (filter)
+    s.until(KEY_DOWN, 76)           # to the nested "Filter: %s"
     s.feed(KEY_SELECT)              # enter region 4 (depth 2)
     assert (s.level, s.cursor) == (4, 79)
     s.feed(KEY_LAST)                # last item of the nested view: " Back"
@@ -3193,8 +3193,8 @@ HDMI_SYNC = [
 
 # the view of the HDMI submenu in each machine mode (0 = PAL, 1 = NTSC)
 _HDMI_VIEW_HEAD = [" HDMI Display Mode", ""]
-_HDMI_VIEW_TAIL = ["", " HDMI Options", "", " HDMI: DVI (no sound)",
-                   " HDMI: %s", " HDMI: Zoom-in", "", " Back"]
+_HDMI_VIEW_TAIL = ["", " HDMI Options", "", " DVI (no sound)",
+                   " Filter: %s", " Zoom-in", "", " Back"]
 HDMI_VIEW = {
     0: _HDMI_VIEW_HEAD + [" 16:9 720p 50 Hz", " 4:3  576p 50 Hz",
                           " 5:4  576p 50 Hz", "", " HDMI Frame Sync", "",
@@ -4627,19 +4627,19 @@ MUTANTS = [
         ("H2  HEAP_SIZE 24512 with MENU_HEAP_SIZE 5760 (into the stack area)",
          _HS_REL,
          "HEAP_SIZE       .EQU 24512                      ; 30208 - 5760 = 24448"),
-        ("H3  MENU_HEAP_SIZE 5696, consistent everywhere (143 words headroom)",
+        ("H3  MENU_HEAP_SIZE 5696, consistent everywhere (153 words headroom)",
          (_MHS, _HS_DBG, _HS_REL,
           "write 30208-5760=24448", "; 5760 words comfortably fit",
-          "leaving 207 words of"),
+          "leaving 217 words of"),
          _heap_sizes(5696) + (
           "write 30208-5696=24512", "; 5696 words comfortably fit",
-          "leaving 143 words of")),
-        ("H4  MENU_HEAP_SIZE 5732, consistent everywhere (179 words headroom)",
+          "leaving 153 words of")),
+        ("H4  MENU_HEAP_SIZE 5722, consistent everywhere (179 words headroom)",
          (_MHS, _HS_DBG, _HS_REL,
           "write 30208-5760=24448", "; 5760 words comfortably fit",
-          "leaving 207 words of"),
-         _heap_sizes(5732) + (
-          "write 30208-5732=24476", "; 5732 words comfortably fit",
+          "leaving 217 words of"),
+         _heap_sizes(5722) + (
+          "write 30208-5722=24486", "; 5722 words comfortably fit",
           "leaving 179 words of")),
         ("H5  HEAP_SIZE of the branch without RELEASE left at 1472",
          _HS_DBG,
@@ -4651,10 +4651,10 @@ MUTANTS = [
         ("H8  stale item count in the comment above MENU_HEAP_SIZE",
          "fit the current menu: 333 items", "fit the current menu: 325 items"),
         ("H9  stale length of OPTM_ITEMS in the comment above MENU_HEAP_SIZE",
-         "(3497 now)", "(3450 now)"),
+         "(3487 now)", "(3497 now)"),
         ("H10 stale peak in the comment above MENU_HEAP_SIZE",
-         "Peak use is 4851 + 702 = 5553, leaving 207",
-         "Peak use is 4772 + 702 = 5474, leaving 286"),
+         "Peak use is 4841 + 702 = 5543, leaving 217",
+         "Peak use is 4851 + 702 = 5553, leaving 207"),
     )
 ] + RCLICK_MUTANTS + FRAMESYNC_MUTANTS
 
