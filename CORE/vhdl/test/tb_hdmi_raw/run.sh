@@ -9,8 +9,11 @@
 # M2M/vhdl/av_pipeline/hdmi_genlock.vhd, runs the simulations of the chosen set and evaluates them.
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
-# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3.
-# JOBS (default 3) sets the number of parallel simulations. Runtimes: see README.md.
+# Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), python3; nvc 1.21 (or $NVC) if present:
+# SIM=nvc (the default when nvc is found) runs the simulations with nvc, about ten times faster,
+# and the full set also runs a reference configuration with both simulators, whose results
+# (a hash over every output of the scaler in every clock) must be equal; SIM=ghdl runs everything
+# with GHDL. JOBS (default 3) sets the number of parallel simulations. Runtimes: see README.md.
 #
 # done by sy2002 in 2026 and licensed under GPL v3
 # --------------------------------------------------------------------------------------------------
@@ -22,6 +25,16 @@ GHDL=${GHDL:-/usr/local/bin/ghdl}
 GF="--std=08 -frelaxed"
 JOBS=${JOBS:-3}
 GENLOCK=${GENLOCK:-$REPO/M2M/vhdl/av_pipeline/hdmi_genlock.vhd}
+NVC=${NVC:-$(command -v nvc || true)}
+SIM=${SIM:-auto}
+if [ "$SIM" = auto ]; then
+   if [ -n "$NVC" ]; then SIM=nvc; else SIM=ghdl; fi
+fi
+case "$SIM" in
+   ghdl) ;;
+   nvc) [ -n "$NVC" ] && [ -x "$NVC" ] || { echo "SIM=nvc, but nvc is not found"; exit 2; } ;;
+   *) echo "SIM must be ghdl or nvc"; exit 2 ;;
+esac
 
 SET=quick
 KEEP=0
@@ -67,14 +80,22 @@ echo "building (GHDL $("$GHDL" --version | head -1 | awk '{print $2}'))"
                              "$HERE/tb_hdmi_raw.vhd" &&
   "$GHDL" -e $GF --workdir=. tb_hdmi_raw ) > "$BUILD/build.log" 2>&1 ||
    { grep -v warning "$BUILD/build.log" | head -30; echo "RESULT: FAIL: build"; exit 1; }
+if [ "$SIM" = nvc ]; then
+   echo "building ($("$NVC" --version | head -1))"
+   mkdir -p "$BUILD/nvc" &&
+   ( cd "$BUILD/nvc" &&
+     "$NVC" --std=2008 -a "$BUILD/ascal_ghdl.vhd" "$REPO/M2M/vhdl/av_pipeline/crop.vhd" "$GENLOCK" \
+                           "$HERE/tb_hdmi_raw.vhd" ) > "$BUILD/build_nvc.log" 2>&1 ||
+      { grep -v Warning "$BUILD/build_nvc.log" | head -30; echo "RESULT: FAIL: build (nvc)"; exit 1; }
+fi
 
 # --------------------------------------------------------------------------------------------------
 # The list of simulations: name, expectation (pass/fail), generics
 # --------------------------------------------------------------------------------------------------
-python3 - "$SET" > "$BUILD/runs.txt" <<'PYEOF'
+python3 - "$SET" "$SIM" > "$BUILD/runs.txt" <<'PYEOF'
 import sys, math
 from fractions import Fraction as Fr
-SET = sys.argv[1]
+SET, SIM = sys.argv[1], sys.argv[2]
 
 # core clocks (CORE/vhdl/clk.vhd): half periods in ps as fractions
 CORE = {"PAL": Fr(10_000 * 6 * 30, 2) / Fr(5675, 100), "NTSC": Fr(10_000 * 5 * 22, 2) / 36}
@@ -106,7 +127,7 @@ MODES = {
 }
 
 def run(name, expect, mode, frames, d0_ms=2.0, crop=False, raw=True, target=None, mem="real",
-        settle=0, dcheck=True, extra="", clk_scale=Fr(1), core_half=None, no_genlock=False):
+        settle=0, dcheck=True, extra="", clk_scale=Fr(1), core_half=None, no_genlock=False, sim="default"):
     md = MODES[mode]
     std = md["std"]
     # The first HDMI picture is not checked where a line of the input picture takes 9 bursts
@@ -170,41 +191,45 @@ def run(name, expect, mode, frames, d0_ms=2.0, crop=False, raw=True, target=None
         g += ["-gG_MEM_EXTRA=140", "-gG_MEM_PAUSE=420", "-gG_MEM_PAUSE_ONE=20"]
     if extra:
         g += extra.split()
-    print(name, expect, " ".join(g))
+    print(name, expect, sim, " ".join(g))
 
 if SET == "quick":
     run("raw_ntsc480", "pass", "ntsc480", 1)
+    run("zoom_ntsc480", "pass", "ntsc480", 1, crop=True)
     run("mutant_target_0.1ms_ntsc480", "fail", "ntsc480", 1, d0_ms=0.1, target=2700, dcheck=False)
 elif SET == "full":
     # (the longest simulations first: the runner takes them in this order)
+    # 1 and 2: the six raw modes (the critical one for the bottom of the picture with the
+    # pessimistic memory)
+    run("raw_pal720", "pass", "pal720", 5)
+    run("raw_ntsc720", "pass", "ntsc720", 5)
+    if SIM == "nvc":
+        # the reference: the same configuration with both simulators, the results must be equal
+        run("reference_ghdl_raw_ntsc480", "pass", "ntsc480", 1, sim="ghdl")
+        run("reference_nvc_raw_ntsc480", "pass", "ntsc480", 1, sim="nvc")
+    run("raw_pal576", "pass", "pal576", 6)
+    run("raw_pal576_54", "pass", "pal576_54", 6)
+    run("raw_ntsc480", "pass", "ntsc480", 6)
+    run("raw_ntsc480_54_slowmem", "pass", "ntsc480_54", 6, mem="slow")
     # 3: zoom-in switched off and on again while locked (after HDMI frames 1 and 4): the core's
     # picture start moves 1.33 ms earlier and back; the first jump stays inside the band (no
     # stretch), the second returns to the target
-    run("zoomtoggle_ntsc480", "pass", "ntsc480", 6, crop=True, extra="-gG_CROP_FLIP1=1 -gG_CROP_FLIP2=4")
-    # 1 and 2: the six raw modes (the critical one for the bottom of the picture with the
-    # pessimistic memory)
-    run("raw_pal720", "pass", "pal720", 1)
-    run("raw_ntsc720", "pass", "ntsc720", 2)
-    run("raw_pal576", "pass", "pal576", 1)
-    run("raw_pal576_54", "pass", "pal576_54", 1)
-    run("raw_ntsc480", "pass", "ntsc480", 2)
-    run("raw_ntsc480_54_slowmem", "pass", "ntsc480_54", 2, mem="slow")
+    run("zoomtoggle_ntsc480", "pass", "ntsc480", 7, crop=True, extra="-gG_CROP_FLIP1=1 -gG_CROP_FLIP2=4")
     # 3: zoom-in, with the pessimistic memory
-    run("zoom_pal576_slowmem", "pass", "pal576", 1, crop=True, mem="slow")
-    run("zoom_ntsc480_slowmem", "pass", "ntsc480", 1, crop=True, mem="slow")
-    # (pull-in runs: d may change by a stretch per frame until settled)
+    run("zoom_pal576_slowmem", "pass", "pal576", 4, crop=True, mem="slow")
+    run("zoom_ntsc480_slowmem", "pass", "ntsc480", 4, crop=True, mem="slow")
+    # 2: start phases inside the band (no stretch): the reader 2.4 ms further behind
+    run("inband_ntsc480", "pass", "ntsc480", 3, d0_ms=4.4)
+    run("inband_zoom_ntsc480", "pass", "ntsc480", 3, d0_ms=4.4, crop=True)
     # 4: pull-in. From 1.5 stretches of 4080 below the target: frames 0 and 1 are stretched (4080,
     # 2040), from frame 2 on the phase is at the target. From inside the tear zone (the HDMI
     # picture begins 0.05 ms after the core's): tears are allowed in every frame, the geometry is
     # checked in every frame, the evaluation requires a tear in frame 0 and none in the last frame.
-    run("pullin_ntsc480", "pass", "ntsc480", 3, d0_ms=2.0 - 1.5 * 4080 / 27000, settle=2)
-    run("pullin_from_tear_ntsc480", "pass", "ntsc480", 2, d0_ms=0.05, settle=99, dcheck=False)
-    # 2: start phases inside the band (no stretch): the reader 2.4 ms further behind
-    run("inband_ntsc480", "pass", "ntsc480", 1, d0_ms=4.4)
-    run("inband_zoom_ntsc480", "pass", "ntsc480", 1, d0_ms=4.4, crop=True)
+    run("pullin_ntsc480", "pass", "ntsc480", 4, d0_ms=2.0 - 1.5 * 4080 / 27000, settle=2)
+    run("pullin_from_tear_ntsc480", "pass", "ntsc480", 3, d0_ms=0.05, settle=99, dcheck=False)
     # 5: standard mode with the genlock and the multiplexer, and without both
-    run("std_ntsc480_genlock", "pass", "ntsc480std", 1, raw=False, dcheck=False)
-    run("std_ntsc480_nogenlock", "pass", "ntsc480std", 1, raw=False, dcheck=False, no_genlock=True)
+    run("std_ntsc480_genlock", "pass", "ntsc480std", 2, raw=False, dcheck=False)
+    run("std_ntsc480_nogenlock", "pass", "ntsc480std", 2, raw=False, dcheck=False, no_genlock=True)
     # 2: the memory latency the scaler tolerates, independent of the genlock: the standard mode
     # with a memory slower than "slowmem" (information)
     run("heavymem_std_ntsc480_54", "info", "ntsc480std_54", 1, raw=False, dcheck=False, mem="heavy")
@@ -230,22 +255,38 @@ NRUNS=$(wc -l < "$BUILD/runs.txt" | tr -d ' ')
 echo "set '$SET': $NRUNS simulations, $JOBS at a time"
 
 # all simulations, JOBS at a time, each with a timeout of 3 hours
-python3 - "$GHDL" "$BUILD" "$JOBS" <<'PYEOF'
-import subprocess, sys, time
+python3 - "$GHDL" "$BUILD" "$JOBS" "$SIM" "$NVC" <<'PYEOF'
+import re, shutil, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
-ghdl, build, jobs = sys.argv[1], sys.argv[2], int(sys.argv[3])
-runs = [l.split(None, 2) for l in open(build + "/runs.txt").read().splitlines() if l.strip()]
+ghdl, build, jobs, default_sim, nvc = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+runs = [l.split(None, 3) for l in open(build + "/runs.txt").read().splitlines() if l.strip()]
 def sim(r):
-    name, expect, generics = r
+    name, expect, simulator, generics = r
+    if simulator == "default":
+        simulator = default_sim
     t = time.time()
     try:
-        p = subprocess.run([ghdl, "-r", "--std=08", "-frelaxed", "--workdir=.", "tb_hdmi_raw",
-                            "--ieee-asserts=disable"] + generics.split(),
-                           cwd=build, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10800)
-        out = p.stdout + p.stderr
+        if simulator == "ghdl":
+            p = subprocess.run([ghdl, "-r", "--std=08", "-frelaxed", "--workdir=.", "tb_hdmi_raw",
+                                "--ieee-asserts=disable"] + generics.split(),
+                               cwd=build, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10800)
+            out = p.stdout + p.stderr
+        else:
+            # nvc takes the generics at elaboration: every run elaborates in a copy of the library
+            d = build + "/nvc_" + name
+            shutil.copytree(build + "/nvc/work", d + "/work")
+            p = subprocess.run([nvc, "--std=2008", "-e"] + generics.split() + ["tb_hdmi_raw"],
+                               cwd=d, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=1800)
+            out = p.stdout + p.stderr
+            p = subprocess.run([nvc, "--std=2008", "-r", "--ieee-warnings=off", "tb_hdmi_raw"],
+                               cwd=d, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10800)
+            # the same form as the reports of GHDL
+            out += re.sub(r"(?m)^\*\* (Note|Warning): \S+: ",
+                          lambda m: "(report %s): " % m.group(1).lower(), p.stdout + p.stderr)
+            shutil.rmtree(d, ignore_errors=True)
     except subprocess.TimeoutExpired:
         out = "TIMEOUT\n"
-    out += "RUNTIME %d s\n" % (time.time() - t)
+    out += "SIMULATOR %s\nRUNTIME %d s\n" % (simulator, time.time() - t)
     open(build + "/" + name + ".log", "w").write(out)
 with ThreadPoolExecutor(max_workers=jobs) as ex:
     list(ex.map(sim, runs))
@@ -257,10 +298,10 @@ PYEOF
 python3 - "$BUILD" "$SET" <<'PYEOF'
 import re, sys
 build, SET = sys.argv[1], sys.argv[2]
-runs = [l.split(None, 2) for l in open(build + "/runs.txt").read().splitlines() if l.strip()]
+runs = [l.split(None, 3) for l in open(build + "/runs.txt").read().splitlines() if l.strip()]
 fails = []
 res = {}
-for name, expect, generics in runs:
+for name, expect, simulator, generics in runs:
     txt = open("%s/%s.log" % (build, name)).read()
     rt = re.search(r"RUNTIME (\d+) s", txt)
     result = re.search(r"\(report note\): (RESULT .*)$", txt, re.M)
@@ -270,7 +311,8 @@ for name, expect, generics in runs:
     res[name] = dict(result=result.group(1) if result else None, frames=frames, mems=mems, errs=errs)
     ok = bool(result) and result.group(1).endswith(" ERRORS=0")
     line = result.group(1) if result else "did not finish"
-    print("  %-36s %s (%s s)" % (name, line, rt.group(1) if rt else "?"))
+    sm = re.search(r"SIMULATOR (\w+)", txt)
+    print("  %-36s %s (%s, %s s)" % (name, line, sm.group(1) if sm else "?", rt.group(1) if rt else "?"))
     for e in errs[:3]:
         print("      " + e)
     if "TIMEOUT" in txt or re.search(r"error", txt.replace("(report warning): ERROR", "")) and not result:
@@ -285,7 +327,7 @@ for name, expect, generics in runs:
 def kv(s):
     return dict(re.findall(r"(\w+)=(-?[\w.']+)", s))
 
-gens = {name: dict(re.findall(r"-gG_(\w+)=(\S+)", generics)) for name, expect, generics in runs}
+gens = {name: dict(re.findall(r"-gG_(\w+)=(\S+)", generics)) for name, expect, simulator, generics in runs}
 
 # distances between writer and reader (Avalon traffic); the monitor reports HDMI frame n as pass n + 1
 print("writer/reader distances in ms (fetch of a line minus its last write burst), per run:")
@@ -314,6 +356,13 @@ for name, r in res.items():
 # without genlock in a standard mode
 def result_kv(name):
     return kv(res[name]["result"]) if name in res and res[name]["result"] else None
+if "reference_ghdl_raw_ntsc480" in res:
+    a, b = result_kv("reference_ghdl_raw_ntsc480"), result_kv("reference_nvc_raw_ntsc480")
+    same = bool(a and b) and a["hash"] == b["hash"] and a["sig"] == b["sig"]
+    print("reference configuration with GHDL and with nvc, every output in every clock: %s" %
+          ("identical (hash %s)" % a["hash"] if same else "DIFFERENT (%s, %s)" % (a and a.get("hash"), b and b.get("hash"))))
+    if not same:
+        fails.append("GHDL and nvc differ")
 if SET == "full":
     a, b = result_kv("std_ntsc480_genlock"), result_kv("std_ntsc480_nogenlock")
     if a and b:

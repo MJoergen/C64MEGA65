@@ -90,6 +90,13 @@ Every run starts the HDMI picture 2.0 ms after a core picture (the target of SPE
 | `mutant_old_reference_zoom_ntsc480` | full | NTSC 480p raw with zoom-in, 1, start 1000 clocks above the target; reference from the falling edge of the cropped vblank (the first wiring of SPEC 5.1) | check 6: with zoom-in that edge comes in every line, the genlock measures a tiny `d` and stretches by 4080 in every frame | fail (`d` changes by 4080 per frame) |
 | `ff_ntsc480std_low`, `ff_ntsc480std_high`, `ff_ntsc480std_54_low`, `ff_ntsc480std_54_high` | extra | standard NTSC 480p 4:3 and 5:4, 2; no genlock, the core clock at the HDMI frame rate, the phase at the lower and the upper threshold of `hdmi_flicker_free` | today's behavior with flicker-free (the runner reports tears) | information |
 
+## Not covered
+
+* `digital_pipeline.vhd` itself is not instantiated (it needs the Xilinx library and the HDMI encoder); the bench repeats its reference register, the synchronizer, the pulse and the multiplexer in front of `htotal` (compared with the file at 3f2e96a). The OSM overlay and the HDMI encoder behind the scaler are not part of the bench.
+* The memory is a model of the R3 path, not the HyperRAM controller and the arbiter themselves.
+* Only nearest neighbor is checked pixel by pixel; the other interpolators fetch the same lines at the same moments.
+* Few frames per run: the long-term behavior of the control law, the pull-in from above the band (up to 8 seconds), a missing reference and a paused core are the subject of the genlock bench `CORE/vhdl/test/tb_hdmi_genlock/`, which uses a model of the scaler's output counters.
+
 ## Results
 
 Quick set with `hdmi_genlock.vhd` at 3f2e96a: `raw_ntsc480` passes (core frame 1 in HDMI frame 0, no tear, geometry exact, `d` = 54008 clocks for a target of 54000; distance at the top 1.881 ms, at the bottom 1.214 ms; smallest margin to the next overwrite 14.77 ms, so the mode is tear-free for `d` from 0.79 ms up to one frame; longest line fetch 24.2 µs; 828 s); `mutant_target_0.1ms_ntsc480` fails as required (tear in picture line 2; 563 s).

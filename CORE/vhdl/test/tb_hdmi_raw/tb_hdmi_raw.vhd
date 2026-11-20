@@ -807,7 +807,7 @@ begin
             end if;
             -- zoom-in toggled after this frame: the next two HDMI frames show the old geometry or
             -- the new picture with the old size; geometry and signature count again from the third
-            if frame = G_CROP_FLIP1 or frame = G_CROP_FLIP2 then
+            if (G_CROP_FLIP1 >= 0 and frame = G_CROP_FLIP1) or (G_CROP_FLIP2 >= 0 and frame = G_CROP_FLIP2) then
                crop_req <= crop_req + 1;
             end if;
             geo_chk := true;
@@ -815,7 +815,8 @@ begin
                (G_CROP_FLIP2 >= 0 and frame + 1 > G_CROP_FLIP2 and frame + 1 <= G_CROP_FLIP2 + 2) then
                geo_chk := false;
             end if;
-            if frame + 1 = G_CROP_FLIP1 + 3 or frame + 1 = G_CROP_FLIP2 + 3 then
+            if (G_CROP_FLIP1 >= 0 and frame + 1 = G_CROP_FLIP1 + 3) or
+               (G_CROP_FLIP2 >= 0 and frame + 1 = G_CROP_FLIP2 + 3) then
                crop_exp := not crop_exp;
                sig_ref  := -1;
                C_G0 := in_y0(crop_exp) mod 256;
