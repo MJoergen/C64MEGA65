@@ -24,7 +24,9 @@ Checks:
 --packet (tb_hdmi_raw_cts with G_PACKET, the HDMI clock running): the CTS of an
 ACR packet is the value of pcm_cts_s of vga_to_hdmi when the packet is sent
 (rising edge of data_ack(1): its bytes are copied from pb(1), which holds
-pcm_cts_s of the clock cycle before). Checks: every ACR request (vga_acr) is
+pcm_cts_s of the clock cycle before); a packet counts for the mode of its request,
+and one that is requested before a change of the mode and sent after it is
+reported and not counted. Checks: every ACR request (vga_acr) is
 sent as one packet within 100 us; pcm_cts_s does not change in the 0.4 ms before
 a packet; in raw 576p (17 / 21) at least 42 packets after the first two, every
 window of 21 of them has exactly 17 packets with 27024 and 4 with 27023 (average
@@ -69,22 +71,33 @@ def packet_main(vcd, repo):
         prev = state.get(name)
         state[name] = v
         if name == "vga_acr" and v == "1" and prev == "0":
-            acr.append(t)
+            acr.append((t, int(state["tb_phase"], 2)))
         elif name == "data_ack" and prev is not None and len(v) == 4 and v[1] == "1" and prev[1] == "0":
-            sent.append((t, int(state["tb_phase"], 2), int(state["pcm_cts_s"], 2)))
+            # the packet belongs to the mode of its request; one whose request comes before a
+            # change of the mode and which is sent after it carries the CTS of the new mode
+            # (phase -1: not counted in either mode)
+            ph = acr[len(sent)][1] if len(sent) < len(acr) else int(state["tb_phase"], 2)
+            if ph != int(state["tb_phase"], 2):
+                ph = -1
+            sent.append((t, ph, int(state["pcm_cts_s"], 2)))
         elif name == "pcm_cts_s" and prev is not None and prev != v:
             cts_ch.append(t)
     print("%d ACR requests, %d ACR packets sent, %d changes of pcm_cts_s" % (len(acr), len(sent), len(cts_ch)))
     check(len(acr) == len(sent) and len(sent) >= 60, "requests and packets do not match")
     for i, (ts, _, _) in enumerate(sent):
         if i < len(acr):
-            check(0 <= ts - acr[i] <= 100 * 10 ** 9, "packet %d sent %s fs after its request" % (i, ts - acr[i]))
+            check(0 <= ts - acr[i][0] <= 100 * 10 ** 9, "packet %d sent %s fs after its request" % (i, ts - acr[i][0]))
         near = [t for t in cts_ch if ts - 400 * 10 ** 9 <= t <= ts]
         # the first packets after the end of the HDMI reset and the mode change are exempt
         if i >= 2 and sent[i - 2][1] == sent[i][1]:
             check(not near, "pcm_cts_s changes %s fs before packet %d" % (ts - near[-1] if near else 0, i))
+    boundary = [(ts, cts) for ts, ph, cts in sent if ph == -1]
+    print("%d packet(s) requested before a change of the mode and sent after it: CTS %s" % (
+        len(boundary), [c for _, c in boundary]))
     steps = []
     for ts, ph, cts in sent:
+        if ph == -1:
+            continue
         if not steps or steps[-1][0] != ph:
             steps.append((ph, []))
         steps[-1][1].append(cts)

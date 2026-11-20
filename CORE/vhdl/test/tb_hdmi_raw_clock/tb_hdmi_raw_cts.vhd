@@ -28,8 +28,9 @@
 -- (the period of raw 576p), the HDMI domain leaves its reset after 2 us, and the
 -- stimulus is raw 576p (CTS_FRAC 17 / 21) for 63 packets, then 576p for 5. run.sh
 -- builds this variant with the output timing generator of the scaler
--- (CORE/vhdl/test/tb_hdmi_raw_wiring/ascal_timing.vhd) and the real
--- video_overlay, so that vga_to_hdmi gets syncs and sends its data islands;
+-- (CORE/vhdl/test/tb_hdmi_raw_wiring/ascal_timing.vhd) and a video_overlay that
+-- passes the syncs through (video_overlay_passthrough.vhd), so that the real
+-- vga_to_hdmi gets syncs and sends its data islands;
 -- check_cts.py --packet takes the CTS of every ACR packet from pcm_cts_s of
 -- vga_to_hdmi, the register whose bytes are copied into the packet when it is
 -- sent (data_ack(1)).
@@ -108,10 +109,10 @@ begin
    audio_clk <= not audio_clk after 40.69 ns when running else '0';   -- 12.288 MHz
 
    -- G_PACKET: the HDMI clock of raw 576p (37.0041 ns) and the end of the HDMI reset after 2 us
-   g_packet : if G_PACKET generate
+   g_hdmi_clock : if G_PACKET generate
       hdmi_clk <= not hdmi_clk after 18502050 fs when running else '0';
       hdmi_rst <= '0' after 2 us;
-   end generate g_packet;
+   end generate g_hdmi_clock;
 
    i_dp : entity work.digital_pipeline
       generic map (
@@ -184,7 +185,7 @@ begin
          wait for C_RUN(i).packets * 1 ms;
       end loop;
       tb_phase <= 99;
-      wait for 100 ns;
+      wait for 200 us;                                       -- the last request is sent within a line
       write(l, string'("SIMULATION DONE"));
       writeline(output, l);
       running <= false;

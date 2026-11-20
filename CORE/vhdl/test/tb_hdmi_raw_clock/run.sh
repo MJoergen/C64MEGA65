@@ -14,9 +14,10 @@
 #        through all 16 modes; check_cts.py checks the CTS of every packet (see
 #        there). About 1 to 2 minutes.
 #   packet tb_hdmi_raw_cts with G_PACKET: the HDMI clock runs, the scaler is the output
-#        timing generator of tb_hdmi_raw_wiring/ascal_timing.vhd and video_overlay is the
-#        real one, so vga_to_hdmi sends its packets; check_cts.py --packet checks the CTS
-#        of 68 ACR packets as vga_to_hdmi sends them. About 2 minutes.
+#        timing generator of tb_hdmi_raw_wiring/ascal_timing.vhd and video_overlay passes
+#        the syncs through (video_overlay_passthrough.vhd), so the real vga_to_hdmi sends
+#        its packets; check_cts.py --packet checks the CTS of 68 ACR packets as
+#        vga_to_hdmi sends them. About 2 minutes.
 #
 # Environment: GHDL (default /usr/local/bin/ghdl), BASE_REV, KEEP (keep the
 # build directory). Prints the checker output and a final "RESULT: PASS" or
@@ -122,14 +123,22 @@ open(sys.argv[3], "w").write(ent + "\n" + open(sys.argv[2]).read())
 EOF2
    python3 "$TOOLS/w2_standin.py" "$REPO/M2M/vhdl/controllers/HDMI/serialiser_10to1_selectio.vhd" \
       serialiser_10to1_selectio "$P/serialiser_standin.vhd" > /dev/null || fail "stand-in serialiser"
+   python3 "$TOOLS/w2_standin.py" "$AV/video_overlay.vhd" video_overlay "$P/video_overlay_ent.vhd" \
+      --retype vga_cfg_shift_i=integer > /dev/null || fail "stand-in video_overlay"
+   python3 - "$P/video_overlay_ent.vhd" "$HERE/video_overlay_passthrough.vhd" "$P/video_overlay_standin.vhd" <<'EOF2' \
+      || fail "video_overlay stand-in"
+import sys
+ent = open(sys.argv[1]).read()
+ent = ent[:ent.index("architecture standin of video_overlay is")]
+open(sys.argv[3], "w").write(ent + "\n" + open(sys.argv[2]).read())
+EOF2
    "$GHDL" -a "${FLAGS[@]}" --work=unisim "$TOOLS/stubs/unisim_vcomponents.vhd" || fail "unisim stub"
    "$GHDL" -a "${FLAGS[@]}" --work=xpm "$TOOLS/stubs/xpm_vcomponents.vhd" || fail "xpm stub"
    "$GHDL" -i "${FLAGS[@]}" "$REPO/M2M/QNICE/vhdl/tools.vhd" "$AV/video_modes_pkg.vhd" \
       "$REPO/M2M/vhdl/controllers/HDMI/types_pkg.vhd" "$REPO/M2M/vhdl/controllers/HDMI/sync_reg.vhd" \
       "$REPO/M2M/vhdl/controllers/HDMI/hdmi_tx_encoder.vhd" "$REPO/M2M/vhdl/controllers/HDMI/vga_to_hdmi.vhd" \
       "$REPO/M2M/vhdl/memory/avm_decrease.vhd" "$AV/clk_synthetic_enable.vhd" "$AV/digital_pipeline.vhd" \
-      "$REPO/M2M/vhdl/ram_init.vhd" "$AV/vga_recover_counters.vhd" "$AV/vga_osm.vhd" "$AV/video_overlay.vhd" \
-      "$WIRING/tb_hdmi_raw_wiring_pkg.vhd" "$P/ascal_standin.vhd" "$P/serialiser_standin.vhd" \
+      "$P/video_overlay_standin.vhd" "$WIRING/tb_hdmi_raw_wiring_pkg.vhd" "$P/ascal_standin.vhd" "$P/serialiser_standin.vhd" \
       "$AV/hdmi_genlock.vhd" "$HERE/tb_hdmi_raw_cts.vhd" || fail "import tb_hdmi_raw_cts (packet)"
    "$GHDL" -m "${FLAGS[@]}" -Wno-binding -Wno-hide tb_hdmi_raw_cts > "$BUILD/packet_make.log" 2>&1 \
       || { cat "$BUILD/packet_make.log"; fail "make tb_hdmi_raw_cts (packet)"; }
