@@ -258,17 +258,32 @@ if want wiring; then
    fi
 
    # differential analysis: the full framework.vhd and mega65.vhd of the base commit and of the
-   # working tree in identical libraries (packages, keyboard chain, current m2m_keyb, cdc_stable); the
-   # sub-entities that are not in the library produce the same "not found" diagnostics in both,
-   # everything else (signal and port names, types, the m2m_keyb port map) is checked. cdc_stable is in
-   # the library because framework.vhd has one instance more of it since the paddle values cross
-   # through it (issue #193); its port maps are checked in both versions
+   # working tree in libraries with the same keyboard chain, current m2m_keyb and cdc_stable; each side
+   # has the packages of its own revision (a package that the top repository tracks is taken from the
+   # base commit for the base side; video_modes_pkg.vhd, for example, has a 4-bit CLK_SEL since issue
+   # #184, which the base framework.vhd does not know). The sub-entities that are not in the library
+   # produce the same "not found" diagnostics in both, everything else (signal and port names, types,
+   # the m2m_keyb port map) is checked. cdc_stable is in the library because framework.vhd has one
+   # instance more of it since the paddle values cross through it (issue #193); its port maps are
+   # checked in both versions
    D="$BUILD/diff"
-   if analyze "$D/lib" $PKGS $KEYB_SRC "$REPO/M2M/vhdl/m2m_keyb.vhd" "$REPO/M2M/vhdl/cdc_stable.vhd"; then
+   mkdir -p "$D/pkg_base"
+   PKGS_BASE=""
+   for p in $PKGS; do
+      rel=${p#"$REPO/"}
+      if git -C "$REPO" cat-file -e "$BASE:$rel" 2>/dev/null; then
+         git -C "$REPO" show "$BASE:$rel" > "$D/pkg_base/$(basename "$rel")"
+         PKGS_BASE="$PKGS_BASE $D/pkg_base/$(basename "$rel")"
+      else
+         PKGS_BASE="$PKGS_BASE $p"          # a file of a submodule: the current one
+      fi
+   done
+   if analyze "$D/lib" $PKGS $KEYB_SRC "$REPO/M2M/vhdl/m2m_keyb.vhd" "$REPO/M2M/vhdl/cdc_stable.vhd" &&
+      analyze "$D/lib_base" $PKGS_BASE $KEYB_SRC "$REPO/M2M/vhdl/m2m_keyb.vhd" "$REPO/M2M/vhdl/cdc_stable.vhd"; then
       for f in M2M/vhdl/framework.vhd CORE/vhdl/mega65.vhd; do
          n=$(basename "$f" .vhd)
          mkdir -p "$D/base_$n" "$D/new_$n"
-         cp -R "$D/lib/." "$D/base_$n/"
+         cp -R "$D/lib_base/." "$D/base_$n/"
          cp -R "$D/lib/." "$D/new_$n/"
          git -C "$REPO" show "$BASE:$f" > "$D/base_$n/$n.vhd" 2>/dev/null || { note_fail "diff_${n}_base_missing"; continue; }
          diags "$D/base_$n" "$D/base_$n/$n.vhd" > "$D/$n.base.txt"

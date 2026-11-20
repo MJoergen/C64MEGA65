@@ -10,7 +10,7 @@ CORE/vhdl/test/tb_capslock/run.sh [keyb|decode|wiring|all] [--keep]
 
 * `keyb`: the keyboard chain (below), Caps Lock off and on at power-on, plus two mutants of `m2m_keyb.vhd` that must fail: `capslock_n_o` gated by the keyboard gate, and no filter.
 * `decode`: the turbo decode of `mega65.vhd`, all combinations, plus two mutants that must fail: Caps Lock without clearing the `C128` bit, and without forcing `4x`.
-* `wiring`: GHDL analysis and elaboration of the four board top files against the real entity declarations of `framework` and `MEGA65_Core`; differential GHDL analysis of the complete `framework.vhd` and `mega65.vhd` against the base commit `522e5fc` (`WIP-V6-A22X1`), which must not show a single new diagnostic; two mutants that must be caught: an unconnected `main_kb_capslock_n_i` and a wrong formal in the `m2m_keyb` port map.
+* `wiring`: GHDL analysis and elaboration of the four board top files against the real entity declarations of `framework` and `MEGA65_Core`; differential GHDL analysis of the complete `framework.vhd` and `mega65.vhd` against the base commit `522e5fc` (`WIP-V6-A22X1`), each side with the packages of its own revision, which must not show a single new diagnostic; two mutants that must be caught: an unconnected `main_kb_capslock_n_i` and a wrong formal in the `m2m_keyb` port map.
 * `all` (default): everything.
 * `--keep`: keeps the build directory and prints its path.
 
