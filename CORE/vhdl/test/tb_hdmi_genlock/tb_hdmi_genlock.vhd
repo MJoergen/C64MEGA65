@@ -106,6 +106,7 @@ architecture sim of tb_hdmi_genlock is
    constant EXACT      : boolean  := M.core_d = 1 and M.core_n = TH;
    constant D_SS       : integer  := TGT - integer(round(SUR));   -- d in the steady state
    constant BAND       : natural  := TGT + TGT / 4;               -- no stretch for TGT < d < TGT + BAND
+   constant JMP        : integer  := 960 - integer(round(SUR));   -- a small jump: d lands 960 below the target
 
    ------------------------------------------------------------------------------
    -- the instances
@@ -250,6 +251,18 @@ architecture sim of tb_hdmi_genlock is
          -- a missing reference while not locked: no stretch in that frame
          ops(0) := op(OP_STOP, 1, false, 100, 7, 1, 0);        -- 720p quick
          add("1 ref missing in the pull-in", TGT - 20000, false, SHORT, false, ops);
+         -- a missing reference while the lock counter is between 1 and 7: no stretch (in 720p the
+         -- stretch of the frame before is the surplus, not 0), the counter neither counts nor clears
+         ops(0) := op(OP_STOP, 4, false, 100, 7, 1, 0);        -- 720p quick
+         add("1 ref missing while locking", TGT - 2000, false, SHORT, false, ops);
+         -- a small jump of the reference while locked (d inside the lock window, 960 below the
+         -- target) and at once an outage of 3 references: the flywheel holds the catch-up stretch
+         -- (about 960) for the whole outage, so d moves by JMP per frame of it (into the band)
+         ops    := C_NOOPS;
+         ops(0) := op(OP_JUMP, 3, true, 300, 7, JMP);           -- 720p quick
+         ops(1) := op(OP_STOP, 1, false, 100, 7, 3, 0);
+         add("small jump, then 3 refs gone", TGT - 2000, false, SHORT, false, ops, true);
+         ops    := C_NOOPS;
          if full then
             ops(0) := op(OP_JUMP, 3, true, 300, 7, 40000);
             add("ref jumps 40000 later",       TGT - 2000, false, SHORT, false, ops);

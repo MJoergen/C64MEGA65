@@ -6,7 +6,7 @@
 #
 #   pal720 ... ntsc480  the complete simulation of the mode: 20 starts (phases over the whole frame,
 #                       among them the worst case; one of them, in 576p and 480p two, locked for 311
-#                       frames) and 13 lists of disturbances
+#                       frames) and 15 lists of disturbances
 #   modes               the four complete simulations
 #   quick               the four modes with a reduced set of starts and disturbances and 31 locked
 #                       frames (see README.md), and synth: a smoke test for work on the entity
@@ -238,10 +238,12 @@ fi
 # and stops at its first error
 MUTANTS="band_edge no_pullin late_first_line distribution index_stuck no_saturation lock_early
          stale_ref same_cycle_ref rst_keeps_extra no_bypass count_from_0 k_max_4095 window_low
-         every_de armed_kept band_4096 band_no_quarter no_hold gap_clears_lock hold_unlocked"
+         every_de armed_kept band_4096 band_no_quarter no_hold gap_clears_lock hold_unlocked
+         hold_unless_zero gap_counts_good hold_max_470"
 
 mutant_def() {
    M_MODE=3
+   M_EXPECT="TB_ERROR"
    case $1 in
       band_edge)       M_ARGS="-gG_SET=starts"
                        M_OLD="            elsif d < target_i + band then"
@@ -266,6 +268,7 @@ mutant_def() {
       no_saturation)   M_ARGS="-gG_SET=disturb"
                        M_OLD="                C_HTOTAL_MAX             when htotal_i + extra > C_HTOTAL_MAX else"
                        M_NEW=""
+                       M_EXPECT="bound check failure"
                        M_TXT="htotal_o not limited to 4095" ;;
       lock_early)      M_ARGS="-gG_SET=starts"
                        M_OLD="   locked_o  <= '1' when enable_i = '1' and good = C_LOCK_FRAMES else '0';"
@@ -323,6 +326,18 @@ mutant_def() {
                        M_OLD=$'               if good /= C_LOCK_FRAMES then\n                  stretch <= 0;'
                        M_NEW=$'               if false then\n                  stretch <= 0;'
                        M_TXT="the stretch is held without a new reference also while not locked" ;;
+      hold_unless_zero) M_ARGS="-gG_SET=disturb"; M_MODE=2
+                       M_OLD=$'               if good /= C_LOCK_FRAMES then\n                  stretch <= 0;'
+                       M_NEW=$'               if good = 0 then\n                  stretch <= 0;'
+                       M_TXT="the stretch is held without a new reference unless the lock counter is 0 (NTSC 720p)" ;;
+      gap_counts_good) M_ARGS="-gG_SET=disturb"
+                       M_OLD=$'            if valid then\n               if d + C_LOCK_BELOW >= target_i and d < target_i + band then'
+                       M_NEW=$'            if true then\n               if not valid or (d + C_LOCK_BELOW >= target_i and d < target_i + band) then'
+                       M_TXT="a measurement without a new reference counts as inside the lock window" ;;
+      hold_max_470)    M_ARGS="-gG_SET=disturb"
+                       M_OLD=$'               if good /= C_LOCK_FRAMES then\n                  stretch <= 0;'
+                       M_NEW=$'               if good /= C_LOCK_FRAMES or stretch > 470 then\n                  stretch <= 0;'
+                       M_TXT="the flywheel keeps only stretches up to 470" ;;
       every_de)        M_ARGS="-gG_SET=starts"
                        M_OLD=$'            armed   <= \'0\';\n'
                        M_NEW=""
@@ -331,8 +346,10 @@ mutant_def() {
 }
 
 # run_mutant <name>: builds the mutant and runs it; writes its report to $BUILD/mut_<name>.txt, first
-# word REJECTED (the run failed), SURVIVED (the run passed), NOBUILD (the mutant does not analyze or
-# elaborate: a stale replacement) or PATTERN
+# word REJECTED (the run failed with the expected message M_EXPECT: an error of the bench, or for
+# no_saturation the bound check of GHDL), SURVIVED (the run passed), RUNFAIL (the run failed in
+# another way: crash, killed, timeout), NOBUILD (the mutant does not analyze or elaborate: a stale
+# replacement) or PATTERN
 run_mutant() {
    local m=$1 dir="$BUILD/mut_$1"
    mutant_def "$m"
@@ -343,8 +360,10 @@ run_mutant() {
       echo "NOBUILD  $m ($M_TXT): $(head -1 "$dir/build.txt" | sed 's/^ *//')" > "$BUILD/mut_$m.txt"
    elif sim "$dir" "$dir/run.log" -gG_MODE=$M_MODE -gG_FAILFAST=true $M_ARGS; then
       echo "SURVIVED $m ($M_TXT)" > "$BUILD/mut_$m.txt"
+   elif grep -q -e "$M_EXPECT" "$dir/run.log"; then
+      echo "REJECTED $m ($M_TXT)"$'\n'"      $(grep -m1 -e "$M_EXPECT" "$dir/run.log.tb" | sed 's/^ *//' | cut -c1-170)" > "$BUILD/mut_$m.txt"
    else
-      echo "REJECTED $m ($M_TXT)"$'\n'"      $(grep -m1 -E 'TB_ERROR|error|TIMEOUT' "$dir/run.log.tb" | sed 's/^ *//' | cut -c1-170)" > "$BUILD/mut_$m.txt"
+      echo "RUNFAIL  $m ($M_TXT): the run failed without \"$M_EXPECT\": $(tail -2 "$dir/run.log" | head -1 | cut -c1-120)" > "$BUILD/mut_$m.txt"
    fi
 }
 
@@ -363,6 +382,7 @@ if want mutants; then
       case "$(head -1 "$BUILD/mut_$m.txt" 2>/dev/null | cut -c1-8)" in
          REJECTED) ;;
          SURVIVED) note_fail "mutant_${m}_not_detected" ;;
+         RUNFAIL*) note_fail "mutant_${m}_run_failed" ;;
          NOBUILD*) note_fail "mutant_${m}_does_not_build" ;;
          *)        note_fail "mutant_${m}_pattern" ;;
       esac
