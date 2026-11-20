@@ -632,9 +632,10 @@ begin
 
   -- For Static Timing Analysis it is necessary
   -- that the default configuration corresponds to the fastest clock speed.
-  -- The static configuration is the 74.25 MHz table (0010). The tables 1000 (74.444 MHz,
-  -- 0.26 % faster) and 1010 are covered by a clock uncertainty on hdmi_clk in
-  -- M2M/common.xdc; the 148.5 MHz table (0011) is not timed and not used.
+  -- The static configuration is the 74.25 MHz table (0010). The only faster table in use
+  -- is 1000 (74.444 MHz, 0.26 % faster); a clock uncertainty on hdmi_clk in M2M/common.xdc
+  -- covers it (1010 runs at 74.0625 MHz, slower than the analyzed 74.25 MHz). The
+  -- 148.5 MHz table (0011) is not timed and not used.
   MMCM: component mmcme2_adv
     generic map (
       bandwidth            => "OPTIMIZED",
