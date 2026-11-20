@@ -305,14 +305,16 @@ the SD card.
 - The general stack of the Shell has 768 words (`STACK_SIZE` minus
   `B_STACK_SIZE` in `CORE/m2m-rom/m2m-rom.asm`), and nothing checks its depth.
   `OPTM_RUN` and `OPTM_SHOW` each reserve one stack word per menu line (333),
-  and the deepest call chain uses 717 words: a CRT or PRG load in the visible
-  menu (the menu is redrawn while `OPTM_RUN` is on the stack). The opening of
-  a file in a keyboard shortcut session (FAT32 code of the Monitor on top of
-  `OPTM_RUN`) comes next. Every further menu line costs two words in the
-  first chain and one in the second; `doc/dev-input/STATUS.md`, section 3,
-  has the numbers measured with 325 lines (701 words; the 717 words of 333
-  lines follow from them by this rule) and `doc/dev-a22x3/STATUS.md`,
-  section 5.4, the call chains.
+  and the deepest call chain uses 717 words (49 words left): a CRT or PRG load
+  in the visible menu (the menu is redrawn while `OPTM_RUN` is on the stack).
+  The opening of a file in a keyboard shortcut session (FAT32 code of the
+  Monitor on top of `OPTM_RUN`) comes next with 673 words (its FAT32 part
+  depends on the directory of the card). Both are measured
+  with the full-system simulation of `doc/dev-a22x3/sim/` (scenarios `r2` and
+  `r4`, lowest stack pointer in `spy.log`; the method is in
+  `doc/dev-input/STATUS.md`, section 4). Every further menu line costs two
+  words in the first chain and one in the second; `doc/dev-a22x3/STATUS.md`,
+  section 5.4, has the call chains.
 - QNICE assembly is explained in this LaTex document
   `M2M/QNICE/doc/intro/qnice_intro.tex` and remember that the monitor acts
   as kind of the "operating system". Here is an overview of the
