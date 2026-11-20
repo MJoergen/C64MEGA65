@@ -54,9 +54,9 @@ Constants in `CORE/vhdl/mega65.vhd` (the values follow from the golden model `M2
 
 `C_MENU_HDMI_RAW50` is removed.
 
-### 1.2 Help and welcome texts
+### 1.2 Help text
 
-The welcome screen in `config.vhd` names the menu item "HDMI: Flicker-free". It is reworded to the new names without changing the number of lines of the screen.
+The first help page in `config.vhd` named the menu item "HDMI: Flicker-free". It says now: for an analog display set `HDMI Frame Sync` to `Off` or `Raw`; for HDMI make sure it is `Flicker-free` (or `Raw`, if the display can show it). The number of lines and the width of the page are unchanged.
 
 ## 2. How it works
 
@@ -189,7 +189,7 @@ The scaler takes `htotal` over in every clock cycle and uses it only to end a li
   - 720p: in the steady state `k` alternates between the two integers around the surplus and `d` stays within a few pixel clocks of `target_i` minus the surplus.
   - 576p and 480p (surplus 0): the stretch ends as soon as `d` has reached `target_i`; from then on `k` is 0, every frame is the static timing of the record, and `d` does not move any more.
   - The band is the range in which nothing needs to be done: the reader is further behind the writer than necessary, but far from the next frame. A jump of the core's phase that leaves `d` inside the band needs no pull-in. The case that matters: switching zoom-in off moves the core's picture start 2.0 ms (PAL) or 1.4 ms (NTSC) earlier. In 720p `d` then glides back to the target by the surplus per frame (15 s in PAL, 4 s in NTSC; from the top of the band 19 s and 7 s) without a tear; in 576p and 480p it stays where it is, and the picture is up to 2.5 ms later than necessary until the phase jumps again.
-  - From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most 6.9 seconds in PAL 720p, 5.0 in NTSC 720p, 2.5 in 576p and 1.7 in 480p (343, 299, 124 and 102 frames, from a phase just beyond the top of the band). During that time the 16 stretch lines are 255 pixel clocks longer than the others, the frame rate is 0.3 to 0.9 % lower, and for a part of it (less than a second) a tear line is visible, as it is today while flicker-free pulls in.
+  - From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most 6.84 seconds in PAL 720p, 5.00 in NTSC 720p, 2.47 in 576p and 1.70 in 480p (343, 299, 124 and 102 frames, from a phase just beyond the top of the band; the benches check the bounds 8, 6, 3 and 2 seconds). During that time the 16 stretch lines are 255 pixel clocks longer than the others, the frame rate is 0.3 to 0.9 % lower, and for a part of it (less than a second) a tear line is visible, as it is today while flicker-free pulls in.
 - `locked_o` is `'1'` after 8 valid measurements in a row with `target_i - 1024 <= d < target_i + band`. A measurement without a new reference changes nothing (the stretch is held while locked, so that a pause of the core or a single missing reference does not move the picture). The held stretch is the one of the last valid measurement: in the steady state that is the surplus within one pixel clock (after 10 seconds without a reference the picture has moved by 15 pixel clocks in PAL 720p and by 42 in NTSC 720p; not at all in 576p and 480p). It is `'0'` after a valid measurement outside the window, after `rst_i` and with `enable_i = '0'`.
 - `rst_i` (the reset of the HDMI domain, active while the pixel clock is reconfigured) clears all state: stretch 0. `enable_i = '0'` does the same (a change between a standard mode and its raw mode does not always reconfigure the pixel clock: NTSC 480p uses the same clock in both).
 
