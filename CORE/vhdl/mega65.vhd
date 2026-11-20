@@ -637,8 +637,8 @@ signal qnice_crt_qnice_wait         : std_logic;
 begin
 
    -- MMCME2_ADV clock generators (the video clock is the core clock, see below)
-   --   C64 PAL:  31.528 MHz, HDMI: Flicker-free: 31.449 MHz (0.25% slower)
-   --   C64 NTSC: 32.727 MHz, HDMI: Flicker-free: 32.790 MHz (0.19% faster)
+   --   C64 PAL:  31.528 MHz, Flicker-free: 31.449 MHz (0.25% slower)
+   --   C64 NTSC: 32.727 MHz, Flicker-free: 32.790 MHz (0.19% faster)
    clk_gen : entity work.clk
       port map (
          sys_clk_i         => clk_i,           -- expects 100 MHz
