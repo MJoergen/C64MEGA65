@@ -1260,6 +1260,67 @@ rewrite of `llist.asm` shipped with exactly this loop, and the testbed
 caught a real memory-layout bug (heap trampling a variable) before any
 hardware saw the code.
 
+### Which tests to run: by scope and cost, not all of them
+
+The repo has more than 30 test suites. Run together they take hours: the
+firmware group about 5 to 10 minutes, the VHDL benches with their quick
+sets about 1 to 1.5 hours, and the complete sets plus the regression of
+the internal 1581 several more hours. Most of that time buys nothing for a
+given change, so pick the suites with the two tables below. This is a
+guideline, not a gate: run more when you have a reason (a change whose
+reach you cannot bound, a shared building block, a release candidate),
+and say in the report what you ran, what you skipped and why.
+
+**Cost tiers** (wall time on the 8-core development machine, `JOBS=2`;
+the numbers are in the README or the header of each runner):
+
+| Tier | Wall time | Suites | Rule |
+|---|---|---|---|
+| 1 | up to about 2 min | every firmware test except the two below, `bankdepth_test.py`, `make_rom.sh`; `tb_hdmi_raw_menu`, `tb_capslock`, `tb_stereo_mix`, `tb_shortcuts`, `tb_drive_led`, `tb_crt_eject`, `tb_ntsc` | run freely when the scope matches |
+| 2 | 2 to 15 min | `strrom_sim_test.py`, `crt_unload_test.py`; `tb_crt_cacher`, `tb_hdmi_raw_clock`, `tb_hdmi_raw_wiring` (`all`), the `quick` sets of `tb_hdmi_genlock` and `tb_hdmi_raw`, `tb_turbo`, `tb_paddles`; single jobs of the 1581 regression; `run_257_proofs.py` | only when the change is in the scope of the suite |
+| 3 | 30 min to hours | `tb_amiga_mouse all`, `tb_hdmi_genlock all`, `tb_hdmi_raw full`, `tb_hdmi_raw_wiring mutants`, the whole 1581 regression (`doc/dev-fdd/tools/README.md`) | once, at the end of a change to the subject of the bench itself; iterate with the quick set or single jobs; tell the user before you start one |
+
+**Scope** (what a change has to touch for a suite to be worth running):
+
+| Changed | Suites |
+|---|---|
+| any Shell or Monitor code (`M2M/rom/`, `CORE/m2m-rom/`, the QNICE monitor) | `make_rom.sh`, `bankdepth_test.py`, `strrom_test.py`, plus the tests of the area: menu (`menu.asm`, `menu_struct.asm`, menu parts of `options.asm`) → `menu_test.py run`; settings saving → `rosm_save_test.py`, `cfm_test.py`; summaries → `summary_test.py`; shortcuts, mounting, `<Saving>`, hidden redraw → `shortcuts_test.py`, `next_disk_test.py`, `mount_reject_test.py`, `saving_text_test.py`, `hidden_redraw_test.py`; ROM and CRT loading → `jiffy_test.py`, `crt_unload_test.py`. The whole firmware group is cheap enough to run in one go before a commit |
+| `strrom.asm`, `asm_strrom.sh`, the string ROM in `qnice_wrapper.vhd`, `IO$PUTS`, `LOG_STR`, `SCR$PRINTSTR` | `strrom_tool_test.py`, `strrom_sim_test.py` |
+| menu definition (`config.vhd` `OPTM_*`, `C_MENU_*` in `mega65.vhd`) | `menu_test.py verify` and `run`, `tb_hdmi_raw_menu` |
+| simulated cartridges (`crt_*.vhd`, `sw_cartridge_*.vhd`, `cartridge.vhd`) | `tb_crt_cacher`, `tb_crt_eject` |
+| clocks, NTSC, mode-change reset (`clk.vhd`, `video_modes_pkg.vhd`, `hr_core_speed`, `mode_change_reset_proc`) | `tb_ntsc` |
+| HDMI pipeline, genlock, raw modes (`hdmi_genlock.vhd`, `ascal.vhd`, `crop.vhd`, `digital_pipeline.vhd`, `video_out_clock.vhd`, `vga_to_hdmi.vhd`) | the `tb_hdmi_raw*` and `tb_hdmi_genlock` benches; their complete sets only for a change to the genlock or the scaler |
+| turbo (`cpu_cyc` and turbo decision in `fpga64_sid_iec.vhd`, `cs_turbo_eligible_o`, `turbo_smart_iec_detector_proc`) | `tb_turbo`; Caps Lock override → `tb_capslock` |
+| audio (`audio_*_proc` in `main.vhd`, `stereo_mix_decode_proc`) | `tb_stereo_mix` |
+| keyboard shortcuts in VHDL (`keyboard.vhd`, `m2m_keyb.vhd`) | `tb_shortcuts`, `tb_capslock` |
+| drive LED (`c1581_error_led.vhd`, `drive_led_*` in `main.vhd`) | `tb_drive_led` |
+| joystick ports (`amiga_mouse.vhd`, `debouncer.vhd`, `mega_key_n_o`) | `tb_amiga_mouse` (quick parts while iterating) |
+| paddles (`mouse_input.vhdl`, the paddle path in `qnice_wrapper.vhd` and `framework.vhd`) | `tb_paddles` |
+| internal 1581 (`physical_1581/`, the `phys_mode` parts of `fdc1772.v`) | the single jobs of the regression that cover the changed unit; the whole regression and `run_257_proofs.py` once at the end |
+| documentation, comments, `VERSIONS.md`, `tests/README.md` | nothing; an `.asm` comment needs `make_rom.sh` at most |
+
+Notes:
+
+- **Compiling a file is not the same as testing it.** `main.vhd`,
+  `mega65.vhd` and `framework.vhd` are compiled by many benches
+  (`tb_ntsc`, `tb_turbo`, `tb_shortcuts`, `tb_stereo_mix`, `tb_drive_led`,
+  `tb_capslock`, `tb_amiga_mouse`, ...), but each of them checks one
+  subject. A change elsewhere in these files needs only the bench of its own
+  subject, plus one cheap bench (for example `tb_capslock`) that shows that
+  the file still analyzes and elaborates.
+- **A pass stays valid.** If a suite passed on an earlier commit and the
+  diff since then does not touch its scope, do not run it again, also not
+  for a review or a merge of an unrelated change.
+- **Quick first, complete once.** While iterating, use the quick set, a
+  single scenario or a single job of a bench; the complete set and the
+  mutants once, when the change is finished.
+- **Several suites in a row:** `doc/dev-a22x3/tools/suites.py <step> <suite> ...`
+  runs them with the clipboard shim and prints one line per suite with its
+  wall time; its groups `fw`, `tb` and `all` exist for a release candidate,
+  not for an everyday change.
+- Mind the CPU budget of the user: long runs share the machine with the
+  work of the user and with other simulations.
+
 ## 8. Useful pointers
 
 - User docs (authoritative for behavior): https://c64.mega65.org
