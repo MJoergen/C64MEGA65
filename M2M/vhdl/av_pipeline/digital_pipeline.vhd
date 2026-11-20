@@ -235,6 +235,17 @@ begin
    assert G_VIDEO_MODE_VECTOR(9).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(9).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(14).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(14).V_PIXELS = 480;
    assert G_VIDEO_MODE_VECTOR(15).H_PIXELS = 720 and G_VIDEO_MODE_VECTOR(15).V_PIXELS = 480;
+   -- In the raw modes 10 to 15 the genlock lengthens the 16 lines that begin with the line in
+   -- which the scaler's vsync ends (hdmi_genlock.vhd, doc/dev-hdmi-raw/SPEC.md 5.2). They must
+   -- end before the scaler fetches the first lines of the next picture, three lines before it,
+   -- so the vertical back porch of a raw record needs 16 + 3 lines and one spare: at least 20
+   -- (the records have 20 in 720p, 39 in 576p and 31 in 480p).
+   assert G_VIDEO_MODE_VECTOR(10).V_BP >= 20;
+   assert G_VIDEO_MODE_VECTOR(11).V_BP >= 20;
+   assert G_VIDEO_MODE_VECTOR(12).V_BP >= 20;
+   assert G_VIDEO_MODE_VECTOR(13).V_BP >= 20;
+   assert G_VIDEO_MODE_VECTOR(14).V_BP >= 20;
+   assert G_VIDEO_MODE_VECTOR(15).V_BP >= 20;
    -- The CTS accumulator of p_pcm_acr holds values below CTS_FRAC_D
    g_assert_cts_frac : for i in G_VIDEO_MODE_VECTOR'range generate
       assert G_VIDEO_MODE_VECTOR(i).CTS_FRAC_N >= 0 and
