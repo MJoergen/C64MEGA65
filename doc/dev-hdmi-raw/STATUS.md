@@ -4,7 +4,7 @@ This file is the running memory of the work: the order, the decisions, the numbe
 
 ## 0. State
 
-**Implemented, reviewed and verified in simulation; not yet built with Vivado, not yet on hardware.** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`.
+**Implemented, reviewed, verified in simulation and built with Vivado (R3 and R6, timing met); not yet on hardware.** Branch `mh_implement_184` (from `develop` = `669e75d`), pushed. Version `WIP-V6-A27`.
 
 | Item | State |
 |---|---|
@@ -15,7 +15,8 @@ This file is the running memory of the work: the order, the decisions, the numbe
 | Benches `tb_hdmi_genlock`, `tb_hdmi_raw`, `tb_hdmi_raw_wiring`, `tb_hdmi_raw_clock`, `tb_hdmi_raw_menu` | done (section 6) |
 | Stack depth of the firmware with 333 menu lines | measured: 717 of 768 words, as computed |
 | Documents (`VERSIONS.md`, `doc/inofficial.md`, `tests/README.md`, `FAQ.md`, `README.md`, `doc/hdmi.md`, `doc/speed.md`, `doc/ntsc.md`, `doc/developer.md`, `AGENTS.md`) | done |
-| Vivado build of R3 and R6, hardware test on displays | the user (section 8) |
+| Vivado build of R3 and R6 | done by the user on 2026-11-20 from `c20a7f3`, checked (section 6) |
+| Hardware test on displays | the user (section 8) |
 
 ## 1. The order (the user, 2026-11-19, 23:15)
 
@@ -108,6 +109,17 @@ All on the integrated tree of the branch. Nothing here replaces the Vivado build
 | `CORE/vhdl/test/tb_hdmi_raw/run.sh full` (the real `ascal.vhd`, `crop.vhd`, the genlock; every pixel of every frame checked) | PASS in all six raw modes: every HDMI frame shows exactly one core frame, in order, no tear. Zoom-in on and off, toggled while locked: the genlock stays locked. Three bench mutants fail as they must |
 | Reader behind writer at the top / bottom of the picture, measured with the real scaler | PAL 720p 1.890 / 3.706 ms, NTSC 720p 1.894 / 1.998, 576p 4:3 1.881 / 3.000, 576p 5:4 2.457 / 2.457, 480p 4:3 1.881 / 1.214, 480p 5:4 2.357 / 0.768 (`SPEC.md` 5.4 within 0.05 ms). No tear from 0.77 ms below the target to at least 12.8 ms above it |
 
+**The Vivado build** (the user, 2026-11-20, Vivado 2022.2, from commit `c20a7f3`)
+
+| | R3 | R6 |
+|---|---|---|
+| Result of the sign-off gates | `RESULT R3 OK` | `RESULT R6 OK` |
+| Worst setup / hold slack of the design | 0.149 / 0.035 ns | 0.201 / 0.036 ns |
+| `hdmi_clk` domain, with the new user uncertainty of 0.100 ns | setup 1.515 ns, hold 0.065 ns | setup 1.515 ns, hold 0.082 ns |
+| Timed paths between `main_clk` and `hdmi_clk` (the new crossing of the reference) | none | none |
+| Errors, critical warnings, re-roll | none | none |
+| Warnings, nets without driver, latches compared with the build of the day before | same counts (491, 17, 6), no new one, none that names the new code | same counts (619, 7, 6), no new one, none that names the new code |
+
 Numbers of the menu change: `OPTM_SIZE` 325 to 333; the six Frame Sync items are the menu lines 66 to 71; every constant behind them moved by 8 (DVI and the filters by 9). Menu heap 4851 + 702 = 5553 words of `MENU_HEAP_SIZE` 5760 (was 5696); the heap of the file browser is 64 words smaller (24448 words in the release build). Stack, measured in the full-system simulation: 717 of 768 words on the deepest chain (a CRT load in the visible menu; 49 words free), 673 on the shortcut chain; register banks 23 and 34, unchanged.
 
 ## 7. Reviews
@@ -126,10 +138,9 @@ The reviews name two risks that are properties of the design, not of the code, a
 
 **For the user**
 
-1. Vivado build of R3 and R6 (`CORE/build_all.sh`). New in the timing analysis: `set_clock_uncertainty -setup 0.100` on `hdmi_clk` in `M2M/common.xdc`; a new source file `M2M/vhdl/av_pipeline/hdmi_genlock.vhd` in the four project files. The new CDC of the reference in `digital_pipeline.vhd` is an `xpm_cdc_single` (constrained by the macro).
-2. Hardware test as in `tests/README.md`, section `Version WIP-V6-A27`. The first things to look at: does the display show `Raw` at all in 720p (the modified blanking lines) and in 4:3 576p (the timing of the MEGA65 core and the Ultimate 64 with a pixel clock 0.09 % higher); is the scroller smooth for minutes; is the sound free of dropouts; does the picture come back after Cursor Up and Return if the display stays black.
-3. The names in the menu are a proposal: `HDMI Frame Sync` with `Off`, `Flicker-free`, `Raw 50.1 Hz` / `Raw 59.8 Hz`, and `HDMI Options`. A line follows each headline, as below `HDMI Display Mode`.
-4. Date and commit in the `WIP-V6-A27` row of `doc/inofficial.md` after the build.
+1. Hardware test as in `tests/README.md`, section `Version WIP-V6-A27`. The first things to look at: does the display show `Raw` at all in 720p (the modified blanking lines) and in 4:3 576p (the timing of the MEGA65 core and the Ultimate 64 with a pixel clock 0.09 % higher); is the scroller smooth for minutes; is the sound free of dropouts; does the picture come back after Cursor Up and Return if the display stays black.
+2. The names in the menu are a proposal: `HDMI Frame Sync` with `Off`, `Flicker-free`, `Raw 50.1 Hz` / `Raw 59.8 Hz`, and `HDMI Options`. A line follows each headline, as below `HDMI Display Mode`.
+3. Date and commit in the `WIP-V6-A27` row of `doc/inofficial.md` (the build that was checked is from `c20a7f3`).
 
 **Found on the way, not part of this work**
 
