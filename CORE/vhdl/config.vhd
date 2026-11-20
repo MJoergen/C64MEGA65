@@ -127,10 +127,10 @@ constant HELP_1 : string :=
    "   are being saved\n" &
    " * If you use any analog display device\n" &
    "   via the VGA port, set HDMI Frame Sync\n" &
-   "   to Off to avoid glitches\n" &
+   "   to Off or Raw to avoid glitches\n" &
    " * If you use HDMI, then absolutely make\n" &
-   "   sure that HDMI Frame Sync is set to\n" &
-   "   Flicker-free or Raw for PAL and NTSC\n" &
+   "   sure HDMI Frame Sync is Flicker-free\n" &
+   "   (or Raw, if your display can show it)\n" &
    " * To use hardware cartridges, you need to\n" &
    "   have a MEGA65 core #0 from at least mid\n" &
    "   2023; so you might need to upgrade\n\n" &
