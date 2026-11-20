@@ -7,8 +7,9 @@
 -- selector through a fixed sequence of codes and prints one line per step:
 --
 --   LOG <time in ps> SEL <code>                   the selector changes
---   LOG <time in ps> DONE <code> <rsto> <period>  14 us later: rsto and the
---                                                 measured period of clko in ps
+--   LOG <time in ps> SEL2 <code>                  it changes again during the step
+--   LOG <time in ps> DONE <code> <rsto> <period>  at the end of the step: rsto and
+--                                                 the measured period of clko in ps
 --                                                 (-1: clko does not run)
 --
 -- G_SEL_WIDTH = 3 runs a version of the file with the 3-bit selector:
@@ -17,7 +18,10 @@
 --   power-on with 0010, then 0000, 0001, ..., 0111 (the same steps as above),
 --   then 1000, 1001, 1010 (the tables of the raw modes), 1011 ... 1111 (codes
 --   without a table of their own) and 0001 (from a code without a table back
---   to a valid one)
+--   to a valid one); then steps in which the selector changes a second time
+--   while the first table is being loaded (or the MMCM is waiting for the lock):
+--   old to old, old to new, new to a code without a table, a code without a
+--   table back to an old one, and in the lock wait old to new
 --
 -- check_drp.py compares the logs (see there). Prints "SIMULATION DONE" at the end.
 -------------------------------------------------------------------------------
@@ -37,7 +41,15 @@ architecture sim of tb_hdmi_raw_clock is
 
    type code_list is array (natural range <>) of natural;
    constant C_CODES_3 : code_list := (2, 0, 1, 2, 3, 4, 5, 6, 7);
-   constant C_CODES_4 : code_list := (2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1);
+   constant C_CODES_4 : code_list := (2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1,
+                                      0, 6, 10, 13, 3);
+   -- second code of a step (C_NONE: none) and when it comes after the first, in ns
+   constant C_NONE    : natural := 99;
+   constant C_SECOND  : code_list := (C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE,
+                                      C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE,
+                                      5, 9, 12, 2, 8);
+   constant C_DELAY   : code_list := (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                      1000, 1500, 800, 2000, 4500);
 
    function codes return code_list is
    begin
@@ -95,6 +107,13 @@ begin
             wait for 1 us;                                  -- power-on: M2M reset
             wait until falling_edge(clki);
             rsti <= '0';
+         end if;
+         if G_SEL_WIDTH = 4 and C_SECOND(i) /= C_NONE then
+            wait for C_DELAY(i) * 1 ns;                     -- in the middle of the load
+            wait until falling_edge(clki);
+            sel <= std_logic_vector(to_unsigned(C_SECOND(i), G_SEL_WIDTH));
+            log("SEL2 " & to_string(std_logic_vector(to_unsigned(C_SECOND(i), G_SEL_WIDTH))));
+            wait for 14 us;                                 -- the first load ends, then the second
          end if;
          wait for 14 us;                                    -- table load (about 3 us) and lock (3 us)
          -- does clko run on the MMCM output, i.e. has the loader switched back to it?

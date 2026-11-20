@@ -24,6 +24,12 @@ Checks:
      (doc/dev-ntsc/tools/w2_checks.py) to the multiplier, dividers and pixel
      clocks of SPEC 4.2, and the table words of the file are the words of the
      generator doc/dev-hdmi-raw/tools/mmcm_tables.py.
+  6. Steps in which the selector changes a second time during the load of the
+     first table or while the MMCM waits for the lock (SEL2): the loader
+     finishes the load it is in (all 23 rows of the first table) and then loads
+     the complete table of the final code; the register file of the MMCM model,
+     replayed from every write of the run, holds the table of the final code in
+     every bit that the table writes, and the loader is back in IDLE.
   5. The codes 1011 to 1111 load exactly the table of 0010 (the same DRP
      accesses at the same addresses, the same written values, the same reset
      and lock events, all at the same times as in the step of 0010; only the
@@ -72,7 +78,9 @@ def parse_log(path):
         if kind == "ERROR":
             errors.append(line)
         elif kind == "SEL":
-            steps.append({"code": args[0], "t0": t, "events": [], "done": None})
+            steps.append({"code": args[0], "t0": t, "events": [], "done": None, "second": None})
+        elif kind == "SEL2":
+            steps[-1]["second"] = args[0]
         elif kind == "DONE":
             steps[-1]["done"] = (args[1], int(args[2]), t - steps[-1]["t0"])
         elif steps:
@@ -140,7 +148,7 @@ def main():
         len(old), " ".join(s["code"] for s in old), len(new), " ".join(s["code"] for s in new)))
     check(old_done and new_done, "a run did not finish")
     check(not old_err and not new_err, "ERROR lines: %s" % (old_err + new_err)[:4])
-    check(len(old) == 9 and len(new) == 18, "unexpected number of steps")
+    check(len(old) == 9 and len(new) == 23, "unexpected number of steps")
 
     # 2. every step against the table of its file
     old_tbl, new_tbl = tables_of(mt, old_vhdl), tables_of(mt, new_vhdl)
@@ -149,7 +157,8 @@ def main():
     for i, s in enumerate(old):
         check_step("old step %d (%s)" % (i, s["code"]), s, old_tbl[table_code(s["code"], 3)])
     for i, s in enumerate(new):
-        check_step("new step %d (%s)" % (i, s["code"]), s, new_tbl[table_code(s["code"], 4)])
+        if s["second"] is None:
+            check_step("new step %d (%s)" % (i, s["code"]), s, new_tbl[table_code(s["code"], 4)])
     print("every step: 23 read-modify-writes in table order with the table data of its code, loader back in IDLE")
 
     # 3. old versus new for the power-on and the eight old codes
@@ -170,7 +179,7 @@ def main():
             "1001": ("28.375", 3, 7, 35, Fraction(100 * 227, 840)),
             "1010": ("29.625", 4, 2, 10, Fraction(100 * 237, 320))}
     for s in new:
-        if s["code"] not in spec:
+        if s["code"] not in spec or s["second"] is not None:
             continue
         m_, d_, o0_, o1_, f_ = spec[s["code"]]
         regs = {int(a, 16): int(v, 16) for k, a, v in drp(s) if k == "WR"}
@@ -193,17 +202,43 @@ def main():
     ref = new[3]                         # the second load of 0010 (the first one is the power-on)
     check(ref["code"] == "0010", "step 3 is not 0010")
     for s in new:
-        if s["code"] in ("1011", "1100", "1101", "1110", "1111"):
+        if s["code"] in ("1011", "1100", "1101", "1110", "1111") and s["second"] is None:
             same = no_read_data(s) == no_read_data(ref) and s["done"] == ref["done"]
             check(same, "code %s does not load exactly like 0010" % s["code"])
             print("code %s: %d events, identical to the load of 0010 (except read data): %s; end: rsto %s, clko %s ps" % (
                 s["code"], len(s["events"]), "yes" if same else "NO", s["done"][0], s["done"][1]))
-    last, first = new[-1], new[2]
+    last, first = new[17], new[2]
     same = (last["code"] == first["code"] == "0001" and no_read_data(last) == no_read_data(first)
             and last["done"] == first["done"])
     check(same, "the change from 1111 to 0001 does not load 0001 as before")
     print("1111 -> 0001: %d events, identical to the first load of 0001 (except read data): %s" % (
         len(last["events"]), "yes" if same else "NO"))
+
+    # 6. a second change of the selector during a load
+    regs = {}
+    for i, s in enumerate(new):
+        for _, k, a in s["events"]:
+            if k == "WR":
+                regs[int(a[0], 16)] = int(a[1], 16)
+        if s["second"] is None:
+            continue
+        first_rows = new_tbl[table_code(s["code"], 4)]
+        final_rows = new_tbl[table_code(s["second"], 4)]
+        acc = drp(s)
+        n = len(acc) // 2
+        check(n == 46, "step %d (%s then %s): %d DRP writes, expected 23 + 23" % (i, s["code"], s["second"], n))
+        if n == 46:
+            part1 = dict(s, events=[e for e in s["events"] if e[1] in ("RD", "WR")][:46])
+            part2 = dict(s, events=[e for e in s["events"] if e[1] in ("RD", "WR")][46:])
+            check_step("step %d first load (%s)" % (i, s["code"]), part1, first_rows)
+            check_step("step %d final load (%s)" % (i, s["second"]), part2, final_rows)
+        bad = [a for a, data, mask in final_rows
+               if (regs.get(a, -1) & ~mask & 0xFFFF) != (data & ~mask & 0xFFFF)]
+        check(not bad, "step %d: the registers %s do not hold the table of %s" % (i, bad, s["second"]))
+        print("step %d: %s, after %s %s: %d DRP writes (the load of %s completed, then the table of %s); "
+              "the register file holds the complete table of %s: %s; end: rsto %s, clko %s ps" % (
+                  i, s["code"], s["second"], "during the load" if s["code"] != "0011" else "in the lock wait",
+                  n, s["code"], s["second"], s["second"], "yes" if not bad else "NO", s["done"][0], s["done"][1]))
 
     if FAILS:
         print("RESULT: FAIL %d mismatch(es)" % len(FAILS))
