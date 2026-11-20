@@ -647,7 +647,7 @@ def cmd_equiv(args):
     return 0
 
 
-# HDMI modes at the C64 frame rate: (name, M, D, O0, O1, htotal, vtotal, standard, role, slot).
+# HDMI modes for the C64 frame rate: (name, M, D, O0, O1, htotal, vtotal, standard, role, slot).
 # "table" entries are the tables for the clk_sel codes first_sel + slot; "alternative" entries
 # are settings that were considered and are not used (printed with --alternatives).
 NEW_TABLES = [
@@ -711,7 +711,13 @@ def cmd_new(args):
             print("  frequency-neutral words that the other style writes differently:")
             for nm, dv, xv, mk, xm in other:
                 print("      %-20s data %04X / %04X  mask %04X / %04X" % (nm, dv, xv, mk, xm))
-        note = "%s at the C64 frame rate: %.6f Hz" % (name, float(fr))
+        # fr is the frame rate of this clock with the totals of the record; in 720p the genlock
+        # stretches the frames to the C64 frame rate, in 576p and 480p the two are equal
+        if fr == core:
+            note = "%s: %.6f Hz, the C64 frame rate" % (name, float(fr))
+        else:
+            note = "%s: %.6f Hz with these totals;\nthe genlock stretches the frames to the C64 frame rate of %.6f Hz" % (
+                name, float(fr), float(core))
         print()
         # labels of cfg_tbl_raw (bit 8 of the table address selects that function) or 9-bit addresses
         base = (sel * 0x20) & 0xFF if args.addr_style == "hex" else sel * 0x20

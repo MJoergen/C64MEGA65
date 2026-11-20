@@ -461,6 +461,12 @@ begin
    end process p_hdmi_ref;
 
    hdmi_ref            <= hdmi_ref_s and not hdmi_ref_d;
+
+   -- The mode code crosses into the HDMI clock domain bit by bit (av_pipeline.vhd), so during
+   -- a change between two standard modes a raw code can be visible for one clock cycle. The
+   -- genlock clears all its state whenever enable_i is '0', so such a cycle leaves nothing
+   -- behind, and in that cycle its htotal_o is htotal_i, the htotal of the record of that
+   -- code: the scaler gets exactly the value it would get from that record without the genlock.
    hdmi_raw            <= '1' when video_mode_is_raw(hdmi_video_mode_i) else '0';
    hdmi_genlock_target <= 2 * hdmi_video_mode.CLK_KHZ;      -- 2.0 ms in pixel clocks
 
