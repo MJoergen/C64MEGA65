@@ -375,8 +375,9 @@ on `main_clk`). M2M splits it:
   in 720p it also adds the 197 (PAL) or 463 (NTSC) pixel clocks per frame
   that the HDMI frame is short. No stretch while the HDMI picture starts up
   to 2.5 ms later than the target (`band = target + target / 4`), so switching
-  zoom-in off needs no new search; while locked, a missing reference (a
-  paused core) keeps the stretch of the last frame. Pull-in from the worst
+  zoom-in off needs no new search; while locked, a missing reference (a core
+  held in reset, or the pause input of the framework, which this core does
+  not use) keeps the stretch of the last frame. Pull-in from the worst
   phase: 6.9 s (PAL 720p), 5.0 s (NTSC 720p), 2.5 s (576p), 1.7 s (480p),
   with a tear line during less than a second of it. The CTS of the audio
   clock regeneration alternates between two values (`CTS_FRAC_N` /

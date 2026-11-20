@@ -115,8 +115,7 @@ back porch until the HDMI picture starts 2.0 ms after the C64's picture, and in 
 missing pixel clocks in every frame. Lines with picture always keep their standard length, and
 every raw mode keeps the sync positions and the CTA VIC of its standard mode.
 
-After a change to a raw mode, a reset of the C64, a pause of the C64 (the file browser) or a
-change between PAL and NTSC, the genlock needs at most 6.9 seconds (PAL 720p; 5.0 in NTSC 720p,
+After a change to a raw mode, a reset of the C64 or a change between PAL and NTSC, the genlock needs at most 6.9 seconds (PAL 720p; 5.0 in NTSC 720p,
 2.5 in 576p, 1.7 in 480p) to bring the HDMI picture to that distance; a tear line wanders through
 the picture during a part of that time (less than a second). While the HDMI picture starts up to
 2.5 ms later than the target, the genlock does not stretch at all. Switching zoom-in off moves
@@ -125,6 +124,7 @@ distance glides back to the target within 15 s (PAL) or 4 s (NTSC) without a tea
 480p the picture stays up to 2.5 ms later. Switching zoom-in on moves it back by the same amount,
 and the genlock returns to the target within a second. Neither needs a new search; apart from the
 moment of the switch itself (the scaler needs up to three frames for a new input size, in every
-mode) the picture stays steady. While the C64 is paused, the genlock keeps the frame length of
-the HDMI output. Which displays accept these frame rates is not known yet. Details:
+mode) the picture stays steady. While no reference arrives (a core held in reset, or the pause
+input of the framework, which this core does not use), the genlock keeps the frame length of the
+HDMI output. Which displays accept these frame rates is not known yet. Details:
 [`dev-hdmi-raw/SPEC.md`](dev-hdmi-raw/SPEC.md).
