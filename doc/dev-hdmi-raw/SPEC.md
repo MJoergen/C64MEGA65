@@ -137,7 +137,7 @@ What the numbers mean per frame (core frame length in pixel clocks minus the tot
 
 ### 4.4 Timing analysis
 
-Vivado times the HDMI domain with the static attributes of the MMCM (74.25 MHz). The fastest new clock is 0.26 % faster (13.433 ns instead of 13.468 ns). `M2M/common.xdc` gets `set_clock_uncertainty -setup 0.050 [get_clocks hdmi_clk]` so that the analysis covers it (the slack of this domain is about 1.4 ns today).
+Vivado times the HDMI domain with the static attributes of the MMCM (74.25 MHz). The fastest new clock is 0.26 % faster (13.433 ns instead of 13.468 ns). `M2M/common.xdc` gets `set_clock_uncertainty -setup 0.100 [get_clocks hdmi_clk]` so that the analysis covers it with a margin for the jitter of the other MMCM settings (the slack of this domain is about 1.4 ns today).
 
 ## 5. The genlock (`M2M/vhdl/av_pipeline/hdmi_genlock.vhd`, new)
 
@@ -162,7 +162,7 @@ entity hdmi_genlock is
 end entity hdmi_genlock;
 ```
 
-`digital_pipeline.vhd` produces `ref_i` from the event that the scaler itself takes as the start of a picture: the first rising edge of its input data enable (`not (video_hblank_i or video_vblank_i)`) after a rising edge of `video_vs_i`. (The falling edge of `video_vblank_i` alone is not usable: with zoom-in the crop also blanks the left and right border through this signal, so it falls in every line.) A register in the core's clock domain is cleared by the rising edge of `video_vs_i` and set by the first visible pixel after it; this level crosses into the HDMI clock domain through `xpm_cdc_single`, and its rising edge there is the pulse. The scaler gets `htotal => hdmi_htotal` in every mode that is not a raw mode (a multiplexer in `digital_pipeline.vhd`, not inside the genlock) and `htotal_o` of the genlock in the raw modes. `enable_i` is `'1'` exactly in the raw modes; with `enable_i = '0'` the genlock holds `htotal_o = htotal_i`.
+`digital_pipeline.vhd` produces `ref_i` from the event that the scaler itself takes as the start of a picture: the first clock cycle with its input data enable active (`video_hblank_i = '0' and video_vblank_i = '0'`) after a rising edge of `video_vs_i`. (The falling edge of `video_vblank_i` alone is not usable: with zoom-in the crop also blanks the left and right border through this signal, so it falls in every line.) A register in the core's clock domain is cleared by the rising edge of `video_vs_i` and set by the first visible pixel after it; this level crosses into the HDMI clock domain through `xpm_cdc_single`, and its rising edge there is the pulse. The scaler gets `htotal => hdmi_htotal` in every mode that is not a raw mode (a multiplexer in `digital_pipeline.vhd`, not inside the genlock) and `htotal_o` of the genlock in the raw modes. `enable_i` is `'1'` exactly in the raw modes; with `enable_i = '0'` the genlock holds `htotal_o = htotal_i`. The mode code crosses into the HDMI clock domain bit by bit, so during a change between two standard modes a raw code can be visible for one clock cycle: the genlock clears all its state whenever `enable_i` is `'0'`, so such a pulse leaves nothing behind, and in that one cycle its output is the `htotal` of the record of that code, exactly what the scaler got in such a cycle before.
 
 ### 5.2 Line stretching
 
