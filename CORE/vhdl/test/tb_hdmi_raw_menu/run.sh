@@ -7,7 +7,8 @@
 #   table    main_hdmi_ff and qnice_video_mode_o of the working tree and of the base commit, copied
 #            verbatim into tb_hdmi_raw_menu.vhd, for every combination of the machine mode, the six
 #            display modes and the six Frame Sync items, with the other menu bits at '0' and '1'
-#   mutants  defects of the two decoders and of the constants that the table must reject
+#   mutants  defects of the two decoders, of their clock domains and of the constants that the
+#            table must reject
 #   all      everything (default)
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
@@ -23,7 +24,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
 GHDL=${GHDL:-/usr/local/bin/ghdl}
 GF="--std=08 -frelaxed"
-BASE=8a0e3ab        # the last commit before the Frame Sync radio groups (WIP-V6-A26 menu)
+BASE=669e75d        # develop before the Frame Sync radio groups (menu of WIP-V6-A26)
 PKG=${VIDEO_MODES_PKG:-$REPO/M2M/vhdl/av_pipeline/video_modes_pkg.vhd}
 
 WHAT=all
@@ -165,9 +166,11 @@ if want mutants; then
    # Raw bit of PAL; ntscraw: the NTSC raw modes read the Raw bit of PAL; nomachine: the PAL raw
    # 16:9 mode also in NTSC; swap: 4:3 raw delivers the 5:4 raw mode; const: C_MENU_HDMI_RAW on the
    # line of Flicker-free; constntsc: C_MENU_HDMI_RAW_NTSC on the line of Off (NTSC); order: the
-   # raw prefix behind the standard chain (never reached)
+   # raw prefix behind the standard chain (never reached); qmain: the raw 16:9 PAL mode reads the Raw
+   # bit of the main clock domain; qntsc: the raw 5:4 NTSC mode reads c64_ntsc (main clock domain);
+   # mqnice: main_hdmi_ff reads the Raw bit of PAL of the QNICE clock domain
    M65="$REPO/CORE/vhdl/mega65.vhd"
-   for m in noand ffntsc ntscraw nomachine swap const constntsc order; do
+   for m in noand ffntsc ntscraw nomachine swap const constntsc order qmain qntsc mqnice; do
       D="$BUILD/mut_$m"
       mkdir -p "$D"
       case $m in
@@ -189,6 +192,13 @@ if want mutants; then
                        "constant C_MENU_HDMI_RAW      : natural := 70;" "constant C_MENU_HDMI_RAW      : natural := 68;" ;;
          constntsc) mutate "$M65" "$D/mega65.vhd" \
                        "constant C_MENU_HDMI_RAW_NTSC : natural := 71;" "constant C_MENU_HDMI_RAW_NTSC : natural := 67;" ;;
+         qmain)     mutate "$M65" "$D/mega65.vhd" \
+                       "qnice_osm_control_i(C_MENU_HDMI_RAW) = '1' else" "main_osm_control_i(C_MENU_HDMI_RAW) = '1' else" ;;
+         qntsc)     mutate "$M65" "$D/mega65.vhd" \
+                       "C_VIDEO_HDMI_5_4_5994_RAW  when qnice_osm_control_i(C_MENU_MACHINE_NTSC) = '1'" \
+                       "C_VIDEO_HDMI_5_4_5994_RAW  when c64_ntsc = '1'" ;;
+         mqnice)    mutate "$M65" "$D/mega65.vhd" \
+                       "and not main_osm_control_i(C_MENU_HDMI_RAW);" "and not qnice_osm_control_i(C_MENU_HDMI_RAW);" ;;
          order)     python3 - "$M65" "$D/mega65.vhd" <<'PYEOF'
 import re, sys
 s = open(sys.argv[1]).read()

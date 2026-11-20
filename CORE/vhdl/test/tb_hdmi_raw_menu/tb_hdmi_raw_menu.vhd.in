@@ -11,7 +11,10 @@
 -- Every combination of the 13 menu bits involved is applied, with all other bits of the 512-bit
 -- menu vectors at '0' and at '1': the machine mode, the six display modes and the six items of the
 -- two Frame Sync radio groups (Off, Flicker-free and Raw of PAL and of NTSC), also the combinations
--- that the Shell produces only for a moment while it writes the menu bits one at a time.
+-- that the Shell produces only for a moment while it changes the menu bits one at a time. Pass 0
+-- applies each combination to the menu vectors of both clock domains, pass 1 applies another
+-- combination with the opposite machine mode to main_osm_control_i than to qnice_osm_control_i,
+-- and the expected value of each decoder follows from the vector of its own clock domain.
 --
 -- Checks per combination:
 --   (a) no Raw bit set: main_hdmi_ff and qnice_video_mode_o equal the decoders of the base commit
@@ -108,147 +111,177 @@ begin
    end block b_base;
 
    stim : process
-      -- bit 0: machine mode NTSC; bits 1 to 6: display modes 16:9, 4:3, 5:4 of PAL, then of NTSC;
-      -- bits 7 to 12: Off (PAL), Off (NTSC), Flicker-free (PAL), Flicker-free (NTSC), Raw (PAL),
-      -- Raw (NTSC)
-      variable st        : std_logic_vector(12 downto 0);
-      variable vn, vb    : std_logic_vector(511 downto 0);
-      variable bgbit     : std_logic;
-      variable ntsc      : boolean;
-      variable raw_act   : boolean;
-      variable any_raw   : boolean;
-      variable ff_item   : std_logic;
-      variable exp_std   : video_mode_type;
-      variable exp_mode  : video_mode_type;
-      variable exp_ff    : std_logic;
-      variable errors    : natural := 0;
-      variable n_a       : natural := 0;    -- combinations without a Raw bit
-      variable n_b       : natural := 0;    -- combinations with the Raw bit of the active mode
-      variable n_c       : natural := 0;    -- combinations with only the Raw bit of the other mode
-      variable n_rawmode : natural := 0;    -- of n_b: a raw member checked
+      -- A state is the value of the 13 menu bits: bit 0 machine mode NTSC; bits 1 to 6 the display
+      -- modes 16:9, 4:3, 5:4 of PAL, then of NTSC; bits 7 to 12 Off (PAL), Off (NTSC), Flicker-free
+      -- (PAL), Flicker-free (NTSC), Raw (PAL), Raw (NTSC). sq is the state of the QNICE clock domain
+      -- (qnice_osm_control_i, decoded into qnice_video_mode_o), sm the state of the main clock domain
+      -- (main_osm_control_i, decoded into main_hdmi_ff). In pass 0 both are the same, in pass 1 sm is
+      -- another state with the opposite machine mode (a permutation of sq), so a decoder that reads
+      -- the menu vector or c64_ntsc of the other clock domain fails.
+      variable sq, sm     : std_logic_vector(12 downto 0);
+      variable vnq, vnm   : std_logic_vector(511 downto 0);
+      variable vbq, vbm   : std_logic_vector(511 downto 0);
+      variable bgbit      : std_logic;
+      variable q_ntsc     : boolean;
+      variable q_raw      : boolean;            -- the Raw bit of the machine mode of sq is set
+      variable q_any      : boolean;            -- a Raw bit of sq is set
+      variable m_ntsc     : boolean;
+      variable m_raw      : boolean;
+      variable m_any      : boolean;
+      variable ff_item    : std_logic;
+      variable exp_std    : video_mode_type;
+      variable exp_mode   : video_mode_type;
+      variable exp_ff     : std_logic;
+      variable errors     : natural := 0;
+      variable n_pass     : natural;
+      variable qa, qb, qc : natural := 0;       -- QNICE states without a Raw bit (a), with the Raw
+                                                -- bit of their machine mode (b), only the other (c)
+      variable ma, mb, mc : natural := 0;       -- the same for the main states
+      variable n_rawmode  : natural := 0;       -- of qb: a raw member checked
 
       procedure fail(msg : string) is
       begin
          if errors < 20 then
-            report "TB: FAIL state " & to_string(st) & " background " & std_logic'image(bgbit) &
-                   ": " & msg severity error;
+            report "TB: FAIL pass " & integer'image(n_pass) & " QNICE state " & to_string(sq) &
+                   " main state " & to_string(sm) & " background " & std_logic'image(bgbit) & ": " &
+                   msg severity error;
          end if;
          errors := errors + 1;
       end procedure fail;
+
+      -- a state into the menu vector of b_new (flat indices of the golden model)
+      procedure put_new(v : inout std_logic_vector(511 downto 0); s : std_logic_vector(12 downto 0)) is
+      begin
+         v(T_MENU_MACHINE_NTSC)       := s(0);
+         v(T_MENU_HDMI_16_9_50)       := s(1);
+         v(T_MENU_HDMI_4_3_50)        := s(2);
+         v(T_MENU_HDMI_5_4_50)        := s(3);
+         v(T_MENU_HDMI_16_9_5994)     := s(4);
+         v(T_MENU_HDMI_4_3_5994)      := s(5);
+         v(T_MENU_HDMI_5_4_5994)      := s(6);
+         v(T_MENU_HDMI_SYNC_OFF)      := s(7);
+         v(T_MENU_HDMI_SYNC_OFF_NTSC) := s(8);
+         v(T_MENU_HDMI_FF)            := s(9);
+         v(T_MENU_HDMI_FF_NTSC)       := s(10);
+         v(T_MENU_HDMI_RAW)           := s(11);
+         v(T_MENU_HDMI_RAW_NTSC)      := s(12);
+      end procedure put_new;
+
+      -- a state into the menu vector of b_base (constants of the base commit, which has no Off and
+      -- no Raw item: its single-select switches are the Flicker-free items)
+      procedure put_base(v : inout std_logic_vector(511 downto 0); s : std_logic_vector(12 downto 0)) is
+      begin
+         v(B_MENU_MACHINE_NTSC)       := s(0);
+         v(B_MENU_HDMI_16_9_50)       := s(1);
+         v(B_MENU_HDMI_4_3_50)        := s(2);
+         v(B_MENU_HDMI_5_4_50)        := s(3);
+         v(B_MENU_HDMI_16_9_5994)     := s(4);
+         v(B_MENU_HDMI_4_3_5994)      := s(5);
+         v(B_MENU_HDMI_5_4_5994)      := s(6);
+         v(B_MENU_HDMI_FF)            := s(9);
+         v(B_MENU_HDMI_FF_NTSC)       := s(10);
+      end procedure put_base;
+
+      procedure classify(s : std_logic_vector(12 downto 0); ntsc, raw, any : out boolean) is
+      begin
+         ntsc := s(0) = '1';
+         any  := s(11) = '1' or s(12) = '1';
+         if s(0) = '1' then raw := s(12) = '1'; else raw := s(11) = '1'; end if;
+      end procedure classify;
    begin
-      for bg in 0 to 1 loop
-         if bg = 0 then bgbit := '0'; else bgbit := '1'; end if;
-         for s in 0 to 2**13 - 1 loop
-            st := std_logic_vector(to_unsigned(s, 13));
-            vn := (others => bgbit);
-            vb := (others => bgbit);
-            vn(T_MENU_MACHINE_NTSC)      := st(0);
-            vn(T_MENU_HDMI_16_9_50)      := st(1);
-            vn(T_MENU_HDMI_4_3_50)       := st(2);
-            vn(T_MENU_HDMI_5_4_50)       := st(3);
-            vn(T_MENU_HDMI_16_9_5994)    := st(4);
-            vn(T_MENU_HDMI_4_3_5994)     := st(5);
-            vn(T_MENU_HDMI_5_4_5994)     := st(6);
-            vn(T_MENU_HDMI_SYNC_OFF)     := st(7);
-            vn(T_MENU_HDMI_SYNC_OFF_NTSC):= st(8);
-            vn(T_MENU_HDMI_FF)           := st(9);
-            vn(T_MENU_HDMI_FF_NTSC)      := st(10);
-            vn(T_MENU_HDMI_RAW)          := st(11);
-            vn(T_MENU_HDMI_RAW_NTSC)     := st(12);
-            vb(B_MENU_MACHINE_NTSC)      := st(0);
-            vb(B_MENU_HDMI_16_9_50)      := st(1);
-            vb(B_MENU_HDMI_4_3_50)       := st(2);
-            vb(B_MENU_HDMI_5_4_50)       := st(3);
-            vb(B_MENU_HDMI_16_9_5994)    := st(4);
-            vb(B_MENU_HDMI_4_3_5994)     := st(5);
-            vb(B_MENU_HDMI_5_4_5994)     := st(6);
-            vb(B_MENU_HDMI_FF)           := st(9);
-            vb(B_MENU_HDMI_FF_NTSC)      := st(10);
-            new_main   <= vn;
-            new_qnice  <= vn;
-            base_main  <= vb;
-            base_qnice <= vb;
-            wait for 1 ns;
-
-            ntsc    := st(0) = '1';
-            any_raw := st(11) = '1' or st(12) = '1';
-            if ntsc then
-               raw_act := st(12) = '1';
-               ff_item := st(10);
-               if    st(6) = '1' then exp_std := C_VIDEO_HDMI_5_4_5994;
-               elsif st(5) = '1' then exp_std := C_VIDEO_HDMI_4_3_5994;
-               else                   exp_std := C_VIDEO_HDMI_16_9_5994;
-               end if;
-            else
-               raw_act := st(11) = '1';
-               ff_item := st(9);
-               if    st(3) = '1' then exp_std := C_VIDEO_HDMI_5_4_50;
-               elsif st(2) = '1' then exp_std := C_VIDEO_HDMI_4_3_50;
-               else                   exp_std := C_VIDEO_HDMI_16_9_50;
-               end if;
-            end if;
-
-            -- (a) and (b): against the decoders of the base commit
-            if not any_raw then
-               n_a := n_a + 1;
-            elsif raw_act then
-               n_b := n_b + 1;
-            else
-               n_c := n_c + 1;
-            end if;
-            if raw_act then
-               if new_mode /= raw_twin(base_mode) or raw_twin(base_mode) = base_mode then
-                  fail("qnice_video_mode_o = " & video_mode_type'image(new_mode) &
-                       ", expected the raw member of " & video_mode_type'image(base_mode));
+      for p in 0 to 1 loop
+         n_pass := p;
+         for bg in 0 to 1 loop
+            if bg = 0 then bgbit := '0'; else bgbit := '1'; end if;
+            for s in 0 to 2**13 - 1 loop
+               sq := std_logic_vector(to_unsigned(s, 13));
+               if p = 0 then
+                  sm := sq;
                else
-                  n_rawmode := n_rawmode + 1;
+                  sm := std_logic_vector(to_unsigned((s * 4093 + 1235) mod 2**13, 13));
                end if;
-               if new_ff /= '0' then
-                  fail("main_hdmi_ff = '1' while Raw is selected");
+               vnq := (others => bgbit);
+               vnm := (others => bgbit);
+               vbq := (others => bgbit);
+               vbm := (others => bgbit);
+               put_new(vnq, sq);
+               put_new(vnm, sm);
+               put_base(vbq, sq);
+               put_base(vbm, sm);
+               new_qnice  <= vnq;
+               new_main   <= vnm;
+               base_qnice <= vbq;
+               base_main  <= vbm;
+               wait for 1 ns;
+
+               classify(sq, q_ntsc, q_raw, q_any);
+               classify(sm, m_ntsc, m_raw, m_any);
+               if q_ntsc then
+                  if    sq(6) = '1' then exp_std := C_VIDEO_HDMI_5_4_5994;
+                  elsif sq(5) = '1' then exp_std := C_VIDEO_HDMI_4_3_5994;
+                  else                   exp_std := C_VIDEO_HDMI_16_9_5994;
+                  end if;
+               else
+                  if    sq(3) = '1' then exp_std := C_VIDEO_HDMI_5_4_50;
+                  elsif sq(2) = '1' then exp_std := C_VIDEO_HDMI_4_3_50;
+                  else                   exp_std := C_VIDEO_HDMI_16_9_50;
+                  end if;
                end if;
-            else
-               if new_mode /= base_mode then
+               if m_ntsc then ff_item := sm(10); else ff_item := sm(9); end if;
+
+               if not q_any then qa := qa + 1; elsif q_raw then qb := qb + 1; else qc := qc + 1; end if;
+               if not m_any then ma := ma + 1; elsif m_raw then mb := mb + 1; else mc := mc + 1; end if;
+
+               -- (a) and (b): against the decoders of the base commit
+               if q_raw then
+                  if new_mode /= raw_twin(base_mode) or raw_twin(base_mode) = base_mode then
+                     fail("qnice_video_mode_o = " & video_mode_type'image(new_mode) &
+                          ", expected the raw member of " & video_mode_type'image(base_mode));
+                  else
+                     n_rawmode := n_rawmode + 1;
+                  end if;
+               elsif new_mode /= base_mode then
                   fail("qnice_video_mode_o = " & video_mode_type'image(new_mode) &
                        ", the base commit gives " & video_mode_type'image(base_mode));
                end if;
-               if new_ff /= base_ff then
+               if m_raw then
+                  if new_ff /= '0' then
+                     fail("main_hdmi_ff = '1' while Raw is selected");
+                  end if;
+               elsif new_ff /= base_ff then
                   fail("main_hdmi_ff = " & std_logic'image(new_ff) &
                        ", the base commit gives " & std_logic'image(base_ff));
                end if;
-            end if;
 
-            -- (c) independent of the base commit
-            if raw_act then
-               exp_mode := raw_twin(exp_std);
-               exp_ff   := '0';
-            else
-               exp_mode := exp_std;
-               exp_ff   := ff_item;
-            end if;
-            if base_mode /= exp_std or base_ff /= ff_item then
-               fail("the base commit does not decode as its priority chain and its switch");
-            end if;
-            if new_mode /= exp_mode then
-               fail("qnice_video_mode_o = " & video_mode_type'image(new_mode) &
-                    ", the model gives " & video_mode_type'image(exp_mode));
-            end if;
-            if new_ff /= exp_ff then
-               fail("main_hdmi_ff = " & std_logic'image(new_ff) & ", the model gives " &
-                    std_logic'image(exp_ff));
-            end if;
-            if video_mode_is_ntsc(new_mode) /= ntsc then
-               fail("video_mode_is_ntsc(" & video_mode_type'image(new_mode) &
-                    ") differs from the machine mode");
-            end if;
+               -- (c) independent of the base commit
+               if q_raw then exp_mode := raw_twin(exp_std); else exp_mode := exp_std; end if;
+               if m_raw then exp_ff := '0'; else exp_ff := ff_item; end if;
+               if base_mode /= exp_std or base_ff /= ff_item then
+                  fail("the base commit does not decode as its priority chain and its switch");
+               end if;
+               if new_mode /= exp_mode then
+                  fail("qnice_video_mode_o = " & video_mode_type'image(new_mode) &
+                       ", the model gives " & video_mode_type'image(exp_mode));
+               end if;
+               if new_ff /= exp_ff then
+                  fail("main_hdmi_ff = " & std_logic'image(new_ff) & ", the model gives " &
+                       std_logic'image(exp_ff));
+               end if;
+               if video_mode_is_ntsc(new_mode) /= q_ntsc then
+                  fail("video_mode_is_ntsc(" & video_mode_type'image(new_mode) &
+                       ") differs from the machine mode");
+               end if;
+            end loop;
          end loop;
       end loop;
 
-      report "TB: " & integer'image(n_a) & " combinations without a Raw bit (a), " &
-             integer'image(n_b) & " with the Raw bit of the active machine mode (b, " &
-             integer'image(n_rawmode) & " raw members), " & integer'image(n_c) &
-             " with only the Raw bit of the other machine mode";
-      if errors = 0 and n_a = 2 * 2**11 and n_b = 2 * 2**12 and n_c = 2 * 2**11 and
-         n_rawmode = n_b then
+      report "TB: QNICE states " & integer'image(qa) & " without a Raw bit (a), " &
+             integer'image(qb) & " with the Raw bit of the active machine mode (b, " &
+             integer'image(n_rawmode) & " raw members), " & integer'image(qc) &
+             " with only the Raw bit of the other machine mode; main states " & integer'image(ma) &
+             " / " & integer'image(mb) & " / " & integer'image(mc);
+      if errors = 0 and qa = 4 * 2**11 and qb = 4 * 2**12 and qc = 4 * 2**11 and
+         ma = qa and mb = qb and mc = qc and n_rawmode = qb then
          report "TB: RESULT PASS";
       else
          report "TB: RESULT FAIL (" & integer'image(errors) & " errors)";
