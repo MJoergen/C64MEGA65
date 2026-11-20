@@ -46,10 +46,15 @@ SUITES = {
     # HDMI at the frame rate of the C64 (#184); a new bench needs one line here and its name in
     # the group "hdmi_raw" below
     "tb_hdmi_raw_menu": (".", ["bash", "CORE/vhdl/test/tb_hdmi_raw_menu/run.sh", "all"], r"^RESULT: PASS", 600),
+    "tb_hdmi_raw_clock": (".", ["bash", "CORE/vhdl/test/tb_hdmi_raw_clock/run.sh", "all"], r"^RESULT: PASS", 1800),
+    "tb_hdmi_raw_wiring": (".", ["bash", "CORE/vhdl/test/tb_hdmi_raw_wiring/run.sh", "all"], r"^RESULT: PASS", 3600),
+    # the quick sets; the complete sets ("all" and "full") take 40 minutes and more, see their READMEs
+    "tb_hdmi_genlock": (".", ["bash", "CORE/vhdl/test/tb_hdmi_genlock/run.sh", "quick"], r"^RESULT: PASS", 3600),
+    "tb_hdmi_raw":     (".", ["bash", "CORE/vhdl/test/tb_hdmi_raw/run.sh", "quick"], r"^RESULT: PASS", 3600),
 }
 GROUPS = {
     "fw0": ["make_rom", "menu_run", "menu_verify", "strrom", "strrom_tool", "rosm", "jiffy"],
-    "hdmi_raw": ["tb_hdmi_raw_menu"],
+    "hdmi_raw": ["tb_hdmi_raw_menu", "tb_hdmi_raw_clock", "tb_hdmi_raw_wiring", "tb_hdmi_genlock", "tb_hdmi_raw"],
     # derived from SUITES, so that a new suite is part of them without a change here
     "fw": [n for n in SUITES if not n.startswith("tb_")],
     "tb": [n for n in SUITES if n.startswith("tb_")],
