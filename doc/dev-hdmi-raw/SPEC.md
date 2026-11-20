@@ -77,7 +77,7 @@ So "Raw" consists of:
 
 ## 3. Core side (`CORE/vhdl/mega65.vhd`)
 
-- `main_hdmi_ff` = bit of the item `Flicker-free` of the active machine mode AND NOT the bit of the item `Raw` of the active machine mode. (The Shell writes the menu bits bank by bank, so two bits of a radio group can be set for a moment; then Raw wins on both sides.)
+- `main_hdmi_ff` = bit of the item `Flicker-free` of the active machine mode AND NOT the bit of the item `Raw` of the active machine mode. (The Shell changes the menu bits one at a time, in rising order: on the way from `Raw` to `Flicker-free` both bits are set for a moment, on the way from `Flicker-free` to `Raw` none. With both set, Raw wins on both sides; with none set, the state is `Off`. Either way the HDMI mode changes once.)
 - The process `hr_core_speed`, `clk.vhd`, `CORE.xdc` and the copy of the process in `CORE/vhdl/test/tb_ntsc/tb_core_speed.vhd` do not change.
 - `qnice_video_mode_o`: the existing chain stays; in front of it, when the `Raw` bit of the active machine mode is set, the raw member of the selected display mode is chosen:
 
