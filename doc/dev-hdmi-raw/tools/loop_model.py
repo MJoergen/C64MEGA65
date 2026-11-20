@@ -9,19 +9,20 @@ MODES = {
   'NTSC 720p': (F(100_000_000*237, 320) * F(547040*110, 36*100_000_000), 1650*750, 74062),
   'NTSC 480p': (F(451308), 858*526, 27000),
 }
-KMAX, GUARD = 4080, 4096
+KMAX = 4080
 def run(name, d0, frames, jitter=True, seed=1):
     N, HV, khz = MODES[name]
     T = 2 * khz
+    BAND = T + T // 4
     rnd = random.Random(seed)
     d = F(d0)            # true distance in pixel clocks (0 <= d < N)
     lock_at = None; inrow = 0; ks = []; dmin = dmax = None
     for f in range(frames):
         dm = int(d) + (rnd.choice((0, 1)) if jitter else 0)     # measured: quantized, one clock of synchronizer uncertainty
         if dm <= T:               k = min(T - dm, KMAX)
-        elif dm < T + GUARD:      k = 0
+        elif dm < T + BAND:       k = 0
         else:                     k = KMAX
-        ok = (T - 1024 <= dm < T + 4096)
+        ok = (T - 1024 <= dm < T + BAND)
         inrow = inrow + 1 if ok else 0
         if inrow == 8 and lock_at is None: lock_at = f
         if lock_at is not None:

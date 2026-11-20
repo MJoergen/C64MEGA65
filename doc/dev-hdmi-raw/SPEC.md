@@ -166,10 +166,10 @@ end entity hdmi_genlock;
 
 ### 5.2 Line stretching
 
-The scaler takes `htotal` over in every clock cycle and uses it only to end a line; a longer line gets its extra pixels at the end of the horizontal back porch. `hs_i`, `vs_i` and `de_i` are the scaler's outputs (10 clock cycles behind its counters).
+The scaler takes `htotal` over in every clock cycle and uses it only to end a line; a longer line gets its extra pixels at the end of the horizontal back porch. `hs_i`, `vs_i` and `de_i` are the scaler's outputs (11 clock cycles behind its counters).
 
 - The genlock acts at every rising edge of `hs_i` (more than 100 clock cycles before the end of the line in every mode).
-- The 16 lines that begin with the line in which `vs_i` falls are the stretch lines: lines 730 to 745 in 720p, 585 to 600 in 576p, 495 to 510 in 480p. They lie in the vertical back porch and end before the scaler fetches the first lines of the next picture (three lines before the picture).
+- The 16 lines that begin with the line in which `vs_i` falls are the stretch lines: lines 730 to 745 in 720p, 585 to 600 in 576p, 495 to 510 in 480p. They lie in the vertical back porch and end before the scaler fetches the first lines of the next picture (three lines before the picture). `digital_pipeline.vhd` asserts for every raw record that the vertical back porch has at least 20 lines.
 - A frame with the stretch `k` (0 to 4080 pixel clocks): the first `k mod 16` stretch lines are `htotal_i + k / 16 + 1` long, the others `htotal_i + k / 16`. All other lines are `htotal_i` long. No line is ever shorter than `htotal_i`, none longer than `htotal_i + 256`.
 
 ### 5.3 Control
@@ -180,16 +180,17 @@ The scaler takes `htotal` over in every clock cycle and uses it only to end a li
 
 | Condition | Stretch `k` |
 |---|---|
-| no `ref_i` since the previous measurement (the core is paused or in reset, or a reference is missing) | 0 |
+| no `ref_i` since the previous measurement (the core is paused or in reset, or a reference is missing) | the stretch of the previous frame while locked (the HDMI side keeps its frame length), otherwise 0 |
 | `d <= target_i` | `min(target_i - d, 4080)` |
-| `target_i < d < target_i + 4096` | 0 |
+| `target_i < d < target_i + band`, with `band = target_i + target_i / 4` (2.5 ms) | 0 |
 | otherwise | 4080 |
 
 - Without stretch the HDMI frame is shorter than the core's frame by the surplus of section 4.2, so `d` falls by that amount per frame; a stretch `k` raises it by `k`.
   - 720p: in the steady state `k` alternates between the two integers around the surplus and `d` stays within a few pixel clocks of `target_i` minus the surplus.
   - 576p and 480p (surplus 0): the stretch ends as soon as `d` has reached `target_i`; from then on `k` is 0, every frame is the static timing of the record, and `d` does not move any more.
-  - From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most about 8 seconds in PAL 720p, 6 in NTSC 720p, 3 in 576p and 2 in 480p. During that time a tear line can be visible, as it is today while flicker-free pulls in.
-- `locked_o` is `'1'` after 8 frames in a row with `target_i - 1024 <= d < target_i + 4096`, and `'0'` after a frame that violates this, after `rst_i` and with `enable_i = '0'`.
+  - The band is the range in which nothing needs to be done: the reader is further behind the writer than necessary, but far from the next frame. A jump of the core's phase that leaves `d` inside the band needs no pull-in. The case that matters: switching zoom-in off moves the core's picture start 2.0 ms (PAL) or 1.4 ms (NTSC) earlier. In 720p `d` then glides back to the target by the surplus per frame (about 15 s in PAL, 4 s in NTSC) without a tear; in 576p and 480p it stays where it is, and the picture is up to 2.5 ms later than necessary until the phase jumps again.
+  - From any other phase the genlock stretches by 4080 per frame until the HDMI picture start has fallen behind far enough to arrive at the target from below: at most about 8 seconds in PAL 720p, 6 in NTSC 720p, 3 in 576p and 2 in 480p. During that time the 16 stretch lines are 255 pixel clocks longer than the others, the frame rate is 0.3 to 0.9 % lower, and for a part of it (less than a second) a tear line is visible, as it is today while flicker-free pulls in.
+- `locked_o` is `'1'` after 8 valid measurements in a row with `target_i - 1024 <= d < target_i + band`. A measurement without a new reference changes nothing (the stretch is held while locked, so that a pause of the core or a single missing reference does not move the picture). It is `'0'` after a valid measurement outside the window, after `rst_i` and with `enable_i = '0'`.
 - `rst_i` (the reset of the HDMI domain, active while the pixel clock is reconfigured) clears all state: stretch 0. `enable_i = '0'` does the same (a change between a standard mode and its raw mode does not always reconfigure the pixel clock: NTSC 480p uses the same clock in both).
 
 ### 5.4 Why 2.0 ms
