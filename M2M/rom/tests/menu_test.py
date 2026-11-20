@@ -1211,6 +1211,12 @@ def deps_build_fixtures():
     fx.append(("v6 drive 9 Always", v6g, v6res, s, 0))
     # the HDMI submenu level with the PAL machine mode: NTSC variants hidden
     fx.append(("v6 HDMI level PAL", v6g, v6res, menu_stdsel(V6_MENU), 3))
+    # and with the NTSC machine mode: the PAL variants hidden, the display
+    # modes and the Frame Sync items of NTSC shown (#184)
+    s = menu_stdsel(V6_MENU)
+    pal, ntsc = group_members(V6_MENU, "MACHINE_MODE")
+    s[pal], s[ntsc] = 0, 1
+    fx.append(("v6 HDMI level NTSC", v6g, v6res, s, 3))
     # the Model submenu level (#87): turbo Off (factory default) hides the
     # Turbo speed block (separator, headline, 2x/3x/4x = idx 46..50); C128
     # and Smart show it - a mother in the same submenu as its dependents
@@ -3238,6 +3244,12 @@ def hdmi_sync_errors():
         if len(mem) != 3 or any("SINGLESEL" in menu[i][2] for i in mem):
             errors.append("group %s has the members %r, expected a radio group "
                           "of three items" % (gname, mem))
+    for label in (" HDMI Display Mode", " HDMI Frame Sync", " HDMI Options"):
+        idx = [i for i, (t, _, _) in enumerate(menu)
+               if t == label and submenu_path(menu, i) == path]
+        if len(idx) != 1 or (menu[idx[0]][1], list(menu[idx[0]][2])) != (None, ["HEADLINE"]):
+            errors.append("the HDMI submenu has the line(s) %r for %r, expected "
+                          "one headline" % ([menu[i] for i in idx], label))
     if errors:
         return errors
     g = menu_masked(menu)
@@ -4381,6 +4393,94 @@ RCLICK_MUTANTS += [
     )
 ]
 
+# The Frame Sync radio groups of the HDMI submenu (#184): the lines of
+# config.vhd, mega65.vhd and the golden model that the mutants below edit.
+# The strings of the golden model are split so that they occur only once in
+# this file (in V6_MENU)
+_FS_DEP0 = "OPTM_DEP(OPTM_G_MACHINE_MODE, 0)"
+_FS_DEP1 = "OPTM_DEP(OPTM_G_MACHINE_MODE, 1)"
+_FS_OFF_P = "OPTM_G_HDMI_FF                         + " + _FS_DEP0 + ", -- Off (PAL)"
+_FS_OFF_N = "OPTM_G_HDMI_FF_NTSC                    + " + _FS_DEP1 + ", -- Off (NTSC)"
+_FS_FF_P = "OPTM_G_HDMI_FF         + OPTM_G_STDSEL + " + _FS_DEP0 + ", -- Flicker-free (PAL)"
+_FS_FF_N = "OPTM_G_HDMI_FF_NTSC    + OPTM_G_STDSEL + " + _FS_DEP1 + ", -- Flicker-free (NTSC)"
+_FS_RAW_P = "OPTM_G_HDMI_FF                         + " + _FS_DEP0 + ", -- Raw 50.1 Hz (PAL)"
+_FS_RAW_N = "OPTM_G_HDMI_FF_NTSC                    + " + _FS_DEP1 + ", -- Raw 59.8 Hz (NTSC)"
+_FS_HL2 = "OPTM_G_HEADLINE,                         -- HDMI Options"
+_FS_ITM_RAW_P = '" Raw 50.1 Hz\\n"'
+
+
+def _fs_std(line):
+    """a Frame Sync line of config.vhd with OPTM_G_STDSEL"""
+    return line.replace(" + OPTM_DEP", " + OPTM_G_STDSEL + OPTM_DEP", 1)
+
+
+def _fs_nostd(line):
+    """a Frame Sync line of config.vhd without OPTM_G_STDSEL"""
+    return line.replace(" + OPTM_G_STDSEL", "", 1)
+
+
+def _fs_const(name, old, new):
+    """the line of a constant of mega65.vhd with the value old and with the value new"""
+    line = "constant %-20s : natural := %d;" % (name, old)
+    return line, line.replace(":= %d;" % old, ":= %d;" % new)
+
+
+_MDL_FS_OFF_P = '(" Off",' + " " * 21 + '"HDMI_FF", [' + ']),'
+_MDL_FS_FF_P = '(" Flicker-free",' + " " * 12 + '"HDMI_FF", ["STD' + 'SEL"]),'
+_MDL_FS_RAW_P = '(" Raw 50.1 Hz",' + " " * 13 + '"HDMI_FF", [' + ']),'
+_MDL_FS_HL2 = '(" HDMI Options",' + " " * 12 + 'None, ["HEAD' + 'LINE"]),'
+
+FRAMESYNC_MUTANTS = [
+    # config.vhd alone: verify compares it with the golden model
+    ("config.vhd  Frame Sync of PAL: Off instead of Flicker-free is the default", _CFG,
+     (_FS_FF_P, _FS_OFF_P), (_fs_nostd(_FS_FF_P), _fs_std(_FS_OFF_P)), "verify"),
+    ("config.vhd  Frame Sync of PAL: Raw instead of Flicker-free is the default", _CFG,
+     (_FS_FF_P, _FS_RAW_P), (_fs_nostd(_FS_FF_P), _fs_std(_FS_RAW_P)), "verify"),
+    ("config.vhd  Frame Sync of NTSC: Off instead of Flicker-free is the default", _CFG,
+     (_FS_FF_N, _FS_OFF_N), (_fs_nostd(_FS_FF_N), _fs_std(_FS_OFF_N)), "verify"),
+    ("config.vhd  Frame Sync of NTSC: Raw instead of Flicker-free is the default", _CFG,
+     (_FS_FF_N, _FS_RAW_N), (_fs_nostd(_FS_FF_N), _fs_std(_FS_RAW_N)), "verify"),
+    ("config.vhd  Raw 50.1 Hz in the Frame Sync group of NTSC", _CFG,
+     _FS_RAW_P, _FS_RAW_P.replace("OPTM_G_HDMI_FF     ", "OPTM_G_HDMI_FF_NTSC", 1), "verify"),
+    ("config.vhd  Flicker-free of PAL and of NTSC with swapped dependencies", _CFG,
+     (_FS_FF_P, _FS_FF_N),
+     (_FS_FF_P.replace(_FS_DEP0, _FS_DEP1), _FS_FF_N.replace(_FS_DEP1, _FS_DEP0)), "verify"),
+    ("config.vhd  Flicker-free of PAL still single-select", _CFG,
+     _FS_FF_P, _FS_FF_P.replace(" + OPTM_G_STDSEL", " + OPTM_G_SINGLESEL + OPTM_G_STDSEL"), "verify"),
+    ("config.vhd  the text of Raw of PAL says 59.8 Hz", _CFG,
+     _FS_ITM_RAW_P, _FS_ITM_RAW_P.replace("50.1", "59.8"), "verify"),
+    ("config.vhd  HDMI Options is not a headline", _CFG,
+     _FS_HL2, _FS_HL2.replace("OPTM_G_HEADLINE,", "OPTM_G_TEXT,    "), "verify"),
+    # the same defects consistently in config.vhd and the golden model: only the
+    # checks of the intended layout (HDMI_SYNC, HDMI_VIEW) can catch them
+    ("consistent  Frame Sync of PAL: Off instead of Flicker-free is the default",
+     (_CFG, _MDL),
+     ((_FS_FF_P, _FS_OFF_P), (_MDL_FS_FF_P, _MDL_FS_OFF_P)),
+     ((_fs_nostd(_FS_FF_P), _fs_std(_FS_OFF_P)),
+      (_MDL_FS_FF_P.replace('["STD' + 'SEL"]', "[]"),
+       _MDL_FS_OFF_P.replace('[' + ']', '["STD' + 'SEL"]'))), "verify"),
+    ("consistent  Raw 50.1 Hz in the Frame Sync group of NTSC", (_CFG, _MDL),
+     (_FS_RAW_P, _MDL_FS_RAW_P),
+     (_FS_RAW_P.replace("OPTM_G_HDMI_FF     ", "OPTM_G_HDMI_FF_NTSC", 1),
+      _MDL_FS_RAW_P.replace('"HDMI_FF"', '"HDMI_FF_NTSC"')), "verify"),
+    ("consistent  HDMI Options is not a headline", (_CFG, _MDL),
+     (_FS_HL2, _MDL_FS_HL2),
+     (_FS_HL2.replace("OPTM_G_HEADLINE,", "OPTM_G_TEXT,    "),
+      _MDL_FS_HL2.replace('["HEAD' + 'LINE"]', "[]")), "verify"),
+] + [
+    # mega65.vhd: each new constant on another line
+    ("mega65.vhd  %s = %d instead of %d (%s)" % (name, new, old, what), _MEGA,
+     _fs_const(name, old, new)[0], _fs_const(name, old, new)[1], "verify")
+    for name, old, new, what in (
+        ("C_MENU_HDMI_SYNC_OFF", 66, 68, "Flicker-free of PAL"),
+        ("C_MENU_HDMI_SYNC_OFF_NTSC", 67, 66, "Off of PAL"),
+        ("C_MENU_HDMI_FF", 68, 64, "the line of the former switch"),
+        ("C_MENU_HDMI_FF_NTSC", 69, 71, "Raw of NTSC"),
+        ("C_MENU_HDMI_RAW", 70, 81, "the line of the former Raw 50.1 Hz"),
+        ("C_MENU_HDMI_RAW_NTSC", 71, 70, "Raw of PAL"),
+    )
+]
+
 MUTANTS = [
     ("optm_deps.asm  OPTM_DEP_OK never hides a line",
      "M2M/rom/optm_deps.asm",
@@ -4556,7 +4656,7 @@ MUTANTS = [
          "Peak use is 4851 + 702 = 5553, leaving 207",
          "Peak use is 4772 + 702 = 5474, leaving 286"),
     )
-] + RCLICK_MUTANTS
+] + RCLICK_MUTANTS + FRAMESYNC_MUTANTS
 
 
 def _quiet_run():
