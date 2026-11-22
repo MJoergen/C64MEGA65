@@ -5,6 +5,16 @@ Before releasing a new version we strive to run all regression tests described
 here. Since running through all the [demos](demos.md) takes some serious
 effort, it might be that we are not always doing it.
 
+Version WIP-V6-A28 - TBD
+------------------------
+
+@TODO: Test the fix of the file browser (MiSTer2MEGA65 issue #84). Everything of WIP-V6-A27 below still applies.
+
+Test folder: on an SD card formatted with the MEGA65 (4 KB clusters), create a new folder and copy exactly 126 files with short upper-case names (for example `T001.PRG` to `T126.PRG`) into it, using Windows or Linux (macOS adds hidden `._` files, which changes the count). Together with `.` and `..`, the directory then fills its first 4 KB cluster exactly.
+
+* @TODO Open the test folder in the file browser: all 126 files are listed, no error (WIP-V6-A27 stops with "SD Card: Unknown error while trying to browse. Error code: 2704"). Replace `T126.PRG` by a D64 with a short upper-case name (for example `GAME.D64`), mount it from the test folder and load a program from it.
+* @TODO Regression check with ordinary folders: browse folders and subfolders, go up with `..`, mount D64 and D81 images, save to a mounted disk image (yellow drive LED, then reload the image and check the saved data), load PRG and CRT files, load JiffyDOS, and check that the settings are saved and restored after a power cycle.
+
 Version WIP-V6-A27 - TBD
 ------------------------
 

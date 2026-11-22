@@ -245,6 +245,13 @@ Version 6 - MONTH DAY, 2026
 
 ## Bugfixes
 
+* The file browser stopped the core with "SD Card: Unknown error while trying
+  to browse. Error code: 2704" on some folders, although the SD card was fine:
+  folders whose directory exactly fills its space on the SD card. On cards
+  with larger clusters such folders could show garbage entries instead. A
+  broken long file name on the SD card could crash the file browser.
+  (GitHub issue https://github.com/sy2002/MiSTer2MEGA65/issues/84)
+
 * Paddles and the 1351 mouse: a program could read a paddle value or a mouse
   position in the very moment it changed and get a number that was never
   measured (a rare one-frame jump of a bat or a pointer). The values now

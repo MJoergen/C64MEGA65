@@ -1240,6 +1240,11 @@ CTRL-C, or stdin EOF — exit codes 0 / 1 / 130. Programs that use
   rebuild it from the current sources (see above).
 - The emulator has 256 register banks, the hardware 64: a testbed cannot
   notice that the firmware nests too deep (see "Register bank depth" below).
+- SD card tests: `-a <image>` attaches a raw disk image. A block access at
+  or beyond its end fails like on the hardware (error `0x2704` for a read),
+  and the environment variable `QNICE_SD_LOG` names a file that receives one
+  line per block access. `M2M/QNICE/test_programs/fat32_chain.py` shows how
+  to build FAT32 images in Python and judge a run by that log.
 - A runaway program that never reads stdin spins forever: wrap emulator
   calls in a timeout (macOS has no `timeout(1)`; use a python
   `subprocess(..., timeout=...)` wrapper).
@@ -1276,7 +1281,7 @@ the numbers are in the README or the header of each runner):
 
 | Tier | Wall time | Suites | Rule |
 |---|---|---|---|
-| 1 | up to about 2 min | every firmware test except the two below, `bankdepth_test.py`, `make_rom.sh`; `tb_hdmi_raw_menu`, `tb_capslock`, `tb_stereo_mix`, `tb_shortcuts`, `tb_drive_led`, `tb_crt_eject`, `tb_ntsc` | run freely when the scope matches |
+| 1 | up to about 2 min | every firmware test except the two below, `bankdepth_test.py`, `make_rom.sh`, the FAT32 tests of QNICE (`M2M/QNICE/test_programs/fat32_*.py`); `tb_hdmi_raw_menu`, `tb_capslock`, `tb_stereo_mix`, `tb_shortcuts`, `tb_drive_led`, `tb_crt_eject`, `tb_ntsc` | run freely when the scope matches |
 | 2 | 2 to 15 min | `strrom_sim_test.py`, `crt_unload_test.py`; `tb_crt_cacher`, `tb_hdmi_raw_clock`, `tb_hdmi_raw_wiring` (`all`), the `quick` sets of `tb_hdmi_genlock` and `tb_hdmi_raw`, `tb_turbo`, `tb_paddles`; single jobs of the 1581 regression; `run_257_proofs.py` | only when the change is in the scope of the suite |
 | 3 | 30 min to hours | `tb_amiga_mouse all`, `tb_hdmi_genlock all`, `tb_hdmi_raw full`, `tb_hdmi_raw_wiring mutants`, the whole 1581 regression (`doc/dev-fdd/tools/README.md`) | once, at the end of a change to the subject of the bench itself; iterate with the quick set or single jobs; tell the user before you start one |
 
@@ -1286,6 +1291,7 @@ the numbers are in the README or the header of each runner):
 |---|---|
 | any Shell or Monitor code (`M2M/rom/`, `CORE/m2m-rom/`, the QNICE monitor) | `make_rom.sh`, `bankdepth_test.py`, `strrom_test.py`, plus the tests of the area: menu (`menu.asm`, `menu_struct.asm`, menu parts of `options.asm`) → `menu_test.py run`; settings saving → `rosm_save_test.py`, `cfm_test.py`; summaries → `summary_test.py`; shortcuts, mounting, `<Saving>`, hidden redraw → `shortcuts_test.py`, `next_disk_test.py`, `mount_reject_test.py`, `saving_text_test.py`, `hidden_redraw_test.py`; ROM and CRT loading → `jiffy_test.py`, `crt_unload_test.py`. The whole firmware group is cheap enough to run in one go before a commit |
 | `strrom.asm`, `asm_strrom.sh`, the string ROM in `qnice_wrapper.vhd`, `IO$PUTS`, `LOG_STR`, `SCR$PRINTSTR` | `strrom_tool_test.py`, `strrom_sim_test.py` |
+| the FAT32 or SD card library of the QNICE Monitor (`M2M/QNICE/monitor/fat32_library.asm`, `sd_library.asm`), the SD card of the emulator (`M2M/QNICE/emulator/sd.c`) | `M2M/QNICE/test_programs/fat32_chain.py` (about 15 s), `fat32_lba.py`, `fat32_multiwrite.py`, plus the firmware group (the Shell contains the Monitor) |
 | menu definition (`config.vhd` `OPTM_*`, `C_MENU_*` in `mega65.vhd`) | `menu_test.py verify` and `run`, `tb_hdmi_raw_menu` |
 | simulated cartridges (`crt_*.vhd`, `sw_cartridge_*.vhd`, `cartridge.vhd`) | `tb_crt_cacher`, `tb_crt_eject` |
 | clocks, NTSC, mode-change reset (`clk.vhd`, `video_modes_pkg.vhd`, `hr_core_speed`, `mode_change_reset_proc`) | `tb_ntsc` |
