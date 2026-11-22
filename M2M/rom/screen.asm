@@ -75,6 +75,8 @@ SCR$INIT        INCRB
 
                 MOVE    SCR$ILX, R0             ; inner left x coordinate
                 MOVE    0, @R0
+                MOVE    SCR$NL_CLRX, R0         ; new lines do not clear
+                MOVE    0, @R0
 
                 XOR     R8, R8                  ; init cursor variables
                 XOR     R9, R9
@@ -286,6 +288,10 @@ SCR$CALC_VRAM   SYSCALL(enter, 1)
 ; \n (backslash char and n)        ditto
 ; <  (less than)                   special character in Anikki-16x16 font
 ; >  (greater than)                ditto
+;
+; If SCR$NL_CLRX is not zero, then a new line first clears the rest of the
+; current line up to the column SCR$NL_CLRX (exclusive): this allows to print
+; text over old text without clearing the screen first.
 ; ----------------------------------------------------------------------------
 
 SCR$PRINTSTR    SYSCALL(enter, 1)
@@ -330,7 +336,19 @@ _PS_L2          MOVE    R4, R7                  ; remember original char
                 RSUB    _PS_POST, 1
                 RBRA    _PS_L1, 1
 
-_PS_L3          MOVE    SCR$ILX, R12
+_PS_L3          MOVE    SCR$NL_CLRX, R3         ; clear the rest of the line?
+                MOVE    @R3, R3                 ; R3: column not to clear..
+                RBRA    _PS_L3B, Z              ; ..any more, 0 = no clearing
+                SUB     @R1, R3                 ; R3: columns to clear
+                RBRA    _PS_L3B, N              ; none
+                RBRA    _PS_L3B, Z
+                RSUB    _PS_PRE, 1
+_PS_L3A         MOVE    0, @R8++                ; 0 = space character
+                SUB     1, R3
+                RBRA    _PS_L3A, !Z
+                RSUB    _PS_POST, 1
+
+_PS_L3B         MOVE    SCR$ILX, R12
                 MOVE    @R12, @R1               ; inner-left start x-coord
                 ADD     1, @R2                  ; new line
                 RSUB    SCR$CALC_VRAM, 1

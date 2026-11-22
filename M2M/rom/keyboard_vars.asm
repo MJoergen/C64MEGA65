@@ -12,9 +12,17 @@ KEYB_PRESSED    .BLOCK 1                        ; currently pressed
 KEYB_NEWKEYS    .BLOCK 1                        ; newly pressed since last..
                                                 ; ..call of KEYB_GETKEY
 
-; typematic delay variables (expected to be a consecutive block of for words
-; overall starting with KEYB_CDN_DELAY)
-KEYB_CDN_DELAY  .BLOCK 1
-KEYB_CDN_TRIG   .BLOCK 1
-KEYB_CUP_DELAY  .BLOCK 1
-KEYB_CUP_TRIG   .BLOCK 1
+; typematic repeat of the cursor keys, two words per key: the time
+; (IO$CYC_MID) of the press or of the last repeat, followed by the state:
+; 0 = not pressed, 1 = pressed and waiting for the delay, 2 = repeating;
+; expected to be a consecutive block of KEYB_TYPEM_WORDS words starting with
+; KEYB_CDN_TIME
+KEYB_CDN_TIME   .BLOCK 1
+KEYB_CDN_STATE  .BLOCK 1
+KEYB_CUP_TIME   .BLOCK 1
+KEYB_CUP_STATE  .BLOCK 1
+KEYB_CLF_TIME   .BLOCK 1
+KEYB_CLF_STATE  .BLOCK 1
+KEYB_CRT_TIME   .BLOCK 1
+KEYB_CRT_STATE  .BLOCK 1
+KEYB_TYPEM_WORDS .EQU 8

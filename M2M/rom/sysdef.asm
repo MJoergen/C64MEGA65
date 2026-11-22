@@ -150,12 +150,12 @@ M2M$GENERAL         .EQU 0xFFE5
 ; (MMIO "qnice_keys_o" register of m2m_keys.vhd)
 M2M$KEYBOARD        .EQU 0xFFE8
 
-; Typematic delay (DLY) and typematic repeat (SPD)
+; Typematic delay (DLY) and typematic repeat (SPD) of the cursor keys, see
+; keyboard.asm: in ticks of IO$CYC_MID (50 MHz / 65536 = 763 Hz)
 ; DLY: How long needs the key to be pressed, until the typematic repeat starts
 ; SPD: How fast will the pressed key be repeated
-; IMPORTANT: These values are empiric and relative to QNICE V1.61
-M2M$TYPEMATIC_DLY   .EQU 0x8000             ; ~0.5sec in QNICE V1.61
-M2M$TYPEMATIC_SPD   .EQU 0x1000             ; ~12 per sec
+M2M$TYPEMATIC_DLY   .EQU 381                ; 0.5 sec
+M2M$TYPEMATIC_SPD   .EQU 64                 ; 84 ms, i.e. ~12 per sec
 
 ; Definition of the bits in M2M$KEYBOARD
 M2M$KEY_UP          .EQU 0x0001
