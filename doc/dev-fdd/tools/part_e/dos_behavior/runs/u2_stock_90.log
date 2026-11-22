@@ -1,0 +1,43 @@
+ROM stock.rom  $9D=20 (idle reload, 10 ms ticks)  boot pc=$B125
+U2 T2 S0  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 10
+U2 T2 S1  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S2  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S3  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S4  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S5  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S6  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S7  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S8  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S9  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S10 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S11 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S12 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S13 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S14 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S15 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S16 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S17 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S18 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S19 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S20 ok=True dirty=80  WS during job 10, during talk gap 0, during listen 0; Read Sectors 20
+U2 T2 S21 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S22 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S23 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S24 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S25 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S26 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S27 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S28 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S29 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S30 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S31 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S32 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S33 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S34 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S35 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S36 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S37 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S38 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+U2 T2 S39 ok=True dirty=80  WS during job 0, during talk gap 0, during listen 0; Read Sectors 0
+final idle: 10 WS
+RESULT rom=stock.rom gap=90ms listen=200ms U2s=40  Write Sectors total=20  (0.50 per U2)  wall 56s

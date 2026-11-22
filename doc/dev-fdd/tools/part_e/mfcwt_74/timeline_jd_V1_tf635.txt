@@ -1,0 +1,59 @@
+# ROM=jd-c1581.bin t_first=635 ms hold=0 lose=2 head=39, "$" 15 ms after UI
+     0.6    -528.1  PC    UI: warm reset (JNMI $AFCA)
+   527.9      -0.8  WD    FORCEINT $D0 pc=$CFD7 TR=1 SR=1 head 39 READY=0
+   528.1      -0.6  JOB   done slot 0 result $00 pc=$CDD1
+   528.5      -0.2  JOB   post slot 0 job $C0 T=0 S=0 pc=$95A1
+   528.7       0.0  MOTOR ON
+  1329.6     800.9  PA    pc=$CD86 age=800.9ms READY=1 PA7changed=0
+  1329.6     800.9  EXAM  PA1 READY exam pc=$CDBC.. 30 reads, 0 not ready -> pass
+  1329.8     801.1  PC    BUMP handler: Restore
+  1329.8     801.1  WD    RESTORE  $08 pc=$CBF8 TR=1 DR=1 head 39->0, 39 steps, busy 119.17 ms
+  1467.3     938.6  JOB   done slot 0 result $00 pc=$CDD1
+  1468.1     939.4  JOB   post slot 6 job $B0 T=40 S=0 pc=$95A1
+  1468.3     939.6  PA    pc=$CD86 age=939.6ms READY=1 PA7changed=0
+  1468.3     939.6  EXAM  PA1 READY exam pc=$CDBC.. 60 reads, 0 not ready -> pass
+  1468.8     940.1  WD    RDADDR   $C8 pc=$CBF8 TR=0 SR=1 head 0 READY=1
+  1480.0     951.3  WD      RA done: C=0 (status rnf=0 crc=0)
+  1482.2     953.4  JOB   done slot 6 result $00 pc=$CDD1
+  1482.8     954.0  JOB   post slot 6 job $B6 T=40 S=0 pc=$95A1
+  1483.0     954.2  PA    pc=$CD86 age=954.2ms READY=1 PA7changed=0
+  1483.0     954.3  EXAM  PA1 READY exam pc=$CDBC.. 30 reads, 0 not ready -> pass
+  1483.2     954.5  JOB   done slot 6 result $00 pc=$CDD1
+  1483.7     955.0  JOB   post slot 6 job $B0 T=40 S=0 pc=$95A1
+  1484.0     955.2  PA    pc=$CD86 age=955.2ms READY=1 PA7changed=0
+  1484.0     955.3  EXAM  PA1 READY exam pc=$CDBC.. 60 reads, 0 not ready -> pass
+  1484.5     955.7  WD    RDADDR   $C8 pc=$CBF8 TR=0 SR=0 head 0 READY=1
+  1499.5     970.8  WD      RA done: C=0 (status rnf=0 crc=0)
+  1501.6     972.9  JOB   done slot 6 result $00 pc=$CDD1
+  1502.2     973.5  JOB   post slot 6 job $B6 T=40 S=0 pc=$95A1
+  1502.4     973.7  PA    pc=$CD86 age=973.7ms READY=1 PA7changed=0
+  1502.4     973.7  EXAM  PA1 READY exam pc=$CDBC.. 60 reads, 0 not ready -> pass
+  1502.7     974.0  JOB   done slot 6 result $00 pc=$CDD1
+  1502.9     974.2  JOB   post slot 6 job $80 T=40 S=0 pc=$95A1
+  1503.2     974.5  PA    pc=$CD86 age=974.5ms READY=1 PA7changed=0
+  1503.4     974.7  EXAM  PA1 READY exam pc=$CDBC.. 30 reads, 0 not ready -> pass
+  1503.6     974.9  WD    RDADDR   $C8 pc=$CBF8 TR=0 SR=0 head 0 READY=1
+  1519.0     990.2  WD      RA done: C=0 (status rnf=0 crc=0)
+  1521.1     992.4  PC    seek stage $CE78
+  1521.2     992.4  WD    SEEK     $18 pc=$CBF8 TR=0 DR=39 head 0->37, 39 steps, busy 119.17 ms
+  1658.9    1130.1  PA    pc=$CD86 age=1130.1ms READY=1 PA7changed=0
+  1658.9    1130.2  EXAM  PA1 READY exam pc=$CDBC.. 60 reads, 0 not ready -> pass
+  1659.3    1130.6  WD    RDADDR   $C8 pc=$CBF8 TR=39 SR=0 head 37 READY=1
+  1660.5    1131.8  WD      RA done: C=37 (status rnf=0 crc=0)
+  1662.7    1134.0  PC    seek stage $CE78
+  1662.7    1134.0  WD    SEEK     $18 pc=$CBF8 TR=37 DR=39 head 37->39, 2 steps, busy 6.06 ms
+  1687.3    1158.6  PA    pc=$CD86 age=1158.6ms READY=0 PA7changed=0
+  1687.3    1158.6  EXAM  PA1 READY exam pc=$CDBC.. 1 reads, 1 not ready -> FAIL
+  1687.3    1158.6  JOB   done slot 6 result $03 pc=$CDD1
+  1694.8    1166.1  PC    UI finished: 73 message, back to idle
+  1720.5    1191.7  JOB   post slot 6 job $80 T=40 S=0 pc=$95A1
+  1720.7    1192.0  PA    pc=$CD86 age=1192.0ms READY=0 PA7changed=0
+  1720.7    1192.0  EXAM  PA1 READY exam pc=$CDBC.. 1 reads, 1 not ready -> FAIL
+  1720.8    1192.0  JOB   done slot 6 result $03 pc=$CDD1
+  1721.2    1192.5  PC    DOS ERROR routine
+  1741.0    1212.3  JOB   post slot 5 job $B0 T=40 S=0 pc=$95A1
+  1741.2    1212.5  PA    pc=$CD86 age=1212.5ms READY=0 PA7changed=0
+  1741.2    1212.5  EXAM  PA1 READY exam pc=$CDBC.. 1 reads, 1 not ready -> FAIL
+  1741.2    1212.5  JOB   done slot 5 result $03 pc=$CDD1
+  1741.6    1212.9  PC    DOS ERROR routine
+index edges (motor age ms): 635 834(lost) 1034(lost) 1233 1432 1632 1831 2030 2229 2429

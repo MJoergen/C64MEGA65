@@ -1,0 +1,49 @@
+# hold=0ms lose=2 head=39 suppress=1 motor_running=0 ROM=stock
+t_first  480 ms: UIend 1278, READY at end 1, next edge +199 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd1 [74 readiness @1268ms] [74 readiness @1269ms] [74 readiness @1269ms] [74 readiness @1270ms] [74 readiness @1270ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173 1268! 1270!
+t_first  495 ms: UIend 1572, READY at end 1, next edge +119 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173 1303 1315
+t_first  510 ms: UIend 1313, READY at end 1, next edge +194 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd2 [74 readiness @1303ms] [74 readiness @1304ms] [74 readiness @1304ms] [74 readiness @1305ms] [74 readiness @1305ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173 1303! 1305!
+t_first  525 ms: UIend 1430, READY at end 1, next edge +91 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  540 ms: UIend 1430, READY at end 1, next edge +106 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  555 ms: UIend 1430, READY at end 1, next edge +121 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  570 ms: UIend 1430, READY at end 1, next edge +136 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  585 ms: UIend 1430, READY at end 1, next edge +151 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  600 ms: UIend 1430, READY at end 1, next edge +166 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173
+t_first  615 ms: UIend 1138, READY at end 0, next edge +75 ms | R C0 C0 C0 S39 [74 readiness @1130ms] | exams(age ms,fails): 801 940 954 955 974 975 1130!
+t_first  630 ms: UIend 1138, READY at end 0, next edge +90 ms | R C0 C0 C0 S39 [74 readiness @1130ms] | exams(age ms,fails): 801 940 954 955 974 975 1130!
+t_first  645 ms: UIend 1166, READY at end 0, next edge +77 ms | R C0 C0 C0 S39 C37 S2 [74 readiness @1159ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159!
+t_first  660 ms: UIend 1181, READY at end 0, next edge +77 ms | R C0 C0 C0 S39 C37 S2 C39 [74 CD08 @1173ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173!
+t_first  675 ms: UIend 1278, READY at end 1, next edge +194 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd1 [74 readiness @1268ms] [74 readiness @1269ms] [74 readiness @1269ms] [74 readiness @1270ms] [74 readiness @1270ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173 1268! 1270!
+t_first  690 ms: UIend 1278, READY at end 1, next edge +10 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd1 [74 readiness @1268ms] [74 readiness @1269ms] [74 readiness @1269ms] [74 readiness @1270ms] [74 readiness @1270ms] | exams(age ms,fails): 801 940 954 955 974 975 1130 1159 1173 1268! 1270!
+# hold=0ms lose=2 head=79 suppress=1 motor_running=0 ROM=stock
+t_first  480 ms: UIend 1552, READY at end 1, next edge +124 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  495 ms: UIend 1552, READY at end 1, next edge +139 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  510 ms: UIend 1552, READY at end 1, next edge +154 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  525 ms: UIend 1260, READY at end 0, next edge +63 ms | R C0 C0 C0 S39 [74 readiness @1252ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252!
+t_first  540 ms: UIend 1260, READY at end 0, next edge +78 ms | R C0 C0 C0 S39 [74 readiness @1252ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252!
+t_first  555 ms: UIend 1288, READY at end 0, next edge +64 ms | R C0 C0 C0 S39 C37 S2 [74 readiness @1281ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281!
+t_first  570 ms: UIend 1288, READY at end 0, next edge +79 ms | R C0 C0 C0 S39 C37 S2 [74 readiness @1281ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281!
+t_first  585 ms: UIend 1303, READY at end 0, next edge +79 ms | R C0 C0 C0 S39 C37 S2 C39 [74 CD08 @1295ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295!
+t_first  600 ms: UIend 1400, READY at end 1, next edge +197 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd1 [74 readiness @1391ms] [74 readiness @1391ms] [74 readiness @1392ms] [74 readiness @1392ms] [74 readiness @1393ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295 1391! 1392!
+t_first  615 ms: UIend 1260, READY at end 0, next edge +153 ms | R C0 C0 C0 S39 [74 readiness @1252ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252!
+t_first  630 ms: UIend 1260, READY at end 0, next edge +168 ms | R C0 C0 C0 S39 [74 readiness @1252ms] | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252!
+t_first  645 ms: UIend 1552, READY at end 1, next edge +89 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  660 ms: UIend 1552, READY at end 1, next edge +104 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  675 ms: UIend 1552, READY at end 1, next edge +119 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+t_first  690 ms: UIend 1552, READY at end 1, next edge +134 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 1061 1076 1077 1096 1097 1252 1281 1295
+# hold=0ms lose=2 head=10 suppress=1 motor_running=0 ROM=stock
+t_first  480 ms: UIend 1352, READY at end 1, next edge +124 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  495 ms: UIend 1352, READY at end 1, next edge +139 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  510 ms: UIend 1352, READY at end 1, next edge +154 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  525 ms: UIend 1352, READY at end 1, next edge +169 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  540 ms: UIend 1352, READY at end 1, next edge +184 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  555 ms: UIend 1352, READY at end 1, next edge +199 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  570 ms: UIend 1352, READY at end 1, next edge +15 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  585 ms: UIend 1352, READY at end 1, next edge +30 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  600 ms: UIend 1352, READY at end 1, next edge +45 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  615 ms: UIend 1494, READY at end 1, next edge +118 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095 1225 1232
+t_first  630 ms: UIend 1352, READY at end 1, next edge +75 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  645 ms: UIend 1352, READY at end 1, next edge +90 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  660 ms: UIend 1352, READY at end 1, next edge +105 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  675 ms: UIend 1352, READY at end 1, next edge +120 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+t_first  690 ms: UIend 1352, READY at end 1, next edge +135 ms | R C0 C0 C0 S39 C37 S2 C39 C39 rd10 | exams(age ms,fails): 801 852 857 858 876 877 1033 1081 1095
+EXIT 0

@@ -1,0 +1,27 @@
+c 9 Dump 1         n= 1 o          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=38 C=38 OK   m=0
+c11 Dump 1         n= 1 o          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=38 C=38 OK   m=0
+c12 Dump 8         n= 1 o          start_in_ring=NO belief_before=?        next=ReadAddress  trk=38 C=38 OK   m=0
+c12 Dump 8         n= 1 i          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=39 C=39 OK   m=0
+c17 Dump 9a        n= 4 iiii       start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c17 Dump 9a        n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c17 Dump 10        n= 4 iiii       start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c17 Dump 10        n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c17 Dump T         n= 1 o          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=38 C=38 OK   m=0
+c22 Dump C1        n= 2 io         start_in_ring=yes belief_before=ok       next=ReadAddress  trk=39 C=39 OK   m=0
+c24 Dump D1        n= 2 ii         start_in_ring=yes belief_before=ok       next=ReadAddress  trk=39 C=39 OK   m=0
+c30 Dump 1         n= 1 o          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=38 C=38 OK   m=0
+c30 Dump 8         n= 1 o          start_in_ring=yes belief_before=?        next=ReadAddress  trk=38 C=38 OK   m=0
+c30 Dump 9a        n= 4 iiii       start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c30 Dump 9a        n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c30 Dump 10        n=28 iiiiiiii.. start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c30 Dump T2        n= 1 o          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=38 C=38 OK   m=0
+c30 Dump C1        n= 2 io         start_in_ring=yes belief_before=ok       next=ReadAddress  trk=39 C=39 OK   m=0
+c34 Dump right     n= 4 iiii       start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c34 Dump right     n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c34 Dump after     n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c34 Dump at        n= 1 i          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=79 C=79 OK   m=0
+c35 Dump E4        n= 1 i          start_in_ring=yes belief_before=ok       next=ReadAddress  trk=39 C=39 OK   m=0
+c35 Dump MFCWT     n=28 iiiiiiii.. start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2
+c35 Dump MFCWT     n= 2 ii         start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=39 OK   m=0
+c35 Dump MFCWT     n= 2 ii         start_in_ring=yes belief_before=off(-2)  next=ReadAddress  trk=39 C=39 OK   m=0
+c35 Dump MFCWT     n=28 iiiiiiii.. start_in_ring=NO belief_before=?        next=ReadAddress  trk=39 C=37 OK   m=-2

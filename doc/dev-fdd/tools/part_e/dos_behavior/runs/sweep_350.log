@@ -1,0 +1,7 @@
+ROM stock.rom  $9D=20 (idle reload, 10 ms ticks)  boot pc=$B125
+U2 T2 S0  ok=True dirty=80  WS during job 0, during talk gap 1, during listen 5; Read Sectors 10
+U2 T2 S1  ok=True dirty=00  WS during job 14, during talk gap 0, during listen 0; Read Sectors 20
+U2 T2 S2  ok=True dirty=80  WS during job 0, during talk gap 0, during listen 5; Read Sectors 0
+U2 T2 S3  ok=True dirty=00  WS during job 15, during talk gap 0, during listen 0; Read Sectors 20
+final idle: 0 WS
+RESULT rom=stock.rom gap=350ms listen=100ms U2s=4  Write Sectors total=40  (10.00 per U2)  wall 27s
