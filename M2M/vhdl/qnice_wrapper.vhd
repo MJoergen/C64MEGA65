@@ -295,7 +295,7 @@ begin
    --    All others are user specific / core specific devices
    -- (refer to M2M/rom/sysdef.asm for a memory map and more details)
    qnice_ramrom_devices : process(all)
-      variable strpos      : natural;
+      variable strpos      : integer;
       variable current_chr : std_logic_vector(15 downto 0);
    begin
       qnice_ramrom_ce_hyperram <= '0';
@@ -366,8 +366,12 @@ begin
                         when x"000" => qnice_ramrom_data_in <= std_logic_vector(to_unsigned(C_VDNUM, 16));
                         when x"001" => qnice_ramrom_data_in <= C_VD_DEVICE;
 
+                        -- the address bus also carries addresses that
+                        -- are no read access of the CPU, so every index is
+                        -- checked against the size of its constant array
                         when others =>
-                           if qnice_ramrom_addr_o(11 downto 4) = x"10" then
+                           if qnice_ramrom_addr_o(11 downto 4) = x"10" and
+                              to_integer(unsigned(qnice_ramrom_addr_o(3 downto 0))) <= C_VD_BUFFER'high then
                               qnice_ramrom_data_in <= C_VD_BUFFER(to_integer(unsigned(qnice_ramrom_addr_o(3 downto 0))));
                            end if;
                      end case;
@@ -379,12 +383,18 @@ begin
                      elsif qnice_ramrom_addr_o(11 downto 0) = x"001" then
                         qnice_ramrom_data_in <= std_logic_vector(to_unsigned(C_CRTROMS_AUTO_NUM, 16));
                      elsif qnice_ramrom_addr_o(11 downto 8) = x"1" then
-                        qnice_ramrom_data_in <= C_CRTROMS_MAN(to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))));
+                        if to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))) <= C_CRTROMS_MAN'high then
+                           qnice_ramrom_data_in <= C_CRTROMS_MAN(to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))));
+                        end if;
                      elsif qnice_ramrom_addr_o(11 downto 8) = x"2" then
-                        qnice_ramrom_data_in <= C_CRTROMS_AUTO(to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))));
+                        if to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))) <= C_CRTROMS_AUTO'high then
+                           qnice_ramrom_data_in <= C_CRTROMS_AUTO(to_integer(unsigned(qnice_ramrom_addr_o(7 downto 0))));
+                        end if;
                      elsif qnice_ramrom_addr_o(11 downto 8) >= x"3" then
-                        strpos := to_integer(unsigned(qnice_ramrom_addr_o(15 downto 0))) - 16#7300# + 1;
-                        qnice_ramrom_data_in <= std_logic_vector(to_unsigned(character'pos(C_CRTROMS_AUTO_NAMES(strpos)), 16));
+                        strpos := to_integer(unsigned(qnice_ramrom_addr_o(11 downto 0))) - 16#300# + 1;
+                        if strpos >= C_CRTROMS_AUTO_NAMES'low and strpos <= C_CRTROMS_AUTO_NAMES'high then
+                           qnice_ramrom_data_in <= std_logic_vector(to_unsigned(character'pos(C_CRTROMS_AUTO_NAMES(strpos)), 16));
+                        end if;
                      end if;
 
                   -- Graphics card VGA
