@@ -6,6 +6,7 @@ Amiga mouse and Atari CX30 paddles, selectable per port in the on-screen menu, a
 
 * The work is WIP-V6-A26. It was developed on the branch `mh_implement_190_193` (branched from `develop` at `6845596`, WIP-V6-A25), merged into `develop` on 2026-11-18 as `f87e0cb` and released as Alpha 26; the branch is deleted.
 * Everything is implemented, simulated and reviewed, and the Vivado build of R3 and R6 from `69d0f51` passed (section 6). On hardware the owner tested the release, and the reporters of both issues confirmed it: Amiga mice work in the setting "Amiga" (issue #190, closed), and Atari paddles use twice the rotation in the setting "Atari CX30" (issue #193, closed on 2026-11-19; section 7).
+* Issue #266 (2026-11-22, "the mouse setting does not follow `Flip joystick ports`") is no defect: the settings belong to the socket (D1) and move with the device. The reported symptoms appear exactly when `Amiga` is set for the socket with the joystick. Analysis, end-to-end bench and the open questions to the reporter: `issue266/README.md`.
 * After the release, `develop` got a bus skew constraint for the crossing of the paddle values with a sign-off check in the build scripts (section 8); the build of 2026-11-19 confirms it (section 6). It changes no logic and comes with the next version.
 
 | Part | Files | State |
