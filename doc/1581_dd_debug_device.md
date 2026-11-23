@@ -2,18 +2,11 @@
 
 **Device:** `C_DEV_C64_PHYS1581 = 0x0108` (defined in `CORE/vhdl/globals.vhd`)
 **Module:** `CORE/vhdl/physical_1581/physical_1581_diag.vhd`
-**Access:** observational, with one writable word (`WR_CTRL`, `0x9A`, map v8). Issue #90 (internal 3.5" DD floppy as a physical 1581, read path), issue #244 (write path, map v8) and issue #257 (read-ahead and spin-up time, map v9).
+**Access:** observational, with two writable words (`WR_CTRL`, `0x9A`, map v8; `RD_CTRL`, `0xA5`, map v10). Issue #90 (internal 3.5" DD floppy as a physical 1581, read path), issue #244 (write path, map v8), issue #257 (read-ahead and spin-up time, map v9) and part E of issue #257 (index gap, stale READY and the decoder's tolerance for a weak sync byte, map v10).
 
-The MEGA65 has no oscilloscope or logic analyzer on the internal floppy bus, so this
-register bank is the only on-hardware window into the physical-1581 read and write
-paths. It surfaces the live pin levels, the controller state machine, the last decoded
-sector result, the CRCs, the index/flux timing, a set of saturating event counters,
-(map v8) the write instruments and (map v9) the read-ahead counters and the spin-up time.
+The MEGA65 has no oscilloscope or logic analyzer on the internal floppy bus, so this register bank is the only on-hardware window into the physical-1581 read and write paths. It surfaces the live pin levels, the controller state machine, the last decoded sector result, the CRCs, the index/flux timing, a set of saturating event counters, (map v8) the write instruments, (map v9) the read-ahead counters and the spin-up time and (map v10) the longest index gap, the count of stale READY and the count and switch of the decoder's tolerance.
 
-It is **observational**: it cannot move the head, spin the motor, open the write gate or
-change any mechanism output. The one exception is `WR_CTRL` (`0x9A`, section 2.2), which
-overrides the write precompensation for experiments; a QNICE write to any other word is
-silently ignored. Reads never stall the QNICE bus.
+It is **observational**: it cannot move the head, spin the motor, open the write gate or change any mechanism output. The two exceptions are switches for experiments: `WR_CTRL` (`0x9A`, section 2.2) overrides the write precompensation, and `RD_CTRL` (`0xA5`, section 2.4) switches the decoder's tolerance for a weak sync byte off. A QNICE write to any other word is silently ignored. Reads never stall the QNICE bus.
 
 The whole bank runs on the QNICE 50 MHz clock (`c64_clk_sd_i`), which is the *same*
 clock as the `physical_1581_controller`, so every value below is a coherent snapshot with
@@ -45,16 +38,12 @@ core name from the config device the same way).
 
 ## 2. Register map
 
-64 words at offsets `0x00`–`0x3F`, the 64-word WD-dialogue trace ring at
-`0x40`–`0x7F` (section 2.1), the 30 write words at `0x80`–`0x9D` (map v8,
-section 2.2) and the four words at `0x9E`–`0xA1` (map v9, section 2.3). Any
-other offset reads `0x0000`. All multi-bit fields are right-aligned unless a
-bit layout is given.
+64 words at offsets `0x00`–`0x3F`, the 64-word WD-dialogue trace ring at `0x40`–`0x7F` (section 2.1), the 30 write words at `0x80`–`0x9D` (map v8, section 2.2), the four words at `0x9E`–`0xA1` (map v9, section 2.3) and the four words at `0xA2`–`0xA5` (map v10, section 2.4). Any other offset reads `0x0000`. All multi-bit fields are right-aligned unless a bit layout is given.
 
 | Off  | Name              | Contents                                                        |
 | ---- | ----------------- | --------------------------------------------------------------- |
 | `0x00` | `SIGNATURE`     | constant `0x1581` — confirms you are talking to this device     |
-| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x09FE` (bit 0, "read-only", cleared since map v8) |
+| `0x01` | `VERSION`       | map version (high byte) / capability flags (low byte) — `0x0AFE` (bit 0, "read-only", cleared since map v8) |
 | `0x02` | `LIVE_IN`       | raw + conditioned input pin levels (bit layout below)           |
 | `0x03` | `LIVE_OUT`      | driven mechanism output levels + enable (bit layout below)      |
 | `0x04` | `CTRL_STATE`    | controller state flags + read/write/step FSM phase (bit layout below) |
@@ -105,11 +94,9 @@ bit layout is given.
 | `0x40`–`0x7F` | `TRC[0..31]` | WD-dialogue trace ring, two words per entry (section 2.1) |
 | `0x80`–`0x9D` | write instruments | map v8, section 2.2 |
 | `0x9E`–`0xA1` | read-ahead counters, spin-up time | map v9, section 2.3 |
+| `0xA2`–`0xA5` | index gap, stale READY, decoder tolerance | map v10, section 2.4 |
 
-The original fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never
-wrap). Read the low word first, then the high word (`0x0000` in the high word while
-values stay small). The eight counters at `0x38`–`0x3F` and the two at `0x9E`/`0x9F`
-are single-word 16-bit saturating counters.
+The original fifteen counters are 32-bit and **saturate** at `0xFFFFFFFF` (they never wrap). Read the low word first, then the high word (`0x0000` in the high word while values stay small). The eight counters at `0x38`–`0x3F`, the two at `0x9E`/`0x9F` and the two at `0xA3`/`0xA4` are single-word 16-bit saturating counters.
 
 Reads and writes share one request/done channel between the WD front end and the
 controller. Since map v8 the read words `LAST_RESULT`, `CHRN_CR`, `CHRN_HN`
@@ -202,7 +189,7 @@ bit 7 announces these counters.
 
 ### Media ready and physical Read Address compatibility
 
-Synthesized `media ready` (`CTRL_STATE` bit 0, the READY line that the 1581 DOS reads on CIA PA1) asserts with the first motor-qualified index edge of a motor-on interval, for every medium: cold, changed, restarted or newly enabled. It falls with the motor request, when no index edge arrived for 500 ms while the motor is on (the disk was removed or has stopped; the next edge brings READY back), on reset and on disable. It does not depend on the disk-change latch. The first edge has to be enough because of the finite PA1 window of the genuine 1581 ROM: the DOS examines READY exactly once, 0.800 s after it switched the motor on (0.826 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so that a second edge, 200 ms after the first, can arrive after the exam. Eject and reinsert detection does not rest on READY: that is the job of the disk-change latch (`CTRL_STATE` bit 4), which is set by the raw change line, by reset and by disable and is cleared only by a completed step with the line released.
+Synthesized `media ready` (`CTRL_STATE` bit 0, the READY line that the 1581 DOS reads on CIA PA1) asserts with the first motor-qualified index edge of a motor-on interval, for every medium: cold, changed, restarted or newly enabled. It falls with the motor request, on reset, on disable, and when no index edge arrived for 500 ms of settled time while the motor is on (the disk was removed or has stopped; the next edge brings READY back). Settled time is the time in which the step engine is idle and the head has settled: from the acceptance of a step until 18 ms after its pulse the 500 ms do not run, and they start anew when the head has settled, because a mechanism may withhold its index pulses while it steps (map v10, section 2.4, measures whether it does). An index edge counts whenever it arrives, during a step as well. It does not depend on the disk-change latch. The first edge has to be enough because of the finite PA1 window of the genuine 1581 ROM: the DOS examines READY exactly once, 0.800 s after it switched the motor on (0.826 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so that a second edge, 200 ms after the first, can arrive after the exam. Eject and reinsert detection does not rest on READY: that is the job of the disk-change latch (`CTRL_STATE` bit 4), which is set by the raw change line, by reset and by disable and is cleared only by a completed step with the line released.
 
 Physical Read Address presents only sector IDs `1..10`. MEGA65 F011 formatting
 can finish a CRC-valid sector-11 ID before index truncates its following record;
@@ -331,6 +318,27 @@ What the two words show in the cases a tester will meet:
 - **`0xFFFF` in `SPINUP_LAST_MS`** means that no measurement has ended since reset: the motor was not on yet, or no index pulse has arrived with the motor on. `SPINUP_MAX_MS` reads `0x0000` until then.
 - **While a measurement runs**, `SPINUP_LAST_MS` still shows the previous result.
 
+### 2.4 Index gap, stale READY and the decoder's tolerance (map v10, words `0xA2`–`0xA5`)
+
+| Off  | Name                | Contents |
+| ---- | ------------------- | -------- |
+| `0xA2` | `IDX_GAP_MAX_MS`  | the longest time between two index edges in a row with the motor on throughout, in whole milliseconds (truncated), since reset; saturates at `0xFFFF`; `0x0000` = no measurement since reset |
+| `0xA3` | `CNT_RDY_STALE`   | 16-bit saturating counter: READY fell while the motor request stayed on (the rule of 500 ms of settled time without an index edge) |
+| `0xA4` | `CNT_TOL_HIT`     | 16-bit saturating counter: uses of the decoder's tolerance for a weak sync byte |
+| `0xA5` | `RD_CTRL`         | readable and writable: bit 0 = 1 switches the decoder's tolerance for a weak sync byte off; `0x0000` after reset (tolerance on); bits 15..1 read 0 |
+
+**Index gap.** A measurement starts with an index edge while the motor-on level (`CTRL_STATE` bit 3) is high and ends with the next index edge; that edge starts the next measurement at once. If the motor-on level is low in any clock between the two edges (the motor request fell, the drive was disabled or reset), the measurement ends without a result, and the next index edge with the motor on starts a new one. The measurement counts real time: it does not depend on READY or on the rule of the controller. `IDX_GAP_MAX_MS` keeps the largest result since reset. What the value means:
+
+- **About 200** (`0x00C8`, one revolution at 300 rpm): every index pulse arrived while the motor ran, also while the head stepped.
+- **About 400 or 600** (`0x0190`, `0x0258`): one index pulse, or two in a row, did not arrive while the motor ran and the disk turned. A mechanism that withholds its index pulses while the head steps can show this after a Restore and a Seek in a row (`UI`, the power-on initialization, the bump after two failed reads) or after a long seek, depending on where the index is when the steps begin. Compare it with `CNT_STEP` (`0x18`): without steps since the reset, the value stays near 200 on such a mechanism.
+- **Thousands:** a disk was taken out and put back while the motor ran (the value is the time without a disk, from the last index pulse of the old disk to the first of the new one). Such a value covers the smaller ones until the next reset, so take the reading that answers the question about index pulses after a reset and before any disk change with the motor on.
+
+**Stale READY.** `CNT_RDY_STALE` counts every fall of READY (`CTRL_STATE` bit 0) while the motor-on level stays high. The controller lowers READY together with the motor-on level when the motor request falls, on reset and on disable; those falls do not count. What remains is the rule of the controller: no index edge for 500 ms of settled time with the motor on. With a disk in the drive and the motor running the counter stays at 0; every count is a disk taken out with the motor on, a disk that stopped turning, or index pulses that stayed away for half a second while the head rested.
+
+**Decoder tolerance.** `CNT_TOL_HIT` counts every use of the decoder's tolerance for a weak sync byte: every time the tolerance made the decoder accept what it would not have accepted without it. On a disk that was written well it stays at or near 0; a count that grows on one track points at a weak recording there. `RD_CTRL` bit 0 switches the tolerance off for a comparison (section 3.6); a core or QNICE reset switches it on again.
+
+All four words are cleared by a reset of the core (section 4); there is no clear-on-read.
+
 ### Bit layouts
 
 `0x02` **`LIVE_IN`** — pin levels. Raw bits are the async connector pins as sampled
@@ -458,7 +466,7 @@ MD            (Memory/Dump) -> prompt "DUMP START ADDRESS="
 703F          -> prompt " END ADDRESS=" ; end (0x7000 + 0x3F = last scalar diagnostic word)
 ```
 
-This prints all 64 scalar diagnostic words in one block. To watch a value live, re-issue the `MD 7000 703F` (or `ME 70xx`) command repeatedly — the registers update continuously while the C64 accesses the drive. The write instruments and the map v9 words are `MD 7080 70A1`. The selection of section 3.1 holds for as long as you stay in the console; after leaving it and coming back, select the device again before the next dump.
+This prints all 64 scalar diagnostic words in one block. To watch a value live, re-issue the `MD 7000 703F` (or `ME 70xx`) command repeatedly — the registers update continuously while the C64 accesses the drive. The write instruments and the words of maps v9 and v10 are `MD 7080 70A5`. The selection of section 3.1 holds for as long as you stay in the console; after leaving it and coming back, select the device again before the next dump.
 
 ### 3.4 Typical checks
 
@@ -477,7 +485,7 @@ This prints all 64 scalar diagnostic words in one block. To watch a value live, 
   means the ID field was never matched. `RNF_CTX` (`0x37`) names the requested track/sector
   of the last RNF — one repeating pair is a persistently unreadable sector, a wandering pair
   is a scattered media/speed problem.
-- **Drive never becomes ready?** `CTRL_STATE` bit0 stays `0`: check the motor bit (bit3), that `CNT_IDX_QUAL` (`0x16`) is counting (index edges only count toward readiness while the motor is on), and that `IDX_PERIOD` (`0x0D`/`0x0E`) is plausible (one revolution, about `0x00989680` cycles at 300 RPM). Readiness models the RDY line of the real mechanism: the motor is on and at least one index edge of the current motor-on interval has arrived. It falls with the motor request and 500 ms after the last index edge. The disk-change latch (bit4) does NOT gate readiness -- it drives the DOS-visible /DSKCHG (CIA PA7) and aborts in-flight reads; the DOS clears it by stepping. `SPINUP_LAST_MS` (`0xA0`) shows how long the first index pulse took after the last motor start, `SPINUP_MAX_MS` (`0xA1`) the worst case since reset: the DOS examines READY once, 800 ms after it switched the motor on (826 ms after a disk change), see section 2.3.
+- **Drive never becomes ready?** `CTRL_STATE` bit0 stays `0`: check the motor bit (bit3), that `CNT_IDX_QUAL` (`0x16`) is counting (index edges only count toward readiness while the motor is on), and that `IDX_PERIOD` (`0x0D`/`0x0E`) is plausible (one revolution, about `0x00989680` cycles at 300 RPM). Readiness models the RDY line of the real mechanism: the motor is on and at least one index edge of the current motor-on interval has arrived. It falls with the motor request, and when no index edge arrived for 500 ms of settled time: the time in which the head steps or settles (18 ms after the last step) does not count. `CNT_RDY_STALE` (`0xA3`) counts the falls by that rule; with a disk in the drive it stays at 0. `IDX_GAP_MAX_MS` (`0xA2`) shows whether the mechanism withholds index pulses while the head steps (about 200 if not, about 400 or 600 if it does), see section 2.4. The disk-change latch (bit4) does NOT gate readiness -- it drives the DOS-visible /DSKCHG (CIA PA7) and aborts in-flight reads; the DOS clears it by stepping. `SPINUP_LAST_MS` (`0xA0`) shows how long the first index pulse took after the last motor start, `SPINUP_MAX_MS` (`0xA1`) the worst case since reset: the DOS examines READY once, 800 ms after it switched the motor on (826 ms after a disk change), see section 2.3.
 - **Loads are slow?** After reading a few tracks, compare `CNT_RD_AHEAD` (`0x9E`) with the
   number of Read Sectors: nine of the ten sectors of a track side should come from the
   read-ahead buffer. `CNT_RD_AHEAD_DROP` (`0x9F`) counts the requests that were accepted for
@@ -514,11 +522,23 @@ MC            (Memory/Change)
 or QNICE reset returns it to `0`. `WR_PRECOMP_CNT` (`0x95`) shows the effect: about 1,800
 shifted pulses per sector with precomp, 0 without.
 
+### 3.6 Switch the decoder's tolerance off (`RD_CTRL`)
+
+The decoder tolerates one weak sync byte in front of a mark (section 2.4). `RD_CTRL` switches that tolerance off without a rebuild, to compare a disk with and without it. With the device selected in this visit of the console (section 3.1):
+
+```text
+MC            (Memory/Change)
+70A5          address of RD_CTRL (0x7000 + 0xA5)
+0001          1 = tolerance off, 0 = tolerance on (default)
+```
+
+`ME 70A5` reads the setting back. It applies at once, and a core or QNICE reset returns it to `0`. `CNT_TOL_HIT` (`0xA4`) shows the effect: it does not grow while the tolerance is off.
+
 ---
 
 ## 4. Notes and caveats
 
-- **Observational.** Apart from `WR_CTRL`, this device cannot change anything the drive does.
+- **Observational.** Apart from `WR_CTRL` and `RD_CTRL`, this device cannot change anything the drive does.
   It observes the `physical_1581_controller`, its decoder and its writer; the mechanism is
   driven entirely by the C64/DOS through the WD1772 model, not by QNICE. In particular it
   cannot open the write gate.

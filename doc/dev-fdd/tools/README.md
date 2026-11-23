@@ -2,7 +2,7 @@
 
 ## `diag_dump_decode.py`: the dumps of the diagnostic device
 
-Decodes the dumps that testers paste into a GitHub issue (the blocks of the QNICE monitor commands `MD 7000 703F`, `MD 7040 707F` and `MD 7080 70A1`) with the names of the register map in `doc/1581_dd_debug_device.md`, the trace ring oldest entry first.
+Decodes the dumps that testers paste into a GitHub issue (the blocks of the QNICE monitor commands `MD 7000 703F`, `MD 7040 707F` and `MD 7080 70A5`) with the names of the register map in `doc/1581_dd_debug_device.md`, the trace ring oldest entry first. Dumps of older maps decode as well: map v8 ends at `709D`, map v9 at `70A1`; the words a dump does not contain are left out. For map v10 it prints the longest index gap with the number of revolutions it spans (and how many index pulses in a row did not arrive), the count of stale READY, and the count and the switch of the decoder's tolerance for a weak sync byte.
 
 ```text
 gh api repos/MJoergen/C64MEGA65/issues/257/comments --paginate > comments.json

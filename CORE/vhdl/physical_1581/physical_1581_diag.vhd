@@ -48,6 +48,14 @@
 --     0xA1 the largest since reset). The stock 1581 ROM samples READY once,
 --     0.80 to 0.83 s after it switched the motor on, and READY needs that
 --     first index edge: the two words show the margin on real hardware.
+--   * (map v10, issue #257 part E) the longest time between two index edges
+--     in a row with the motor on throughout (0xA2, ms), how often READY fell
+--     while the motor request stayed on (0xA3: the controller's rule of 500
+--     ms without an index edge), how often the decoder used its tolerance for
+--     a weak sync byte (0xA4), and RD_CTRL (0xA5), the second writable word:
+--     bit 0 switches that tolerance off. 0xA2 shows whether the mechanism
+--     withholds index pulses while the head steps (about 200 when every
+--     pulse arrives, about 400 or 600 when one or two in a row are missing).
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -58,11 +66,13 @@
 -- unsynchronized as a quasi-static bus (latched at the fdc finalize, i.e. at
 -- least two 50 MHz cycles before the synced dbg_fin_i edge that samples it).
 --
--- It is observational with ONE exception: WR_CTRL (word 0x9A, map v8) is
+-- It is observational with TWO exceptions: WR_CTRL (word 0x9A, map v8) is
 -- writable from QNICE and drives wr_precomp_mode_o, the controller's precomp
--- override (0/3 follow the WD P bit, 1 off, 2 on; reset 0). QNICE writes to
--- every other word are ignored. Register reads are a purely combinational mux
--- over the register file, with no wait-state.
+-- override (0/3 follow the WD P bit, 1 off, 2 on; reset 0), and RD_CTRL (word
+-- 0xA5, map v10) is writable and drives dec_tol_off_o with its bit 0 ('1'
+-- switches the decoder's tolerance for a weak sync byte off; reset 0). QNICE
+-- writes to every other word are ignored. Register reads are a purely
+-- combinational mux over the register file, with no wait-state.
 --
 -- Register map: see the RM_* constants below and doc/1581_dd_debug_device.md.
 --
@@ -229,12 +239,13 @@ entity physical_1581_diag is
     -- WR_CTRL (0x9A) -> controller wr_precomp_mode_i
     wr_precomp_mode_o      : out std_logic_vector(1 downto 0);
 
-    -- -> controller dec_tol_off_i: '1' switches the decoder's tolerance for a weak sync byte off
+    -- RD_CTRL (0xA5) bit 0 -> controller dec_tol_off_i: '1' switches the decoder's tolerance for a weak sync byte off
     dec_tol_off_o          : out std_logic := '0';
 
     -----------------------------------------------------------------------------
     -- QNICE interface (device C_DEV_C64_PHYS1581), no wait-state. Reads are a
-    -- combinational mux; the only write is WR_CTRL (word 0x9A).
+    -- combinational mux; the only writes are WR_CTRL (word 0x9A) and RD_CTRL
+    -- (word 0xA5).
     -----------------------------------------------------------------------------
     qnice_ce_i          : in  std_logic;                     -- chip enable
     qnice_we_i          : in  std_logic := '0';              -- write strobe (implies ce)
@@ -355,8 +366,13 @@ architecture rtl of physical_1581_diag is
   constant RM_CNT_RD_AHEAD_DROP : integer := 16#9F#; -- 16-bit: adoptions given up (the live path took over)
   constant RM_SPINUP_LAST_MS : integer := 16#A0#;   -- motor-on to first index edge, last measurement (ms); FFFF = none yet
   constant RM_SPINUP_MAX_MS  : integer := 16#A1#;   -- the largest RM_SPINUP_LAST_MS since reset (ms)
+  -- map v10 (index gap, stale READY, decoder tolerance, issue #257 part E)
+  constant RM_IDX_GAP_MAX_MS : integer := 16#A2#;   -- longest index-to-index time with the motor on throughout (ms); 0 = none yet
+  constant RM_CNT_RDY_STALE  : integer := 16#A3#;   -- 16-bit: READY fell while the motor request stayed on
+  constant RM_CNT_TOL_HIT    : integer := 16#A4#;   -- 16-bit: the decoder used its tolerance for a weak sync byte
+  constant RM_RD_CTRL        : integer := 16#A5#;   -- WRITABLE: bit 0 switches the decoder's tolerance off
 
-  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"09";
+  constant C_MAP_VERSION : std_logic_vector(7 downto 0) := x"0A";
   -- capability flags: bit0 = read-only (cleared since map v8: WR_CTRL is writable),
   --                   bit1 = counters present, bit2 = CRC taps present,
   --                   bit3 = image-drive busy word (RM_IMG_DRIVE) present,
@@ -489,6 +505,27 @@ architecture rtl of physical_1581_diag is
   signal spinup_ms      : unsigned(15 downto 0) := (others => '0'); -- milliseconds of the running measurement
   signal spinup_last    : unsigned(15 downto 0) := C_SPINUP_NONE;
   signal spinup_max     : unsigned(15 downto 0) := (others => '0');
+
+  ---------------------------------------------------------------------------
+  -- map v10: the index gap and the stale READY derive from the motor-on
+  -- level (st_motor_on_i, low while the drive is disabled or in reset), the
+  -- motor-qualified index edge (diag_index_qual_i) and the READY level. A gap
+  -- measurement starts with a motor-qualified index edge and ends with the
+  -- next one; the motor-on level low in any clock between them ends it
+  -- without a result. It counts whole milliseconds of real time (truncated)
+  -- and saturates at FFFF; idx_gap_max keeps the largest result since reset
+  -- (0 = none yet). A stale READY is a fall of READY while the motor-on
+  -- level stays high: the controller lowers READY together with that level
+  -- on reset, on disable and with the motor request, so only the fall after
+  -- 500 ms of settled time without an index edge counts.
+  ---------------------------------------------------------------------------
+  signal idx_gap_run    : std_logic := '0';                        -- a gap measurement is running
+  signal idx_gap_pre    : natural range 0 to G_MS_CYC - 1 := 0;    -- cycles of the current millisecond
+  signal idx_gap_ms     : unsigned(15 downto 0) := (others => '0'); -- milliseconds of the running measurement
+  signal idx_gap_max    : unsigned(15 downto 0) := (others => '0');
+  signal prev_ready     : std_logic := '0';
+  signal cnt_rdy_stale, cnt_tol_hit : unsigned(15 downto 0) := (others => '0');
+  signal rd_ctrl        : std_logic := '0';
 
   ---------------------------------------------------------------------------
   -- saturating +1 helper (increments only on 'ev')
@@ -627,6 +664,15 @@ begin
         spinup_ms         <= (others => '0');
         spinup_last       <= C_SPINUP_NONE;
         spinup_max        <= (others => '0');
+        -- map v10
+        idx_gap_run       <= '0';
+        idx_gap_pre       <= 0;
+        idx_gap_ms        <= (others => '0');
+        idx_gap_max       <= (others => '0');
+        prev_ready        <= st_media_ready_i;
+        cnt_rdy_stale     <= (others => '0');
+        cnt_tol_hit       <= (others => '0');
+        rd_ctrl           <= '0';
       else
         -- derived event pulses
         rddone_evt := rd_done_tgl_i  xor prev_rd_done;
@@ -824,10 +870,40 @@ begin
           end if;
         end if;
 
-        -- WR_CTRL (0x9A): the only QNICE-writable word
+        -- map v10: the longest index gap with the motor on throughout
+        if st_motor_on_i = '0' then
+          idx_gap_run <= '0';
+        elsif diag_index_qual_i = '1' then
+          if idx_gap_run = '1' and idx_gap_ms > idx_gap_max then
+            idx_gap_max <= idx_gap_ms;
+          end if;
+          idx_gap_run <= '1';
+          idx_gap_pre <= 0;
+          idx_gap_ms  <= (others => '0');
+        elsif idx_gap_run = '1' then
+          if idx_gap_pre = G_MS_CYC - 1 then
+            idx_gap_pre <= 0;
+            if idx_gap_ms /= x"FFFF" then
+              idx_gap_ms <= idx_gap_ms + 1;
+            end if;
+          else
+            idx_gap_pre <= idx_gap_pre + 1;
+          end if;
+        end if;
+
+        -- map v10: READY fell while the motor-on level stayed high
+        prev_ready    <= st_media_ready_i;
+        cnt_rdy_stale <= sat_inc16(cnt_rdy_stale, prev_ready and not st_media_ready_i and st_motor_on_i);
+        cnt_tol_hit   <= sat_inc16(cnt_tol_hit, tol_hit_i);
+
+        -- WR_CTRL (0x9A) and RD_CTRL (0xA5): the QNICE-writable words
         if qnice_ce_i = '1' and qnice_we_i = '1' and
            to_integer(unsigned(qnice_addr_i)) = RM_WR_CTRL then
           wr_ctrl <= qnice_data_i(1 downto 0);
+        end if;
+        if qnice_ce_i = '1' and qnice_we_i = '1' and
+           to_integer(unsigned(qnice_addr_i)) = RM_RD_CTRL then
+          rd_ctrl <= qnice_data_i(0);
         end if;
 
         -- latch CRCs on the decoder's field-complete pulses
@@ -855,6 +931,7 @@ begin
   end process update_p;
 
   wr_precomp_mode_o <= wr_ctrl;
+  dec_tol_off_o     <= rd_ctrl;
 
   ---------------------------------------------------------------------------
   -- CTRL_STATE bits 15:12 (map v8): the read FSM phase, or -- while a write op
@@ -900,8 +977,8 @@ begin
                "001";
 
   ---------------------------------------------------------------------------
-  -- combinational read mux (no wait-state). Writes other than WR_CTRL are
-  -- ignored.
+  -- combinational read mux (no wait-state). Writes other than WR_CTRL and
+  -- RD_CTRL are ignored.
   ---------------------------------------------------------------------------
   read_p : process (all)
     variable a : integer;
@@ -1047,6 +1124,12 @@ begin
       when RM_CNT_RD_AHEAD_DROP => qnice_data_o <= std_logic_vector(cnt_rd_ahead_drop);
       when RM_SPINUP_LAST_MS  => qnice_data_o <= std_logic_vector(spinup_last);
       when RM_SPINUP_MAX_MS   => qnice_data_o <= std_logic_vector(spinup_max);
+
+      -- map v10: index gap, stale READY, decoder tolerance
+      when RM_IDX_GAP_MAX_MS  => qnice_data_o <= std_logic_vector(idx_gap_max);
+      when RM_CNT_RDY_STALE   => qnice_data_o <= std_logic_vector(cnt_rdy_stale);
+      when RM_CNT_TOL_HIT     => qnice_data_o <= std_logic_vector(cnt_tol_hit);
+      when RM_RD_CTRL         => qnice_data_o <= x"000" & "000" & rd_ctrl;
 
       when others             =>
         if a >= RM_TRC_BASE and a <= RM_TRC_END then

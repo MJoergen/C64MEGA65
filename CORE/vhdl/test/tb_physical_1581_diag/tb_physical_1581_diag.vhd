@@ -3,7 +3,8 @@
 --
 -- Stand-alone unit test of physical_1581_diag (the QNICE diagnostic register
 -- bank, issue #90; map v8 write instruments issue #244; map v9 read-ahead
--- counters and spin-up time issue #257). It drives known
+-- counters and spin-up time issue #257; map v10 index gap, stale READY and
+-- decoder tolerance, issue #257 part E). It drives known
 -- diagnostic inputs and event
 -- strobes, reads every documented register word over the QNICE read interface,
 -- and asserts:
@@ -28,6 +29,15 @@
 --     motor edge. The main instance counts 10 clocks per millisecond
 --     (G_MS_CYC) so that the saturation is reachable; a second instance with
 --     the production default checks the real scale of 50,000 clocks.
+--   * map v10 (issue #257 part E): IDX_GAP_MAX_MS (the largest time between
+--     two motor-qualified index edges with the motor-on level high in every
+--     clock between them: truncated milliseconds, the maximum kept, no result
+--     across a motor-off clock, saturation at FFFF, both scales),
+--     CNT_RDY_STALE (a fall of READY with the motor-on level high counts; a
+--     fall together with the motor-on level, as the controller makes it on
+--     reset, disable and motor off, does not; saturation), CNT_TOL_HIT
+--     (count, saturation), RD_CTRL (bit 0 only, its output, independent of
+--     WR_CTRL), and that a reset clears all four words.
 --
 -- Purely combinational reads and same-clock counters => no timing subtlety; the
 -- whole run is a few tens of milliseconds of sim time.
@@ -117,6 +127,10 @@ architecture sim of tb_physical_1581_diag is
   -- map v9 read-ahead strobes
   signal diag_rd_ahead, diag_rd_ahead_drop : std_logic := '0';
 
+  -- map v10: decoder tolerance strobe and switch
+  signal tol_hit     : std_logic := '0';
+  signal dec_tol_off : std_logic;
+
   -- QNICE interface
   signal q_ce   : std_logic := '0';
   signal q_we   : std_logic := '0';
@@ -167,7 +181,7 @@ begin
       a1_train_i => a1_train,
       mark_fe_i => mark_fe, mark_dam_i => mark_dam,
       dam_unarmed_i => dam_unarmed, match_id_i => match_id,
-      dam_miss_i => dam_miss,
+      dam_miss_i => dam_miss, tol_hit_i => tol_hit,
       diag_wr_phase_i => diag_wr_phase, diag_wr_session_i => diag_wr_session,
       diag_wr_feed_i => diag_wr_feed, diag_wr_abort_i => diag_wr_abort,
       diag_wr_prec_i => diag_wr_prec, diag_wr_done_i => diag_wr_done,
@@ -182,7 +196,7 @@ begin
       wr_pop_i => wr_pop, wr_fifo_level_i => wr_fifo_level,
       dbg_wr_fin_i => dbg_wr_fin, dbg_wr_wp_i => dbg_wr_wp, dbg_wr_drop_i => dbg_wr_drop,
       diag_rd_ahead_i => diag_rd_ahead, diag_rd_ahead_drop_i => diag_rd_ahead_drop,
-      wr_precomp_mode_o => wr_precomp_mode,
+      wr_precomp_mode_o => wr_precomp_mode, dec_tol_off_o => dec_tol_off,
       qnice_ce_i => q_ce, qnice_we_i => q_we, qnice_addr_i => q_addr,
       qnice_data_i => q_wdat, qnice_data_o => q_data
     );
@@ -362,6 +376,26 @@ begin
       pulse1(diag_index_qual);
     end procedure;
 
+    -- map v10: the next motor-qualified index edge, sampled n clocks after the
+    -- previous one (which pulse1 sampled one clock before it returned): the
+    -- bank has counted n - 1 full clocks, (n - 1) / G_MS_CYC milliseconds
+    procedure idx_gap(n : natural) is
+    begin
+      clkw(n - 2);
+      pulse1(diag_index_qual);
+    end procedure;
+
+    procedure expect_tol(exp : std_logic; name : string) is
+    begin
+      if dec_tol_off /= exp then
+        report "FAIL " & name & ": dec_tol_off_o = " & std_logic'image(dec_tol_off)
+             & " exp " & std_logic'image(exp) severity error;
+        fails := fails + 1;
+      else
+        report "  OK  " & name & " = " & std_logic'image(dec_tol_off);
+      end if;
+    end procedure;
+
     variable v_readop, v_cancel, v_trc, v_chrn : std_logic_vector(15 downto 0);
   begin
     -- ---- reset ----------------------------------------------------------
@@ -373,11 +407,16 @@ begin
 
     -- ---- static + reset-state reads ------------------------------------
     expect(16#00#, x"1581", "SIGNATURE");
-    expect(16#01#, x"09FE", "VERSION/CAP (map v9, bit0 read-only cleared)");
+    expect(16#01#, x"0AFE", "VERSION/CAP (map v10, bit0 read-only cleared)");
     expect(16#9E#, x"0000", "CNT_RD_AHEAD(reset)");
     expect(16#9F#, x"0000", "CNT_RD_AHEAD_DROP(reset)");
     expect(16#A0#, x"FFFF", "SPINUP_LAST_MS(reset: no measurement yet)");
     expect(16#A1#, x"0000", "SPINUP_MAX_MS(reset)");
+    expect(16#A2#, x"0000", "IDX_GAP_MAX_MS(reset: no measurement yet)");
+    expect(16#A3#, x"0000", "CNT_RDY_STALE(reset)");
+    expect(16#A4#, x"0000", "CNT_TOL_HIT(reset)");
+    expect(16#A5#, x"0000", "RD_CTRL(reset)");
+    expect_tol('0', "decoder tolerance on after reset");
     expect(16#14#, x"0000", "CNT_IDX_RAW_LO(reset)");
     expect(16#29#, x"0000", "TRC_CNT(reset)");
     expect(16#36#, x"0000", "EST(reset input)");
@@ -880,11 +919,120 @@ begin
     expect(16#A0#, x"30D4", "SPINUP_LAST_MS=12500 (scaled bank)");
     expect2(16#A0#, x"0002", "SPINUP_LAST_MS=2 at 50,000 clocks per millisecond");
     expect2(16#A1#, x"000D", "SPINUP_MAX_MS=13 at 50,000 clocks per millisecond");
-    expect2(16#01#, x"09FE", "VERSION of the second instance");
+    expect2(16#01#, x"0AFE", "VERSION of the second instance");
     st_motor_on <= '0';
     wait until rising_edge(clk);
 
-    expect(16#A2#, x"0000", "reserved word 0xA2 reads 0");
+    -- ---- map v10: IDX_GAP_MAX_MS (10 clocks per millisecond in this bank) --
+    -- the index edges after the first spin-up of the v9 section came 27
+    -- clocks apart with the motor on: 26 full clocks, 2 ms
+    expect(16#A2#, x"0002", "IDX_GAP_MAX_MS=2 from the index edges of the v9 section");
+    st_motor_on <= '1';
+    clkw(3);
+    pulse1(diag_index_qual);            -- starts a measurement
+    idx_gap(400);
+    expect(16#A2#, x"0027", "IDX_GAP_MAX_MS=39 (399 full clocks)");
+    idx_gap(201);
+    expect(16#A2#, x"0027", "IDX_GAP_MAX_MS keeps the larger value (20 ms measured)");
+    idx_gap(1001);
+    expect(16#A2#, x"0064", "IDX_GAP_MAX_MS=100");
+    -- the motor-on level low in one clock between two edges: neither the
+    -- 200 ms across it nor the 150 ms before it are a result, and the edge
+    -- after it starts a measurement
+    clkw(1500);
+    st_motor_on <= '0';
+    wait until rising_edge(clk);
+    st_motor_on <= '1';
+    clkw(500);
+    pulse1(diag_index_qual);
+    expect(16#A2#, x"0064", "IDX_GAP_MAX_MS: no result across a motor-off clock");
+    idx_gap(1801);
+    expect(16#A2#, x"00B4", "IDX_GAP_MAX_MS=180 from the edge after the motor-off clock");
+    -- saturation, and the production scale of the second instance: 655,399
+    -- full clocks are 65,539 ms here and 13 ms there
+    idx_gap(655_400);
+    expect(16#A2#, x"FFFF", "IDX_GAP_MAX_MS saturates at FFFF");
+    expect2(16#A2#, x"000D", "IDX_GAP_MAX_MS=13 at 50,000 clocks per millisecond");
+    st_motor_on <= '0';
+    wait until rising_edge(clk);
+
+    -- ---- map v10: CNT_RDY_STALE --------------------------------------------
+    -- READY and the motor-on level fell in the same clock in the state-word
+    -- section above (as the controller lowers them on reset, disable and
+    -- with the motor request): no count
+    expect(16#A3#, x"0000", "CNT_RDY_STALE: a fall together with the motor-on level");
+    st_motor_on <= '1'; st_media_ready <= '1';
+    clkw(3);
+    st_media_ready <= '0';              -- the 500 ms rule: READY falls, the motor stays on
+    clkw(3);
+    expect(16#A3#, x"0001", "CNT_RDY_STALE=1 (READY fell with the motor on)");
+    st_media_ready <= '1';
+    clkw(3);
+    st_media_ready <= '0'; st_motor_on <= '0';
+    clkw(3);
+    expect(16#A3#, x"0001", "CNT_RDY_STALE: READY fell together with the motor-on level");
+    st_media_ready <= '1';
+    clkw(3);
+    st_media_ready <= '0';              -- READY falls while the motor is off
+    clkw(3);
+    st_motor_on <= '1';                 -- a rise of the motor-on level alone
+    clkw(3);
+    expect(16#A3#, x"0001", "CNT_RDY_STALE: a fall with the motor off, a motor edge");
+    for i in 1 to 65_540 loop           -- one fall every two clocks: past the 16-bit range
+      st_media_ready <= '1';
+      wait until rising_edge(clk);
+      st_media_ready <= '0';
+      wait until rising_edge(clk);
+    end loop;
+    clkw(2);
+    expect(16#A3#, x"FFFF", "CNT_RDY_STALE saturates at FFFF");
+    st_motor_on <= '0';
+    wait until rising_edge(clk);
+
+    -- ---- map v10: CNT_TOL_HIT -----------------------------------------------
+    for i in 1 to 7 loop pulse1(tol_hit); end loop;
+    expect(16#A4#, x"0007", "CNT_TOL_HIT=7");
+    expect(16#A3#, x"FFFF", "CNT_RDY_STALE untouched by the tolerance strobe");
+    tol_hit <= '1';                     -- one count per clock: past the 16-bit range
+    clkw(65_540);
+    tol_hit <= '0';
+    wait until rising_edge(clk);
+    expect(16#A4#, x"FFFF", "CNT_TOL_HIT saturates at FFFF");
+
+    -- ---- map v10: RD_CTRL, the second writable word ------------------------
+    expect(16#A5#, x"0000", "RD_CTRL still 0");
+    q_write(16#A5#, x"0001");
+    expect(16#A5#, x"0001", "RD_CTRL=1 (tolerance off)");
+    expect_tol('1', "decoder tolerance off after RD_CTRL=1");
+    q_write(16#9A#, x"0002");
+    expect(16#A5#, x"0001", "RD_CTRL untouched by a write to WR_CTRL");
+    expect_tol('1', "decoder tolerance still off after a write to WR_CTRL");
+    q_write(16#A5#, x"FFFE");
+    expect(16#A5#, x"0000", "RD_CTRL keeps bit 0 only");
+    expect_tol('0', "decoder tolerance on after RD_CTRL=FFFE");
+    expect(16#9A#, x"0002", "WR_CTRL untouched by a write to RD_CTRL");
+    expect_mode("10", "precomp mode untouched by a write to RD_CTRL");
+    q_write(16#A5#, x"0003");
+    expect(16#A5#, x"0001", "RD_CTRL=1 again");
+    q_write(16#A4#, x"1234");
+    expect(16#A4#, x"FFFF", "a write to CNT_TOL_HIT is ignored");
+    q_write(16#A2#, x"0000");
+    expect(16#A2#, x"FFFF", "a write to IDX_GAP_MAX_MS is ignored");
+    q_write(16#9A#, x"0000");
+
+    -- ---- map v10: a reset clears the four words ----------------------------
+    rst <= '1';
+    clkw(2);
+    rst <= '0';
+    wait until rising_edge(clk);
+    expect(16#A2#, x"0000", "IDX_GAP_MAX_MS cleared by reset");
+    expect(16#A3#, x"0000", "CNT_RDY_STALE cleared by reset");
+    expect(16#A4#, x"0000", "CNT_TOL_HIT cleared by reset");
+    expect(16#A5#, x"0000", "RD_CTRL cleared by reset");
+    expect_tol('0', "decoder tolerance on after a reset");
+    expect2(16#A2#, x"0000", "IDX_GAP_MAX_MS of the second instance cleared by reset");
+
+    expect(16#A6#, x"0000", "reserved word 0xA6 reads 0");
 
     -- ---- verdict -------------------------------------------------------
     if fails = 0 then

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Decoder for the dumps of the diagnostic device of the Internal 1581 (doc/1581_dd_debug_device.md)
 that testers paste into a GitHub issue: the blocks of the QNICE monitor commands MD 7000 703F,
-MD 7040 707F and MD 7080 70A1 (map v8: up to 709D), each in a code fence that starts with "7000:".
+MD 7040 707F and MD 7080 70A5 (map v8: up to 709D, map v9: up to 70A1), each in a code fence that
+starts with "7000:".
 
   gh api repos/MJoergen/C64MEGA65/issues/257/comments --paginate > comments.json
   python3 -I diag_dump_decode.py comments.json                 # every dump of every comment
@@ -95,6 +96,24 @@ def show(lab, w, full_ring=True):
         last, mx = w[0xA0], w[0xA1]
         note = "no measurement since reset" if last == 0xFFFF else ("saturated" if last == 0xFFFE else f"{last} ms")
         print(f"SPINUP (map v9): motor-on to first index pulse: last={note}, max={mx} ms" + ("  <-- 800 ms or more: the READY exam of the DOS (0.80 s after motor-on) can fail, unless the motor was switched on without a disk" if mx >= 800 else ""))
+    if 0xA2 in w and 0xA5 in w:
+        gap = w[0xA2]
+        rev = (per / 50e3) if per else 200.0
+        if gap == 0:
+            gnote = "no measurement since reset"
+        elif gap == 0xFFFF:
+            gnote = "saturated (65.5 s or more)"
+        else:
+            k = round(gap / rev)
+            gnote = f"{gap} ms = {gap / rev:.2f} revolutions"
+            if gap >= 5 * rev:
+                gnote += "  <-- no index pulse for a long time with the motor on: a disk out and in, or a disk that stopped"
+            elif k >= 2:
+                gnote += f"  <-- {k - 1} index pulse(s) in a row did not arrive with the motor on (withheld while the head stepped?)"
+            else:
+                gnote += "  (every index pulse arrived)"
+        print(f"INDEX GAP (map v10): longest time between two index edges with the motor on: {gnote}")
+        print(f"STALE READY (map v10): READY fell with the motor on {w[0xA3]} times | DECODER TOLERANCE: used {w[0xA4]} times, RD_CTRL={w[0xA5]:04X} ({'tolerance OFF' if w[0xA5] & 1 else 'tolerance on'})")
     n, ents = ring(w)
     if full_ring:
         print(f"-- trace ring, oldest -> newest (TRC_CNT={n}) --")
