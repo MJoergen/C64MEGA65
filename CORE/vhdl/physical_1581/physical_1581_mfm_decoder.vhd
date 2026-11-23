@@ -64,6 +64,10 @@ entity physical_1581_mfm_decoder is
     rst_i             : in  std_logic;                    -- sync reset / invalidate
     f_rdata_i         : in  std_logic;                    -- pre-synchronized active-low flux
 
+    -- tolerance for a weak sync byte (issue #257): '1' switches it off, the
+    -- decoder then accepts a mark only after three sync bytes; quasi-static
+    tol_off_i         : in  std_logic := '0';
+
     -- decoded ID (address-mark) field
     id_valid_o        : out std_logic := '0';             -- 1-cycle pulse at end of ID
     id_c_o            : out unsigned(7 downto 0) := (others => '0');
@@ -91,6 +95,7 @@ entity physical_1581_mfm_decoder is
     mark_fe_o         : out std_logic := '0';             -- pulse: qualified train followed by FE
     mark_dam_o        : out std_logic := '0';             -- pulse: qualified train followed by FB/F8
     dam_unarmed_o     : out std_logic := '0';             -- pulse: DAM ignored without valid ID/data lock-up
+    tol_hit_o         : out std_logic := '0';             -- pulse: the tolerance for a weak sync byte was used
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked

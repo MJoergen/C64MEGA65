@@ -176,6 +176,7 @@ entity physical_1581_diag is
     mark_fe_i           : in  std_logic := '0';
     mark_dam_i          : in  std_logic := '0';
     dam_unarmed_i       : in  std_logic := '0';
+    tol_hit_i           : in  std_logic := '0';   -- the decoder used its tolerance for a weak sync byte
     match_id_i          : in  std_logic := '0';
     dam_miss_i          : in  std_logic := '0';
 
@@ -227,6 +228,9 @@ entity physical_1581_diag is
 
     -- WR_CTRL (0x9A) -> controller wr_precomp_mode_i
     wr_precomp_mode_o      : out std_logic_vector(1 downto 0);
+
+    -- -> controller dec_tol_off_i: '1' switches the decoder's tolerance for a weak sync byte off
+    dec_tol_off_o          : out std_logic := '0';
 
     -----------------------------------------------------------------------------
     -- QNICE interface (device C_DEV_C64_PHYS1581), no wait-state. Reads are a

@@ -189,6 +189,7 @@ entity physical_1581_controller is
     wr_deleted_i     : in  std_logic := '0';     -- DAM F8 instead of FB
     wr_precomp_i     : in  std_logic := '0';     -- precomp requested (WD P bit = 0)
     wr_precomp_mode_i: in  std_logic_vector(1 downto 0) := "00";  -- 0/3 follow wr_precomp_i, 1 off, 2 on (diag WR_CTRL)
+    dec_tol_off_i    : in  std_logic := '0';     -- '1': decoder without its tolerance for a weak sync byte (diag RD_CTRL)
     wbyte_data_i     : in  std_logic_vector(7 downto 0) := (others => '0');
     wbyte_empty_i    : in  std_logic := '1';
     wbyte_rd_o       : out std_logic := '0';
@@ -238,6 +239,7 @@ entity physical_1581_controller is
     diag_mark_fe_o      : out std_logic := '0';   -- 1-cycle pulse: qualified FE mark
     diag_mark_dam_o     : out std_logic := '0';   -- 1-cycle pulse: qualified FB/F8 mark
     diag_dam_unarmed_o  : out std_logic := '0';   -- pulse: DAM ignored (no ID/data lock-up)
+    diag_tol_hit_o      : out std_logic := '0';   -- pulse: the decoder used its tolerance for a weak sync byte
     diag_match_id_o     : out std_logic := '0';   -- 1-cycle pulse: requested sector ID matched
     diag_dam_miss_o     : out std_logic := '0';   -- 1-cycle pulse: matched ID had no DAM
     diag_rd_ahead_o     : out std_logic := '0';   -- 1-cycle pulse: a Read Sector was served from the read-ahead buffer
@@ -595,6 +597,7 @@ begin
   i_dec : entity work.physical_1581_mfm_decoder
     port map (
       clk_i => clk_i, rst_i => dec_rst, f_rdata_i => rdata_sync,
+      tol_off_i => dec_tol_off_i, tol_hit_o => diag_tol_hit_o,
       id_valid_o => id_valid, id_c_o => id_c, id_h_o => id_h, id_r_o => id_r,
       id_n_o => id_n, id_crc_ok_o => id_crc_ok, id_crc_stored_o => id_crc_stored,
       data_start_o => data_start, data_deleted_o => data_deleted,

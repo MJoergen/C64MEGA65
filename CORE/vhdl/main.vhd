@@ -672,6 +672,7 @@ architecture synthesis of main is
   signal   p1581_wr_busy         : std_logic;              -- controller -> iec_drive phys_wr_busy + diag
   signal   p1581_wr_ok           : std_logic;              -- controller -> diag
   signal   p1581_wr_precomp_mode : std_logic_vector(1 downto 0);  -- diag WR_CTRL -> controller
+  signal   p1581_dec_tol_off     : std_logic;              -- diag RD_CTRL -> controller -> decoder
   signal   p1581_f_wgate         : std_logic;              -- controller pins -> f_wgate_o / f_wdata_o + diag
   signal   p1581_f_wdata         : std_logic;
   -- write-path diagnostic taps (controller -> diag, both 50 MHz)
@@ -730,6 +731,7 @@ architecture synthesis of main is
   signal   p1581_diag_mark_fe      : std_logic;
   signal   p1581_diag_mark_dam     : std_logic;
   signal   p1581_diag_dam_unarmed  : std_logic;
+  signal   p1581_diag_tol_hit      : std_logic;
   signal   p1581_diag_match_id     : std_logic;
   signal   p1581_diag_dam_miss     : std_logic;
   signal   p1581_diag_rd_ahead      : std_logic;          -- a Read Sector was served from the read-ahead buffer (map v9)
@@ -2652,6 +2654,7 @@ begin
       wr_deleted_i     => p1581_wr_deleted,
       wr_precomp_i     => p1581_wr_precomp,
       wr_precomp_mode_i=> p1581_wr_precomp_mode,
+      dec_tol_off_i    => p1581_dec_tol_off,
       wbyte_data_i     => p1581_wbyte_data,
       wbyte_empty_i    => p1581_wbyte_empty,
       wbyte_rd_o       => p1581_wbyte_rd,
@@ -2691,6 +2694,7 @@ begin
       diag_mark_fe_o      => p1581_diag_mark_fe,
       diag_mark_dam_o     => p1581_diag_mark_dam,
       diag_dam_unarmed_o  => p1581_diag_dam_unarmed,
+      diag_tol_hit_o      => p1581_diag_tol_hit,
       diag_match_id_o     => p1581_diag_match_id,
       diag_dam_miss_o     => p1581_diag_dam_miss,
       diag_rd_ahead_o     => p1581_diag_rd_ahead,
@@ -2882,6 +2886,7 @@ begin
       mark_fe_i           => p1581_diag_mark_fe,
       mark_dam_i          => p1581_diag_mark_dam,
       dam_unarmed_i       => p1581_diag_dam_unarmed,
+      tol_hit_i           => p1581_diag_tol_hit,
       match_id_i          => p1581_diag_match_id,
       dam_miss_i          => p1581_diag_dam_miss,
 
@@ -2921,6 +2926,7 @@ begin
       dbg_wr_wp_i            => p1581_dbg_wr_wp_sd_s,
       dbg_wr_drop_i          => p1581_dbg_wr_drop_sd_s,
       wr_precomp_mode_o      => p1581_wr_precomp_mode,
+      dec_tol_off_o          => p1581_dec_tol_off,
 
       -- QNICE interface (from mega65.vhd core_specific_devices decode)
       qnice_ce_i        => phys_diag_ce_i,
