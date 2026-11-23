@@ -99,21 +99,23 @@ python3 -I $T/longseeks.py image.d81 60
 python3 -I -B $T/boot_timing.py <repository>/doc/dev-fdd/rom_emu
 ```
 
-## `format_stop/`: the sector header our decoder could not see (section 4)
+## `format_stop/`: the sector header our decoder could not see (section 4), and the decoder's tolerance for it
 
 | File | What it does |
 | --- | --- |
 | `scp.py` | reader for SuperCard Pro flux files and a simple MFM decoder; the other scripts use it |
 | `a1margins.py`, `a1profile.py`, `a1scan.py`, `idmargins.py` | the margin of every sync train of a capture against the decoder's thresholds (in half cells; below 0 means the decoder loses the sync byte) |
 | `window.py`, `outliers.py`, `sidestats.py`, `recwin.py` | raw flux intervals around a point of a track; flux quality per side and per sector |
-| `decmodel.py` | a model of the production decoder at the level of flux intervals, checked against the RTL on the failing track side; `survey` lists the headers the decoder cannot read on every side of a capture |
+| `decmodel.py` | a model of the production decoder at the level of flux intervals, checked against the RTL event for event (`rtlcmp.py`); without `--tol` it is the decoder with `tol_off_i` high (the decoder before the tolerance), with `--tol` the production rule (`TOL_PROD`); it also holds the variants that were evaluated (A with other options, B); `survey` lists the headers the decoder cannot read on every side of a capture |
 | `pllcheck.py` | the same track side decoded with a phase-tracking PLL of the kind the Greaseweazle software uses |
-| `relaxcheck.py` | on the model: what accepting an address mark after two sync bytes at exact spacing would recover, and whether it adds false marks |
+| `relaxcheck.py` | on the model: what accepting an address mark after two sync bytes at exact spacing would recover, and whether it adds false marks (the first look at variant A, on three captures) |
+| `tolsurvey.py`, `tolsum.py`, `tolsurvey/` | the decoder without its tolerance against the variants (A as built, A without its restrictions, B with the phase factor 0.7) on every side of a whole capture: fields decoded, gained, lost or changed, each gained field checked against the PLL of `pllcheck.py`, the uses of the tolerance, every train of two with what follows it, the margins of the real sync trains per byte, and the census of rewritten sectors; `tolsurvey/` holds the result of every capture of the issue and the table of `tolsum.py` |
+| `rtlcmp.py` | the RTL (`tb_flux_dec` log) against the model on the same edge file, event type by event type: same payloads, constant latency |
 | `romdiff.py` | the stock ROM against another 1581 ROM, by address range |
 | `exp_weak_id.py` | the genuine ROM formatting two cylinders with one header made unreadable after its Write Track: job result, retries, motor time |
 | `mkflux.py`, `f77h0.txt.gz` | writes the flux of one track side as edge times for the benches; the file is cylinder 77, side H=1, of the disk as the failed format left it (three revolutions of a formatted, empty track) |
-| `tb_flux_dec.vhd`, `evsum.py` | bench: the production decoder on such an edge file, with a summary of what it decoded per revolution |
-| `tb_flux_ctl.vhd`, `ctl_run.log` | bench: the production controller with decoder, read-ahead buffer and read FIFO on the same flux, replaying the verify of the failed format; the log of the run |
+| `tb_flux_dec.vhd`, `evsum.py` | bench: the production decoder on such an edge file, with a summary of what it decoded per revolution; `G_TOL_OFF=1` switches the tolerance off, every use is logged as `TOL` |
+| `tb_flux_ctl.vhd`, `ctl_run.log`, `ctl_run_tol.log` | bench: the production controller with decoder, read-ahead buffer and read FIFO on the same flux, replaying the verify of the failed format; `G_TOL_OFF=1` switches the tolerance off; the logs of the runs without (`ctl_run.log`) and with the tolerance |
 
 The capture is `G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp` from the attachment of the same name of comment 35.
 
@@ -126,24 +128,49 @@ python3 -I $T/decmodel.py survey capture.scp           # the headers the decoder
 python3 -I $T/mkflux.py capture.scp 77 0 f77h0.txt     # the file that is in this folder, gzipped
 python3 -I $T/mkflux.py capture.scp 77 0 f77h0_x4.txt --loops 4
 
-# the decoder alone (45 s): every revolution decodes the headers 1 2 3 4 5 6 8 9 10 and never 7
+# the decoder alone (45 s): with -gG_TOL_OFF=1 every revolution decodes the headers 1 2 3 4 5 6 8 9 10 and never 7;
+# with the tolerance (the default) all ten, sector 7 with one TOL event per revolution
 nvc --std=2008 -a $P/physical_1581_pkg.vhd $P/physical_1581_crc.vhd $P/physical_1581_mfm_gaps.vhd \
     $P/physical_1581_mfm_quantise.vhd $P/physical_1581_mfm_gaps_to_bits.vhd $P/physical_1581_mfm_bits_to_bytes.vhd \
     $P/physical_1581_mfm_decoder.vhd $T/tb_flux_dec.vhd -e -gG_IN=f77h0.txt -gG_OUT=events.txt tb_flux_dec -r
 python3 -I $T/evsum.py events.txt 9954550
 
 # controller, decoder and read-ahead buffer (7 minutes): Read Address finds sector 2, sector 3 is read live,
-# 4 to 6 come from the buffer, sector 7 ends with result 04 (record not found) after five index edges
+# 4 to 6 come from the buffer; with -gG_TOL_OFF=1 sector 7 ends with result 04 (record not found) after five
+# index edges (ctl_run.log), with the tolerance it comes from the buffer with result 00 (ctl_run_tol.log)
 nvc --std=2008 -a $P/physical_1581_pkg.vhd $P/physical_1581_crc.vhd $P/physical_1581_inputs.vhd \
     $P/physical_1581_mfm_gaps.vhd $P/physical_1581_mfm_quantise.vhd $P/physical_1581_mfm_gaps_to_bits.vhd \
     $P/physical_1581_mfm_bits_to_bytes.vhd $P/physical_1581_mfm_decoder.vhd $P/physical_1581_mfm_encoder.vhd \
     $P/physical_1581_writer.vhd $P/physical_1581_rdahead.vhd $P/physical_1581_rdfifo.vhd \
-    $P/physical_1581_controller.vhd $T/tb_flux_ctl.vhd -e -gG_IN=f77h0_x4.txt tb_flux_ctl -r
+    $P/physical_1581_controller.vhd $T/tb_flux_ctl.vhd -e -gG_IN=f77h0_x4.txt -gG_REV_CYC=9954565 tb_flux_ctl -r
+# G_REV_CYC = 9954565 is the mean revolution of the looped file ((29863795 - 100) / 3, from the output of mkflux.py);
+# add -gG_TOL_OFF=1 for the decoder without its tolerance
 
 python3 -I -B $T/exp_weak_id.py                        # the DOS side: error 20 without a retry
 ```
 
-Both benches were run from this folder against the RTL of the repository, with the results given in the comments above. For a change of the decoder, `tb_flux_dec` on `f77h0.txt` is the case that has to turn from "never 7" into all ten headers.
+Both benches were run from this folder against the RTL of the repository. With `-gG_TOL_OFF=1` the decoder is the decoder before the tolerance: its `tb_flux_dec` log on `f77h0.txt` is byte for byte that of the commit before, and its `tb_flux_ctl` run reproduces `ctl_run.log`.
+
+The tolerance for a weak first sync byte (change 3 of `doc/dev-fdd/ISSUE257-PART-E-FIXES.md`) was chosen and checked with these commands; the captures are the attachments of comments 18, 30, 34 and 35:
+
+```text
+python3 -I -B $T/tolsurvey.py G5-format.txt capture.scp     # one capture, all sides, all variants (10 to 20 minutes)
+python3 -I -B $T/tolsurvey.py out.txt capture.scp --cyl 77-77 --quick   # one cylinder, the production rule only
+python3 -I -B $T/tolsum.py tolsurvey/*.txt                  # the table over all captures (tolsurvey/SUMMARY.txt)
+python3 -I -B $T/decmodel.py side capture.scp 77 0 --tol --list   # the model with the production rule, event list
+
+# model against RTL on one track side: the edge file, the bench with and without the tolerance, the comparison
+python3 -I $T/mkflux.py capture.scp 39 0 edges.txt
+nvc --std=2008 -a <the seven decoder files as above> $T/tb_flux_dec.vhd \
+    -e -gG_IN=edges.txt -gG_OUT=ev_on.txt tb_flux_dec -r
+nvc --std=2008 -e -gG_IN=edges.txt -gG_OUT=ev_off.txt -gG_TOL_OFF=1 tb_flux_dec -r
+python3 -I -B $T/rtlcmp.py edges.txt ev_on.txt on          # RESULT: AGREE
+python3 -I -B $T/rtlcmp.py edges.txt ev_off.txt off
+```
+
+`ev_off.txt` is byte for byte the log of the decoder before the tolerance on the same edge file; `tolsurvey/RTL_SAMPLES.txt` lists the track sides on which this was run and the results.
+
+The result on the twelve captures (`tolsurvey/SUMMARY.txt`): without the tolerance the decoder reads 50,877 IDs and 49,597 data fields, all with a good CRC; 9,894 of the sectors were rewritten one at a time by the core and carry its write splices. The rule as built (variant A) adds the ID and the data field of sector 7 of cylinder 77, H=1, of the failed format in each of the three revolutions, every one confirmed by the PLL, and loses or changes nothing: 3 uses. In all twelve captures there are four trains of two: the three of that header and one followed by a byte that is three or more bits away from FE, FB and F8. A without its restrictions gives the same fields. Variant B (the gap near a midpoint decided by its phase, factor 0.7, within 25 cycles of the midpoint) reads that header in one revolution of three and changes the class of 16,407 intervals elsewhere. Of the 88,457 sync trains that follow a zero run, the only bytes within 0.10 half cells of a midpoint are the first sync bytes of the three trains of that header and the third sync byte of the track information mark (`A1 A1 A1 65`) of cylinder 36, H=0, of the 11-sector disk G3 (in both of its reads), which is not a sector field.
 
 ## `dos_behavior/`: orphan blocks and the number of sector writes (sections 5 and 6)
 

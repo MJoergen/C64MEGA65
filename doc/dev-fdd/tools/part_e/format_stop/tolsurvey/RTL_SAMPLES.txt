@@ -1,0 +1,134 @@
+tb_flux_dec on 26 track sides, two revolutions each (mkflux.py --revs 2): the decoder with its tolerance (on),
+with tol_off_i high (off) and the decoder of commit 365a783, before the tolerance (HEAD); rtlcmp.py compares
+on and off with the model (decmodel.py: TOL_PROD and no tolerance), cmp compares the logs of off and HEAD byte for byte.
+
+sample fmt_c77h0: G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp cyl 77 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     230 events)
+events: on      236, TOL 2, IDs on 20 off 18, DEND on 20 off 18
+sample fmt_c78h0: G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp cyl 78 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     250 events)
+events: on      250, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample fmt_c00h1: G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp cyl 0 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     240 events)
+events: on      240, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g3c_c36h1: G3-after-C-R3A-R6drive-A25.scp cyl 36 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     278 events)
+events: on      278, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample g3c_c39h0: G3-after-C-R3A-R6drive-A25.scp cyl 39 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     262 events)
+events: on      262, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample g3c_c40h0: G3-after-C-R3A-R6drive-A25.scp cyl 40 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     290 events)
+events: on      290, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample g4e4_c39h1: G4-after-E4-JiffyDOS-R3A-R6drive-A25.scp cyl 39 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     262 events)
+events: on      262, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g4e4_c41h0: G4-after-E4-JiffyDOS-R3A-R6drive-A25.scp cyl 41 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     252 events)
+events: on      252, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample fmt_c74h0: G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp cyl 74 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     240 events)
+events: on      240, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g3c_c38h1: G3-after-C-R3A-R6drive-A25.scp cyl 38 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     286 events)
+events: on      286, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample g4_c39h0: G4-R3A-R6drive-A25.scp cyl 39 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     240 events)
+events: on      240, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g4_c40h1: G4-R3A-R6drive-A25.scp cyl 40 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     250 events)
+events: on      250, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3d_c39h0: G5-after-E3-DraCopy-R3A-R6drive-A25.scp cyl 39 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     274 events)
+events: on      274, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3d_c38h1: G5-after-E3-DraCopy-R3A-R6drive-A25.scp cyl 38 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     262 events)
+events: on      262, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3m_c41h0: G5-after-E3-files-MFCWT-R3A-R6drive-A25.scp cyl 41 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     261 events)
+events: on      261, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3f_c39h0: G5-after-E3-files-DraCopy-R3A-R6drive-A25.scp cyl 39 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     242 events)
+events: on      242, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3f_c56h0: G5-after-E3-files-DraCopy-R3A-R6drive-A25.scp cyl 56 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     264 events)
+events: on      264, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e4f_c40h0: G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25.scp cyl 40 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     251 events)
+events: on      251, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g1_c79h0: G1-R3A-R6drive-A25.scp cyl 79 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     272 events)
+events: on      272, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample g3_c39h0: G3-R3A-R6drive-A25.scp cyl 39 head 0
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     262 events)
+events: on      262, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample f4_c79h1: F4.scp cyl 79 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     242 events)
+events: on      242, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e3m_c39h1: G5-after-E3-files-MFCWT-R3A-R6drive-A25.scp cyl 39 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     271 events)
+events: on      271, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e4d_c39h1: G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25.scp cyl 39 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     259 events)
+events: on      259, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g5e4f_c07h1: G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25.scp cyl 7 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     254 events)
+events: on      254, TOL 0, IDs on 20 off 20, DEND on 20 off 20
+sample g1_c39h1: G1-R3A-R6drive-A25.scp cyl 39 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     285 events)
+events: on      285, TOL 0, IDs on 22 off 22, DEND on 20 off 20
+sample f4_c20h1: F4.scp cyl 20 head 1
+model vs RTL, tolerance on : RESULT: AGREE
+model vs RTL, tolerance off: RESULT: AGREE
+off vs HEAD: IDENTICAL (     242 events)
+events: on      242, TOL 0, IDs on 20 off 20, DEND on 20 off 20

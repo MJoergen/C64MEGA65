@@ -7,6 +7,8 @@
 -- tb_physical_1581_rdseq. Sequence as in the dump: Read Address, then Read
 -- Sector R+1 ... up to sector 7, then G_EXTRA_REVS revolutions idle with the
 -- motor on. Logs every request/result and the decoder counters per phase.
+-- G_TOL_OFF = 1 switches the decoder's tolerance for a weak first sync byte
+-- off (dec_tol_off_i); "tol" counts diag_tol_hit_o.
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -16,7 +18,8 @@ use work.physical_1581_pkg.all;
 
 entity tb_flux_ctl is
   generic (G_IN : string := "flux.txt"; G_REV_CYC : natural := 9954550;
-           G_LAST : integer := 7; G_EXTRA_REVS : integer := 2);
+           G_LAST : integer := 7; G_EXTRA_REVS : integer := 2;
+           G_TOL_OFF : natural := 0);
 end entity;
 
 architecture sim of tb_flux_ctl is
@@ -59,10 +62,13 @@ architecture sim of tb_flux_ctl is
   signal d_rd_ahead, d_rd_ahead_drop, d_idx, d_match, d_dmiss : std_logic;
   signal d_cand, d_rej, d_train, d_fe, d_dam, d_unarm, d_gerr, d_idv : std_logic;
   signal n_ahead, n_drop, n_idx, n_match, n_dmiss : integer := 0;
+  signal tol_off, d_tol : std_logic := '0';
+  signal n_tol : integer := 0;
   signal n_cand, n_rej, n_train, n_fe, n_dam, n_unarm, n_gerr, n_idv : integer := 0;
 begin
   clk   <= not clk   after 10 ns;
   rdclk <= not rdclk after 15859 ps;
+  tol_off <= '1' when G_TOL_OFF /= 0 else '0';
 
   dut : entity work.physical_1581_controller
     generic map (G_CAPABLE => true)
@@ -86,7 +92,8 @@ begin
       diag_index_qual_o => d_idx, diag_match_id_o => d_match, diag_dam_miss_o => d_dmiss,
       diag_a1_candidate_o => d_cand, diag_a1_reject_o => d_rej, diag_a1_train_o => d_train,
       diag_mark_fe_o => d_fe, diag_mark_dam_o => d_dam, diag_dam_unarmed_o => d_unarm,
-      diag_gap_error_o => d_gerr, diag_id_valid_o => d_idv
+      diag_gap_error_o => d_gerr, diag_id_valid_o => d_idv,
+      dec_tol_off_i => tol_off, diag_tol_hit_o => d_tol
     );
 
   i_fifo : entity work.physical_1581_rdfifo
@@ -113,6 +120,7 @@ begin
       if d_unarm = '1' then n_unarm <= n_unarm + 1; end if;
       if d_gerr = '1' then n_gerr <= n_gerr + 1; end if;
       if d_idv = '1' then n_idv <= n_idv + 1; end if;
+      if d_tol = '1' then n_tol <= n_tol + 1; end if;
     end if;
   end process;
 
@@ -169,7 +177,7 @@ begin
         & " unarmed=" & integer'image(n_unarm) & " match=" & integer'image(n_match)
         & " dam_miss=" & integer'image(n_dmiss) & " rej=" & integer'image(n_rej)
         & " gaperr=" & integer'image(n_gerr) & " ahead=" & integer'image(n_ahead)
-        & " drop=" & integer'image(n_drop);
+        & " drop=" & integer'image(n_drop) & " tol=" & integer'image(n_tol);
     end procedure;
 
     procedure wd_op(op : std_logic_vector(2 downto 0); trk, secn : integer) is

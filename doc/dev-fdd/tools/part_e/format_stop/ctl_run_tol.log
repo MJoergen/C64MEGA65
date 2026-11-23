@@ -1,0 +1,33 @@
+** Note: 201073310ns+0: before RA: idx=2 cand=62 train=20 FE=10 IDdec=11 DAM=10 unarmed=0 match=0 dam_miss=0 rej=0 gaperr=0 ahead=0 drop=0 tol=1
+   Procedure COUNTERS [STRING] at ../tb_flux_ctl.vhd:172
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:231
+** Note: 220388670ns+0: RA result 00 C=77 H=1 R=2
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 257463610ns+0: RS 3: result 00 rnf='0' crc='0' CHR=77/1/3 took 34650940000000 fs, index edges 0, from buffer false
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 277016970ns+0: RS 4: result 00 rnf='0' crc='0' CHR=77/1/4 took 3084540000000 fs, index edges 0, from buffer true
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 296409350ns+0: RS 5: result 00 rnf='0' crc='0' CHR=77/1/5 took 2923560000000 fs, index edges 0, from buffer true
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 315904770ns+0: RS 6: result 00 rnf='0' crc='0' CHR=77/1/6 took 3026600000000 fs, index edges 0, from buffer true
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 335553230ns+0: RS 7: result 00 rnf='0' crc='0' CHR=77/1/7 took 3179640000000 fs, index edges 0, from buffer true
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 352021866ns+0: after the last Read Sector: idx=2 cand=106 train=34 FE=16 IDdec=18 DAM=18 unarmed=1 match=5 dam_miss=0 rej=0 gaperr=0 ahead=4 drop=0 tol=2
+   Procedure COUNTERS [STRING] at ../tb_flux_ctl.vhd:172
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:257
+** Note: 551112866ns+0: motor on, one more revolution: idx=3 cand=165 train=53 FE=25 IDdec=28 DAM=28 unarmed=1 match=5 dam_miss=0 rej=0 gaperr=0 ahead=4 drop=0 tol=3
+   Procedure COUNTERS [STRING] at ../tb_flux_ctl.vhd:172
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:260
+** Note: 750203866ns+0: motor on, one more revolution: idx=4 cand=224 train=72 FE=34 IDdec=38 DAM=38 unarmed=1 match=5 dam_miss=0 rej=0 gaperr=1 ahead=4 drop=0 tol=4
+   Procedure COUNTERS [STRING] at ../tb_flux_ctl.vhd:172
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:260
+** Note: 750203866ns+0: nonzero bytes presented: 0
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 750203866ns+0: END
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:162
+** Note: 750203866ns+0: FINISH called
+   Procedure FINISH [] at lib/std.08/env-body.vhd:42
+   Process :tb_flux_ctl:stim at ../tb_flux_ctl.vhd:264
+EXIT 0
+Mo. 23 Nov. 2026 23:57:34 CET

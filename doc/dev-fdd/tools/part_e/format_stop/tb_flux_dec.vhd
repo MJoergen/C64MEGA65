@@ -2,6 +2,10 @@
 -- line, from tools/mkflux.py) into an unmodified copy of the production
 -- physical_1581_mfm_decoder and logs every record event (issue #257, part E).
 -- A line "R <cycle>" asserts the decoder reset for 1 clock at that cycle.
+-- G_TOL_OFF = 1 drives tol_off_i high (the decoder without its tolerance for
+-- a weak first sync byte); every tol_hit_o pulse is logged as "TOL <cycle>".
+-- The decoder of commit 5338987 (ports without function) runs on this bench
+-- too: it ignores tol_off_i and never pulses tol_hit_o.
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -9,7 +13,8 @@ use std.textio.all;
 use work.physical_1581_pkg.all;
 
 entity tb_flux_dec is
-  generic (G_IN : string := "flux.txt"; G_OUT : string := "events.txt");
+  generic (G_IN : string := "flux.txt"; G_OUT : string := "events.txt";
+           G_TOL_OFF : natural := 0);
 end entity;
 
 architecture sim of tb_flux_dec is
@@ -23,13 +28,16 @@ architecture sim of tb_flux_dec is
   signal id_c, id_h, id_r, id_n, data_byte : unsigned(7 downto 0);
   signal id_crc_stored, last_gap, crc_value : unsigned(15 downto 0);
   signal locked, gap_err, runt, a1c, a1rej, a1tr, mfe, mdam, dunarm : std_logic;
+  signal tol_off, tol_hit : std_logic := '0';
   signal est : unsigned(11 downto 0);
 begin
   clk <= not clk after 10 ns when not done;
+  tol_off <= '1' when G_TOL_OFF /= 0 else '0';
 
   dut : entity work.physical_1581_mfm_decoder
     port map (
       clk_i => clk, rst_i => rst, f_rdata_i => rdata,
+      tol_off_i => tol_off, tol_hit_o => tol_hit,
       id_valid_o => id_valid, id_c_o => id_c, id_h_o => id_h, id_r_o => id_r,
       id_n_o => id_n, id_crc_ok_o => id_crc_ok, id_crc_stored_o => id_crc_stored,
       data_start_o => data_start, data_deleted_o => data_deleted,
@@ -107,6 +115,7 @@ begin
       if a1tr = '1' then write(l, string'("T ")); write(l, cyc); writeline(fout, l); end if;
       if gap_err = '1' then write(l, string'("GE ")); write(l, cyc); write(l, string'(" gap=")); write(l, to_integer(last_gap)); writeline(fout, l); end if;
       if runt = '1' then write(l, string'("RUNT ")); write(l, cyc); writeline(fout, l); end if;
+      if tol_hit = '1' then write(l, string'("TOL ")); write(l, cyc); writeline(fout, l); end if;
     end if;
   end process;
 end architecture;
