@@ -1,9 +1,9 @@
 -------------------------------------------------------------------------------
 -- tb_physical_1581_quantise_ab.vhd   (issue #90 rounds 12 through 14)
 --
--- A/B margin harness: SEVEN complete decoders run in parallel on
+-- A/B margin harness: EIGHT complete decoders run in parallel on
 -- identical stress flux, so every trial reports one row of
---   old | r12 | r13 | prod | tacq | spanoff | seqoff
+--   old | r12 | r13 | prod | tacq | spanoff | seqoff | toloff
 --
 --   * old  = the pre-round-12 FIXED-WINDOW classifier (library q_old = the
 --            production sources with the test-only ref_mfm_quantise_fixed.vhd
@@ -30,6 +30,10 @@
 --   * seqoff = exact commit-0ab9f92 production semantics: complete-A1 span
 --              qualification, but no ID-before-DAM record sequencing. Kept
 --              to reproduce the new hardware failure upper bound.
+--   * toloff = production with tol_off_i high: the decoder without its
+--              tolerance for a weak first sync byte (issue #257 part E),
+--              i.e. production of the commits before the tolerance. prod
+--              must pass every row that toloff passes.
 --
 -- Build (three libraries, SEPARATE workdirs -- the per-library object files
 -- share basenames and would overwrite each other in a shared directory):
@@ -89,6 +93,12 @@
 --                                      production must reject the false DAM,
 --                                      retain the ID arm and accept the real
 --                                      stock/F011 twelve-zero data lock-up.
+--   (x)    WEAK FIRST SYNC BYTE       -- the first A1 of the ID train, or of
+--                                      the data train, displaced like the
+--                                      recorded ID of issue #257 part E
+--                                      (A1_WEAK): its long interval reads
+--                                      as medium. prod must decode, toloff
+--                                      must fail (the tolerance's own rows).
 --
 -- ACCEPTANCE (all machine-checked at the end):
 --   * canonical decodes byte-exact on old, r12, r13 and production;
@@ -109,6 +119,9 @@
 --     false-A1 mechanism;
 --   * the tacq instance fails at least one must_new peak/combo row -- the
 --     recorded refutation of the tight-acquisition fix candidate;
+--   * the tolerance never costs a row: no trial where toloff succeeds and
+--     production fails; the weak-first-sync-byte rows pass in production and
+--     fail in toloff;
 --   * SILENT-CORRUPTION GUARD: any CRC-approved decode (any instance, any
 --     trial) whose ID fields or payload differ from the golden record is a
 --     FATAL failure -- CRC-caught corruption is acceptable, silent wrong
@@ -137,7 +150,7 @@ architecture sim of tb_physical_1581_quantise_ab is
 
   constant NAME_LEN : integer := 26;
   constant MAXT     : integer := 6144;   -- max flux transitions per record
-  constant NDUT     : integer := 7;      -- 0=old 1=r12 2=r13 3=prod 4=tacq 5=spanoff 6=seqoff
+  constant NDUT     : integer := 8;      -- 0=old 1=r12 2=r13 3=prod 4=tacq 5=spanoff 6=seqoff 7=toloff
 
   type int_arr  is array (natural range <>) of integer;
   type real_arr is array (natural range <>) of real;
@@ -203,8 +216,9 @@ architecture sim of tb_physical_1581_quantise_ab is
   type res_rec is record
     name    : string(1 to NAME_LEN);
     fam     : integer;   -- 0 can / 1 speed / 2 drift / 3 jit / 4 peak+combo
-                         -- / 6 art / 7 splice / 8 junk
-    ok      : boolean_vector(0 to NDUT - 1);   -- old/r12/r13/prod/tacq/spanoff/seqoff
+                         -- / 6 art / 7 splice / 8 junk / 9 F011
+                         -- / 10 weak first sync byte
+    ok      : boolean_vector(0 to NDUT - 1);   -- old/r12/r13/prod/tacq/spanoff/seqoff/toloff
     must_n  : boolean;
     emin    : integer;   -- production-side est excursion (integer cycles)
     emax    : integer;
@@ -232,7 +246,8 @@ architecture sim of tb_physical_1581_quantise_ab is
       when 3      => return "prod";
       when 4      => return "tacq";
       when 5      => return "spanoff";
-      when others => return "seqoff";
+      when 6      => return "seqoff";
+      when others => return "toloff";
     end case;
   end function;
 
@@ -241,7 +256,7 @@ begin
   clk <= not clk after 10 ns;   -- 50 MHz
 
   ---------------------------------------------------------------------------
-  -- the seven decoders under test, same flux
+  -- the eight decoders under test, same flux
   ---------------------------------------------------------------------------
   -- 0: pre-round-12 fixed windows (exact round-11: no sync gate)
   dut_old : entity q_old.physical_1581_mfm_decoder
@@ -338,6 +353,18 @@ begin
       locked_o => d_lock(6), gap_error_o => d_gerr(6)
     );
 
+  -- 7: production without its tolerance for a weak first sync byte
+  dut_toloff : entity q_new.physical_1581_mfm_decoder
+    port map (
+      clk_i => clk, rst_i => rst, f_rdata_i => f_rdata, tol_off_i => '1',
+      id_valid_o => d_id_valid(7), id_c_o => d_idc(7), id_h_o => d_idh(7),
+      id_r_o => d_idr(7), id_n_o => d_idn(7), id_crc_ok_o => d_id_crc_ok(7),
+      data_start_o => d_data_start(7), data_byte_o => d_byte(7),
+      data_byte_valid_o => d_bytev(7), data_end_o => d_data_end(7),
+      data_crc_ok_o => d_data_crc_ok(7),
+      locked_o => d_lock(7), gap_error_o => d_gerr(7)
+    );
+
   ---------------------------------------------------------------------------
   -- quantiser probe instances (single-gap decision table)
   ---------------------------------------------------------------------------
@@ -423,6 +450,8 @@ begin
     variable prev        : std_logic := '0';
     variable art_after_t : integer := -1;   -- artifact goes into the gap after this transition
     variable splice_t    : integer := -1;   -- speed step applies from this transition on
+    variable wk_id_t     : integer := -1;   -- first transition of the ID's first A1
+    variable wk_dat_t    : integer := -1;   -- first transition of the data field's first A1
     variable crcv        : unsigned(15 downto 0);
 
     -- rng
@@ -432,7 +461,7 @@ begin
     -- results
     variable res   : res_arr;
     variable nres  : integer := 0;
-    variable wins  : int_arr(0 to 9) := (others => 0);   -- production-over-old wins per family
+    variable wins  : int_arr(0 to 10) := (others => 0);  -- production-over-old wins per family
     variable fails : integer := 0;
     variable tacq_peak_fails : integer := 0;
 
@@ -509,6 +538,7 @@ begin
         if k = 7 then art_after_t := nt - 1; end if;
         enc_byte(x"00");
       end loop;
+      wk_id_t := nt;
       enc_a1; enc_a1; enc_a1;
       enc_byte(x"FE");
       enc_byte(TC); enc_byte(TH); enc_byte(TR); enc_byte(TN);
@@ -538,6 +568,7 @@ begin
         if k = 7 then splice_t := nt; end if;
         enc_byte(x"00");
       end loop;
+      wk_dat_t := nt;
       enc_a1; enc_a1; enc_a1;
       enc_byte(x"FB");
       crcv := x"FFFF";
@@ -594,7 +625,8 @@ begin
       seed         : integer;
       junk         : integer := -1;      -- <0 none; 100+s rand; 200+s chain; 300+s spaced
       exp_r12_fail : boolean := false;   -- junk-chain: r12 MUST fail (regression proof)
-      exp_seqoff_fail : boolean := false -- timing-valid unsolicited DAM: 0ab9f92 MUST fail
+      exp_seqoff_fail : boolean := false; -- timing-valid unsolicited DAM: 0ab9f92 MUST fail
+      weak         : integer := 0        -- 1: first A1 of the ID weak, 2: of the data field
     ) is
       variable t   : real_arr(0 to MAXT - 1);
       variable sh  : real_arr(0 to MAXT - 1);
@@ -637,6 +669,17 @@ begin
           sh(j) := t(j);
         end if;
       end loop;
+
+      -- 2b) a weak first sync byte: its five transitions displaced like
+      --     A1_WEAK (+470, -650, +100, -100, -500 ns), in cycles
+      if weak /= 0 then
+        if weak = 1 then ne := wk_id_t; else ne := wk_dat_t; end if;
+        sh(ne)     := sh(ne)     + 23.5;
+        sh(ne + 1) := sh(ne + 1) - 32.5;
+        sh(ne + 2) := sh(ne + 2) + 5.0;
+        sh(ne + 3) := sh(ne + 3) - 5.0;
+        sh(ne + 4) := sh(ne + 4) - 25.0;
+      end if;
 
       -- 3) independent per-edge jitter
       if jit > 0 then
@@ -817,9 +860,20 @@ begin
       if okv(3) and not okv(0) then
         wins(fam) := wins(fam) + 1;
       end if;
+      if weak /= 0 then
+        if not okv(3) then
+          report "FAIL: weak-sync trial " & name & " not decoded by production" severity error;
+          fails := fails + 1;
+        end if;
+        if okv(7) then
+          report "FAIL: weak-sync trial " & name & " decoded without the tolerance"
+               & " (the vector does not exercise it)" severity error;
+          fails := fails + 1;
+        end if;
+      end if;
       report "TRIAL " & pad(name) & " old=" & pf(okv(0)) & " r12=" & pf(okv(1))
            & " r13=" & pf(okv(2)) & " prod=" & pf(okv(3)) & " tacq=" & pf(okv(4))
-           & " spanoff=" & pf(okv(5)) & " seqoff=" & pf(okv(6))
+           & " spanoff=" & pf(okv(5)) & " seqoff=" & pf(okv(6)) & " toloff=" & pf(okv(7))
            & "  est=[" & integer'image(n_est_min / 16) & ".." & integer'image((n_est_max + 15) / 16) & "]";
     end procedure;
 
@@ -961,6 +1015,11 @@ begin
 
     run_trial("splice +2.5% step",  7, M_SPLICE,  1.000, 1.025,  0,  0, false, true, 38);
 
+    -- the weak first sync byte of issue #257 part E (family 10)
+    run_trial("weak 1st A1 of ID",  10, M_UNIFORM, 1.000, 1.000,  0,  0, false, true, 56, weak => 1);
+    run_trial("weak 1st A1 of data", 10, M_UNIFORM, 1.000, 1.000, 0,  0, false, true, 57, weak => 2);
+    run_trial("weak 1st A1 ID S15", 10, M_UNIFORM, 1.000, 1.000,  0, 15, false, true, 58, weak => 1);
+
     ---------------------------------------------------------------------
     -- PHASE 1b: write-splice junk trials (round 13). The rand profile is
     -- the naive model (too tame -- everyone survives, kept as evidence of
@@ -980,12 +1039,12 @@ begin
     ---------------------------------------------------------------------
     -- PHASE 2: table + acceptance
     ---------------------------------------------------------------------
-    report "==== A/B RESULT TABLE (old | r12 | r13 | prod | tacq | spanoff | seqoff) ====";
+    report "==== A/B RESULT TABLE (old | r12 | r13 | prod | tacq | spanoff | seqoff | toloff) ====";
     for k in 0 to nres - 1 loop
       report res(k).name & " | old=" & pf(res(k).ok(0)) & " | r12=" & pf(res(k).ok(1))
            & " | r13=" & pf(res(k).ok(2)) & " | prod=" & pf(res(k).ok(3))
            & " | tacq=" & pf(res(k).ok(4)) & " | spanoff=" & pf(res(k).ok(5))
-           & " | seqoff=" & pf(res(k).ok(6))
+           & " | seqoff=" & pf(res(k).ok(6)) & " | toloff=" & pf(res(k).ok(7))
            & " | est " & integer'image(res(k).emin) & ".." & integer'image(res(k).emax);
     end loop;
 
@@ -996,6 +1055,11 @@ begin
       end if;
       if res(k).must_n and not res(k).ok(3) then
         report "FAIL (must_new): " & res(k).name & " production did not decode" severity error;
+        fails := fails + 1;
+      end if;
+      if res(k).ok(7) and not res(k).ok(3) then
+        report "FAIL (TOLERANCE REGRESSION): " & res(k).name
+             & " toloff passed, production failed" severity error;
         fails := fails + 1;
       end if;
       -- Keep the round-13 hardware failure live: every source-derived F011 ID

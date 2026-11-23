@@ -35,6 +35,17 @@ package mfm_flux_gen_pkg is
   -- Emit a missing-clock A1 sync byte; leaves prev_data = '1'.
   procedure mfm_a1(signal rdata : out std_logic; prev_data : inout std_logic);
 
+  -- Emit a missing-clock A1 whose five flux transitions (half-cells 1, 5, 8,
+  -- 12 and 15 of raw 0x4489) are displaced by d(1) .. d(5) (positive = later):
+  -- the peak shift of one weak recording. A1_WEAK reproduces the first sync
+  -- byte of the ID of sector 7, cylinder 77, H=1 of issue #257 part E: after
+  -- a 00 byte its intervals are 6.47, 6.88, 6.75, 7.80 and 5.60 us, and the
+  -- 6.88 us long interval falls below the midpoint 3.5 * 2 us.
+  type a1_shift_t is array (1 to 5) of time;
+  constant A1_WEAK : a1_shift_t := (470 ns, -650 ns, 100 ns, -100 ns, -500 ns);
+  procedure mfm_a1_shift(signal rdata : out std_logic; prev_data : inout std_logic;
+                         d : in a1_shift_t);
+
   -- Emit one data byte like mfm_byte, but inject a RUNT double edge right
   -- after the byte's first flux transition: the legitimate low pulse is split
   -- by a 60 ns glitchy high spike, so a spurious second falling edge follows
@@ -152,6 +163,25 @@ package body mfm_flux_gen_pkg is
       mfm_halfcell(rdata, MFM_A1_RAW(i));
     end loop;
     prev_data := '1';              -- A1 data = 0xA1, last data bit = 1
+  end procedure;
+
+  procedure mfm_a1_shift(signal rdata : out std_logic; prev_data : inout std_logic;
+                         d : in a1_shift_t) is
+    type pos_t is array (1 to 5) of natural;
+    constant POS : pos_t := (1, 5, 8, 12, 15);
+    variable t_now : time := 0 ns;              -- relative to the byte start
+    variable t_k   : time;
+  begin
+    for k in 1 to 5 loop
+      t_k := POS(k) * MFM_HALF_CELL + d(k);
+      wait for t_k - t_now;
+      rdata <= '0';
+      wait for MFM_LOW_WIDTH;
+      rdata <= '1';
+      t_now := t_k + MFM_LOW_WIDTH;
+    end loop;
+    wait for 16 * MFM_HALF_CELL - t_now;
+    prev_data := '1';
   end procedure;
 
   procedure mfm_byte_runt(signal rdata : out std_logic;

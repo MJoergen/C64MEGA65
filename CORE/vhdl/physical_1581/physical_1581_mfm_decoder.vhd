@@ -15,6 +15,7 @@
 -- CRC coverage: reset at the first of the three A1 syncs, then A1,A1,A1 are fed
 -- synthetically (bits_to_bytes signals A1 via sync_o, not a byte), then the mark
 -- byte and every field/data byte and the two stored CRC bytes; residue 0 == good.
+-- After a train of two (see below) the third A1 is fed just before the mark.
 --
 -- SYNC-TRAIN QUALIFIER (issue #90 rounds 14/15): the adaptive quantiser remains
 -- deliberately tolerant, but a field boundary is accepted only after three
@@ -25,6 +26,32 @@
 -- the address-mark train itself and is formatter-independent: stock 1581
 -- media have 12 x 00 before an ID, while the MEGA65 F011 formatter writes an
 -- ID immediately after 4E gap bytes. Both still contain the same A1 train.
+--
+-- TOLERANCE FOR A WEAK FIRST SYNC BYTE (issue #257): one flux interval of the
+-- first A1 that falls on the wrong side of a midpoint (peak shift of one weak
+-- recording) removes the candidate of that byte, and the two that remain do
+-- not make a train of three. While the parser is idle and tol_off_i is low,
+-- the byte after a train of two (two candidates at the exact spacing, the
+-- second A1 and the third) is accepted as the mark:
+--   * FE always. Such an ID is reported only with a good CRC; with a bad one
+--     it leaves no trace (no id_valid_o, data arm and N unchanged), so a false
+--     mark of this kind can neither end a Read Address with a CRC error nor
+--     disarm the data field of the ID before it.
+--   * FB/F8 only after a CRC-valid ID and with the zero run ending
+--     C_QUANT_SYNC_LAT + 1 .. C_QUANT_SYNC_LAT + C_QUANT_A1_SPACING gaps before
+--     the first candidate of the pair: the window of a train of three, moved
+--     by the five gaps of the weak byte. A pair right after the zero run is
+--     the start of a train, never a complete one.
+-- The CRC receives the A1 of the weak byte before the mark, so the field is
+-- checked exactly as after three. A train of two never re-anchors an open
+-- field. A weak second or third sync byte is not tolerated: after a weak
+-- second byte a byte completes between the two remaining candidates, after a
+-- weak third byte the byte after the pair is the damaged A1, not the mark.
+-- The diagnostic pulses a1_candidate_o, a1_train_o, mark_fe_o, mark_dam_o
+-- and dam_unarmed_o concern candidates and trains of three exactly as without
+-- the tolerance; tol_hit_o pulses once per mark accepted on a train of two.
+-- The tolerance exists only with the production values of the sync
+-- generics; the historical columns of the A/B harness keep their behavior.
 --
 -- A timing-valid splice can nevertheless contain a complete A1-like train.
 -- Therefore production also enforces the IBM/WD record grammar: a DAM is
@@ -64,8 +91,9 @@ entity physical_1581_mfm_decoder is
     rst_i             : in  std_logic;                    -- sync reset / invalidate
     f_rdata_i         : in  std_logic;                    -- pre-synchronized active-low flux
 
-    -- tolerance for a weak sync byte (issue #257): '1' switches it off, the
-    -- decoder then accepts a mark only after three sync bytes; quasi-static
+    -- tolerance for a weak first sync byte (issue #257, see header): '1'
+    -- switches it off, the decoder then accepts a mark only after three sync
+    -- bytes and is identical to the decoder without the tolerance; quasi-static
     tol_off_i         : in  std_logic := '0';
 
     -- decoded ID (address-mark) field
@@ -95,7 +123,7 @@ entity physical_1581_mfm_decoder is
     mark_fe_o         : out std_logic := '0';             -- pulse: qualified train followed by FE
     mark_dam_o        : out std_logic := '0';             -- pulse: qualified train followed by FB/F8
     dam_unarmed_o     : out std_logic := '0';             -- pulse: DAM ignored without valid ID/data lock-up
-    tol_hit_o         : out std_logic := '0';             -- pulse: the tolerance for a weak sync byte was used
+    tol_hit_o         : out std_logic := '0';             -- pulse: a mark accepted on a train of two (weak first sync byte)
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     -- read-only diagnostic tap (issue #90): the live CRC-16 running value. At an
     -- id_valid_o / data_end_o pulse this is the CRC residue of the just-checked
@@ -146,6 +174,24 @@ architecture rtl of physical_1581_mfm_decoder is
   -- Captured at the first A1 of a production train. This is separate from
   -- sync qualification so F011 ID fields remain legal without a zero run.
   signal data_preamble_ok : std_logic := '0';
+  -- Captured with it for a data mark on a train of two (weak first A1): the
+  -- zero run ended C_QUANT_SYNC_LAT + 1 .. C_QUANT_SYNC_LAT + C_QUANT_A1_SPACING
+  -- gaps before this candidate.
+  signal data_preamble2_ok : std_logic := '0';
+
+  -- The tolerance for a weak first sync byte exists in the production
+  -- configuration of the sync generics only (see header).
+  constant C_TOL : boolean := G_SYNC_GATE and not G_SYNC_PREAMBLE_GATE and
+                              G_SYNC_SPAN_GATE and G_RECORD_SEQUENCE_GATE;
+  -- A mark accepted on a train of two: the CRC gets the A1 of the weak sync
+  -- byte first and the mark two clocks later (the CRC engine buffers one byte
+  -- and takes the next one only while it shifts).
+  signal crc_mark_pend : integer range 0 to 2 := 0;
+  signal crc_mark_byte : unsigned(7 downto 0) := (others => '0');
+  -- The open ID was accepted on a train of two. Such an ID is reported only
+  -- with a good CRC; with a bad one it leaves no trace: no id_valid_o, and
+  -- the arm of the data mark and N of the last ID stay as they were.
+  signal tol_id : std_logic := '0';
 
   -- Sync qualification state. The round-13 preamble counters remain only for
   -- the test-selectable historical column; production uses sync_gap_age.
@@ -259,6 +305,7 @@ begin
       mark_fe_o         <= '0';
       mark_dam_o        <= '0';
       dam_unarmed_o     <= '0';
+      tol_hit_o         <= '0';
 
       if rst_i = '1' then
         state     <= S_IDLE;
@@ -272,7 +319,18 @@ begin
         a1_gap_0 <= 0; a1_gap_1 <= 0; a1_gap_2 <= 0; a1_gap_3 <= 0;
         data_armed <= '0';
         data_preamble_ok <= '0';
+        data_preamble2_ok <= '0';
+        crc_mark_pend <= 0;
+        tol_id <= '0';
       else
+        -- the mark of a train of two, two clocks after its stand-in A1
+        if crc_mark_pend /= 0 then
+          if crc_mark_pend = 1 then
+            crc_feed <= '1'; crc_byte <= crc_mark_byte;
+          end if;
+          crc_mark_pend <= crc_mark_pend - 1;
+        end if;
+
         -- diagnostics + loss of lock on an out-of-spec gap; also the
         -- preamble-run bookkeeping for the write-splice sync gate
         if q_valid = '1' then
@@ -293,6 +351,7 @@ begin
             run_age     <= 15;          -- loud loss of lock: close the gate
             sync_gap_age <= 15;
             data_preamble_ok <= '0';
+            data_preamble2_ok <= '0';
           elsif q_class = "00" then
             if short_run >= C_QUANT_SYNC_RUN - 1 then
               run_age <= 0;             -- preamble run complete/continuing
@@ -355,6 +414,7 @@ begin
               sync_gap_age <= 15;
               a1_span_reject_o <= '1';
               data_preamble_ok <= '0';
+              data_preamble2_ok <= '0';
             elsif sync_cnt = 0 then
               -- First candidate is provisional: prime the CRC, but do not
               -- claim separator lock until the complete train is proven.
@@ -366,6 +426,12 @@ begin
                 data_preamble_ok <= '1';
               else
                 data_preamble_ok <= '0';
+              end if;
+              if run_age > C_QUANT_SYNC_LAT and
+                 run_age <= C_QUANT_SYNC_LAT + C_QUANT_A1_SPACING then
+                data_preamble2_ok <= '1';
+              else
+                data_preamble2_ok <= '0';
               end if;
             elsif sync_gap_age = C_QUANT_A1_SPACING then
               if sync_cnt < 3 then
@@ -387,6 +453,12 @@ begin
                 data_preamble_ok <= '1';
               else
                 data_preamble_ok <= '0';
+              end if;
+              if run_age > C_QUANT_SYNC_LAT and
+                 run_age <= C_QUANT_SYNC_LAT + C_QUANT_A1_SPACING then
+                data_preamble2_ok <= '1';
+              else
+                data_preamble2_ok <= '0';
               end if;
             end if;
           end if;
@@ -416,6 +488,7 @@ begin
             sync_cnt <= 0;
             data_armed <= '0';
             data_preamble_ok <= '0';
+            tol_id <= '0';
           else
            case state is
             when S_IDLE =>
@@ -427,6 +500,7 @@ begin
                     state <= S_ID_C;
                     data_armed <= '0';
                     data_preamble_ok <= '0';
+                    tol_id <= '0';
                   when MARK_FB =>
                     if not G_RECORD_SEQUENCE_GATE or
                        (data_armed = '1' and data_preamble_ok = '1') then
@@ -454,6 +528,34 @@ begin
                   when others =>
                     data_preamble_ok <= '0'; -- unsupported mark: ignore
                 end case;
+              elsif C_TOL and tol_off_i = '0' and sync_cnt = 2 and
+                    (byte_d = MARK_FE or
+                     ((byte_d = MARK_FB or byte_d = MARK_F8) and
+                      data_armed = '1' and data_preamble2_ok = '1')) then
+                -- train of two (weak first sync byte): this byte is the mark
+                crc_feed      <= '1';
+                crc_byte      <= MARK_A1;
+                crc_mark_pend <= 2;
+                crc_mark_byte <= byte_d;
+                tol_hit_o     <= '1';
+                locked_o      <= '1';
+                if byte_d = MARK_FE then
+                  -- the arm of the data mark stays until the CRC verdict
+                  state  <= S_ID_C;
+                  tol_id <= '1';
+                else
+                  if byte_d = MARK_F8 then
+                    deleted_r <= '1';
+                  else
+                    deleted_r <= '0';
+                  end if;
+                  data_start_o <= '1';
+                  data_cnt     <= data_len(last_n);
+                  state        <= S_DATA;
+                  data_armed   <= '0';
+                end if;
+                data_preamble_ok  <= '0';
+                data_preamble2_ok <= '0';
               end if;
               sync_cnt <= 0;
 
@@ -464,7 +566,10 @@ begin
             when S_ID_R =>
               crc_feed <= '1'; crc_byte <= byte_d; id_r_r <= byte_d; state <= S_ID_N; sync_cnt <= 0;
             when S_ID_N =>
-              crc_feed <= '1'; crc_byte <= byte_d; id_n_r <= byte_d; last_n <= byte_d;
+              crc_feed <= '1'; crc_byte <= byte_d; id_n_r <= byte_d;
+              if tol_id = '0' then
+                last_n <= byte_d;
+              end if;
               state <= S_ID_CRC1; sync_cnt <= 0;
             when S_ID_CRC1 =>
               crc_feed <= '1'; crc_byte <= byte_d; crc_stored_r(15 downto 8) <= byte_d;
@@ -496,17 +601,24 @@ begin
         -- CRC settle + evaluate (counter guarantees the last fed byte is shifted)
         if state = S_ID_CHECK then
           if chk_cnt = 0 then
-            id_c_o          <= id_c_r;
-            id_h_o          <= id_h_r;
-            id_r_o          <= id_r_r;
-            id_n_o          <= id_n_r;
-            id_crc_stored_o <= crc_stored_r;
-            if crc_value = x"0000" then id_crc_ok_o <= '1'; else id_crc_ok_o <= '0'; end if;
-            id_valid_o      <= '1';
-            if G_RECORD_SEQUENCE_GATE and crc_value = x"0000" then
-              data_armed <= '1';
+            if tol_id = '1' and crc_value /= x"0000" then
+              null;                         -- train of two, bad CRC: no trace
             else
-              data_armed <= '0';
+              id_c_o          <= id_c_r;
+              id_h_o          <= id_h_r;
+              id_r_o          <= id_r_r;
+              id_n_o          <= id_n_r;
+              id_crc_stored_o <= crc_stored_r;
+              if crc_value = x"0000" then id_crc_ok_o <= '1'; else id_crc_ok_o <= '0'; end if;
+              id_valid_o      <= '1';
+              if G_RECORD_SEQUENCE_GATE and crc_value = x"0000" then
+                data_armed <= '1';
+              else
+                data_armed <= '0';
+              end if;
+              if tol_id = '1' then
+                last_n <= id_n_r;
+              end if;
             end if;
             state           <= S_IDLE;
           else
