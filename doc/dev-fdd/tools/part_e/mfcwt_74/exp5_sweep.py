@@ -1,10 +1,17 @@
 # Sweep: MFCWT's "UI" (DOS warm reset) on the 1581 ROM (stock, or c1581.rom of the current directory),
 # motor stopped before, against mechanism parameters.
 # usage: exp5_sweep.py <hold_ms> <lose_steps> <head> <tfirst_from> <tfirst_to> <step> [suppress 0/1] [motor_running 0/1]
+#        [rule=old|new] [pace=rtl|rate|<ms>]
 import sys, os, copy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from h257 import *
 from exp3 import idle_until_motor_off
+# options (after the positional arguments): rule=old|new pace=rtl|rate|<ms> (h257.py)
+OPT = dict(a.split('=', 1) for a in sys.argv[1:] if '=' in a)
+sys.argv = [a for a in sys.argv if '=' not in a]
+RULE = OPT.get('rule', 'old')
+PACE = None if OPT.get('pace', 'rtl') == 'rtl' else ('rate' if OPT['pace'] == 'rate' else float(OPT['pace']))
+OPTS = ''.join(' %s=%s' % kv for kv in sorted(OPT.items()))
 
 hold = float(sys.argv[1]); lose = int(sys.argv[2]); head = int(sys.argv[3])
 t_a, t_b, t_s = int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
@@ -38,11 +45,12 @@ def classify(m, t_motor):
         else: out.append(e)
     return ' '.join(out)
 
-print('# hold=%.0fms lose=%d head=%d suppress=%d motor_running=%d ROM=%s' % (hold, lose, head, supp, running, ('stock' if machmod.ROM[0xC160 - 0x8000] == 0x4C else 'c1581.rom of the current directory')))
+print('# hold=%.0fms lose=%d head=%d suppress=%d motor_running=%d ROM=%s' % (hold, lose, head, supp, running, ('stock' if machmod.ROM[0xC160 - 0x8000] == 0x4C else 'c1581.rom of the current directory')) + OPTS)
 for tf in range(t_a, t_b + 1, t_s):
     m = copy.deepcopy(base)
     m.t_first = int(tf * MS); m.suppress_steps = bool(supp); m.suppress_hold = int(hold * MS)
     m.lose_in_steps = lose; m.lose_min = 10
+    m.ready_rule = RULE; m.pace = PACE
     m.logging = True; m.log.clear()
     if running:
         # case (b): the motor is running when UI comes (a job on track 20 just before)

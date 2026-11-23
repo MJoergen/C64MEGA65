@@ -1,0 +1,11 @@
+# rule=new pace=rate hold=18ms head=39 motor=run9 lose=2 "$"=15ms after UI ROM=stock
+t_first  620 ms phase 0/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 798 799 818 819 1089 1126 1134 | 74: - | at the exams, largest count of the old rule 390 ms, of the new rule 130 ms
+t_first  620 ms phase 1/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 796 797 815 816 1086 1123 1136 | 74: - | at the exams, largest count of the old rule 760 ms, of the new rule 153 ms
+t_first  620 ms phase 2/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 793 794 813 814 1084 1120 1134 | 74: - | at the exams, largest count of the old rule 780 ms, of the new rule 175 ms
+t_first  620 ms phase 3/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 810 811 829 830 1101 1142 1151 | 74: - | at the exams, largest count of the old rule 819 ms, of the new rule 197 ms
+t_first  620 ms phase 4/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 807 808 827 828 1098 1140 1148 | 74: - | at the exams, largest count of the old rule 589 ms, of the new rule 47 ms
+t_first  620 ms phase 5/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 789 805 806 824 825 1101 1137 1146 | 74: - | at the exams, largest count of the old rule 658 ms, of the new rule 44 ms
+t_first  620 ms phase 6/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 802 803 827 828 1098 1134 1143 | 74: - | at the exams, largest count of the old rule 678 ms, of the new rule 64 ms
+t_first  620 ms phase 7/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 804 805 824 825 1095 1132 1140 | 74: - | at the exams, largest count of the old rule 382 ms, of the new rule 86 ms
+t_first  620 ms phase 8/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 788 802 803 821 822 1092 1129 1137 | 74: - | at the exams, largest count of the old rule 382 ms, of the new rule 108 ms
+# 0 of 9 cases with a failed exam

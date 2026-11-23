@@ -1,0 +1,14 @@
+# rule=old pace=rate hold=18ms seek from cylinder 0 to track 80, 12 phases, lose=0 ROM=stock
+phase  0/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 2 510! | 74: readiness@510 | at the exams, largest count of the old rule 510 ms, of the new rule 7 ms
+phase  1/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 5 512! | 74: readiness@512 | at the exams, largest count of the old rule 529 ms, of the new rule 22 ms
+phase  2/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 9 515! | 74: readiness@515 | at the exams, largest count of the old rule 549 ms, of the new rule 42 ms
+phase  3/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 2 499! | 74: readiness@499 | at the exams, largest count of the old rule 549 ms, of the new rule 52 ms
+phase  4/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 6 502! | 74: readiness@502 | at the exams, largest count of the old rule 568 ms, of the new rule 72 ms
+phase  5/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 9 505! | 74: readiness@505 | at the exams, largest count of the old rule 588 ms, of the new rule 92 ms
+phase  6/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 2 507! | 74: readiness@507 | at the exams, largest count of the old rule 607 ms, of the new rule 102 ms
+phase  7/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 6 510! | 74: readiness@510 | at the exams, largest count of the old rule 627 ms, of the new rule 122 ms
+phase  8/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 9 518! | 74: readiness@518 | at the exams, largest count of the old rule 651 ms, of the new rule 142 ms
+phase  9/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 2 502! | 74: readiness@502 | at the exams, largest count of the old rule 651 ms, of the new rule 152 ms
+phase 10/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 6 505! | 74: readiness@505 | at the exams, largest count of the old rule 671 ms, of the new rule 172 ms
+phase 11/12: FAIL | trains: SEEK79(474.00 ms) | exams (ms after the job, ! failed): 9 507! | 74: readiness@507 | at the exams, largest count of the old rule 690 ms, of the new rule 192 ms
+# 12 of 12 phases with a failed exam

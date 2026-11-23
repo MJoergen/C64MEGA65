@@ -1,0 +1,11 @@
+# rule=new pace=12 hold=30ms head=39 motor=run9 lose=2 "$"=15ms after UI ROM=c1581.rom of the current directory
+t_first  620 ms phase 0/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1037 1038 1057 1058 1562 1621 1637 | 74: - | at the exams, largest count of the old rule 1238 ms, of the new rule 130 ms
+t_first  620 ms phase 1/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1035 1036 1054 1055 1559 1618 1634 | 74: - | at the exams, largest count of the old rule 1183 ms, of the new rule 153 ms
+t_first  620 ms phase 2/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1032 1033 1052 1053 1557 1615 1631 | 74: - | at the exams, largest count of the old rule 1277 ms, of the new rule 175 ms
+t_first  620 ms phase 3/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1049 1050 1068 1069 1579 1632 1648 | 74: - | at the exams, largest count of the old rule 1316 ms, of the new rule 197 ms
+t_first  620 ms phase 4/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1046 1047 1071 1072 1576 1630 1646 | 74: - | at the exams, largest count of the old rule 1136 ms, of the new rule 57 ms
+t_first  620 ms phase 5/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1029 1049 1050 1068 1069 1574 1627 1648 | 74: - | at the exams, largest count of the old rule 582 ms, of the new rule 54 ms
+t_first  620 ms phase 6/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1046 1047 1066 1067 1571 1624 1646 | 74: - | at the exams, largest count of the old rule 583 ms, of the new rule 64 ms
+t_first  620 ms phase 7/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1043 1044 1063 1064 1568 1622 1643 | 74: - | at the exams, largest count of the old rule 586 ms, of the new rule 86 ms
+t_first  620 ms phase 8/9: pass | trains: RESTORE40 SEEK39 SEEK2 | exams (ms after UI, ! failed): 529 1028 1041 1042 1060 1061 1565 1624 1640 | 74: - | at the exams, largest count of the old rule 1219 ms, of the new rule 108 ms
+# 0 of 9 cases with a failed exam

@@ -1,0 +1,14 @@
+# rule=old pace=rtl hold=18ms seek from cylinder 10 to track 61, 12 phases, lose=0 ROM=stock
+phase  0/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 2 187 198 | 74: - | at the exams, largest count of the old rule 198 ms, of the new rule 14 ms
+phase  1/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 5 190 200 | 74: - | at the exams, largest count of the old rule 217 ms, of the new rule 22 ms
+phase  2/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 9 193 203 | 74: - | at the exams, largest count of the old rule 237 ms, of the new rule 42 ms
+phase  3/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 2 176 187 | 74: - | at the exams, largest count of the old rule 237 ms, of the new rule 52 ms
+phase  4/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 6 179 190 | 74: - | at the exams, largest count of the old rule 256 ms, of the new rule 72 ms
+phase  5/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 9 182 193 | 74: - | at the exams, largest count of the old rule 276 ms, of the new rule 92 ms
+phase  6/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 2 185 195 | 74: - | at the exams, largest count of the old rule 295 ms, of the new rule 102 ms
+phase  7/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 6 188 198 | 74: - | at the exams, largest count of the old rule 315 ms, of the new rule 122 ms
+phase  8/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 9 196 201 | 74: - | at the exams, largest count of the old rule 334 ms, of the new rule 142 ms
+phase  9/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 2 179 184 | 74: - | at the exams, largest count of the old rule 334 ms, of the new rule 152 ms
+phase 10/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 6 182 193 | 74: - | at the exams, largest count of the old rule 359 ms, of the new rule 172 ms
+phase 11/12: pass | trains: SEEK50(151.50 ms) | exams (ms after the job, ! failed): 9 185 195 | 74: - | at the exams, largest count of the old rule 378 ms, of the new rule 192 ms
+# 0 of 12 phases with a failed exam

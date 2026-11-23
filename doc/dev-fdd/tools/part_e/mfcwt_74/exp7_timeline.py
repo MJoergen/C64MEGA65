@@ -1,9 +1,15 @@
 # Full timeline of MFCWT's "UI" + "$" on the 1581 ROM (stock, or c1581.rom of the current directory):
-# usage: exp7_timeline.py <t_first_ms> <delay_of_dollar_ms> [hold_ms] [lose] [head]
+# usage: exp7_timeline.py <t_first_ms> <delay_of_dollar_ms> [hold_ms] [lose] [head] [rule=old|new] [pace=rtl|rate|<ms>]
 import sys, os, copy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from h257 import *
 from exp3 import idle_until_motor_off
+# options (after the positional arguments): rule=old|new pace=rtl|rate|<ms> (h257.py)
+OPT = dict(a.split('=', 1) for a in sys.argv[1:] if '=' in a)
+sys.argv = [a for a in sys.argv if '=' not in a]
+RULE = OPT.get('rule', 'old')
+PACE = None if OPT.get('pace', 'rtl') == 'rtl' else ('rate' if OPT['pace'] == 'rate' else float(OPT['pace']))
+OPTS = ''.join(' %s=%s' % kv for kv in sorted(OPT.items()))
 tf = int(sys.argv[1]); dly = int(sys.argv[2])
 hold = float(sys.argv[3]) if len(sys.argv) > 3 else 0
 lose = int(sys.argv[4]) if len(sys.argv) > 4 else 2
@@ -11,11 +17,12 @@ head = int(sys.argv[5]) if len(sys.argv) > 5 else 39
 m = boot(); idle_until_motor_off(m)
 m.head = head; m.wd_track = head; m.ram[0x27] = head
 m.t_first = int(tf * MS); m.suppress_steps = True; m.suppress_hold = int(hold * MS); m.lose_in_steps = lose
+m.ready_rule = RULE; m.pace = PACE
 m.watch_pc = {0xCDA8: 'job error 3 (readiness stage $CDA8)', 0xCD39: 'job error 3 ($CD08 exam before Read Address)',
               0xAFE6: 'UI finished: 73 message, back to idle', 0xCB0F: 'BUMP handler: Restore', 0xCE78: 'seek stage $CE78',
               0x98F7: '"$" load directory', 0xA7AE: 'DOS ERROR routine', 0xAFCA: 'UI: warm reset (JNMI $AFCA)'}
 m.logging = True; m.log.clear()
-print('# ROM=%s t_first=%d ms hold=%.0f lose=%d head=%d, "$" %d ms after UI' % (('stock' if machmod.ROM[0xC160 - 0x8000] == 0x4C else 'c1581.rom of the current directory'), tf, hold, lose, head, dly))
+print('# ROM=%s t_first=%d ms hold=%.0f lose=%d head=%d, "$" %d ms after UI' % (('stock' if machmod.ROM[0xC160 - 0x8000] == 0x4C else 'c1581.rom of the current directory'), tf, hold, lose, head, dly) + OPTS)
 inject(m, 'UI', sa=15)
 t0 = m.cyc
 while m.cyc - t0 < 3 * CPS:

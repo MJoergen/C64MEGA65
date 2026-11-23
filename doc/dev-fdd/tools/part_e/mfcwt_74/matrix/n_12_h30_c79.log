@@ -1,0 +1,9 @@
+# rule=new pace=12 hold=30ms head=79 motor=stopped lose=2 "$"=15ms after UI ROM=stock
+t_first  400 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 996 ms, of the new rule 39 ms
+t_first  465 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 1709 ms, of the new rule 137 ms
+t_first  530 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 1644 ms, of the new rule 72 ms
+t_first  595 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 980 ms, of the new rule 28 ms
+t_first  660 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 1713 ms, of the new rule 141 ms
+t_first  725 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 1648 ms, of the new rule 76 ms
+t_first  790 ms: pass | trains: RESTORE79 SEEK39 SEEK2 | exams (motor age ms, ! failed): 801 1768 1774 1775 1793 1794 2298 2357 2373 | 74: - | at the exams, largest count of the old rule 985 ms, of the new rule 28 ms
+# 0 of 7 cases with a failed exam
