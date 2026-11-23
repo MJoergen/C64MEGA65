@@ -1,0 +1,113 @@
+capture                                            variant    IDok  IDbad  DATAok DATAbad gained  lost PLLok PLLno   uses
+F4                                                 base       3200      0    3200       0      0     0     0     0      0
+F4                                                 A          3200      0    3200       0      0     0     0     0      0
+F4                                                 A_wide     3200      0    3200       0      0     0     0     0      0
+F4                                                 B70        3200      0    3200       0      0     0     0     0    148
+G1-R3A-R6drive-A25                                 base       5280      0    4800       0      0     0     0     0      0
+G1-R3A-R6drive-A25                                 A          5280      0    4800       0      0     0     0     0      0
+G1-R3A-R6drive-A25                                 A_wide     5280      0    4800       0      0     0     0     0      0
+G1-R3A-R6drive-A25                                 B70        5280      0    4800       0      0     0     0     0   2774
+G3-R3A-R6drive-A25                                 base       3520      0    3200       0      0     0     0     0      0
+G3-R3A-R6drive-A25                                 A          3520      0    3200       0      0     0     0     0      0
+G3-R3A-R6drive-A25                                 A_wide     3520      0    3200       0      0     0     0     0      0
+G3-R3A-R6drive-A25                                 B70        3520      0    3200       0      0     0     0     0     38
+G3-after-C-R3A-R6drive-A25                         base       5280      0    4800       0      0     0     0     0      0
+G3-after-C-R3A-R6drive-A25                         A          5280      0    4800       0      0     0     0     0      0
+G3-after-C-R3A-R6drive-A25                         A_wide     5280      0    4800       0      0     0     0     0      0
+G3-after-C-R3A-R6drive-A25                         B70        5280      0    4800       0      0     0     0     0   2334
+G4-R3A-R6drive-A25                                 base       4800      0    4800       0      0     0     0     0      0
+G4-R3A-R6drive-A25                                 A          4800      0    4800       0      0     0     0     0      0
+G4-R3A-R6drive-A25                                 A_wide     4800      0    4800       0      0     0     0     0      0
+G4-R3A-R6drive-A25                                 B70        4800      0    4800       0      0     0     0     0   1352
+G4-after-E4-JiffyDOS-R3A-R6drive-A25               base       4800      0    4800       0      0     0     0     0      0
+G4-after-E4-JiffyDOS-R3A-R6drive-A25               A          4800      0    4800       0      0     0     0     0      0
+G4-after-E4-JiffyDOS-R3A-R6drive-A25               A_wide     4800      0    4800       0      0     0     0     0      0
+G4-after-E4-JiffyDOS-R3A-R6drive-A25               B70        4800      0    4800       0      0     0     0     0   1494
+G5-after-E3-DraCopy-R3A-R6drive-A25                base       3200      0    3200       0      0     0     0     0      0
+G5-after-E3-DraCopy-R3A-R6drive-A25                A          3200      0    3200       0      0     0     0     0      0
+G5-after-E3-DraCopy-R3A-R6drive-A25                A_wide     3200      0    3200       0      0     0     0     0      0
+G5-after-E3-DraCopy-R3A-R6drive-A25                B70        3200      0    3200       0      0     0     0     0    541
+G5-after-E3-files-DraCopy-R3A-R6drive-A25          base       3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-DraCopy-R3A-R6drive-A25          A          3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-DraCopy-R3A-R6drive-A25          A_wide     3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-DraCopy-R3A-R6drive-A25          B70        3200      0    3200       0      0     0     0     0    564
+G5-after-E3-files-MFCWT-R3A-R6drive-A25            base       3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-MFCWT-R3A-R6drive-A25            A          3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-MFCWT-R3A-R6drive-A25            A_wide     3200      0    3200       0      0     0     0     0      0
+G5-after-E3-files-MFCWT-R3A-R6drive-A25            B70        3200      0    3200       0      0     0     0     0    558
+G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25       base       4800      0    4800       0      0     0     0     0      0
+G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25       A          4800      0    4800       0      0     0     0     0      0
+G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25       A_wide     4800      0    4800       0      0     0     0     0      0
+G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25       B70        4800      0    4800       0      0     0     0     0   2638
+G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25 base       4800      0    4800       0      0     0     0     0      0
+G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25 A          4800      0    4800       0      0     0     0     0      0
+G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25 A_wide     4800      0    4800       0      0     0     0     0      0
+G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25 B70        4800      0    4800       0      0     0     0     0   2884
+G5-after-E4-format-JiffyDOS-R3A-R6drive-A25        base       4797      0    4797       0      0     0     0     0      0
+G5-after-E4-format-JiffyDOS-R3A-R6drive-A25        A          4800      0    4800       0      6     0     6     0      3
+G5-after-E4-format-JiffyDOS-R3A-R6drive-A25        A_wide     4800      0    4800       0      6     0     6     0      3
+G5-after-E4-format-JiffyDOS-R3A-R6drive-A25        B70        4798      0    4798       0      2     0     2     0   1082
+
+TOTAL                                              base      50877      0   49597       0      0     0     0     0      0
+TOTAL                                              A         50880      0   49600       0      6     0     6     0      3
+TOTAL                                              A_wide    50880      0   49600       0      6     0     6     0      3
+TOTAL                                              B70       50878      0   49598       0      2     0     2     0  16407
+
+F4: sides 160; distinct sectors (cylinder, side, R): written in one pass 1117, rewritten 483, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 19200, trains 6400, FE 3200, DAM 3200 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 775
+   real sync trains 6400; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G1-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 1410, rewritten 350, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 32562, trains 10842, FE 5280, DAM 5280 (unarmed 0), trains followed by another byte 282, span rejects 9, gap errors 50439
+   real sync trains 5562; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G3-R3A-R6drive-A25: sides 160; distinct sectors (cylinder, side, R): written in one pass 1758, rewritten 2, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 21742, trains 7238, FE 3520, DAM 3520 (unarmed 0), trains followed by another byte 198, span rejects 0, gap errors 399
+   real sync trains 3718; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 2], < 0.10: [0, 0, 2]
+G3-after-C-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 1690, rewritten 70, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 32627, trains 10856, FE 5280, DAM 5280 (unarmed 0), trains followed by another byte 296, span rejects 5, gap errors 48616
+   real sync trains 5577; weakest byte position (1, 2, 3): margin < 0: [0, 0, 1], < 0.05: [0, 0, 3], < 0.10: [0, 0, 3]
+   pairs A hd3 IDLE no-pll-train: 1
+   pairs A_wide hd3 IDLE no-pll-train: 1
+G4-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 1110, rewritten 490, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 28800, trains 9600, FE 4800, DAM 4800 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 50864
+   real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G4-after-E4-JiffyDOS-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 1090, rewritten 509, both verdicts in different revolutions 1
+   decoder without tolerance, all sides and revolutions: candidates 28800, trains 9600, FE 4800, DAM 4800 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 52656
+   real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E3-DraCopy-R3A-R6drive-A25: sides 160; distinct sectors (cylinder, side, R): written in one pass 0, rewritten 1600, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 19200, trains 6400, FE 3200, DAM 3200 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 2976
+   real sync trains 6400; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E3-files-DraCopy-R3A-R6drive-A25: sides 160; distinct sectors (cylinder, side, R): written in one pass 10, rewritten 1590, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 19200, trains 6400, FE 3200, DAM 3200 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 2589
+   real sync trains 6400; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E3-files-MFCWT-R3A-R6drive-A25: sides 160; distinct sectors (cylinder, side, R): written in one pass 20, rewritten 1580, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 19200, trains 6400, FE 3200, DAM 3200 (unarmed 0), trains followed by another byte 0, span rejects 0, gap errors 2552
+   real sync trains 6400; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E4-DraCopy-JiffyDOS-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 0, rewritten 1600, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 28809, trains 9600, FE 4800, DAM 4800 (unarmed 0), trains followed by another byte 0, span rejects 2, gap errors 52625
+   real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E4-files-DraCopy-JiffyDOS-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 10, rewritten 1590, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 28820, trains 9600, FE 4800, DAM 4800 (unarmed 0), trains followed by another byte 0, span rejects 8, gap errors 52873
+   real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 0], < 0.10: [0, 0, 0]
+G5-after-E4-format-JiffyDOS-R3A-R6drive-A25: sides 164; distinct sectors (cylinder, side, R): written in one pass 1569, rewritten 30, both verdicts in different revolutions 0
+   decoder without tolerance, all sides and revolutions: candidates 28797, trains 9597, FE 4797, DAM 4800 (unarmed 3), trains followed by another byte 0, span rejects 0, gap errors 47080
+   real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [3, 0, 0], < 0.05: [3, 0, 0], < 0.10: [3, 0, 0]
+   pairs A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 118.462 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 136.287 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 317.562 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 335.385 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 516.654 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 534.490 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 118.462 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 136.287 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 317.562 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 335.385 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 516.654 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   pairs A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 534.490 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   pairs A mark IDLE pll-train: 3
+   pairs A_wide mark IDLE pll-train: 3
+   pairs A       cyl 77 head 0 118.272 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   pairs A       cyl 77 head 0 317.372 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   pairs A       cyl 77 head 0 516.464 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   pairs A_wide  cyl 77 head 0 118.272 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   pairs A_wide  cyl 77 head 0 317.372 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   pairs A_wide  cyl 77 head 0 516.464 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes

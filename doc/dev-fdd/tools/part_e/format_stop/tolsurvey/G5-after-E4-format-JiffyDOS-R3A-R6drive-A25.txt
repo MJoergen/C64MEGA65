@@ -1,0 +1,42 @@
+capture G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp, 3 revolutions per side
+   A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 118.462 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 136.287 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 317.562 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 335.385 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   A       cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 516.654 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A       cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 534.490 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 118.462 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 136.287 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 317.562 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 335.385 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   A_wide  cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 516.654 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   A_wide  cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 534.490 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+   B70     cyl 77 head 0 GAINED ID (77, 1, 7, 2, True) at 118.462 ms of the stream, PLL confirms (phase adjust 0.30/0.45)
+   B70     cyl 77 head 0 GAINED DATA (True, False, 2997515640) at 136.287 ms of the stream, PLL confirms (phase adjust 0.30/0.45/0.60)
+
+sides 164
+variant      IDok    IDbad   DATAok  DATAbad  gained    lost   PLLok   PLLno    uses
+base         4797        0     4797        0       0       0       0       0       0
+A            4800        0     4800        0       6       0       6       0       3
+A_wide       4800        0     4800        0       6       0       6       0       3
+B70          4798        0     4798        0       2       0       2       0    1082
+
+trains of two (variant, following byte, parser state, PLL sees a three-byte train there): count
+   A mark IDLE pll-train: 3
+   A_wide mark IDLE pll-train: 3
+details (marks, and non-train pairs one bit from a mark):
+   A       cyl 77 head 0 118.272 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   A       cyl 77 head 0 317.372 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   A       cyl 77 head 0 516.464 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   A_wide  cyl 77 head 0 118.272 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   A_wide  cyl 77 head 0 317.372 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+   A_wide  cyl 77 head 0 516.464 ms: pair then FE state IDLE armed 0 preamble2 1 run age 10, PLL train yes
+
+real sync trains 9600; weakest byte position (1, 2, 3): margin < 0: [3, 0, 0], < 0.05: [3, 0, 0], < 0.10: [3, 0, 0]
+weakest 12 trains (margin in half cells, byte, cyl, head, ms of the stream): -0.076 b1 c77 h0 317.25, -0.057 b1 c77 h0 118.15, -0.050 b1 c77 h0 516.34, +0.110 b1 c77 h0 536.01, +0.146 b1 c77 h0 137.80, +0.154 b1 c77 h0 336.90, +0.160 b2 c74 h0 119.55, +0.161 b1 c77 h0 119.56, +0.180 b2 c74 h0 517.74, +0.181 b1 c72 h0 137.80, +0.181 b1 c72 h0 336.88, +0.181 b3 c76 h0 137.81
+
+ID-to-data distance in PLL half cells: 704:4707, 705:11, 706:41, 707:30, 708:8
+data fields written in the pass of their ID: 4707, rewritten (a splice between ID and data): 90 (all revolutions)
+distinct sectors (cylinder, side, R): written in one pass 1569, rewritten 30, both verdicts in different revolutions 0
+
+decoder without tolerance, all sides and revolutions: candidates 28797, trains 9597, FE 4797, DAM 4800 (unarmed 3), trains followed by another byte 0, span rejects 0, gap errors 47080

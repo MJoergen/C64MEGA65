@@ -1,0 +1,20 @@
+capture G3-R3A-R6drive-A25.scp, 2 revolutions per side
+
+sides 160
+variant      IDok    IDbad   DATAok  DATAbad  gained    lost   PLLok   PLLno    uses
+base         3520        0     3200        0       0       0       0       0       0
+A            3520        0     3200        0       0       0       0       0       0
+A_wide       3520        0     3200        0       0       0       0       0       0
+B70          3520        0     3200        0       0       0       0       0      38
+
+trains of two (variant, following byte, parser state, PLL sees a three-byte train there): count
+details (marks, and non-train pairs one bit from a mark):
+
+real sync trains 3718; weakest byte position (1, 2, 3): margin < 0: [0, 0, 0], < 0.05: [0, 0, 2], < 0.10: [0, 0, 2]
+weakest 12 trains (margin in half cells, byte, cyl, head, ms of the stream): +0.000 b3 c36 h1 201.94, +0.020 b3 c36 h1 2.82, +0.263 b3 c33 h0 201.94, +0.270 b1 c49 h1 203.71, +0.279 b1 c16 h0 60.76, +0.287 b3 c33 h0 2.84, +0.290 b2 c27 h1 297.41, +0.291 b1 c1 h1 42.48, +0.292 b1 c16 h0 259.86, +0.292 b3 c72 h0 259.86, +0.293 b1 c49 h1 4.60, +0.293 b3 c72 h0 203.65
+
+ID-to-data distance in PLL half cells: 720:3356, 727:2, 728:2
+data fields written in the pass of their ID: 3356, rewritten (a splice between ID and data): 4 (all revolutions)
+distinct sectors (cylinder, side, R): written in one pass 1758, rewritten 2, both verdicts in different revolutions 0
+
+decoder without tolerance, all sides and revolutions: candidates 21742, trains 7238, FE 3520, DAM 3520 (unarmed 0), trains followed by another byte 198, span rejects 0, gap errors 399
