@@ -52,6 +52,19 @@
 --     assert on WDATA low while WGATE is high, span queries (seed / new edge
 --     counts) and a text dump of a track's edge list for wr_twin.py.
 --
+-- Option for both modes (generic G_IDX_HIDE, off by default): a mechanism
+-- that withholds its index pulses while the head steps. The index output is
+-- held inactive from the leading edge of a step pulse until cfg_idx_hide_i
+-- after its trailing edge; the next step pulse within that time extends it.
+-- A train whose pulses follow each other closer than cfg_idx_hide_i
+-- therefore hides the index from its first pulse until cfg_idx_hide_i after
+-- its last one: with cfg_idx_hide_i = step pace + hold time this is the
+-- window of doc/dev-fdd/tools/part_e/mfcwt_74/h257.py (the Type-I command
+-- plus the hold time). Only the output line is masked: the spindle, the
+-- flux and the position keep turning, and an index pulse that is low when
+-- the mask ends shows from then on. cfg_idx_hide_i is read at every step
+-- pulse, so a bench can change it between trains.
+--
 -- C64MEGA65 project, GPLv3.
 -------------------------------------------------------------------------------
 library ieee;
@@ -67,7 +80,8 @@ entity mech_model_1581 is
     G_INDEX_LOW    : time    := 2 ms;     -- index active-low pulse width
     G_NUM_CYL      : integer := 80;       -- cylinders 0 .. G_NUM_CYL-1
     G_WRITABLE     : boolean := false;    -- true: live rotating flux store (see header)
-    G_DUMP_PREFIX  : string  := "flux_"   -- dump file name prefix (G_WRITABLE)
+    G_DUMP_PREFIX  : string  := "flux_";  -- dump file name prefix (G_WRITABLE)
+    G_IDX_HIDE     : boolean := false     -- true: index withheld while the head steps (see header)
   );
   port (
     -- driven BY the controller (we only observe these) ----------------------
@@ -85,6 +99,7 @@ entity mech_model_1581 is
     cfg_noindex_i     : in  std_logic := '0';  -- G_WRITABLE: suppress the index pulse (sensor fault)
     cfg_badcrc_sec_i  : in  integer := 0;      -- read-only generator: sector with a wrong data CRC (0 = none)
     cfg_deleted_sec_i : in  integer := 0;      -- read-only generator: sector with the deleted data mark (0 = none)
+    cfg_idx_hide_i    : in  time := 0 ns;      -- G_IDX_HIDE: index withheld until this time after a step pulse
 
     -- driven TO the controller ----------------------------------------------
     f_index_o         : out std_logic := '1';   -- active-low index
@@ -131,6 +146,10 @@ architecture sim of mech_model_1581 is
   -- Current head cylinder. The step process is the sole writer.
   signal cyl_r : integer range 0 to G_NUM_CYL - 1 := 0;
 
+  -- The index as the spindle produces it, and the mask of G_IDX_HIDE.
+  signal idx_raw  : std_logic := '1';
+  signal idx_hide : boolean   := false;
+
   -- True while the disk is actually spinning under the (selected) head.
   function spinning(mot, sel, pres : std_logic) return boolean is
   begin
@@ -168,6 +187,29 @@ begin
   end process step_proc;
 
   ---------------------------------------------------------------------------
+  -- Index output: the spindle's index, masked while the head steps when
+  -- G_IDX_HIDE is set (see header). Without the option the mask stays off.
+  ---------------------------------------------------------------------------
+  f_index_o <= '1' when idx_hide else idx_raw;
+
+  g_hide : if G_IDX_HIDE generate
+    hide_proc : process
+    begin
+      wait until falling_edge(f_step_i);        -- the first pulse of a train
+      idx_hide <= true;
+      loop
+        wait until rising_edge(f_step_i);       -- its trailing edge
+        if cfg_idx_hide_i > 0 ns then
+          -- the next pulse within the time continues the train
+          wait until falling_edge(f_step_i) for cfg_idx_hide_i;
+        end if;
+        exit when f_step_i /= '0';
+      end loop;
+      idx_hide <= false;
+    end process hide_proc;
+  end generate g_hide;
+
+  ---------------------------------------------------------------------------
   -- Static sensor levels (active-low).
   ---------------------------------------------------------------------------
   config_proc : process (cfg_wprot_i, cfg_change_i)
@@ -195,12 +237,12 @@ begin
   ---------------------------------------------------------------------------
   index_proc : process
   begin
-    f_index_o <= '1';
+    idx_raw <= '1';
     wait for G_INDEX_PERIOD - G_INDEX_LOW;
     if spinning(f_motora_i, f_selecta_i, cfg_present_i) then
-      f_index_o <= '0';
+      idx_raw <= '0';
       wait for G_INDEX_LOW;
-      f_index_o <= '1';
+      idx_raw <= '1';
     else
       wait for G_INDEX_LOW;               -- keep the period constant, stay high
     end if;
@@ -502,9 +544,9 @@ begin
         pos_o <= pos;
 
         if pos < C_IDXL and spin and cfg_noindex_i = '0' then
-          f_index_o <= '0';
+          idx_raw <= '0';
         else
-          f_index_o <= '1';
+          idx_raw <= '1';
         end if;
 
         -- lazy seed: the first time a track is under the spinning head

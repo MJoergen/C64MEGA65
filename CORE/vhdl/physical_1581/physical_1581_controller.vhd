@@ -1086,6 +1086,32 @@ begin
         -- cannot wait for a second pulse 200 ms later: that one can come
         -- after the exam. The speed of the disk is not judged here; that
         -- remains a matter of the decoder and of the CRCs.
+        --
+        -- RDY falls with the motor request, on reset and on disable, and
+        -- when no index edge arrived for 2 * G_PERIOD_MAX_CYC (500 ms) of
+        -- settled time. The time in which the step engine works or the head
+        -- has not settled (head_settled low: from the acceptance of a step
+        -- until G_SETTLE_CYC after the trailing edge of its pulse) does not
+        -- count: idx_gap_cnt stays at zero, so the 500 ms start anew when
+        -- the head has settled. An index edge counts whenever it arrives,
+        -- during a step as well. The reason: some mechanisms deliver no
+        -- index pulses while they step and for a hold time after the last
+        -- step (the TEAC FD-235HF gates INDEX until 15.8 to 17.9 ms after
+        -- the last step pulse); that the mechanism of the R6 of issue #257
+        -- does so is inferred from the timing of its failures, not observed.
+        -- On such a mechanism a Restore and a Seek in a row can hide two
+        -- index pulses in a row, and with that time counted RDY can be low
+        -- at the exam that the ROM makes right after the Seek. With the
+        -- rule, RDY stays up on such a mechanism as long as its hold time
+        -- is shorter than 500 ms plus the settle time minus one revolution
+        -- (about 318 ms).
+        -- Without any index edge RDY keeps its value for as long as the
+        -- steps come closer than 500 ms plus the settle time. A disk taken
+        -- out while the head moves is noticed 500 ms after the head has
+        -- settled; until then the disk-change line guards the data (the
+        -- read engine aborts on its level, the write engine on its edge),
+        -- and a write opens the gate only behind a CRC-valid sector header
+        -- (Write Sector) or at an index edge (Write Track).
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
 
@@ -1103,13 +1129,16 @@ begin
           if index_edge = '1' then
             idx_gap_cnt <= (others => '0');
             idx_seen    <= '1';
+          elsif step_st /= SI_IDLE or head_settled = '0' then
+            -- the head moves or settles: this time does not count
+            idx_gap_cnt <= (others => '0');
           elsif idx_gap_cnt < to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then
             idx_gap_cnt <= idx_gap_cnt + 1;
           else
-            -- No index edge for two maximum periods while the motor is on:
-            -- the disk was removed or has stopped (or the spindle has not
-            -- produced its first pulse yet). Drop readiness until the next
-            -- edge.
+            -- No index edge for two maximum periods of settled time while
+            -- the motor is on: the disk was removed or has stopped (or the
+            -- spindle has not produced its first pulse yet). Drop readiness
+            -- until the next edge.
             media_ready <= '0';
             idx_seen    <= '0';
             idx_gap_cnt <= (others => '0');
