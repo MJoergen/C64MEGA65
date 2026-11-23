@@ -47,9 +47,9 @@ Thanks to Erik Scheffers (eriks5) for his REU bugfix that made the C64 now
 even more compatible, as we now can run the awesome fREUd demo by Hoaxers
 flawlessly.
 
-Thanks to Mikey351AU for finding, analyzing and fixing a bug in the FAT32
-library that, since 2016, stopped the file browser with "Error code: 2704" on
-folders whose directory exactly fills its space on the SD card.
+Thanks to Mikey351AU for finding and fixing a long-standing bug in our FAT32
+library, which makes reading SD cards more robust: no more sporadic "Error
+code: 2704" on MEGA65-formatted cards and fewer errors on PC-formatted cards.
 
 C64MEGA65:
 ----------
