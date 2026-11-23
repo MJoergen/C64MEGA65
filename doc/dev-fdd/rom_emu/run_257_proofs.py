@@ -13,7 +13,13 @@
 #     of the mechanism) and the number of pulses that READY waits for as the
 #     rule under test: 2 = the controller up to WIP-V6-A22X3 for a cold or
 #     changed disk, 1 = the controller since the fix (and, before it, for an
-#     unchanged disk). Type-I commands take the time they take in the RTL.
+#     unchanged disk). Type-I commands take the time they take in the RTL:
+#     every step waits for the rate time of the command (r1 r0: 6, 12, 2,
+#     3 ms) and for the acknowledge of the controller (3.03 ms, 4.03 ms after
+#     a reversal), whichever is longer; BUSY of a command with n steps is the
+#     sum of its n paces, of a command without a step 1.5 ms. With paced =
+#     False a step takes the acknowledge alone: the RTL of WIP-V6-A25, which
+#     the tester's hardware ran (proof I3 reproduces its dumps).
 #
 #   * The delivery of a Read Sector as the RTL does it. "live" is a real
 #     WD1772 (and the model of wd_write_model.py): bytes are presented as they
@@ -55,8 +61,11 @@ class M257(WriteMachine):
         self.motor_log = []              # (cycle, 'on' | 'off')
         self._motor_prev = False
         self.pa1_samples = []            # (cycles since motor-on, ready) at the ROM's $CDBC exam
-        self.step_busy = (6060, 8060)    # RTL: 3.03 ms same direction, 4.03 ms after a reversal
-        self._last_out = None
+        self.step_ack = (6060, 8060)     # controller: 3.03 ms same direction, 4.03 ms after a reversal
+        self.step_rate = {0: 12000, 1: 24000, 2: 4000, 3: 6000}   # fdc1772.v phys_rate_ticks / 4
+        self.t1_min = 3000               # PHYS_T1_MIN_TICKS: 1.5 ms
+        self.paced = True                # False: a step per acknowledge (WIP-V6-A25)
+        self._last_out = None            # direction of the last step (any Type-I command)
         self.led_log = []                # (cycle, PA5, PA6)
         self._led_prev = None
         # ---- delivery ----
@@ -99,12 +108,19 @@ class M257(WriteMachine):
         if top in (0x8, 0x9) and self.delivery != 'live':
             return self.read_sector(v)
         self.ra_alive = False                            # every other command ends the read-ahead
+        if top <= 0x7:                                   # Type I: the steps as machine.py counts them
+            if top == 0x0:   n, out = self.head, True
+            elif top == 0x1: n, out = abs(self.wd_track - self.wd_data_in), self.wd_data_in < self.wd_track
+            else:            n, out = 1, top in (0x6, 0x7)          # Step (0x2, 0x3) is modelled as inward
         super().wd_command(v)
-        if top in (0x4, 0x5, 0x6, 0x7):
-            out = top in (0x6, 0x7)
-            rev = self._last_out is not None and out != self._last_out
-            self._last_out = out
-            self.busy_until = self.cyc + (self.step_busy[1] if rev else self.step_busy[0])
+        if top <= 0x7:
+            busy = 0
+            for i in range(n):
+                rev = i == 0 and self._last_out is not None and out != self._last_out
+                rate = self.step_rate[v & 3] if self.paced else 0
+                busy += max(rate, self.step_ack[1] if rev else self.step_ack[0])
+            if n: self._last_out = out
+            self.busy_until = self.cyc + (busy if n else self.t1_min)
         if top in (0x8, 0x9) and self.ctrl_done_at is not None and not self.ctrl_rnf:
             self.rs_log.append((self.wd_sector, 'live', self.cyc, self.ctrl_done_at))
     def read_sector(self, v):
@@ -181,10 +197,10 @@ for _ in range(4000):               # the power-on activity ends, the motor stop
     if not base.motor() and not base.wd_busy(): break
 check('boot: the drive is idle and the motor is off', not base.motor() and not base.wd_busy())
 
-def changed_disk(t_first_s, need):
+def changed_disk(t_first_s, need, paced=True):
     m = copy.deepcopy(base)
     m.chg_latch = True               # a disk was inserted while the motor was off
-    m.t_first = int(t_first_s * CPS); m.need = need
+    m.t_first = int(t_first_s * CPS); m.need = need; m.paced = paced
     return m
 
 # ================= I: the first access after inserting a disk =================
@@ -203,11 +219,14 @@ def outcome(t_first_s, need):
     res, mc, mt = run_job(m, 0x80, 40, 0)
     return res, len(steps(m, mc)), len(rw_cmds(m, mc))
 
-a = outcome(0.62, 2); b = outcome(0.63, 2)
-check('I2 two index pulses: a first pulse at 0.62 s is in time, at 0.63 s the job ends with error 3 (DOS 74) after one step pair and without any read or write command',
-      a[0] == 0 and a[2] > 0 and b == (3, 2, 0), '0.62 s: job %02X, %d read commands; 0.63 s: job %02X, %d steps, %d read/write commands' % (a[0], a[2], b[0], b[1], b[2]))
+# the step pair takes 2 x 6 ms (the rate of $48 and $68), so the exam comes at
+# 0.830 s and a second pulse at 0.631 s + 199.3 ms is the last one in time
+a = outcome(0.62, 2); b = outcome(0.635, 2)
+check('I2 two index pulses: a first pulse at 0.62 s is in time, at 0.635 s the job ends with error 3 (DOS 74) after one step pair and without any read or write command',
+      a[0] == 0 and a[2] > 0 and b == (3, 2, 0), '0.62 s: job %02X, %d read commands; 0.635 s: job %02X, %d steps, %d read/write commands' % (a[0], a[2], b[0], b[1], b[2]))
 
-m = changed_disk(0.65, 2)
+# the tester's hardware ran WIP-V6-A25, whose steps took the acknowledge alone
+m = changed_disk(0.65, 2, paced=False)
 res, mc, mt = run_job_until_motor_off(m, 0x80, 40, 0)
 on = [e[0] for e in m.motor_log if e[1] == 'on']; off = [e[0] for e in m.motor_log if e[1] == 'off']
 dur = (off[-1] - on[0]) if on and off else 0
@@ -220,10 +239,10 @@ lo = (DUR - 53 * m.rev_cyc) / CPS; hi = (DUR - 52 * m.rev_cyc) / CPS
 print('     53 pulses in %.3f s mean: first pulse later than %.3f s and not later than %.3f s after motor-on;' % (DUR / CPS, lo, hi))
 print('     the job fails from 0.63 s on, so both failing accesses had their first pulse 0.63 to %.3f s after motor-on' % hi)
 
-a = outcome(0.82, 1); b = outcome(0.83, 1); c = outcome(0.665, 1)
-check('I4 one index pulse: a first pulse at 0.665 s (the upper bound of the two failing accesses) and even at 0.82 s is in time; 0.83 s is the limit of the ROM itself',
+a = outcome(0.82, 1); b = outcome(0.835, 1); c = outcome(0.665, 1)
+check('I4 one index pulse: a first pulse at 0.665 s (the upper bound of the two failing accesses) and even at 0.82 s is in time; 0.835 s is beyond the limit of the ROM itself (the exam at 0.830 s)',
       c[0] == 0 and c[2] > 0 and a[0] == 0 and a[2] > 0 and b == (3, 2, 0),
-      '0.665 s: job %02X; 0.82 s: job %02X; 0.83 s: job %02X' % (c[0], a[0], b[0]))
+      '0.665 s: job %02X; 0.82 s: job %02X; 0.835 s: job %02X' % (c[0], a[0], b[0]))
 
 m = copy.deepcopy(base); m.t_first = int(0.40 * CPS); m.need = 1      # unchanged disk: no step pair
 res, mc, mt = run_job(m, 0x80, 40, 0)
