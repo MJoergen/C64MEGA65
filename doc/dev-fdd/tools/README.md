@@ -2,13 +2,17 @@
 
 ## `diag_dump_decode.py`: the dumps of the diagnostic device
 
-Decodes the dumps that testers paste into a GitHub issue (the blocks of the QNICE monitor commands `MD 7000 703F`, `MD 7040 707F` and `MD 7080 70A5`) with the names of the register map in `doc/1581_dd_debug_device.md`, the trace ring oldest entry first. Dumps of older maps decode as well: map v8 ends at `709D`, map v9 at `70A1`; the words a dump does not contain are left out. For map v10 it prints the longest index gap with the number of revolutions it spans (and how many index pulses in a row did not arrive), the count of stale READY, and the count and the switch of the decoder's tolerance for a weak sync byte.
+Decodes the dumps that testers paste into a GitHub issue (the blocks of the QNICE monitor commands `MD 7000 703F`, `MD 7040 707F` and `MD 7080 70A5`) with the names of the register map in `doc/1581_dd_debug_device.md`, the trace ring oldest entry first. Dumps of older maps decode as well: map v8 ends at `709D`, map v9 at `70A1`; the words a dump does not contain are left out. The words of map v10 are decoded only for a device whose `VERSION` reports map v10 or later; a v10 device dumped without them gets a note. The decoder prints the longest index gap in revolutions of the index period of the same dump: within 0.1 of 2 to 5 revolutions it names the index pulses that did not arrive (what a mechanism that withholds them while the head steps shows after a recalibration at 6 ms per step), and it flags a gap that is not near a whole number of revolutions; with every gap longer than a revolution it prints the cross-check with `CNT_RDY_STALE` and `CNT_CHANGE`, which count a disk change and not withheld pulses. Then the count of stale READY, and the count and the switch of the decoder's tolerance for a weak sync byte (bits 15 to 1 of `RD_CTRL` are flagged when they are not 0). A line that is not `<address>: <words>`, a word that is not hexadecimal and a missing block are skipped with a note.
 
 ```text
 gh api repos/MJoergen/C64MEGA65/issues/257/comments --paginate > comments.json
 python3 -I doc/dev-fdd/tools/diag_dump_decode.py comments.json            # every dump of every comment
 python3 -I doc/dev-fdd/tools/diag_dump_decode.py comments.json 17 18      # the dumps of comments 17 and 18
 ```
+
+## `idx_gap_model.py`: what the index gap reads
+
+Computes `IDX_GAP_MAX_MS` (map v10) after a recalibration from cylinders 0, 39 and 79, after seeks over 50 and 79 cylinders and for a recalibration from every cylinder, on a mechanism that withholds its index pulses from the first step pulse of a train until a hold time after its last one (or after the end of BUSY), at 6 and 3.03 ms per step, over every index phase. The model is in the header of the script; `python3 -I doc/dev-fdd/tools/idx_gap_model.py [revolution in ms]`, about 10 s.
 
 ## `regression/`: the simulation regression of `CORE/vhdl/physical_1581`
 
