@@ -41,7 +41,7 @@ The regression runs on a clone of the commit, not on the working tree, so the tr
 | `write_g6_l15`, `write_g7_l15` | `run_tb_write.sh`, groups 6 and 7: the read-ahead next to the write engine | 28 and 11 minutes |
 | `loop_g1` to `loop_g5` | `tb_physical_1581_rdahead_loop`: the read-ahead in the closed loop | 17 to 44 minutes |
 | `controller` | `tb_physical_1581_controller` | 34 minutes |
-| `media_contract_runner` | `run_tb_media_contract.sh`: the media contract with nvc and with GHDL, and 25 mutants with nvc (with GHDL alone if nvc is not installed) | 52 minutes |
+| `media_contract_runner` | `run_tb_media_contract.sh`: the media contract with nvc and with GHDL, and 31 mutants with nvc (with GHDL alone if nvc is not installed) | 40 minutes |
 | `write_g1_l15` to `write_g5_l15` | `run_tb_write.sh`, groups 1 to 5 (group 2 with three DRQ latencies) | 12 to 21 minutes |
 | `rdahead_ctl_runner` | `run_tb_rdahead_ctl.sh`: the controller's read-ahead on a synthetic record stream and 18 mutants | 13 minutes |
 

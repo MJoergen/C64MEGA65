@@ -171,7 +171,7 @@ Open remarks, none of them a defect:
 
 * `doc/dev-fdd/rom_emu/run_257_proofs.py`: the genuine-ROM proofs (`python3 -I`, about 6 minutes).
 * `doc/dev-fdd/tools/regression/`: the simulation regression of section 9 as a job queue (`reg_setup.sh`, `reg_queue.py`, `jobq.py`, `reg_check.py`), the runner of the small unit benches (`units.sh`), the mutants of the read-ahead engine (`mutants_rdahead.py`) and the differential analysis of `main.vhd` (`main_diff_check.sh`). How to run it: `doc/dev-fdd/tools/README.md`.
-* `CORE/vhdl/test/tb_physical_1581_controller/run_tb_media_contract.sh`: the media contract and its 17 mutants (half an hour; in WIP-V6-A28 25 mutants, with nvc and GHDL, 52 minutes: `doc/dev-fdd/ISSUE257-PART-E-FIXES.md` section 8.1).
+* `CORE/vhdl/test/tb_physical_1581_controller/run_tb_media_contract.sh`: the media contract and its 17 mutants (half an hour; in WIP-V6-A28 31 mutants, with nvc and GHDL, 40 minutes: `doc/dev-fdd/ISSUE257-PART-E-FIXES.md` section 8.1).
 * `CORE/vhdl/test/tb_physical_1581_controller/run_tb_rdahead_ctl.sh`: the controller's read-ahead on a synthetic record stream and its 18 mutants (a quarter of an hour).
 * `CORE/vhdl/test/tb_physical_1581_controller/run_tb_write.sh <scratch> [group:latency ...]`: the closed-loop write groups with the twin check; `JOBS` limits how many run at the same time. Its exit status is that of the twin check: read the line `group G latency L us: rc=...` for the verdict of the simulation.
 * `CORE/vhdl/test/tb_drive_led/run.sh`: the drive LED.
