@@ -33,23 +33,40 @@
 -- not make a train of three. While the parser is idle and tol_off_i is low,
 -- the byte after a train of two (two candidates at the exact spacing, the
 -- second A1 and the third) is accepted as the mark:
---   * FE always. Such an ID is reported only with a good CRC; with a bad one
---     it leaves no trace (no id_valid_o, data arm and N unchanged), so a false
---     mark of this kind can neither end a Read Address with a CRC error nor
---     disarm the data field of the ID before it.
+--   * FE always. Such an ID is reported only with a good CRC. With a bad one
+--     it is not reported (no id_valid_o) and leaves the data arm and N as
+--     they were, so a false mark of this kind can neither end a Read Address
+--     with a CRC error nor disarm the data field of the ID before it. It
+--     does occupy the parser for its six bytes and the CRC check: a data
+--     mark of a train of three that is one of the six bytes after its FE is
+--     ignored (dam_unarmed_o), and that data field is lost in this
+--     revolution. That takes a false A1 A1 FE inside the zero run of a data
+--     field with three to five zero bytes left between that FE and the sync
+--     train (with fewer, the run in front of the train is too short for any
+--     decoder); every format and every Write Sector writes those zero bytes
+--     in the same pass as the sync train (unit bench, scenario 20).
 --   * FB/F8 only after a CRC-valid ID and with the zero run ending
 --     C_QUANT_SYNC_LAT + 1 .. C_QUANT_SYNC_LAT + C_QUANT_A1_SPACING gaps before
---     the first candidate of the pair: the window of a train of three, moved
---     by the five gaps of the weak byte. A pair right after the zero run is
---     the start of a train, never a complete one.
+--     the first candidate of the pair. The window of a train of three (at
+--     most C_QUANT_SYNC_LAT gaps), moved by the five gaps of the weak byte,
+--     would start at C_QUANT_A1_SPACING; its lower bound is raised above
+--     C_QUANT_SYNC_LAT because a pair that close to the zero run holds the
+--     first two sync bytes of a train, and the byte after it is the third
+--     sync byte (weak), never the mark.
 -- The CRC receives the A1 of the weak byte before the mark, so the field is
 -- checked exactly as after three. A train of two never re-anchors an open
 -- field. A weak second or third sync byte is not tolerated: after a weak
 -- second byte a byte completes between the two remaining candidates, after a
 -- weak third byte the byte after the pair is the damaged A1, not the mark.
--- The diagnostic pulses a1_candidate_o, a1_train_o, mark_fe_o, mark_dam_o
--- and dam_unarmed_o concern candidates and trains of three exactly as without
--- the tolerance; tol_hit_o pulses once per mark accepted on a train of two.
+-- Diagnostic pulses: a1_candidate_o, a1_span_reject_o, a1_train_o,
+-- mark_fe_o and mark_dam_o concern candidates and trains of three and are
+-- the same with and without the tolerance. dam_unarmed_o pulses for a data
+-- mark of a train of three that the grammar rejects; with the tolerance this
+-- differs where the parser differs: the data mark after an ID recovered on a
+-- pair is armed and does not pulse, and a data mark that arrives while an ID
+-- opened on a pair is read pulses (the window above). tol_hit_o pulses once
+-- per mark accepted on a train of two, including an ID on a pair that turns
+-- out to have a bad CRC; locked_o rises with such a mark.
 -- The tolerance exists only with the production values of the sync
 -- generics; the historical columns of the A/B harness keep their behavior.
 --
@@ -189,8 +206,8 @@ architecture rtl of physical_1581_mfm_decoder is
   signal crc_mark_pend : integer range 0 to 2 := 0;
   signal crc_mark_byte : unsigned(7 downto 0) := (others => '0');
   -- The open ID was accepted on a train of two. Such an ID is reported only
-  -- with a good CRC; with a bad one it leaves no trace: no id_valid_o, and
-  -- the arm of the data mark and N of the last ID stay as they were.
+  -- with a good CRC; with a bad one there is no id_valid_o, and the arm of
+  -- the data mark and N of the last ID stay as they were.
   signal tol_id : std_logic := '0';
 
   -- Sync qualification state. The round-13 preamble counters remain only for
@@ -602,7 +619,7 @@ begin
         if state = S_ID_CHECK then
           if chk_cnt = 0 then
             if tol_id = '1' and crc_value /= x"0000" then
-              null;                         -- train of two, bad CRC: no trace
+              null;                         -- train of two, bad CRC: not reported
             else
               id_c_o          <= id_c_r;
               id_h_o          <= id_h_r;

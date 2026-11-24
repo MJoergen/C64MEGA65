@@ -8,7 +8,9 @@
 -- high). Every scenario starts with a decoder reset and checks, for both, the
 -- counts of decoded IDs, CRC-good IDs, data fields, CRC-good data fields,
 -- tol_hit_o pulses and ignored DAMs, the deleted flag of the last data field
--- and every payload byte.
+-- and every payload byte, that locked_o is high at every tol_hit_o pulse, and
+-- where a scenario names them the C, R, N and CRC verdict of the last ID and
+-- the length of the last data field.
 --
 -- Scenario 0 (both decoders identical) is the original vector: an ID field
 -- (C/H/R/N, CRC good) and a 512-byte data field whose payload embeds
@@ -20,10 +22,10 @@
 -- ID field and one inside the data field (issue #90 round 10): both fields
 -- decode byte-exact, runt_o pulses exactly twice, gap_error_o never fires.
 --
--- Scenarios 1 to 15 (issue #257 part E): the tolerance. A weak sync byte is
--- A1_WEAK of mfm_flux_gen_pkg, the recorded peak shift of the ID that stopped
--- a format: its long interval of 6.88 us classifies as medium, the candidate
--- of that byte is lost.
+-- Scenarios 1 to 22 (issue #257 part E; 28 cases, as 20 and 21 have four
+-- each): the tolerance. A weak sync byte is A1_WEAK of mfm_flux_gen_pkg, the
+-- recorded peak shift of the ID that stopped a format: its long interval of
+-- 6.88 us classifies as medium, the candidate of that byte is lost.
 --   1  ID, first sync byte weak            on: ID + data, 1 hit  off: DAM ignored
 --   2  ID, second sync byte weak           both: no ID, DAM ignored
 --   3  ID, third sync byte weak            both: no ID, DAM ignored
@@ -48,6 +50,25 @@
 --      CRC-valid ID body                   both: no ID
 --  16  ID weak first byte and a bad CRC (a damaged header): on: 1 hit, no ID
 --      reported, the DAM after it ignored; off: no ID, DAM ignored
+--  17  an ID on a pair and its data, then an ordinary ID with a bad CRC and
+--      its data: on: both IDs, the second with its bad CRC, its DAM ignored;
+--      off: only the second ID
+--  18  a false pair + FE, two bytes later a real ID with a bad CRC that
+--      re-anchors the parser: both: the real ID with its bad CRC, its DAM
+--      ignored; on: 1 hit
+--  19  MEGA65 layout (an ID right after the 4E bytes, no zero run), first
+--      sync byte weak: on: ID and 512-byte data, 1 hit; off: DAM ignored
+--  20  the window of a false ID on a pair: A1 A1 FE in the zero run of a
+--      data field with k zero bytes left before its sync train. k = 3, 4, 5:
+--      on: the data field lost (1 hit, DAM ignored); off: read. k = 6: both
+--      read it
+--  21  the bounds of the zero-run window of a data mark on a pair: the zero
+--      run ending r gaps before the pair's first candidate. r = 7, 11: on:
+--      data, 1 hit; r = 6, 12: on: no data; off: never
+--  22  the record of scenarios 1 and 4 without a weak byte: the ID of
+--      scenario 1 and the data field of scenario 4, both accepted on a pair,
+--      came in the same clock after the scenario start as these fields after
+--      three sync bytes (id_valid_o, data_start_o, data_end_o)
 --
 -- Run: ghdl -a --std=08 --workdir=B  <pkg> <crc> <4 stages> <decoder> <flux_pkg> <this>
 --      ghdl --elab-run --std=08 --workdir=B tb_physical_1581_mfm_decoder --assert-level=error
@@ -112,12 +133,15 @@ architecture sim of tb_physical_1581_mfm_decoder is
   -- event counters per decoder (monotonic; the stimulus compares deltas)
   type cnt_t is record
     ids, ids_ok, dat, dat_ok, tol, unarmed, runts, gerr, bad_bytes : natural;
+    lock_err   : natural;                 -- uses of the tolerance without locked_o
     last_bytes : natural;
     last_del   : std_logic;
     last_id_c, last_id_r, last_id_n : unsigned(7 downto 0);
     last_id_ok : std_logic;
+    t_idv, t_ds, t_de : time;             -- time of the last id_valid_o, data_start_o, data_end_o
   end record;
-  constant CNT0 : cnt_t := (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '0', x"00", x"00", x"00", '0');
+  constant CNT0 : cnt_t := (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '0', x"00", x"00", x"00", '0',
+                            0 ns, 0 ns, 0 ns);
   type cnt_arr is array (0 to 1) of cnt_t;
   signal cnt : cnt_arr := (others => CNT0);
 
@@ -127,7 +151,6 @@ architecture sim of tb_physical_1581_mfm_decoder is
     del : std_logic;                          -- deleted flag of the last data field
   end record;
 
-  signal fails : natural := 0;
 
   function hs(v : unsigned) return string is
   begin
@@ -165,15 +188,21 @@ begin
         if runt(k) = '1' then c(k).runts := c(k).runts + 1; end if;
         if gap_error(k) = '1' then c(k).gerr := c(k).gerr + 1; end if;
         if dam_unarmed(k) = '1' then c(k).unarmed := c(k).unarmed + 1; end if;
-        if tol_hit(k) = '1' then c(k).tol := c(k).tol + 1; end if;
+        if tol_hit(k) = '1' then
+          c(k).tol := c(k).tol + 1;
+          -- a mark accepted on a train of two raises locked_o in the same clock
+          if locked(k) /= '1' then c(k).lock_err := c(k).lock_err + 1; end if;
+        end if;
         if id_valid(k) = '1' then
           c(k).ids := c(k).ids + 1;
           if id_crc_ok(k) = '1' then c(k).ids_ok := c(k).ids_ok + 1; end if;
           c(k).last_id_c := id_c(k); c(k).last_id_r := id_r(k); c(k).last_id_n := id_n(k);
           c(k).last_id_ok := id_crc_ok(k);
+          c(k).t_idv := now;
         end if;
         if data_start(k) = '1' then
           bi(k) := 0;
+          c(k).t_ds := now;
         elsif data_byte_valid(k) = '1' then
           if data_byte(k) /= gen_data(bi(k)) then
             c(k).bad_bytes := c(k).bad_bytes + 1;
@@ -185,6 +214,7 @@ begin
           if data_crc_ok(k) = '1' then c(k).dat_ok := c(k).dat_ok + 1; end if;
           c(k).last_bytes := bi(k);
           c(k).last_del := data_deleted(k);
+          c(k).t_de := now;
         end if;
       end loop;
       cnt <= c;
@@ -196,6 +226,9 @@ begin
     variable prev : std_logic := '0';
     variable v    : unsigned(15 downto 0);
     variable s0   : cnt_arr;
+    variable fails : natural := 0;            -- failed checks
+    variable t_scn : time;                    -- start of the scenario (end of its reset)
+    variable t1_idv, t1_ds, t1_de, t4_ds, t4_de : time;
     type weak_t is array (1 to 3) of boolean;
     constant NONE_W : weak_t := (false, false, false);
 
@@ -260,12 +293,42 @@ begin
       wait for n * 20 ns - MFM_LOW_WIDTH;
     end procedure;
 
+    -- data field whose train has only its second and third sync byte: 12 x 00,
+    -- then nf filler gaps (medium and short alternately, medium first, so no
+    -- candidate can form), then A1 A1 + mark + gen_data(0 .. len-1) + CRC. The
+    -- zero run ends nf + 4 gaps before the first candidate of the pair (the
+    -- filler, then long, medium, long, medium of the first A1).
+    procedure data_pair_after(nf : positive; mark : unsigned(7 downto 0); len : natural) is
+      variable crc : unsigned(15 downto 0);
+    begin
+      mfm_bytes(f_rdata, x"00", 12, prev);
+      for i in 1 to nf loop
+        if i < nf then
+          if i mod 2 = 1 then gap_c(300); else gap_c(200); end if;
+        else                                  -- the first transition of the A1 comes 100 cycles into it
+          if i mod 2 = 1 then gap_c(200); else gap_c(100); end if;
+        end if;
+      end loop;
+      mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev);
+      mfm_byte(f_rdata, mark, prev);
+      crc := x"FFFF";
+      crc := crc16_update(crc, x"A1"); crc := crc16_update(crc, x"A1"); crc := crc16_update(crc, x"A1");
+      crc := crc16_update(crc, mark);
+      for i in 0 to len - 1 loop
+        mfm_byte(f_rdata, gen_data(i), prev);
+        crc := crc16_update(crc, gen_data(i));
+      end loop;
+      mfm_byte(f_rdata, crc(15 downto 8), prev);
+      mfm_byte(f_rdata, crc(7 downto 0), prev);
+    end procedure;
+
     procedure begin_scn is
     begin
       wait until rising_edge(clk);
       rst <= '1';
       for i in 1 to 4 loop wait until rising_edge(clk); end loop;
       rst <= '0';
+      t_scn := now;
       wait for 20 us;                         -- no flux: the gaps stage starts afresh
       prev := '0';
       mfm_bytes(f_rdata, x"4E", 16, prev);    -- lead-in: the estimate settles
@@ -286,6 +349,7 @@ begin
          c.dat - s0(k).dat /= e.dat or c.dat_ok - s0(k).dat_ok /= e.dat_ok or
          c.tol - s0(k).tol /= e.tol or c.unarmed - s0(k).unarmed /= e.unarmed or
          (e.dat_ok = e.dat and c.bad_bytes /= s0(k).bad_bytes) or
+         c.lock_err /= s0(k).lock_err or
          (e.dat /= 0 and c.last_del /= e.del) then
         ok := false;
       end if;
@@ -300,9 +364,29 @@ begin
                " hits " & integer'image(c.tol - s0(k).tol) & "/" & integer'image(e.tol) &
                " unarmed " & integer'image(c.unarmed - s0(k).unarmed) & "/" & integer'image(e.unarmed) &
                " bad bytes " & integer'image(c.bad_bytes - s0(k).bad_bytes) &
+               " hits without locked_o " & integer'image(c.lock_err - s0(k).lock_err) &
                " deleted " & std_logic'image(c.last_del) & "/" & std_logic'image(e.del)
           severity error;
-        fails <= fails + 1;
+        fails := fails + 1;
+      end if;
+    end procedure;
+
+    -- the last reported ID (C, R, N, CRC verdict) and the length of the last
+    -- data field (len = 0: not checked), where a scenario must not rely on the
+    -- CRC verdicts alone
+    procedure check_last(name : string; k : natural; c_e, r_e, n_e : unsigned(7 downto 0);
+                         ok_e : std_logic; len_e : natural) is
+      variable c : cnt_t;
+    begin
+      c := cnt(k);
+      if c.last_id_c /= c_e or c.last_id_r /= r_e or c.last_id_n /= n_e or c.last_id_ok /= ok_e or
+         (len_e /= 0 and c.last_bytes /= len_e) then
+        report "FAIL: " & name & " tolerance " & choose(k) & ": last ID C/R/N/ok " &
+               hs(c.last_id_c) & "/" & hs(c.last_id_r) & "/" & hs(c.last_id_n) & "/" & std_logic'image(c.last_id_ok) &
+               " expected " & hs(c_e) & "/" & hs(r_e) & "/" & hs(n_e) & "/" & std_logic'image(ok_e) &
+               ", last data field " & integer'image(c.last_bytes) & " bytes, expected " & integer'image(len_e)
+          severity error;
+        fails := fails + 1;
       end if;
     end procedure;
 
@@ -398,6 +482,8 @@ begin
     mfm_bytes(f_rdata, x"4E", 22, prev);
     data_field(x"FB", 128, NONE_W);
     end_scn("scenario 1 (ID, sync byte 1 weak)", (1, 1, 1, 1, 1, 0, '0'), (0, 0, 0, 0, 0, 1, '0'));
+    check_last("scenario 1", 0, x"4D", x"07", x"00", '1', 128);
+    t1_idv := cnt(0).t_idv - t_scn; t1_ds := cnt(0).t_ds - t_scn; t1_de := cnt(0).t_de - t_scn;
 
     -- ===== scenario 2: ID, second sync byte weak ============================
     begin_scn;
@@ -419,6 +505,8 @@ begin
     mfm_bytes(f_rdata, x"4E", 22, prev);
     data_field(x"FB", 128, weak(1));
     end_scn("scenario 4 (data FB, sync byte 1 weak)", (1, 1, 1, 1, 1, 0, '0'), (1, 1, 0, 0, 0, 0, '0'));
+    check_last("scenario 4", 0, x"4D", x"07", x"00", '1', 128);
+    t4_ds := cnt(0).t_ds - t_scn; t4_de := cnt(0).t_de - t_scn;
 
     -- ===== scenario 5: deleted data F8, first sync byte weak, 512 bytes =====
     begin_scn;
@@ -426,6 +514,7 @@ begin
     mfm_bytes(f_rdata, x"4E", 22, prev);
     data_field(x"F8", 512, weak(1));
     end_scn("scenario 5 (data F8, sync byte 1 weak)", (1, 1, 1, 1, 1, 0, '1'), (1, 1, 0, 0, 0, 0, '0'));
+    check_last("scenario 5", 0, x"4D", x"07", x"02", '1', 512);
 
     -- ===== scenario 6: data, second sync byte weak ==========================
     begin_scn;
@@ -505,6 +594,8 @@ begin
     mfm_bytes(f_rdata, x"4E", 6, prev);
     data_field(x"FB", 128, NONE_W);
     end_scn("scenario 13 (splice junk + two A1 + FE before the data)", (1, 1, 1, 1, 1, 0, '0'), (1, 1, 1, 1, 0, 0, '0'));
+    check_last("scenario 13", 0, x"4D", x"07", x"00", '1', 128);
+    check_last("scenario 13", 1, x"4D", x"07", x"00", '1', 128);
 
     -- ===== scenario 14: first and second sync byte weak (train of one) ======
     begin_scn;
@@ -544,6 +635,125 @@ begin
     data_field(x"FB", 128, NONE_W);
     end_scn("scenario 16 (ID sync byte 1 weak, bad CRC)", (0, 0, 0, 0, 1, 1, '0'), (0, 0, 0, 0, 0, 1, '0'));
 
+    -- ===== scenario 17: an ID on a pair, then an ordinary ID with a bad CRC ==
+    -- the FE of a train of three clears the mark of the pair: the second ID
+    -- is reported with its bad CRC, sets N and disarms its data field
+    begin_scn;
+    id_field(x"4D", x"01", x"07", x"00", weak(1), false, true);
+    mfm_bytes(f_rdata, x"4E", 22, prev);
+    data_field(x"FB", 128, NONE_W);
+    mfm_bytes(f_rdata, x"4E", 20, prev);
+    id_field(x"4D", x"01", x"08", x"01", NONE_W, true, true);
+    mfm_bytes(f_rdata, x"4E", 22, prev);
+    data_field(x"FB", 256, NONE_W);
+    end_scn("scenario 17 (pair ID, then ordinary ID with bad CRC)", (2, 1, 1, 1, 1, 1, '0'), (1, 0, 0, 0, 0, 2, '0'));
+    check_last("scenario 17", 0, x"4D", x"08", x"01", '0', 128);
+    check_last("scenario 17", 1, x"4D", x"08", x"01", '0', 0);
+
+    -- ===== scenario 18: a false pair + FE, a real ID re-anchors it ==========
+    -- the real ID (train of three, bad CRC) arrives while the false ID on the
+    -- pair is open: the re-anchor clears the mark of the pair, the real ID is
+    -- reported with its bad CRC
+    begin_scn;
+    mfm_bytes(f_rdata, x"4E", 4, prev);
+    mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev);
+    mfm_byte(f_rdata, x"FE", prev);
+    mfm_byte(f_rdata, x"4E", prev); mfm_byte(f_rdata, x"4E", prev);
+    id_field(x"4D", x"01", x"09", x"01", NONE_W, true, false);
+    mfm_bytes(f_rdata, x"4E", 22, prev);
+    data_field(x"FB", 256, NONE_W);
+    end_scn("scenario 18 (false pair FE, re-anchored ID with bad CRC)", (1, 0, 0, 0, 1, 1, '0'), (1, 0, 0, 0, 0, 1, '0'));
+    check_last("scenario 18", 0, x"4D", x"09", x"01", '0', 0);
+    check_last("scenario 18", 1, x"4D", x"09", x"01", '0', 0);
+
+    -- ===== scenario 19: MEGA65 format, ID right after the 4E bytes ==========
+    -- no zero run in front of the ID (an ID mark needs none), first sync byte
+    -- weak, 512-byte data field
+    begin_scn;
+    id_field(x"4D", x"00", x"0B", x"02", weak(1), false, false);
+    mfm_bytes(f_rdata, x"4E", 22, prev);
+    data_field(x"FB", 512, NONE_W);
+    end_scn("scenario 19 (MEGA65 layout, ID sync byte 1 weak)", (1, 1, 1, 1, 1, 0, '0'), (0, 0, 0, 0, 0, 1, '0'));
+    check_last("scenario 19", 0, x"4D", x"0B", x"02", '1', 512);
+
+    -- ===== scenario 20: the window of a false ID on a pair ==================
+    -- An ID, then in its gap 2 the zero run with A1 A1 FE in it and k zero
+    -- bytes between that FE and the sync train of the data field. The false
+    -- ID takes the six bytes after its FE; a data mark of a train of three
+    -- among them is ignored (dam_unarmed_o). k = 3 to 5: the data field is
+    -- lost with the tolerance and read without it; k = 6: read by both. (With
+    -- k below 3 the zero run in front of the data train is shorter than 16
+    -- short gaps, and no decoder reads the field.)
+    for k in 3 to 6 loop
+      begin_scn;
+      id_field(x"4D", x"01", x"07", x"00", NONE_W, false, true);
+      mfm_bytes(f_rdata, x"4E", 22, prev);
+      mfm_bytes(f_rdata, x"00", 6, prev);
+      mfm_a1(f_rdata, prev); mfm_a1(f_rdata, prev);
+      mfm_byte(f_rdata, x"FE", prev);
+      mfm_bytes(f_rdata, x"00", k, prev);
+      a1_train(NONE_W);
+      mfm_byte(f_rdata, x"FB", prev);
+      v := x"FFFF";
+      v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1"); v := crc16_update(v, x"A1");
+      v := crc16_update(v, x"FB");
+      for i in 0 to 127 loop mfm_byte(f_rdata, gen_data(i), prev); v := crc16_update(v, gen_data(i)); end loop;
+      mfm_byte(f_rdata, v(15 downto 8), prev);
+      mfm_byte(f_rdata, v(7 downto 0), prev);
+      if k < 6 then
+        end_scn("scenario 20 (false ID on a pair, " & integer'image(k) & " zero bytes before the data train)",
+                (1, 1, 0, 0, 1, 1, '0'), (1, 1, 1, 1, 0, 0, '0'));
+      else
+        end_scn("scenario 20 (false ID on a pair, " & integer'image(k) & " zero bytes before the data train)",
+                (1, 1, 1, 1, 1, 0, '0'), (1, 1, 1, 1, 0, 0, '0'));
+        check_last("scenario 20", 0, x"4D", x"07", x"00", '1', 128);
+      end if;
+      check_last("scenario 20", 1, x"4D", x"07", x"00", '1', 128);
+    end loop;
+
+    -- ===== scenario 21: the bounds of the zero-run window of a pair =========
+    -- a data mark on a pair after a CRC-valid ID, the zero run ending r gaps
+    -- before the first candidate of the pair: accepted for r = 7 and 11,
+    -- rejected for r = 6 and 12 (and never without the tolerance)
+    for r in 6 to 12 loop
+      if r = 6 or r = 7 or r = 11 or r = 12 then
+        begin_scn;
+        id_field(x"4D", x"01", x"07", x"00", NONE_W, false, true);
+        mfm_bytes(f_rdata, x"4E", 22, prev);
+        data_pair_after(r - 4, x"FB", 128);
+        if r = 7 or r = 11 then
+          end_scn("scenario 21 (data mark on a pair, zero run " & integer'image(r) & " gaps before it)",
+                  (1, 1, 1, 1, 1, 0, '0'), (1, 1, 0, 0, 0, 0, '0'));
+          check_last("scenario 21", 0, x"4D", x"07", x"00", '1', 128);
+        else
+          end_scn("scenario 21 (data mark on a pair, zero run " & integer'image(r) & " gaps before it)",
+                  (1, 1, 0, 0, 0, 0, '0'), (1, 1, 0, 0, 0, 0, '0'));
+        end if;
+      end if;
+    end loop;
+
+
+    -- ===== scenario 22: the timing of fields accepted on a pair ============
+    -- The record of scenarios 1 and 4 without a weak byte. A weak byte moves
+    -- only transitions of the first A1, every later transition is where it
+    -- was, so the pulses of the ID of scenario 1 and of the data field of
+    -- scenario 4, both accepted on a pair, must come in the same clock after
+    -- the scenario start as here after three sync bytes: a Write Sector
+    -- positioned by such an ID opens its write gate where it always did.
+    begin_scn;
+    id_field(x"4D", x"01", x"07", x"00", NONE_W, false, true);
+    mfm_bytes(f_rdata, x"4E", 22, prev);
+    data_field(x"FB", 128, NONE_W);
+    end_scn("scenario 22 (the record of scenarios 1 and 4 without a weak byte)", (1, 1, 1, 1, 0, 0, '0'), (1, 1, 1, 1, 0, 0, '0'));
+    if cnt(0).t_idv - t_scn /= t1_idv or cnt(0).t_ds - t_scn /= t4_ds or cnt(0).t_de - t_scn /= t4_de or
+       cnt(0).t_ds - t_scn /= t1_ds or cnt(0).t_de - t_scn /= t1_de then
+      report "FAIL: scenario 22: ID at " & time'image(cnt(0).t_idv - t_scn) & " (on a pair, scenario 1: " &
+             time'image(t1_idv) & "), data start at " & time'image(cnt(0).t_ds - t_scn) &
+             " (on a pair, scenario 4: " & time'image(t4_ds) & ")" severity error;
+      fails := fails + 1;
+    else
+      report "scenario 22: the ID of scenario 1 and the data field of scenario 4 came in the same clock as after three sync bytes";
+    end if;
     wait for 10 us;
     if fails = 0 then
       report "physical_1581_mfm_decoder: ALL TESTS PASSED";

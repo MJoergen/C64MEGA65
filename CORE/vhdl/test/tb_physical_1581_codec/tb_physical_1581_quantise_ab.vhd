@@ -121,7 +121,8 @@
 --     recorded refutation of the tight-acquisition fix candidate;
 --   * the tolerance never costs a row: no trial where toloff succeeds and
 --     production fails; the weak-first-sync-byte rows pass in production and
---     fail in toloff;
+--     fail in toloff and in every historical column (old, r12, r13, tacq,
+--     spanoff, seqoff), which have no tolerance;
 --   * SILENT-CORRUPTION GUARD: any CRC-approved decode (any instance, any
 --     trial) whose ID fields or payload differ from the golden record is a
 --     FATAL failure -- CRC-caught corruption is acceptable, silent wrong
@@ -870,6 +871,15 @@ begin
                & " (the vector does not exercise it)" severity error;
           fails := fails + 1;
         end if;
+        -- the historical columns have no tolerance: a tolerance that leaks
+        -- into one of them shows here
+        for k in 0 to 6 loop
+          if k /= 3 and okv(k) then
+            report "FAIL: weak-sync trial " & name & " decoded by the historical column "
+                 & iname(k) & " (the tolerance leaks out of the production generics)" severity error;
+            fails := fails + 1;
+          end if;
+        end loop;
       end if;
       report "TRIAL " & pad(name) & " old=" & pf(okv(0)) & " r12=" & pf(okv(1))
            & " r13=" & pf(okv(2)) & " prod=" & pf(okv(3)) & " tacq=" & pf(okv(4))
