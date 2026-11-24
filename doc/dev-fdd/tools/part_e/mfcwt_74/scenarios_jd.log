@@ -1,0 +1,34 @@
+# scenario=power rule=old pace=rtl hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+power-on, head on 39: pass | trains: STEPIN1 STEPOUT1 RESTORE39 SEEK39 | exams (ms after the start, ! failed): 2123 2260 2283 2284 2302 2303 2459 2463 | 74: - | marks: BUMP@2123 init-done@2720 | largest count at an exam, old rule 387 ms, new rule 47 ms
+# scenario=power rule=old pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+power-on, head on 39: FAIL | trains: STEPIN1 STEPOUT1 RESTORE39 | exams (ms after the start, ! failed): 2128 2381 2405 2406 2424! | 74: readiness@2424 readiness@2425 | marks: BUMP@2128 init-done@2432 | largest count at an exam, old rule 508 ms, new rule 50 ms
+# scenario=power rule=new pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+power-on, head on 39: pass | trains: STEPIN1 STEPOUT1 RESTORE39 SEEK39 | exams (ms after the start, ! failed): 2128 2381 2405 2406 2424 2425 2695 2702 | 74: - | marks: BUMP@2128 init-done@2959 | largest count at an exam, old rule 785 ms, new rule 51 ms
+# scenario=uj rule=old pace=rtl hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+UJ, then "$" 3 s later: FAIL | trains: RESTORE39 SEEK39 | exams (ms after the start, ! failed): 2098 2237 2244 2245 2264 2265 2420! 3005 3024 | 74: readiness@2420 | marks: BUMP@2098 init-done@2427 | largest count at an exam, old rule 503 ms, new rule 181 ms
+# scenario=uj rule=old pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+UJ, then "$" 3 s later: FAIL | trains: RESTORE39 SEEK39 | exams (ms after the start, ! failed): 2098 2352 2361 2362 2386 2387 2657! 3007 3024 | 74: readiness@2657 | marks: BUMP@2098 init-done@2664 | largest count at an exam, old rule 740 ms, new rule 181 ms
+# scenario=uj rule=new pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+UJ, then "$" 3 s later: pass | trains: RESTORE39 SEEK39 | exams (ms after the start, ! failed): 2098 2352 2361 2362 2386 2387 2657 2663 | 74: - | marks: BUMP@2098 init-done@2920 | largest count at an exam, old rule 746 ms, new rule 181 ms
+# scenario=bump rule=old pace=rtl hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+"$" with data CRC errors on cylinder 39: pass | trains: SEEK20 RESTORE39 SEEK39 | exams (ms after the start, ! failed): 809 905 923 978 981 1041 1045 1100 1238 1382 1406 1461 1464 | 74: - | marks: BUMP@1100 ERROR@1519 | largest count at an exam, old rule 386 ms, new rule 188 ms
+# scenario=bump rule=old pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+"$" with data CRC errors on cylinder 39: FAIL | trains: SEEK20 RESTORE39 SEEK39 | exams (ms after the start, ! failed): 805 949 952 1007 1010 1065 1069 1124 1377 1643! | 74: readiness@1643 readiness@1644 | marks: BUMP@1124 ERROR@1644 | largest count at an exam, old rule 624 ms, new rule 184 ms
+# scenario=bump rule=new pace=rate hold=18ms t_first=620ms head=39 ROM=c1581.rom of the current directory
+"$" with data CRC errors on cylinder 39: pass | trains: SEEK20 RESTORE39 SEEK39 | exams (ms after the start, ! failed): 805 949 952 1007 1010 1065 1069 1124 1377 1643 1649 1704 1708 | 74: - | marks: BUMP@1124 ERROR@1768 | largest count at an exam, old rule 688 ms, new rule 184 ms
+# scenario=seekw rule=old pace=rtl hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+write job on track 80, head on 1 before it: pass | trains: SEEK78 | exams (ms after the start, ! failed): 3 261 270 507 528 765 1003 | 74: - | marks: - | largest count at an exam, old rule 358 ms, new rule 197 ms
+# scenario=seekw rule=old pace=rate hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+write job on track 80, head on 1 before it: FAIL | trains: SEEK78 | exams (ms after the start, ! failed): 2 492! | 74: readiness@492 | marks: - | largest count at an exam, old rule 581 ms, new rule 91 ms
+# scenario=seekw rule=new pace=rate hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+write job on track 80, head on 1 before it: pass | trains: SEEK78 | exams (ms after the start, ! failed): 2 492 508 745 766 1003 1241 | 74: - | marks: - | largest count at an exam, old rule 597 ms, new rule 134 ms
+# scenario=pull rule=old pace=rtl hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+job result $03, change line 1, READY 0
+read job on track 80, head on 1 before it, disk taken out 200 ms after the job was posted: FAIL | trains: SEEK78 STEPIN1 STEPOUT1 | exams (ms after the start, ! failed): 3 | 74: readiness@286 | marks: taken-out@200 | largest count at an exam, old rule 91 ms, new rule 91 ms
+# scenario=pull rule=old pace=rate hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+job result $03, change line 1, READY 0
+read job on track 80, head on 1 before it, disk taken out 200 ms after the job was posted: FAIL | trains: SEEK78 STEPIN1 STEPOUT1 | exams (ms after the start, ! failed): 2 | 74: readiness@522 | marks: taken-out@200 | largest count at an exam, old rule 91 ms, new rule 91 ms
+# scenario=pull rule=new pace=rate hold=18ms t_first=620ms head=0 ROM=c1581.rom of the current directory
+job result $03, change line 1, READY 0
+read job on track 80, head on 1 before it, disk taken out 200 ms after the job was posted: FAIL | trains: SEEK78 STEPIN1 STEPOUT1 | exams (ms after the start, ! failed): 2 | 74: readiness@522 | marks: taken-out@200 | largest count at an exam, old rule 91 ms, new rule 91 ms
+EXIT 0

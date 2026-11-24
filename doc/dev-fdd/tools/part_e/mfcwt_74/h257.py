@@ -17,6 +17,15 @@
 #     for a hold time after the last step (hypothesis H1): an edge is lost
 #     from the start of a Type-I command with steps until suppress_hold after
 #     the end of its BUSY time;
+#   * a disk taken out (disk_in set False) and put in again as the RTL sees
+#     it: no index edge while it is out, so READY falls by its rule (500 ms
+#     after the last edge, or 500 ms of settled time); the disk-change line
+#     (chg_latch) is set and stays set until a step with a disk in; a read
+#     command (Read Sector, Read Address) while that line is set ends at once
+#     with record-not-found and no byte, as the RTL's read engine aborts on
+#     the level of the line; without a disk a Write Sector finds no sector
+#     header (record not found, no byte written) and a Write Track no index
+#     edge (no index after 300 ms);
 #   * Type-I timing by one of three paces (pace):
 #       None:   as the RTL of A25 does it: one step per controller acknowledge,
 #               3.03 ms, 4.03 ms after a reversal (the WD step-rate bits are
@@ -86,6 +95,7 @@ class M(WriteMachine):
         s.ready_rule = 'old'       # 'old' or 'new' (see the header)
         s.pace = None              # None (RTL of A25), 'rate' (WD1772 rate bits) or milliseconds
         s.susp_windows = []        # (start, end) cycles: step engine busy or head not settled
+        s.absent = []              # [out, in] cycles in which the disk was out (in None: still out)
     def L(s, kind, text):
         if s.logging: s.log.append((s.cyc, kind, text))
     # ---------------- motor / index / READY ----------------
@@ -96,19 +106,38 @@ class M(WriteMachine):
             s._motor_prev = m
             s.motor_on_at = s.cyc if m else None
             s.L('MOTOR', 'ON' if m else 'OFF')
+    # ---------------- the disk ----------------
+    @property
+    def disk_in(s):
+        return getattr(s, '_disk_in', True)
+    @disk_in.setter
+    def disk_in(s, v):
+        was = getattr(s, '_disk_in', True)
+        s._disk_in = bool(v)
+        if was and not v:
+            s.__dict__.setdefault('absent', []).append([getattr(s, 'cyc', 0), None])
+            s.chg_latch = True
+            s.L('DISK', 'taken out')
+        elif v and not was:
+            if s.__dict__.get('absent'): s.absent[-1][1] = getattr(s, 'cyc', 0)
+            s.L('DISK', 'put in')
+    def is_absent(s, t):
+        for a, b in s.__dict__.get('absent', []):
+            if a <= t and (b is None or t < b): return True
+        return False
     def suppressed(s, t):
         if not s.suppress_steps: return False
         for a, b in s.step_windows[-50:]:
             if a <= t <= b + s.suppress_hold: return True
         return False
     def last_edge(s, t):
-        if s.motor_on_at is None or not s.disk_in: return None
+        if s.motor_on_at is None: return None
         t0 = s.motor_on_at + s.t_first
         if t < t0: return None
         k = (t - t0) // s.rev_cyc
         while k >= 0:
             e = t0 + k * s.rev_cyc
-            if not s.suppressed(e): return e
+            if not s.suppressed(e) and not s.is_absent(e): return e
             k -= 1
             if t - (t0 + k * s.rev_cyc) > 4 * CPS: return None
         return None
@@ -206,7 +235,18 @@ class M(WriteMachine):
         if top >= 8:
             s.L('WD', '%-8s $%02X pc=$%04X TR=%d SR=%d head %d READY=%d'
                 % (fmt_cmd(v), v, s.cpu.pc, s.wd_track, s.wd_sector, s.head, int(s.ready())))
-        return super().wd_command(v)
+        key = (s.head, s.pa0_to_physside(), s.wd_sector)
+        if not s.disk_in and top in (0xA, 0xB) and key not in s.rnf_inject:
+            # no disk: the controller finds no sector header, nothing is written
+            s.rnf_inject.add(key); super().wd_command(v); s.rnf_inject.discard(key); return
+        if not s.disk_in and top == 0xF:
+            s.noidx_inject = True       # no disk: no index edge for the Write Track
+        r = super().wd_command(v)
+        if top in (0x8, 0x9, 0xC) and s.chg_latch and s.cmd == v and s.phys_op in ('rs', 'ra'):
+            # the RTL's read engine aborts on the level of the disk-change line
+            s.staged = None; s.ctrl_rnf = 1; s.ctrl_crc = 0; s.ctrl_done_at = s.cyc + 20
+            s.L('WD', '  aborted at once: disk-change line set (record not found, no byte)')
+        return r
     def next_id(s, r, not_before):
         return super().next_id(r, max(not_before, s.settle_until))
     def next_any_id(s, not_before):
