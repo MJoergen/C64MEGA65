@@ -4,7 +4,7 @@
 #   power   the power-on initialization (the mechanism runs from the reset on)
 #   uj      "UJ" (cold reset of the DOS) with the motor stopped, "$" 3 s later
 #   bump    "$" with every sector of cylinder 39 giving a data CRC error: two retries, the bump
-#           of the DOS (a Restore and a Seek), two more retries, error 20
+#           of the DOS (a Restore and a Seek), two more retries, error 23 (READ ERROR)
 #   seekw   motor running (a job on the next cylinder started it, so the head is on cylinder 1),
 #           a write job on track 80 (a seek of 78 cylinders)
 #   pull    as seekw with a read job, the disk taken out 200 ms after the job was posted, while
