@@ -2806,9 +2806,10 @@ begin
   --------------------------------------------------------------------------------------------------
   -- Device C_DEV_C64_PHYS1581 = 0x0108. Runs on c64_clk_sd_i (== QNICE clock ==
   -- controller clock), so it observes the controller with zero CDC. Observational
-  -- with one exception: WR_CTRL (word 0x9A, map v8) drives the controller's
-  -- precomp override. It never touches the gate. See doc/1581_dd_debug_device.md
-  -- for the register map and how to read it from QNICE.
+  -- with two exceptions: WR_CTRL (word 0x9A, map v8) drives the controller's
+  -- precomp override, and RD_CTRL (word 0xA5, map v10) switches the decoder's
+  -- tolerance for a weak sync byte off. It never touches the gate. See
+  -- doc/1581_dd_debug_device.md for the register map and how to read it from QNICE.
   i_physical_1581_diag : entity work.physical_1581_diag
     port map (
       clk_i             => c64_clk_sd_i,

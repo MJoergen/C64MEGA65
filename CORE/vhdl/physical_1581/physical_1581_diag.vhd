@@ -54,8 +54,10 @@
 --     ms without an index edge), how often the decoder used its tolerance for
 --     a weak sync byte (0xA4), and RD_CTRL (0xA5), the second writable word:
 --     bit 0 switches that tolerance off. 0xA2 shows whether the mechanism
---     withholds index pulses while the head steps (about 200 when every
---     pulse arrives, about 400 or 600 when one or two in a row are missing).
+--     withholds index pulses while the head steps: about one revolution
+--     (200) when every pulse arrives, a whole multiple of it when pulses
+--     are missing (2 to 5 revolutions after a recalibration at the 6 ms per
+--     step of the DOS; doc/1581_dd_debug_device.md, section 2.4).
 --
 -- It runs on clk_i == c64_clk_sd_i, which is the SAME 50 MHz clock as both the
 -- physical_1581_controller and the QNICE CPU -> no clock-domain crossing is
@@ -73,6 +75,11 @@
 -- switches the decoder's tolerance for a weak sync byte off; reset 0). QNICE
 -- writes to every other word are ignored. Register reads are a purely
 -- combinational mux over the register file, with no wait-state.
+--
+-- rst_i is c64_rst_sd_i, the QNICE reset (power-on, or the reset button held
+-- for more than 1.5 s). A short press of the reset button resets the C64 core
+-- only: no word of this bank is cleared, and WR_CTRL and RD_CTRL keep their
+-- values.
 --
 -- Register map: see the RM_* constants below and doc/1581_dd_debug_device.md.
 --

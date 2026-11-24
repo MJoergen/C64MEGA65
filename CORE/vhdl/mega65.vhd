@@ -1379,8 +1379,10 @@ begin
 
          -- Physical internal 1581: diagnostic register bank (issues #90 and #244).
          -- Mirrors the C_DEV_C64_RAM pattern: no wait-state. The diag bank accepts
-         -- one write, WR_CTRL (word 0x9A, precomp override), and ignores writes to
-         -- every other word. Its QNICE port lives in i_main (same 50 MHz domain).
+         -- writes to two words, WR_CTRL (word 0x9A, precomp override) and RD_CTRL
+         -- (word 0xA5, the switch of the decoder's tolerance for a weak sync byte),
+         -- and ignores writes to every other word. Its QNICE port lives in i_main
+         -- (same 50 MHz domain).
          when C_DEV_C64_PHYS1581 =>
             phys_diag_ce               <= qnice_dev_ce_i;
             phys_diag_we               <= qnice_dev_we_i;
