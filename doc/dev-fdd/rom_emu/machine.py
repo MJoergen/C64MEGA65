@@ -12,9 +12,24 @@
 #   - non-Force-Interrupt command writes while busy are IGNORED
 #   - no unilateral not-ready completions: an op issued while the medium is
 #     not ready completes via the controller's own bounded RNF-class result
-# Type-I (seek/step) commands keep the simple timed model (unchanged by v2).
+# Type-I (seek/step) commands keep the simple timed model (unchanged by v2):
+# every step takes T1_STEP_CYC cycles, a command without a step 1.5 ms. The
+# default, 1.5 ms per step, is not the step time of the RTL (the rate of the
+# command, 6 ms for the ROM's codes, with the controller's acknowledge as the
+# lower bound; run_257_proofs.py models that): the proofs of this model are
+# about the delivery and the write contract, which do not depend on it.
+# run_proofs.py and run_write_proofs.py take --t1-step-ms=<ms> to run with
+# another step time; they pass at 1.5, 6 and 12 ms. (run_write_proofs.py
+# writes its fixtures, which then come out at another rotational phase:
+# restore them from git. run_257_proofs.py replaces the Type-I timing with
+# its own.)
 import sys, os
 from cpu6502 import CPU
+
+T1_STEP_CYC = 3000
+for _a in sys.argv[1:]:
+    if _a.startswith('--t1-step-ms='):
+        T1_STEP_CYC = int(round(float(_a.split('=', 1)[1]) * 2000))
 
 def _load_rom():
     # 1) explicit path on the command line, 2) c1581.rom in the CWD,
@@ -268,22 +283,22 @@ class Machine:
             n=self.head
             for _ in range(n): self.do_step(True)
             self.wd_track=0
-            self.busy_until=self.cyc+ max(1,n)*3000
+            self.busy_until=self.cyc+ (n*T1_STEP_CYC if n else 3000)
         elif top==0x1:    # SEEK
             step_to=self.wd_data_in
             n=abs(self.wd_track-step_to)
             outward = step_to < self.wd_track
             for _ in range(n): self.do_step(outward)
             self.wd_track=step_to
-            self.busy_until=self.cyc+max(1,n)*3000
+            self.busy_until=self.cyc+(n*T1_STEP_CYC if n else 3000)
         elif top in (0x2,0x3): # STEP (repeat last dir): model as inward
-            self.do_step(False); self.busy_until=self.cyc+3000
+            self.do_step(False); self.busy_until=self.cyc+T1_STEP_CYC
             if v&0x10: self.wd_track=(self.wd_track+1)&0xFF
         elif top in (0x4,0x5): # STEP-IN
-            self.do_step(False); self.busy_until=self.cyc+3000
+            self.do_step(False); self.busy_until=self.cyc+T1_STEP_CYC
             if v&0x10: self.wd_track=(self.wd_track+1)&0xFF
         elif top in (0x6,0x7): # STEP-OUT
-            self.do_step(True); self.busy_until=self.cyc+3000
+            self.do_step(True); self.busy_until=self.cyc+T1_STEP_CYC
             if v&0x10: self.wd_track=(self.wd_track-1)&0xFF
         elif top in (0x8,0x9): # READ SECTOR
             self.start_phys_op('rs')

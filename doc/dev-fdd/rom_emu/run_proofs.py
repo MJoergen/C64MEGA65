@@ -200,39 +200,42 @@ check('P-M3 stuck PA7 independently -> job 03, zero WD read commands',
 # Source-derived F011 rotational layout.  Starting from cylinder 3 reproduces
 # the genuine login context: one RA locates the resting cylinder, 36 steps seek
 # to cylinder 39, and subsequent RAs can encounter the complete sector-11 ID.
-pm4 = copy.deepcopy(media_base)
-pm4.head = 3
-pm4.wd_track = 0
-pm4.ra_layout = 'f011'
-pm4.f011_phase_origin = 0
-cold_cache(pm4)
-mark = len(pm4.trace)
-post_job(pm4, 0x80, 40, 3)
-run_until_idle(pm4, 4_000_000, 'P-M4 F011 sector 11')
-pm4_ra = ra_sectors(pm4, mark)
-pm4_rs = rs_cmds(pm4, mark)
-check('P-M4 faithful F011 layout exposes sector 11 and stops before Read Sector',
-      pm4.ram[2] == 0x02 and pm4_ra[-3:] == [5, 10, 11] and len(pm4_rs) == 0,
-      'result=%02X RA=%s rs=%d' % (pm4.ram[2], pm4_ra, len(pm4_rs)))
+# Which IDs the Read Address commands after the seek meet depends on the
+# rotational phase at which they come, and the time of the seek moves that
+# phase. So both proofs run over 20 phase origins, 10 ms apart (one
+# revolution of 200 ms; two IDs are at least 12.2 ms apart, so the first ID
+# after the seek takes every value), and hold for any time per step of the
+# Type I model of machine.py.
+F011_PHASES = 20
+def f011_login(origin, normalized):
+    fm = copy.deepcopy(media_base)
+    fm.head = 3
+    fm.wd_track = 0
+    fm.ra_layout = 'f011'
+    fm.f011_phase_origin = origin
+    if normalized:
+        fm.f011_id_end_bytes = fm.f011_id_end_bytes[:10]  # physical RA normalization
+    cold_cache(fm)
+    mark = len(fm.trace)
+    post_job(fm, 0x80, 40, 3)
+    run_until_idle(fm, 4_000_000, 'F011 login')
+    return (origin, fm.ram[2], ra_sectors(fm, mark)[-3:], len(rs_cmds(fm, mark)),
+            bytes(fm.ram[0x0C00:0x2000]) == cache_expected(fm))
 
-pm5 = copy.deepcopy(media_base)
-pm5.head = 3
-pm5.wd_track = 0
-pm5.ra_layout = 'f011'
-pm5.f011_phase_origin = 0
-pm5.f011_id_end_bytes = pm5.f011_id_end_bytes[:10]  # physical RA normalization
-cold_cache(pm5)
-mark = len(pm5.trace)
-post_job(pm5, 0x80, 40, 3)
-run_until_idle(pm5, 4_000_000, 'P-M5 normalized F011 RA')
-pm5_ra = ra_sectors(pm5, mark)
-pm5_rs = rs_cmds(pm5, mark)
-pm5_exact = bytes(pm5.ram[0x0C00:0x2000]) == cache_expected(pm5)
-check('P-M5 hiding R outside 1..10 heals F011 login byte-exact',
-      pm5.ram[2] < 2 and pm5_ra[-3:] == [5, 10, 1] and
-      len(pm5_rs) == 10 and pm5_exact,
-      'result=%02X RA=%s rs=%d exact=%s'
-      % (pm5.ram[2], pm5_ra, len(pm5_rs), pm5_exact))
+f011_rev = media_base.f011_rev_bytes * media_base.PACE
+pm4_runs = [f011_login(k * f011_rev // F011_PHASES, False) for k in range(F011_PHASES)]
+pm5_runs = [f011_login(k * f011_rev // F011_PHASES, True) for k in range(F011_PHASES)]
+pm4_hit = [r for r in pm4_runs if r[1] == 0x02 and r[2][-1:] == [11] and r[3] == 0]
+check('P-M4 faithful F011 layout exposes sector 11 and stops before Read Sector, in some rotational phase',
+      len(pm4_hit) >= 1,
+      '%d of %d phases: job 02, no Read Sector; first: origin %.1f ms RA=%s'
+      % (len(pm4_hit), F011_PHASES, (pm4_hit[0][0] / 2000.0) if pm4_hit else -1, pm4_hit[0][2] if pm4_hit else []))
+pm5_bad = [r for r in pm5_runs if not (r[1] < 2 and r[3] == 10 and r[4])]
+check('P-M5 hiding R outside 1..10 heals F011 login byte-exact, in every rotational phase',
+      len(pm5_bad) == 0,
+      '%d of %d phases with result < 2, 10 Read Sectors and an exact cache%s'
+      % (F011_PHASES - len(pm5_bad), F011_PHASES,
+         '' if not pm5_bad else '; first failure: origin %.1f ms result=%02X RS=%d' % (pm5_bad[0][0] / 2000.0, pm5_bad[0][1], pm5_bad[0][3])))
 
 # ================= P-C: truncated sector, CRC-only status =================
 cold_cache(m)

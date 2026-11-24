@@ -18,8 +18,11 @@
 #     3 ms) and for the acknowledge of the controller (3.03 ms, 4.03 ms after
 #     a reversal), whichever is longer; BUSY of a command with n steps is the
 #     sum of its n paces, of a command without a step 1.5 ms. With paced =
-#     False a step takes the acknowledge alone: the RTL of WIP-V6-A25, which
-#     the tester's hardware ran (proof I3 reproduces its dumps).
+#     False a step takes the acknowledge alone: the step timing before
+#     WIP-V6-A28, which WIP-V6-A21X1 (the hardware of comment 17 of the
+#     issue, whose dumps and format time I2, I3 and R5 reproduce) and
+#     WIP-V6-A25 share. I1 to I5 are the proofs of that timing; I6 is the
+#     exam with the RTL of WIP-V6-A28.
 #
 #   * The delivery of a Read Sector as the RTL does it. "live" is a real
 #     WD1772 (and the model of wd_write_model.py): bytes are presented as they
@@ -64,8 +67,9 @@ class M257(WriteMachine):
         self.step_ack = (6060, 8060)     # controller: 3.03 ms same direction, 4.03 ms after a reversal
         self.step_rate = {0: 12000, 1: 24000, 2: 4000, 3: 6000}   # fdc1772.v phys_rate_ticks / 4
         self.t1_min = 3000               # PHYS_T1_MIN_TICKS: 1.5 ms
-        self.paced = True                # False: a step per acknowledge (WIP-V6-A25)
+        self.paced = True                # False: a step per acknowledge (WIP-V6-A21X1, WIP-V6-A25)
         self._last_out = None            # direction of the last step (any Type-I command)
+        self.t1_log = []                 # (cycle, command, steps, BUSY cycles) of every Type-I command
         self.led_log = []                # (cycle, PA5, PA6)
         self._led_prev = None
         # ---- delivery ----
@@ -121,6 +125,7 @@ class M257(WriteMachine):
                 busy += max(rate, self.step_ack[1] if rev else self.step_ack[0])
             if n: self._last_out = out
             self.busy_until = self.cyc + (busy if n else self.t1_min)
+            self.t1_log.append((self.cyc, v, n, self.busy_until - self.cyc))
         if top in (0x8, 0x9) and self.ctrl_done_at is not None and not self.ctrl_rnf:
             self.rs_log.append((self.wd_sector, 'live', self.cyc, self.ctrl_done_at))
     def read_sector(self, v):
@@ -204,8 +209,9 @@ def changed_disk(t_first_s, need, paced=True):
     return m
 
 # ================= I: the first access after inserting a disk =================
+# I1 to I5: the step timing of WIP-V6-A21X1 and WIP-V6-A25 (paced = False)
 print('\n--- I: first access after inserting a disk (motor stopped, disk changed) ---', flush=True)
-m = changed_disk(0.40, 1)
+m = changed_disk(0.40, 1, paced=False)
 res, mc, mt = run_job(m, 0x80, 40, 0)
 t_exam = m.pa1_samples[0][0] / CPS if m.pa1_samples else None
 st = [fmt_cmd(c[1]) + ' $%02X' % c[1] for c in steps(m, mc)]
@@ -213,19 +219,21 @@ check('I1 the ROM examines READY once, 0.80 to 0.86 s after it switched the moto
       res == 0 and t_exam is not None and 0.80 <= t_exam <= 0.86 and st == ['STEPIN $48', 'STEPOUT $68'],
       'first PA1 read of $CDBC %.4f s after motor-on, steps %s, job %02X' % (t_exam or -1, st, res))
 T_EXAM = t_exam
+PAIR_ACK = sum(e[3] for e in m.t1_log if e[0] >= m.cmd_log[mc][0] and (e[1] >> 4) in (0x4, 0x5, 0x6, 0x7))
 
-def outcome(t_first_s, need):
-    m = changed_disk(t_first_s, need)
+def outcome(t_first_s, need, paced=False):
+    m = changed_disk(t_first_s, need, paced)
     res, mc, mt = run_job(m, 0x80, 40, 0)
     return res, len(steps(m, mc)), len(rw_cmds(m, mc))
 
-# the step pair takes 2 x 6 ms (the rate of $48 and $68), so the exam comes at
-# 0.830 s and a second pulse at 0.631 s + 199.3 ms is the last one in time
-a = outcome(0.62, 2); b = outcome(0.635, 2)
-check('I2 two index pulses: a first pulse at 0.62 s is in time, at 0.635 s the job ends with error 3 (DOS 74) after one step pair and without any read or write command',
-      a[0] == 0 and a[2] > 0 and b == (3, 2, 0), '0.62 s: job %02X, %d read commands; 0.635 s: job %02X, %d steps, %d read/write commands' % (a[0], a[2], b[0], b[1], b[2]))
+# the two-pulse rule (the controller up to WIP-V6-A22X3) with the steps at the
+# acknowledge: the hardware of comment 17 (WIP-V6-A21X1)
+a = outcome(0.62, 2); b = outcome(0.63, 2)
+I2 = a[0] == 0 and a[2] > 0 and b == (3, 2, 0)
+check('I2 two index pulses, steps at the acknowledge: a first pulse at 0.62 s is in time, at 0.63 s the job ends with error 3 (DOS 74) after one step pair and without any read or write command',
+      I2, '0.62 s: job %02X, %d read commands; 0.63 s: job %02X, %d steps, %d read/write commands' % (a[0], a[2], b[0], b[1], b[2]))
 
-# the tester's hardware ran WIP-V6-A25, whose steps took the acknowledge alone
+# the dumps "10-pre" and "FMT-0" of comment 17 (WIP-V6-A21X1, steps at the acknowledge)
 m = changed_disk(0.65, 2, paced=False)
 res, mc, mt = run_job_until_motor_off(m, 0x80, 40, 0)
 on = [e[0] for e in m.motor_log if e[1] == 'on']; off = [e[0] for e in m.motor_log if e[1] == 'off']
@@ -237,19 +245,36 @@ check('I3 the failing access as the tester saw it: error 3, two steps, no read, 
 DUR = dur
 lo = (DUR - 53 * m.rev_cyc) / CPS; hi = (DUR - 52 * m.rev_cyc) / CPS
 print('     53 pulses in %.3f s mean: first pulse later than %.3f s and not later than %.3f s after motor-on;' % (DUR / CPS, lo, hi))
-print('     the job fails from 0.63 s on, so both failing accesses had their first pulse 0.63 to %.3f s after motor-on' % hi)
+if I2:
+    print('     the job fails from 0.63 s on (I2), so both failing accesses had their first pulse 0.63 to %.3f s after motor-on' % hi)
 
-a = outcome(0.82, 1); b = outcome(0.835, 1); c = outcome(0.665, 1)
-check('I4 one index pulse: a first pulse at 0.665 s (the upper bound of the two failing accesses) and even at 0.82 s is in time; 0.835 s is beyond the limit of the ROM itself (the exam at 0.830 s)',
+# the one-pulse rule (the controller since WIP-V6-A25) with the steps of WIP-V6-A25
+a = outcome(0.82, 1); b = outcome(0.83, 1); c = outcome(0.665, 1)
+check('I4 one index pulse, steps at the acknowledge: a first pulse at 0.665 s (the upper bound of the two failing accesses) and even at 0.82 s is in time; 0.83 s is the limit of the ROM itself',
       c[0] == 0 and c[2] > 0 and a[0] == 0 and a[2] > 0 and b == (3, 2, 0),
-      '0.665 s: job %02X; 0.82 s: job %02X; 0.835 s: job %02X' % (c[0], a[0], b[0]))
+      '0.665 s: job %02X; 0.82 s: job %02X; 0.83 s: job %02X' % (c[0], a[0], b[0]))
 
-m = copy.deepcopy(base); m.t_first = int(0.40 * CPS); m.need = 1      # unchanged disk: no step pair
+m = copy.deepcopy(base); m.t_first = int(0.40 * CPS); m.need = 1; m.paced = False   # unchanged disk: no step pair
 res, mc, mt = run_job(m, 0x80, 40, 0)
 t_un = m.pa1_samples[0][0] / CPS if m.pa1_samples else None
 check('I5 unchanged disk: no step pair, READY examined 0.79 to 0.82 s after motor-on',
       res == 0 and len(steps(m, mc)) == 0 and t_un is not None and 0.79 <= t_un <= 0.82,
       'first PA1 read %.4f s after motor-on' % (t_un or -1))
+
+# I6: the RTL of WIP-V6-A28: the one-pulse rule and the steps at the rate of the
+# command; the step pair takes 2 x 6 ms, and the exam comes later by exactly
+# what the pair takes longer than with the steps at the acknowledge (I1)
+m = changed_disk(0.40, 1, paced=True)
+res, mc, mt = run_job(m, 0x80, 40, 0)
+t_ex6 = m.pa1_samples[0][0] / CPS if m.pa1_samples else None
+pair6 = sum(e[3] for e in m.t1_log if e[0] >= m.cmd_log[mc][0] and (e[1] >> 4) in (0x4, 0x5, 0x6, 0x7))
+st6 = [fmt_cmd(c[1]) + ' $%02X' % c[1] for c in steps(m, mc)]
+a = outcome(0.83, 1, paced=True); b = outcome(0.835, 1, paced=True)
+check('I6 WIP-V6-A28 (one index pulse, steps at the rate of the command): the step pair takes 12 ms and READY is examined later than in I1 by what the pair takes longer; a first pulse at 0.83 s is in time, at 0.835 s the job ends with error 3',
+      res == 0 and st6 == ['STEPIN $48', 'STEPOUT $68'] and pair6 == 24000 and t_ex6 is not None and T_EXAM is not None
+      and abs((t_ex6 - T_EXAM) - (pair6 - PAIR_ACK) / CPS) < 0.0002 and a[0] == 0 and a[2] > 0 and b == (3, 2, 0),
+      'first PA1 read of $CDBC %.4f s after motor-on (I1: %.4f s), step pair %.2f ms (I1: %.2f ms); 0.83 s: job %02X; 0.835 s: job %02X'
+      % (t_ex6 or -1, T_EXAM or -1, pair6 / 2000.0, PAIR_ACK / 2000.0, a[0], b[0]))
 
 # ================= R: ten Read Sectors of a track side =================
 print('\n--- R: reading a track side (cache fill of the DOS, job $80 on a cold cache) ---', flush=True)
@@ -280,9 +305,16 @@ check('R4 with the read-ahead buffer: nine of ten sectors served from the buffer
       '%.1f ms' % fill['readahead']['ms'])
 
 print('\n--- R: format, two cylinders (N0: = job $C0 + job $F0), verify after every Write Track ---', flush=True)
+# a real WD1772 and the read-ahead (WIP-V6-A28) step at the rate of the command;
+# delivery v2 alone is the hardware of comment 17 (WIP-V6-A21X1), which stepped
+# at the acknowledge. One cylinder is measured from the Write Track of side 1
+# of cylinder 0 to that of side 1 of cylinder 1: each Write Track starts at an
+# index pulse, so this does not depend on the rotational phase at which the
+# format begins (the first Write Track waits for an index pulse, the
+# measurement does not include that wait).
 fmt = {}
-for mode in ('live', 'quarantine', 'readahead'):
-    m = copy.deepcopy(base); m.delivery = mode
+for mode, paced in (('live', True), ('quarantine', False), ('readahead', True)):
+    m = copy.deepcopy(base); m.delivery = mode; m.paced = paced
     m.head = 3; m.wd_track = 3
     m.ram[0x8F] = 1                     # last cylinder := 1
     m.ram[0x95] = 0x80; m.ram[0x87] = 0
@@ -296,15 +328,16 @@ for mode in ('live', 'quarantine', 'readahead'):
     rs = [c for c in m.cmd_log[mc:] if (c[1] >> 4) in (0x8, 0x9)]
     # one side = from its Write Track to the next Write Track (sides 0/1 of cylinder 0, side 0 of cylinder 1)
     per_side = [(wt[i + 1] - wt[i]) / 2000.0 for i in range(len(wt) - 1)]
-    per_cyl = (wt[2] - wt[0]) / 2000.0 if len(wt) >= 3 else 0
+    per_cyl = (wt[3] - wt[1]) / 2000.0 if len(wt) >= 4 else 0
     blank = all(bytes(m.disk[(c, h, r)]) == bytes(512) for c in (0, 1) for h in (0, 1) for r in range(1, 11))
     fmt[mode] = dict(ok=ok, res=m.ram[2], wt=len(wt), rs=len(rs), per_cyl=per_cyl, blank=blank)
-    print('     %-10s job %02X, %d Write Tracks, %d Read Sectors, one cylinder (two sides and the step) %7.1f ms -> 80 cylinders %5.1f s = %d min %02d s'
-          % (mode, m.ram[2], len(wt), len(rs), per_cyl, per_cyl * 80 / 1000.0, int(per_cyl * 80 / 60000), int(per_cyl * 80 / 1000) % 60))
-check('R5 format, delivery v2 without read-ahead: 80 cylinders take 6 to 7.5 minutes (the tester measured 6 min 43 s)',
+    print('     %-10s %s job %02X, %d Write Tracks, %d Read Sectors, sides %s ms, one cylinder (two sides and the step) %7.1f ms -> 80 cylinders %5.1f s = %d min %02d s'
+          % (mode, 'paced  ' if paced else 'unpaced', m.ram[2], len(wt), len(rs), ['%.1f' % x for x in per_side],
+             per_cyl, per_cyl * 80 / 1000.0, int(per_cyl * 80 / 60000), int(per_cyl * 80 / 1000) % 60))
+check('R5 format, delivery v2 without read-ahead, steps at the acknowledge (WIP-V6-A21X1): 80 cylinders take 6 to 7.5 minutes (the tester measured 6 min 43 s)',
       fmt['quarantine']['res'] == 1 and fmt['quarantine']['blank'] and 360 <= fmt['quarantine']['per_cyl'] * 80 / 1000 <= 450,
       '%.1f s' % (fmt['quarantine']['per_cyl'] * 80 / 1000))
-check('R6 format with the read-ahead buffer: under two minutes, like a real WD1772',
+check('R6 format with the read-ahead buffer, steps at the rate (WIP-V6-A28): under two minutes, like a real WD1772',
       fmt['readahead']['res'] == 1 and fmt['readahead']['blank'] and fmt['readahead']['per_cyl'] * 80 / 1000 <= 120
       and abs(fmt['readahead']['per_cyl'] - fmt['live']['per_cyl']) <= 60,
       'read-ahead %.1f s, real chip %.1f s' % (fmt['readahead']['per_cyl'] * 80 / 1000, fmt['live']['per_cyl'] * 80 / 1000))
