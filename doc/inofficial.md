@@ -47,7 +47,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A25    | 11/14/26 | 6845596 | Internal 1581: the first access after inserting a disk works (it could fail with 74 DRIVE NOT READY); reading a track takes one revolution instead of ten, so a format takes about 1 min 45 s instead of 6 min 43 s; the drive LED blinks when a 1581 reports an error (issue #257)
 | WIP-V6-A26    | 11/17/26 | 69d0f51 | Amiga mouse support incl. right click via MEGA + left button (issue #190); Atari CX30 paddle support (issue #193); fixed rare wrong paddle and 1351 values
 | WIP-V6-A27    | 11/20/26 | c20a7f3 | HDMI Frame Sync `Raw`: HDMI at the C64's own frame rate (issues #184 and #148)
-| WIP-V6-A28    | TBD      | TBD     | File browser: no more error 2704 on folders whose directory exactly fills its clusters on the SD card; a broken long file name no longer crashes the file browser (MiSTer2MEGA65 issue #84); Internal 1581: no more 74 DRIVE NOT READY after UI or other recalibrations, the head steps at the 6 ms of a real 1581, and a weakly recorded first sync byte no longer hides a sector (issue #257)
+| WIP-V6-A28    | 11/24/26 | 4badd5c | File browser: no more error 2704 on folders whose directory exactly fills its clusters; a broken long file name no longer crashes it (MiSTer2MEGA65 issue #84); Internal 1581: no more 74 DRIVE NOT READY after UI, head steps at 6 ms like a real 1581, a weak first sync byte no longer hides a sector (issue #257)
 
 ## Version 5.2
 
