@@ -16,7 +16,7 @@ Computes `IDX_GAP_MAX_MS` (map v10) after a recalibration from cylinders 0, 39 a
 
 ## `regression/`: the simulation regression of `CORE/vhdl/physical_1581`
 
-The benches of the controller simulate the 50 MHz clock for up to 1.5 s, so the whole regression takes about ten core hours. These scripts run it as a queue of jobs with a limit on how many run at the same time, and they give a verdict per job. They need GHDL 5.1.1, nvc 1.21 (the jobs `mut_decoder_runner` and `flux_runner` build with nvc alone; `media_contract_runner` and `mut_diag_runner` use it when it is installed), python3 and git; `jobq.py` calls `script(1)` in the form of macOS.
+The benches of the controller simulate the 50 MHz clock for up to 1.5 s, so the whole regression takes seven and a half core hours. These scripts run it as a queue of jobs with a limit on how many run at the same time, and they give a verdict per job. They need GHDL 5.1.1, nvc 1.21 (the jobs `mut_decoder_runner` and `flux_runner` build with nvc alone; `media_contract_runner` and `mut_diag_runner` use it when it is installed), python3 and git; `jobq.py` calls `script(1)` in the form of macOS.
 
 ```text
 T=<repository>/doc/dev-fdd/tools/regression

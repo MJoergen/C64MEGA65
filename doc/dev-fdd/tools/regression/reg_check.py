@@ -75,6 +75,8 @@ for name, log, cmd in jobs:
             rej = len(re.findall(r"mutant '[^']*' rejected", text)); note = "%d mutants rejected" % rej
             surv = [x.strip() for x in text.split("\n") if "mutant" in x and "rejected" not in x and "===" not in x]
             if surv: ok = False; note += "; NOT rejected: " + surv[0][:100]
+            if name == "flux_runner":
+                note = "%d checks OK" % len(re.findall(r": OK$", text, re.M))
             if name == "mut_decoder_runner":
                 # mutants_mfm_decoder.py: one line per mutant with KILLED or SURVIVED, and its own verdict line
                 ok = ok and "MUTANTS RESULT: PASS" in text
