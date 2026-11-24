@@ -1,6 +1,6 @@
 # Tools of the part E analysis (issue #257)
 
-The one-off tools behind `doc/dev-fdd/ISSUE257-PART-E.md`, kept so that every number of that record can be reproduced and so that a fix has its test cases at hand. They read the tester's dumps, disk images and flux captures; none of them changes anything in the repository.
+The one-off tools behind `doc/dev-fdd/ISSUE257-PART-E.md` and behind the checks of its fixes (`doc/dev-fdd/ISSUE257-PART-E-FIXES.md`), kept so that every number of these records can be reproduced and so that a later change has its test cases at hand. They read the tester's dumps, disk images and flux captures; none of them changes anything in the repository.
 
 Common points:
 

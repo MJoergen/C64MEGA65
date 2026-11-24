@@ -370,6 +370,8 @@ The physical sequencer clamps a requested rate to the qualified mechanism
 minimum. It does not pretend the mechanism can accept 2 ms just because the
 WD1772 code can request it. Type-II/III `E` delay is 15 ms.
 
+> **As built (issue #257, WIP-V6-A28).** The image path of `fdc1772.v` keeps its 16-bit `step_rate_clk`, in which the 12 ms entry wraps (3.81 ms instead; it matters only if the ROM's probe of the CIA clock fails, which it does not in the core). The physical path has a 20-bit table of its own, `phys_rate_ticks`, with the values above. Record: [dev-fdd/ISSUE257-PART-E-FIXES.md](dev-fdd/ISSUE257-PART-E-FIXES.md), sections 2 and 6.
+
 For the WD1772-02 write commands, P=0 enables the model-specific nominal
 plus/minus 187 ns write precompensation and P=1 disables it. At 50 MHz the
 initial binding is the nearest value, 180 ns/nine cycles; a qualified profile
@@ -643,6 +645,8 @@ The initial conservative timing contract is:
 
 The WD 2 ms step-rate code is clamped to the 3 ms mechanism minimum. BUSY
 remains set until the real sequencer acknowledges the step and required settle.
+
+> **As built (issue #257, WIP-V6-A28).** The WD1772 model paces every physical Type I command by its rate bits, with the acknowledge of the controller's step engine (3.03 ms, 4.03 ms after a reversal) as the lower bound, so each step takes the larger of the two and the codes for 2 and 3 ms run at the acknowledge. BUSY of a command with n steps lasts n such paces plus two or three ticks of the 8 MHz enable; it does not include the settle time. The controller's read and write engines wait for its 18 ms settle themselves, and the 1581 DOS waits 18 ms after every Type I command. Record: [dev-fdd/ISSUE257-PART-E-FIXES.md](dev-fdd/ISSUE257-PART-E-FIXES.md), section 2.
 
 ### 7.4 Read-data capture
 
@@ -1923,6 +1927,8 @@ may support simulation acceleration, but production values MUST satisfy:
 
 > **As built (issue #257, WIP-V6-A25).** The row "Motor-to-media-ready qualification" above (and the `media_ready` definition in section 13.2) is not what the core does, and it must not be restored from this specification, because it fails on real hardware. The core asserts `media_ready` with the first index edge of a motor-on interval, for every medium and without a minimum time. The genuine 1581 ROM examines READY exactly once, 0.80 s after it switched the motor on (0.83 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so a second edge 200 ms after the first can miss the exam, and the job then ends with `74,DRIVE NOT READY`. Record: [dev-fdd/ISSUE257.md](dev-fdd/ISSUE257.md).
 
+> **As built (issue #257, WIP-V6-A28).** The rows "Same-direction step interval" and "Reversal step interval" hold: the WD1772 model asks for the next step only after the rate time of the command and after the acknowledge of the controller (in WIP-V6-A25 and before, the steps followed the acknowledge alone, 3.03 ms whatever the rate). The row "Missing index after previously locked operation" is, in the core, not-ready after 500 ms of settled time without an index edge: the time in which the step engine works or the head settles does not count. Record: [dev-fdd/ISSUE257-PART-E-FIXES.md](dev-fdd/ISSUE257-PART-E-FIXES.md), sections 1 and 2.
+
 The representative mechanism must meet its 197–203 ms qualification target,
 but that narrow data-sheet range is not used as a runtime on/off gate. The
 wider 150–250 ms edge window prevents modestly aged but readable mechanisms
@@ -2234,7 +2240,7 @@ ms. If no usable edge history exists at that point, even two later edges at the
 broad 250 ms limit fit within the independent 1.10 s deadline with filter margin.
 The six-edge WD Motor-On spin-up sequence remains separate.
 
-> **As built (issue #257, WIP-V6-A25).** The core does not use this startup rule, nor the two-edge term and the 505 ms clamp of the `media_ready` definition at the top of this section, and they must not be restored from this specification: they fail on real hardware. READY asserts with the first index edge of a motor-on interval; it falls with the motor request, 500 ms after the last index edge, on reset and on disable. The genuine 1581 ROM examines READY exactly once, 0.80 s after it switched the motor on (0.83 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so a second edge can miss the exam. Record: [dev-fdd/ISSUE257.md](dev-fdd/ISSUE257.md).
+> **As built (issue #257, WIP-V6-A25).** The core does not use this startup rule, nor the two-edge term and the 505 ms clamp of the `media_ready` definition at the top of this section, and they must not be restored from this specification: they fail on real hardware. READY asserts with the first index edge of a motor-on interval; it falls with the motor request, after 500 ms of settled time without an index edge (WIP-V6-A28: the time in which the head steps or settles does not count, [dev-fdd/ISSUE257-PART-E-FIXES.md](dev-fdd/ISSUE257-PART-E-FIXES.md) section 1), on reset and on disable. The genuine 1581 ROM examines READY exactly once, 0.80 s after it switched the motor on (0.83 s after a disk change), and the first index pulse of the mechanism can come 0.63 s or later after motor-on, so a second edge can miss the exam. Record: [dev-fdd/ISSUE257.md](dev-fdd/ISSUE257.md).
 
 The narrow 197–203 ms range is a mechanism/write qualification. Ordinary read
 plausibility accepts 150–250 ms and warns outside 180–220 ms. A blank indexed

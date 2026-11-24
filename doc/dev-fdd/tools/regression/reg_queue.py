@@ -11,7 +11,7 @@ Sets (default: all but "sweep", in this order):
   loop     tb_physical_1581_rdahead_loop, groups 1 to 5
   generic  tb_physical_1581_controller
   sweep3   three points of the phase sweep of tb_physical_1581_rdseq (gaps 0, 3200 and 10000 us)
-  media    run_tb_media_contract.sh (17 mutants)
+  media    run_tb_media_contract.sh (25 mutants)
   write15  write groups 1 to 5 (seven runs)
   ctl      run_tb_rdahead_ctl.sh (18 mutants)
   sweep    all 14 points of the phase sweep
