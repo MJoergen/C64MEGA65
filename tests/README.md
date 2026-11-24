@@ -8,12 +8,59 @@ effort, it might be that we are not always doing it.
 Version WIP-V6-A28 - TBD
 ------------------------
 
-@TODO: Test the fix of the file browser (MiSTer2MEGA65 issue #84). Everything of WIP-V6-A27 below still applies.
+@TODO: Test the fix of the file browser (MiSTer2MEGA65 issue #84) and the three fixes for the `Internal 1581` that came out of part E of issue #257 (READY while the head moves, the step rate of the head, the decoder's tolerance for a weak sync byte). Everything of WIP-V6-A27 below still applies.
 
 Test folder: on an SD card formatted with the MEGA65 (4 KB clusters), create a new folder and copy exactly 126 files with short upper-case names (for example `T001.PRG` to `T126.PRG`) into it, using Windows or Linux (macOS adds hidden `._` files, which changes the count). Together with `.` and `..`, the directory then fills its first 4 KB cluster exactly.
 
 * @TODO Open the test folder in the file browser: all 126 files are listed, no error (WIP-V6-A27 stops with "SD Card: Unknown error while trying to browse. Error code: 2704"). Replace `T126.PRG` by a D64 with a short upper-case name (for example `GAME.D64`), mount it from the test folder and load a program from it.
 * @TODO Regression check with ordinary folders: browse folders and subfolders, go up with `..`, mount D64 and D81 images, save to a mounted disk image (yellow drive LED, then reload the image and check the saved data), load PRG and CRT files, load JiffyDOS, and check that the settings are saved and restored after a power cycle.
+
+Internal 1581 (issue #257, part E), on R3/R3A and R6. Use DD disks that may be overwritten. Where a step asks for a dump, dump the diagnostic device in the same visit of the console (`MD 7000 703F`, `MD 7040 707F` and `MD 7080 70A5`, map v10, see `doc/1581_dd_debug_device.md`; select the device again at every visit); `doc/dev-fdd/tools/diag_dump_decode.py` decodes the dumps and the trace ring. Background and numbers: `doc/dev-fdd/ISSUE257-PART-E-FIXES.md`.
+
+MFCWT and `74, DRIVE NOT READY` (in WIP-V6-A25, MFCWT 1.6 under JiffyDOS reported `REREAD DIRECTORY FIRST` or `REREAD TARGET DIRECTORY` at almost every check, with `74,DRIVE NOT READY` in the error channel):
+
+* @TODO With the JiffyDOS Kernal and the JiffyDOS ROM in the internal 1581, MFCWT 1.6: read the directory of a disk in the internal drive, format a disk there, copy files from a D81 image to the internal drive and back. No `REREAD DIRECTORY FIRST`, no `REREAD TARGET DIRECTORY`, and the error channel never reads `74`.
+* @TODO The same check without the cartridge, still with JiffyDOS: the program below sends `UI`, reads the answer and opens `$` in the next statement, in ten rounds with a pause of 15 seconds between them, so that the motor stops. Expected: `0 OK` in every line (for WIP-V6-A25 the analysis, `doc/dev-fdd/ISSUE257-PART-E.md` section 9, expects `74` in a good part of the rounds). Dump the device after the run.
+
+```
+10 OPEN 15,8,15
+20 FOR R=1 TO 10
+30 PRINT#15,"UI":INPUT#15,A,A$,B,C
+40 OPEN 2,8,0,"$":INPUT#15,E,E$,TR,SE:CLOSE 2
+50 PRINT R;E;E$
+60 T0=TI
+70 IF TI-T0<900 THEN 70
+80 NEXT R
+90 CLOSE 15
+```
+
+The step rate (in WIP-V6-A25 the head stepped every 3 ms instead of the 6 ms that the 1581 DOS asks for, and the mechanism of the R6 ended every long seek two cylinders short of its target):
+
+* @TODO With a disk in the drive, switch the MEGA65 off and on (the DOS recalibrates the head at power-on: a Restore to cylinder 0, then a Seek to cylinder 39, the directory track 40), wait until the motor is off, and dump the device. In the trace ring, the Read Address right after the STEP entries inward finds cylinder 39 at once, and no two further STEP entries and no second Read Address follow it. In WIP-V6-A25 the R6's mechanism found cylinder 37 there and the DOS stepped twice more (`doc/dev-fdd/ISSUE257-PART-E.md`, section 3). Report it for every board and mechanism.
+* @TODO Seeks take twice as long as in WIP-V6-A25 (39 cylinders: 234 ms instead of 119 ms), so the stepping sounds slower. Report anything unusual, for example a head that knocks at the end of a seek.
+
+Formats:
+
+* @TODO Three formats in a row (`OPEN 15,8,15,"N0:NAME,ID":CLOSE 15`, and once with DraCopy under JiffyDOS, which stopped once with error 20 in WIP-V6-A25): each ends with `0 OK 0 0` and 3160 blocks free, in about the time of WIP-V6-A25 (1 min 45 s). Dump the device after the third.
+
+The new words of the diagnostic device:
+
+* @TODO In the dumps of the steps above (`MD 7080 70A5`), report per board and per mechanism: `IDX_GAP_MAX_MS` (`0xA2`), the longest time between two index pulses with the motor on, in milliseconds: about 200 (`00C8`) means that the mechanism delivers its index pulses while the head steps, about 400 or 600 (`0190`, `0258`) that it withholds them, which is what the READY fix assumes and what no one has measured yet. A value of thousands means that a disk was taken out and put back with the motor on; take that reading after a reset and before such a disk change. `CNT_RDY_STALE` (`0xA3`): 0, unless a disk was taken out while the motor ran. `CNT_TOL_HIT` (`0xA4`): how often the decoder accepted a mark behind a weak sync byte, 0 or small on a healthy disk; report it together with `CNT_A1_CAND` (`0x38`) and `CNT_A1_TRAIN` (`0x3A`) of the same dump. `RD_CTRL` (`0xA5`): `0000`.
+* @TODO The off switch of the decoder's tolerance (`doc/1581_dd_debug_device.md`, section 3.6): in the console, select the device, then `MC` `70A5` `0001` switches the tolerance off, and `ME` `70A5` reads `0001` back. Leave the console, read the directory and load a file: the drive works as before. In the next dump `RD_CTRL` reads `0001` and `CNT_TOL_HIT` has not grown. `MC` `70A5` `0000`, or a reset, switches the tolerance on again.
+
+Regression:
+
+* @TODO Everything of the sections WIP-V6-A25 and WIP-V6-A21 for the internal drive still applies (the first access after inserting a disk, the speed of reading, the error blink of the drive LED, writing and formatting).
+* @TODO Take the disk out while the motor runs and access the empty drive: `74, DRIVE NOT READY`, as before (READY now falls half a second after the head rests); the next disk works. `CNT_RDY_STALE` counts one more.
+* @TODO Disk images behave as before: `LOAD` and `SAVE` on a D64 image and on a D81 image, with the stock Kernal and with JiffyDOS.
+
+Open point, not a check of a fix:
+
+* @TODO Maverick V4.0, "Dual Drive 1581 Data Copier", between two D81 images (both drives set to disk image, no internal drive): note exactly what happens, which function you used, where it stops, what it shows on the screen, and the error channel of both drives (`doc/dev-fdd/ISSUE257-PART-E.md`, section 7).
+
+Vivado build (Internal 1581):
+
+* @TODO Timing is met on R3 and R6 in every clock domain, in particular in the QNICE clock domain (`qnice_clk`): the read multiplexer of the diagnostic device has four more words. The synthesis log reports no latch and no new critical warning for `physical_1581_controller.vhd`, `physical_1581_mfm_decoder.vhd`, `physical_1581_diag.vhd`, `main.vhd` and `fdc1772.v`; none of these changes adds a block RAM.
 
 Version WIP-V6-A27 - TBD
 ------------------------
