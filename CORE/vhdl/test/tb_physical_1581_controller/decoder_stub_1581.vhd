@@ -60,6 +60,7 @@ entity physical_1581_mfm_decoder is
     clk_i             : in  std_logic;
     rst_i             : in  std_logic;
     f_rdata_i         : in  std_logic;
+    tol_off_i         : in  std_logic := '0';   -- as the real decoder; without effect in the stub
     id_valid_o        : out std_logic := '0';
     id_c_o            : out unsigned(7 downto 0) := (others => '0');
     id_h_o            : out unsigned(7 downto 0) := (others => '0');
@@ -82,6 +83,7 @@ entity physical_1581_mfm_decoder is
     mark_fe_o         : out std_logic := '0';
     mark_dam_o        : out std_logic := '0';
     dam_unarmed_o     : out std_logic := '0';
+    tol_hit_o         : out std_logic := '0';   -- as the real decoder; never pulses in the stub
     last_gap_o        : out unsigned(15 downto 0) := (others => '0');
     crc_value_o       : out unsigned(15 downto 0) := (others => '0');
     est_o             : out unsigned(11 downto 0) := to_unsigned(C_QUANT_EST_NOM_Q, 12)
