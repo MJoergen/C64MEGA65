@@ -5,6 +5,7 @@ A job passes only if
   bench      : its log has 'ALL TESTS PASSED', a 'simulation finished' line, no error or failure report,
                and the runner recorded 'RUN_SIM rc=0'
   runner     : (name ends with _runner) its log has 'RESULT: PASS' and 'RUN_SIM rc=0'
+               (mut_decoder_runner: also 'MUTANTS RESULT: PASS')
   units      : its log has 'UNITS RESULT: PASS' and 'RUN_SIM rc=0'
   mut_rdahead: 35 mutants of the engine KILLED, none SURVIVED, 'RUN_SIM rc=0'
   write group: the line 'group G latency L us: rc=0 | ... ALL TESTS PASSED ... | ... simulation finished',
@@ -72,6 +73,11 @@ for name, log, cmd in jobs:
             rej = len(re.findall(r"mutant '[^']*' rejected", text)); note = "%d mutants rejected" % rej
             surv = [x.strip() for x in text.split("\n") if "mutant" in x and "rejected" not in x and "===" not in x]
             if surv: ok = False; note += "; NOT rejected: " + surv[0][:100]
+            if name == "mut_decoder_runner":
+                # mutants_mfm_decoder.py: one line per mutant with KILLED or SURVIVED, and its own verdict line
+                ok = ok and "MUTANTS RESULT: PASS" in text
+                note = "%d decoder mutants killed, %d survive as expected" % (
+                    len(re.findall(r"^\S+ +KILLED ", text, re.M)), len(re.findall(r"^\S+ +SURVIVED .*\[(?:equivalent|control)\]", text, re.M)))
         elif name == "mut_rdahead":
             k = len(re.findall(r"-> KILLED", text)); bad2 = len(re.findall(r"SURVIVED|ANALYZE FAILED|rc=timeout", text))
             ok = rc == 0 and "RUN_SIM rc=0" in text and k == 35 and bad2 == 0

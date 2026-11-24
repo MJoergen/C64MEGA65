@@ -7,6 +7,10 @@ Sets (default: all but "sweep", in this order):
   units    the eight small unit benches without a runner of their own (units.sh)
   mutants  the 35 mutants of the read-ahead engine (mutants_rdahead.py) and the 59 of the diagnostic
            device (mutants_diag.py, job mut_diag_runner)
+  decoder  the 35 mutants of the decoder's tolerance for a weak first sync byte
+           (mutants_mfm_decoder.py, job mut_decoder_runner; nvc)
+  flux     the production decoder and controller on recorded flux, with and without the tolerance
+           (run_flux_benches.sh, job flux_runner; nvc)
   accept   ten sectors of a track side within 260 ms (tb_physical_1581_rdseq)
   write67  write groups 6 and 7 (the read-ahead next to the write engine)
   loop     tb_physical_1581_rdahead_loop, groups 1 to 5
@@ -19,7 +23,7 @@ Sets (default: all but "sweep", in this order):
 """
 import os, sys
 D = sys.argv[1]
-sets = sys.argv[2:] or ["short", "units", "mutants", "accept", "write67", "loop", "generic", "sweep3", "media", "write15", "ctl"]
+sets = sys.argv[2:] or ["short", "units", "mutants", "decoder", "flux", "accept", "write67", "loop", "generic", "sweep3", "media", "write15", "ctl"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 B = D + "/b"; L = B + "/logs"
 C = D + "/src/CORE/vhdl/test/tb_physical_1581_controller"
@@ -44,6 +48,10 @@ for s in sets:
     elif s == "mutants":
         job("mut_rdahead", "python3 -I %s/mutants_rdahead.py %s/src %s/mut_rdahead" % (HERE, D, D))
         job("mut_diag_runner", "python3 -I %s/mutants_diag.py %s/src %s/mut_diag" % (HERE, D, D))
+    elif s == "decoder":
+        job("mut_decoder_runner", "python3 -I -B %s/src/CORE/vhdl/test/tb_physical_1581_codec/mutants_mfm_decoder.py %s/src %s/mut_decoder" % (D, D, D))
+    elif s == "flux":
+        job("flux_runner", "bash %s/src/doc/dev-fdd/tools/part_e/format_stop/run_flux_benches.sh %s/src %s/flux" % (D, D, D))
     elif s == "accept":
         sim("rdseq_accept_n10_max260", "tb_physical_1581_rdseq", "-gG_NSEC=10", "-gG_MAX_MS=260")
     elif s == "loop":
