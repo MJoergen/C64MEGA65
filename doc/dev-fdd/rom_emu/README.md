@@ -31,11 +31,18 @@ consumption-coupled pipeline:
   medium is not ready completes through the controller's own bounded
   RNF-class result (`T_NOTREADY`; time constants are scaled stand-ins, the
   semantics are what is mirrored).
-- Type-I (restore/seek/step) keeps the simple timed model.
+- Type-I (restore/seek/step) keeps the simple timed model: 1.5 ms per step,
+  1.5 ms for a command without a step. That is not the step time of the RTL
+  (the rate of the command, with the controller's acknowledge as the lower
+  bound, which `run_257_proofs.py` models); the proofs of this model do not
+  depend on it. `run_proofs.py` and `run_write_proofs.py` take
+  `--t1-step-ms=<ms>` and pass at 1.5, 6 and 12 ms per step
+  (`run_write_proofs.py` rewrites its fixtures, which at another step time
+  come out at another rotational phase: restore them from git).
 
 ## How to run the proofs
 
-    python3 run_proofs.py      # any CWD; ROM found automatically
+    python3 run_proofs.py      # any CWD; ROM found automatically; --t1-step-ms=6 for 6 ms per step
     python3 run_boot.py        # plain boot + WD trace dump
 
 `run_proofs.py` must end with `RESULT: ALL PROOFS PASS`. It proves, against
@@ -82,36 +89,44 @@ real WD1772, `quarantine` = delivery v2 of `fdc1772.v`, `readahead` = delivery
 v2 with the controller's read-ahead buffer). Every Type I command takes the
 time it takes in the RTL: each step the larger of the rate of the command
 (6 ms for the ROM's `$08`, `$18`, `$48` and `$68`) and the acknowledge of the
-controller (3.03 ms, 4.03 ms after a reversal); a command without a step
-1.5 ms. With `paced = False` a step takes the acknowledge alone, the step
-model of WIP-V6-A25. It proves:
+controller (3.03 ms, 4.03 ms after a reversal; the direction of the last
+step is kept across all Type I commands, as the controller keeps it); a
+command without a step 1.5 ms. With `paced = False` a step takes the
+acknowledge alone: the step timing before WIP-V6-A28, which WIP-V6-A21X1 (the
+hardware of comment 17 of issue #257) and WIP-V6-A25 share. It proves:
 
-- **I1 to I5, the READY exam.** The ROM switches the motor on (`$CD63`), lets 80
+- **I1 to I6, the READY exam.** The ROM switches the motor on (`$CD63`), lets 80
   ticks of 10 ms pass (`$CE53`; the count is set at `$B095`), and then examines
-  PA1 (`$CDAD` calls `$CDBC`, 30 reads): 0.8000 s after motor-on for an
-  unchanged disk, 0.8303 s for a changed one (step pair `$48`/`$68`, 6 ms each,
-  and 18 ms settle first, `$CD8A`; 0.8263 s with the step model of WIP-V6-A25). "Not ready" there is job error 3 =
+  PA1 (`$CDAD` calls `$CDBC`, 30 reads). "Not ready" there is job error 3 =
   `74,DRIVE NOT READY`, and the job is not retried. (A Read Address examines
-  PA1 again right before its command, `$CD08`.) With READY after two index pulses the
-  job fails as soon as the first pulse comes later than 0.631 s after motor-on
-  (I2 checks 0.62 s and 0.635 s); with READY after one pulse the limit is the
-  exam itself, 0.830 s (I4 checks 0.82 s and 0.835 s). The failing case, run
-  with the step model of WIP-V6-A25 that the tester's hardware had (I3),
-  reproduces the hardware dumps of issue #257 exactly: one step pair, no read or write
-  command, the motor on for 11.030 s, 53 index pulses.
+  PA1 again right before its command, `$CD08`.) I1 to I5 run with the steps at
+  the acknowledge, the timing of the hardware they describe: the exam comes
+  0.8000 s after motor-on for an unchanged disk and 0.8253 s for a changed one
+  (step pair `$48`/`$68` of 3.03 and 4.03 ms, as the last step before it went
+  inward, and 18 ms settle first, `$CD8A`). With
+  READY after two index pulses (the controller up to WIP-V6-A22X3) the job
+  fails as soon as the first pulse comes later than 0.62 s after motor-on (I2
+  checks 0.62 s and 0.63 s); with READY after one pulse (WIP-V6-A25) the limit
+  is the exam itself (I4 checks 0.82 s and 0.83 s). The failing case (I3)
+  reproduces the dumps "10-pre" and "FMT-0" of comment 17 (WIP-V6-A21X1)
+  exactly: one step pair, no read or write command, the motor on for
+  11.030 s, 53 index pulses. I6 is the exam with the RTL of WIP-V6-A28 (READY
+  after one pulse, steps at the rate): the step pair takes 12 ms, the exam
+  comes 4.94 ms later, at 0.8303 s, and a first pulse at 0.83 s is in time,
+  at 0.835 s the job fails.
 - **R1 to R6, sequential reads.** The DOS issues the next Read Sector 66 to
   95 us after the BUSY drop (2.25 ms after a Read Address). Ten sectors of a
   side take 215 ms on a real WD1772, 2032 ms with delivery v2 alone (the
   sector is presented for 16.4 ms after its CRC verdict, so the next ID has
   passed and every sector waits a revolution), and 232 ms with the read-ahead
-  buffer. A format of 80 cylinders, extrapolated from its first cylinder:
-  86.1 s, 375.4 s and 87.5 s (with the step model of WIP-V6-A25: 100.2 s,
-  389.5 s and 101.5 s; delivery v2 measured on hardware: 403 s). The
-  extrapolation depends on the rotational phase at which the first Write
-  Track begins, which the length of the Type I commands before it moves;
-  from the second side on one cylinder takes 1200.0 ms with the read-ahead
-  whatever the step model, because the Write Track after the Seek of one
-  step waits for its index pulse anyway.
+  buffer. A format of 80 cylinders, measured from the second Write Track to
+  the fourth (one cylinder, side 1 to side 1; every Write Track starts at an
+  index pulse, so the measurement does not depend on the rotational phase at
+  which the format begins): 96.0 s on a real WD1772 and with the read-ahead
+  of WIP-V6-A28, both stepping at the rate, and 384.0 s with delivery v2
+  alone and the steps at the acknowledge, the hardware of comment 17 (it
+  measured 403 s). A Write Track after the Seek of one step waits for its
+  index pulse, so the step time does not change the time of a format.
 - **L1 to L4, the LED lines.** The power LED (PA5) is lit and steady without
   an error and toggles every 100.0 ms while an error is pending; when the
   error is cleared, the DOS leaves it as it is, lit or dark. The activity LED
