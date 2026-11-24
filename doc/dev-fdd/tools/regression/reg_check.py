@@ -4,9 +4,11 @@
 A job passes only if
   bench      : its log has 'ALL TESTS PASSED', a 'simulation finished' line, no error or failure report,
                and the runner recorded 'RUN_SIM rc=0'
-  runner     : (name ends with _runner) its log has 'RESULT: PASS' and 'RUN_SIM rc=0'
+  runner     : (name ends with _runner) its log has 'RESULT: PASS', no 'RESULT: FAIL', no line with
+               'mutant' and without 'rejected' (lines with '===' aside), and 'RUN_SIM rc=0'
                (mut_decoder_runner: also 'MUTANTS RESULT: PASS')
-  units      : its log has 'UNITS RESULT: PASS' and 'RUN_SIM rc=0'
+  units      : its log has 'UNITS RESULT: PASS', a line 'tb_...: rc=0 errors=0' for each of the eight
+               benches, and 'RUN_SIM rc=0'
   mut_rdahead: 35 mutants of the engine KILLED, none SURVIVED, 'RUN_SIM rc=0'
   write group: the line 'group G latency L us: rc=0 | ... ALL TESTS PASSED ... | ... simulation finished',
                'run_tb_write: twin rc=0', no error report in the simulation log, and 'RUN_SIM rc=0'

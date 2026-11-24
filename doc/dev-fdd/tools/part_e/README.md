@@ -168,7 +168,7 @@ python3 -I -B $T/exp_weak_id.py                        # the DOS side: error 20 
 bash $T/run_flux_benches.sh <repository> <absolute scratch directory>   # RESULT: PASS
 ```
 
-Both benches were run from this folder against the RTL of the repository. With `-gG_TOL_OFF=1` the decoder is the decoder before the tolerance: its `tb_flux_dec` log on `f77h0.txt` is byte for byte that of the commit before, and its `tb_flux_ctl` run reproduces `ctl_run.log`.
+Both benches were run from this folder against the RTL of the repository. With `-gG_TOL_OFF=1` the decoder is the decoder before the tolerance: its `tb_flux_dec` log on `f77h0.txt` is byte for byte that of the decoder without change 3, and its `tb_flux_ctl` run reproduces `ctl_run.log`.
 
 The tolerance for a weak first sync byte (change 3 of `doc/dev-fdd/ISSUE257-PART-E-FIXES.md`) was chosen and checked with these commands; the captures are the attachments of comments 18, 30, 34 and 35:
 

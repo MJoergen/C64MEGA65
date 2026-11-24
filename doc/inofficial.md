@@ -47,7 +47,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V6-A25    | 11/14/26 | 6845596 | Internal 1581: the first access after inserting a disk works (it could fail with 74 DRIVE NOT READY); reading a track takes one revolution instead of ten, so a format takes about 1 min 45 s instead of 6 min 43 s; the drive LED blinks when a 1581 reports an error (issue #257)
 | WIP-V6-A26    | 11/17/26 | 69d0f51 | Amiga mouse support incl. right click via MEGA + left button (issue #190); Atari CX30 paddle support (issue #193); fixed rare wrong paddle and 1351 values
 | WIP-V6-A27    | 11/20/26 | c20a7f3 | HDMI Frame Sync `Raw`: HDMI at the C64's own frame rate (issues #184 and #148)
-| WIP-V6-A28    | TBD      | TBD     | File browser: no more error 2704 on folders whose directory exactly fills its clusters on the SD card; a broken long file name no longer crashes the file browser (MiSTer2MEGA65 issue #84); Internal 1581: no more 74 DRIVE NOT READY after UI or other recalibrations, the head steps at the 6 ms of a real 1581, and a weakly recorded sync byte no longer hides a sector (issue #257)
+| WIP-V6-A28    | TBD      | TBD     | File browser: no more error 2704 on folders whose directory exactly fills its clusters on the SD card; a broken long file name no longer crashes the file browser (MiSTer2MEGA65 issue #84); Internal 1581: no more 74 DRIVE NOT READY after UI or other recalibrations, the head steps at the 6 ms of a real 1581, and a weakly recorded first sync byte no longer hides a sector (issue #257)
 
 ## Version 5.2
 
@@ -102,7 +102,7 @@ can be checked in the "About & Help" menu of the core.
 | WIP-V5-A14    | 04/07/23 | 7711653 | Support for the EasyFlash 1CR: Play games and also flash the cartridge using your MEGA65
 | WIP-V5-A15    | 04/22/23 | 07f2b90 | Support for CRT file loading (simulated cartridges) and direct PRG file loading; fully dynamic HDMI flicker-free mode
 | WIP-V5-A16    | 04/24/23 | 7162767 | Support for the hardware IEC port of the MEGA65: Connect disk drives, printers, SD2IEC, etc.
-| WIP-V5-A17    | 04/24/23 | b0d47b2 | Add support for EasyFlash's 256 bytes of RAM or in general support for cartridge RAM that is located at $DExx and $DFxx (256 bytes each)
+| WIP-V5-A17    | 04/24/23 | b0d47b2 | Add support for EasyFlash's 256 bytes of RAM or in general support for cartridge RAM that is located at \$DExx and \$DFxx (256 bytes each)
 | WIP-V5-A18    | 04/29/23 | 4f91c48 | More stability for hardware cartridges: Delayed PHI2 signal by 63ns. PowerCartridge now works and EasyFlash 3 can be flashed (but does not run any games, yet). Simulated cartridges: Support for modern Ocean type 1B cartridges such as SoulForce (fixes https://github.com/MJoergen/C64MEGA65/issues/20)
 | WIP-V5-A19    | 05/02/23 | bc3218b | Ability to switch Kernal versions: Standard, C64 Games System, Japanese Revision and JiffyDOS
 | WIP-V5-A20    | 05/07/23 | dbc7143 | Fixed bug in FAT32 library that lead to an Settings file: Seek failed." error under certain circumstances. Plus other smaller bugs und features.
