@@ -45,17 +45,17 @@ TOL_PROD = {'v': 'A', 'reanchor2': False, 'dam2_max': SYNC_LAT + SPACING,
 
 def edge_gaps(edges):
     """edge cycles -> (gap, edge cycle) as physical_1581_mfm_gaps measures
-    them: its counter restarts at 0 in the cycle of an edge, so a gap is the
-    distance of two edges minus one (the 2-stage edge pipeline adds a
-    constant delay that cancels); a gap below C_GAP_GLITCH = 16 is a runt and
-    merges into the following one."""
+    them: its counter restarts at 0 in the cycle of an edge and saturates at
+    65535, so a gap is the distance of two edges minus one, at most 65535
+    (the 2-stage edge pipeline adds a constant delay that cancels); a gap
+    below C_GAP_GLITCH = 16 is a runt and merges into the following one."""
     last = None
     out = []
     for c in edges:
         if last is None:
             last = c
             continue
-        g = c - last - 1
+        g = min(c - last - 1, 65535)
         if g < 16:            # runt: merge into the following gap
             continue
         out.append((g, c))
@@ -135,7 +135,9 @@ class Model:
             self.state = 'IDLE'; self.sync_cnt = 0; self.short_run = 0
             self.run_age = 15; self.sync_gap_age = 15; self.preamble_ok = 0
             self.preamble2_ok = 0; self.tol_id = 0
-            self.recent = []; self.bitcount = 0
+            # gaps_to_bits forgets its sync history and queued bits; the byte
+            # framing of bits_to_bytes is kept, as in the RTL
+            self.recent = []
             return
         if cls == 2:
             if self.short_run >= SYNC_RUN - 1: self.run_age = 0

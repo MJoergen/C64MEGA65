@@ -130,6 +130,7 @@ python3 -I -B $T/boot_timing.py <repository>/doc/dev-fdd/rom_emu
 | `exp_weak_id.py` | the genuine ROM formatting two cylinders with one header made unreadable after its Write Track: job result, retries, motor time |
 | `mkflux.py`, `f77h0.txt.gz` | writes the flux of one track side as edge times for the benches; the file is cylinder 77, side H=1, of the disk as the failed format left it (three revolutions of a formatted, empty track) |
 | `tb_flux_dec.vhd`, `evsum.py` | bench: the production decoder on such an edge file, with a summary of what it decoded per revolution; `G_TOL_OFF=1` switches the tolerance off, every use is logged as `TOL` |
+| `run_flux_benches.sh`, `loopflux.py` | the two benches below with the tolerance on and off and their checks in one run (`run_flux_benches.sh <repository> <scratch directory>`, about 25 minutes, `JOBS=2` runs the two decoders of a bench at once, ends with `RESULT: PASS` or `RESULT: FAIL`); `loopflux.py` loops an edge file exactly as `mkflux.py --loops` would have written it, so the runner makes the looped flux of `tb_flux_ctl` from `f77h0.txt.gz` |
 | `tb_flux_ctl.vhd`, `ctl_run.log`, `ctl_run_tol.log` | bench: the production controller with decoder, read-ahead buffer and read FIFO on the same flux, replaying the verify of the failed format; `G_TOL_OFF=1` switches the tolerance off; the logs of the runs without (`ctl_run.log`) and with the tolerance |
 
 The capture is `G5-after-E4-format-JiffyDOS-R3A-R6drive-A25.scp` from the attachment of the same name of comment 35.
@@ -162,6 +163,9 @@ nvc --std=2008 -a $P/physical_1581_pkg.vhd $P/physical_1581_crc.vhd $P/physical_
 # add -gG_TOL_OFF=1 for the decoder without its tolerance
 
 python3 -I -B $T/exp_weak_id.py                        # the DOS side: error 20 without a retry
+
+# both benches with and without the tolerance and every check below in one run (about 25 minutes)
+bash $T/run_flux_benches.sh <repository> <absolute scratch directory>   # RESULT: PASS
 ```
 
 Both benches were run from this folder against the RTL of the repository. With `-gG_TOL_OFF=1` the decoder is the decoder before the tolerance: its `tb_flux_dec` log on `f77h0.txt` is byte for byte that of the commit before, and its `tb_flux_ctl` run reproduces `ctl_run.log`.
@@ -185,7 +189,7 @@ python3 -I -B $T/rtlcmp.py edges.txt ev_off.txt off
 
 `ev_off.txt` is byte for byte the log of the decoder before the tolerance on the same edge file; `tolsurvey/RTL_SAMPLES.txt` lists the track sides on which this was run and the results.
 
-The result on the twelve captures (`tolsurvey/SUMMARY.txt`): without the tolerance the decoder reads 50,877 IDs and 49,597 data fields, all with a good CRC; 9,894 of the sectors were rewritten one at a time by the core and carry its write splices. The rule as built (variant A) adds the ID and the data field of sector 7 of cylinder 77, H=1, of the failed format in each of the three revolutions, every one confirmed by the PLL, and loses or changes nothing: 3 uses. In all twelve captures there are four trains of two: the three of that header and one followed by a byte that is three or more bits away from FE, FB and F8. A without its restrictions gives the same fields. Variant B (the gap near a midpoint decided by its phase, factor 0.7, within 25 cycles of the midpoint) reads that header in one revolution of three and changes the class of 16,407 intervals elsewhere. Of the 88,457 sync trains that follow a zero run, the only bytes within 0.10 half cells of a midpoint are the first sync bytes of the three trains of that header and the third sync byte of the track information mark (`A1 A1 A1 65`) of cylinder 36, H=0, of the 11-sector disk G3 (in both of its reads), which is not a sector field.
+The result on the twelve captures (`tolsurvey/SUMMARY.txt`): without the tolerance the decoder reads 50,877 IDs and 49,597 data fields, all with a good CRC; 9,894 of the sectors were rewritten one at a time by the core and carry its write splices. The rule as built (variant A) adds the ID and the data field of sector 7 of cylinder 77, H=1, of the failed format in each of the three revolutions, every one confirmed by the PLL, and loses or changes nothing: 3 uses. In all twelve captures there are four trains of two, and none is false: the three of that header, and the first two sync bytes of the track information mark (`A1 A1 A1 65`) of cylinder 36, H=0, of the 11-sector disk G3-after-C in one revolution, whose third sync byte is weak (the byte after the pair is `A3`). A without its restrictions gives the same fields. Variant B (the gap near a midpoint decided by its phase, factor 0.7, within 25 cycles of the midpoint) reads that header in one revolution of three and changes the class of 16,407 intervals elsewhere. Of the 88,457 sync trains that follow a zero run, the only bytes within 0.10 half cells of a midpoint are the first sync bytes of the three trains of that header and the third sync byte of the track information mark (`A1 A1 A1 65`) of cylinder 36, H=0, of the 11-sector disk G3 (in both of its reads), which is not a sector field.
 
 ## `dos_behavior/`: orphan blocks and the number of sector writes (sections 5 and 6)
 
