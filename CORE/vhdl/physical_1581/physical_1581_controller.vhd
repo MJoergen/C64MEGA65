@@ -109,7 +109,7 @@ entity physical_1581_controller is
     G_STEP_LOW_CYC    : natural := 200;         -- 4 us
     G_STEP_REC_CYC    : natural := 150_000;     -- 3 ms same-direction
     G_STEP_REV_CYC    : natural := 200_000;     -- 4 ms reversal
-    G_SETTLE_CYC      : natural := 900_000;     -- 18 ms final head settle
+    G_SETTLE_CYC      : natural := 900_000;     -- 18 ms final head settle (at least 1, see the assertion)
     G_SIDE_SETTLE_CYC : natural := 5_000;       -- 100 us
     G_DAM_TIMEOUT_CYC : natural := 68_800;      -- 43 decoded byte-times
     G_SEARCH_WD_CYC   : natural := 65_000_000;  -- 1.300 s absolute search watchdog
@@ -576,6 +576,14 @@ architecture rtl of physical_1581_controller is
   signal w_flags     : std_logic_vector(4 downto 0);
 
 begin
+
+  -- Elaboration-time check: settle_cnt is loaded with G_SETTLE_CYC at the
+  -- trailing edge of a step pulse and sets head_settled when it counts down
+  -- to 1. With 0 head_settled would stay low for good after the first step:
+  -- reads would wait for ever, and RDY would no longer fall by staleness.
+  assert G_SETTLE_CYC >= 1
+    report "physical_1581_controller: G_SETTLE_CYC must be at least 1"
+    severity failure;
 
   en <= '1' when (G_CAPABLE and active_s = '1') else '0';
 
@@ -1096,9 +1104,18 @@ begin
         -- the head has settled. An index edge counts whenever it arrives,
         -- during a step as well. The reason: some mechanisms deliver no
         -- index pulses while they step and for a hold time after the last
-        -- step (the TEAC FD-235HF gates INDEX until 15.8 to 17.9 ms after
-        -- the last step pulse); that the mechanism of the R6 of issue #257
-        -- does so is inferred from the timing of its failures, not observed.
+        -- step. The TEAC FD-235HF-C929, -C940 and -C991, for example, are
+        -- delivered with a "ready and seek-complete gate" for INDEX and
+        -- READ DATA: they output INDEX only in the ready state and in the
+        -- seek-complete state, which begins 15.8 to 17.9 ms after the
+        -- trailing edge of the final STEP pulse, and they gate READ DATA in
+        -- the same way (TEAC, "FD-235HF-C929/C940/C991 Micro Floppy Disk
+        -- Drive Specification", Rev. A, sections 8.3.9 and 8.3.10; the
+        -- document does not say which other FD-235HF variants have the
+        -- gate). G_SETTLE_CYC, 18 ms after that trailing edge, ends after
+        -- the longest seek-complete time of that document, 17.9 ms. That
+        -- the mechanism of the R6 of issue #257 withholds its index pulses
+        -- is inferred from the timing of its failures, not observed.
         -- On such a mechanism a Restore and a Seek in a row can hide two
         -- index pulses in a row, and with that time counted RDY can be low
         -- at the exam that the ROM makes right after the Seek. With the
@@ -1108,10 +1125,16 @@ begin
         -- Without any index edge RDY keeps its value for as long as the
         -- steps come closer than 500 ms plus the settle time. A disk taken
         -- out while the head moves is noticed 500 ms after the head has
-        -- settled; until then the disk-change line guards the data (the
-        -- read engine aborts on its level, the write engine on its edge),
-        -- and a write opens the gate only behind a CRC-valid sector header
-        -- (Write Sector) or at an index edge (Write Track).
+        -- settled. Until then the data is guarded without RDY: the read
+        -- engine aborts on the level of the disk-change line in every
+        -- state; the write engine's change term fires once, in a write that
+        -- runs when the line asserts, so a write issued later does not see
+        -- it. Such a later write is guarded by the DOS, which looks at the
+        -- disk-change latch (CIA PA7) at the start of every job that uses
+        -- the disk and ends the job with 74, and by the medium: without a
+        -- disk there is no CRC-valid sector header for a Write Sector and
+        -- no index edge for a Write Track, and the gate opens only behind
+        -- such a header or at such an edge.
         ------------------------------------------------------------------
         motor_on_act <= motor_s;
 

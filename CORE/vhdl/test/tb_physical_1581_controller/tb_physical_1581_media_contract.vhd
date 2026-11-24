@@ -20,6 +20,10 @@
 --     the last step) therefore keeps READY up;
 --   * the disk-change latch is set by the raw line, by reset and by disable,
 --     and only a step with the line released clears it;
+--   * while READY is still up after a disk was taken out during a train,
+--     nothing reaches the drive: a Read Sector ends at once with "disk
+--     changed" and without a byte, a Write Sector opens no gate and ends when
+--     READY falls;
 --   * physical Read Address ignores the F011 formatter's CRC-valid sector-11
 --     ID and returns the following stock-compatible sector 1.
 --
@@ -33,14 +37,32 @@
 --     settle time longer than the step recovery, as in production), with the
 --     mechanism model mech_model_1581 and its option G_IDX_HIDE. A motor
 --     restart and a disable with a cleared change latch come first, then the
---     disk taken out during a train and at rest, steps without a disk, the
---     first index edge of a motor-on interval during a train, and at the end
---     the table of step trains (C_TRAINS). The comments and the table give
+--     disk taken out during a train (with the read and the write above) and
+--     at rest, steps without a disk, the first index edge of a motor-on
+--     interval during a train, and at the end the table of step trains
+--     (C_TRAINS). The comments and the table give
 --     times at production scale; p2() converts them. The index pulse of the
 --     model is 400 us wide at every scale, because the controller accepts an
 --     index pulse only after 200 us.
 --   * ready_ref: the READY rule in clocked form, checked in every clock of
---     both controllers (see the entity below).
+--     both controllers (see the entity below). It takes the controller's own
+--     enable, motor request, index edge, step phase and head_settled as its
+--     inputs, so it checks the logic of the rule in every clock, but a defect
+--     in what feeds those inputs (the settle timer, the step engine, the
+--     reset branch) would be repeated by it. The checks below do not take
+--     them from the controller:
+--   * anchored to the pins and the generics, in both parts: head_settled is
+--     low at every leading edge of a STEP pulse and rises exactly
+--     G_SETTLE_CYC clocks after the trailing edge of the last one (a rise in
+--     reset or disable excepted); READY rises only in the clock after a
+--     clock in which the controller took an index edge; and wherever READY
+--     has to fall by staleness, it falls in the very clock that the rule
+--     gives from the last index edge, from the trailing edge of the last
+--     STEP pulse plus the step recovery or the settle time, or from a
+--     re-enable without a step (part 1: after an edge, after a step, after
+--     a re-enable with a side change in between; part 2: a disk taken out
+--     during a train and at rest). The windows of expect_ready and
+--     expect_idle check the rest of the cases at the level of the stimulus.
 --
 -- The first failed check ends the run with a failure, so the last line
 -- "ALL TESTS PASSED" is only reached when every check held.
@@ -136,6 +158,8 @@ architecture sim of tb_physical_1581_media_contract is
   -------------------------------------------------------------------------
   constant C1_PERIOD_MAX : natural := 1_000_000;   -- 20 ms: READY falls 40 ms after the last edge
   constant C1_STEP_REC   : natural := 25_000;      -- 0.5 ms, longer than the settle time
+  constant C1_SETTLE     : natural := 2;
+  constant C1_LIM        : natural := 2 * C1_PERIOD_MAX;
 
   signal done1 : boolean := false;
   signal clk : std_logic := '0';
@@ -165,6 +189,8 @@ architecture sim of tb_physical_1581_media_contract is
   signal idx_edge   : std_logic;
   signal out_bits   : std_logic_vector(15 downto 0);
   signal mot1       : std_logic;
+  signal last_step_end1 : time := 0 ns;   -- trailing edge of the last STEP pulse of dut
+  signal last_idx_edge1 : time := 0 ns;   -- the clock in which dut saw its last index edge
 
   type byte_arr_t is array (0 to 5) of unsigned(7 downto 0);
   signal cap : byte_arr_t := (others => (others => '0'));
@@ -212,6 +238,15 @@ architecture sim of tb_physical_1581_media_contract is
   signal cfg_hide2     : time := 0 ns;
   signal last_step_end : time := 0 ns;   -- trailing edge of the last STEP pulse of dut2
   signal last_idx_fall : time := 0 ns;   -- leading (falling) edge of the last INDEX pulse at the pin of dut2
+  signal last_idx_edge2 : time := 0 ns;  -- the clock in which dut2 saw its last index edge
+  -- a read or a write of dut2 after a disk was taken out during a train
+  signal rd_req2       : std_logic := '0';
+  signal rd_op2        : std_logic_vector(2 downto 0) := RDOP_READ_SECTOR;
+  signal rd_done2      : std_logic;
+  signal rd_result2    : std_logic_vector(4 downto 0);
+  signal rd_rnf2       : std_logic;
+  signal byte_wr2      : std_logic;
+  signal bytes2        : natural := 0;
 
   signal expect_ready2 : std_logic := '0';
   signal expect_idle2  : std_logic := '0';
@@ -253,7 +288,7 @@ begin
       G_STEP_LOW_CYC    => 2,
       G_STEP_REC_CYC    => C1_STEP_REC,
       G_STEP_REV_CYC    => C1_STEP_REC,
-      G_SETTLE_CYC      => 2,
+      G_SETTLE_CYC      => C1_SETTLE,
       G_SIDE_SETTLE_CYC => 2,
       G_SEARCH_WD_CYC   => 10_000_000,
       G_SEARCH_EDGES    => 3,
@@ -290,7 +325,7 @@ begin
 
   mot1 <= not f_motora;
   ref1 : entity work.ready_ref
-    generic map (G_LIM => 2 * C1_PERIOD_MAX, G_NAME => "part 1")
+    generic map (G_LIM => C1_LIM, G_NAME => "part 1")
     port map (
       clk_i => clk, rst_i => rst, en_i => out_bits(6), mot_i => mot1,
       idx_i => idx_edge, step_phase_i => step_phase, settled_i => head_settled,
@@ -317,6 +352,40 @@ begin
     end if;
   end process;
 
+  -- Checks anchored to the pins and the generics, independent of the rule's
+  -- inputs that ready_ref takes from the controller: head_settled is low at
+  -- every leading edge of a STEP pulse and rises exactly G_SETTLE_CYC clocks
+  -- after the trailing edge of the last one (a rise in reset or disable
+  -- excepted), and READY rises only in the clock after a clock with an index
+  -- edge.
+  pins1_p : process (f_step, head_settled, media_ready)
+  begin
+    if rising_edge(f_step) then
+      last_step_end1 <= now;
+    end if;
+    if falling_edge(f_step) then
+      assert head_settled = '0'
+        report "part 1: head_settled is up at the leading edge of a STEP pulse" severity failure;
+    end if;
+    if rising_edge(head_settled) and now > 0 ns and rst = '0' and out_bits(6) = '1' then
+      assert now - last_step_end1 = C1_SETTLE * C_CLK
+        report "part 1: head_settled rose " & integer'image((now - last_step_end1) / 1 ns) & " ns" &
+               " after the trailing edge of the last STEP pulse" severity failure;
+    end if;
+    if rising_edge(media_ready) then
+      assert now = last_idx_edge1 + C_CLK
+        report "part 1: READY rose " & integer'image((now - last_idx_edge1) / 1 ns) & " ns" &
+               " after the last index edge, not one clock" severity failure;
+    end if;
+  end process;
+
+  idx1_p : process (clk)
+  begin
+    if rising_edge(clk) and idx_edge = '1' then
+      last_idx_edge1 <= now;
+    end if;
+  end process;
+
   stim : process
     variable prev_ack  : std_logic;
     variable prev_done : std_logic;
@@ -337,6 +406,19 @@ begin
       wait for 300 us;
       f_index <= '1';
       wait for 100 us;
+    end procedure;
+
+    -- READY is up and has to fall in the clock that ends at t_fall, exactly
+    -- (t_fall is a rising edge of clk)
+    procedure fall_at (t_fall : time; msg : string) is
+    begin
+      expect_ready <= '1';
+      wait for t_fall - now - 5 ns;
+      check(media_ready = '1', msg & ": READY fell before " & integer'image((t_fall) / 1 ns) & " ns");
+      expect_ready <= '0';
+      wait until media_ready = '0' for 10 ns;
+      check(media_ready = '0' and now = t_fall,
+            msg & ": READY did not fall at " & integer'image((t_fall) / 1 ns) & " ns");
     end procedure;
 
     procedure do_step is
@@ -396,18 +478,14 @@ begin
 
     -- The staleness interval counts settled time only: a step 10 ms after
     -- the last edge starts it anew when the step engine has finished (here
-    -- the recovery of 0.5 ms outlasts the settle time), so ready falls two
-    -- maximum periods after the acknowledge of the step.
+    -- the recovery of 0.5 ms outlasts the settle time). Taken from the pin
+    -- and the generics: the engine acknowledges G_STEP_REC_CYC + 1 clocks
+    -- after the trailing edge of the STEP pulse, the count runs from the
+    -- clock after that, and ready falls when it has reached the limit.
     pulse_index;
     wait for 10 ms;
     do_step;
-    t_exp := t_ack + (2 * C1_PERIOD_MAX + 1) * C_CLK;
-    wait for t_exp - 1 us - now;
-    expect_ready <= '0';
-    wait until media_ready = '0' for 2 us;
-    check(media_ready = '0', "staleness after a step did not clear ready");
-    check(now >= t_exp - 1 us and now <= t_exp + 1 us,
-          "staleness after a step did not count from the end of the step");
+    fall_at(last_step_end1 + (C1_STEP_REC + 2 + C1_LIM) * C_CLK, "staleness after a step");
     pulse_index;
     check(media_ready = '1', "medium not ready again after the staleness that followed a step");
 
@@ -423,7 +501,7 @@ begin
     wait until rising_edge(clk);
     step_req <= not step_req;                -- the step runs from about 50 us to 550 us
     wait for 200 us;
-    check(step_phase /= "00", "the step ended before the index edge");
+    check(step_ack = prev_ack, "the step ended before the index edge");
     check(media_ready = '1', "an index edge during a step did not make the drive ready");
     wait for 50 us;
     f_index <= '1';
@@ -441,12 +519,9 @@ begin
     pulse_index;
 
     -- If the motor remains commanded but index disappears, readiness drops
-    -- (disk removed or stalled) two maximum periods after the last edge, not
-    -- earlier and not later; the next edge brings it back.
-    wait for 39 ms;
-    expect_ready <= '0';
-    wait for 1200 us;
-    check(media_ready = '0', "index staleness did not clear ready");
+    -- (disk removed or stalled) two maximum periods after the last edge, to
+    -- the clock; the next edge brings it back.
+    fall_at(last_idx_edge1 + (C1_LIM + 1) * C_CLK, "index staleness");
     pulse_index;
     check(media_ready = '1', "medium not ready again after the pulses returned");
 
@@ -507,6 +582,16 @@ begin
     expect_idle <= '0';
     pulse_index;
     check(media_ready = '1', "re-enabled controller not ready after its first index");
+    -- No step since the re-enable: the head counts as settled, and ready
+    -- falls two maximum periods after the edge, to the clock. A side change
+    -- in between does not hold the interval.
+    wait for 5 ms;
+    cia_side <= '0';
+    wait for 1 ms;
+    cia_side <= '1';
+    fall_at(last_idx_edge1 + (C1_LIM + 1) * C_CLK, "staleness after the re-enable, no step");
+    pulse_index;
+    check(media_ready = '1', "not ready again after the staleness that followed the re-enable");
     do_step;
     check(change_latched = '0', "step did not clear re-enable change latch");
 
@@ -561,15 +646,15 @@ begin
       cia_side_i => '1',
       step_req_tgl_i => step_req2, step_outward_i => step_out2,
       step_ack_tgl_o => step_ack2,
-      rd_req_tgl_i => '0', rd_op_i => RDOP_READ_ADDRESS,
-      rd_track_i => (others => '0'), rd_side_i => '1',
-      rd_sector_i => (others => '0'), rd_seq_i => "01",
-      rd_cancel_tgl_i => '0', rd_done_tgl_o => open,
-      rd_done_seq_o => open, rd_result_o => open,
-      rd_crc_err_o => open, rd_rnf_o => open,
+      rd_req_tgl_i => rd_req2, rd_op_i => rd_op2,
+      rd_track_i => to_unsigned(10, 8), rd_side_i => '1',
+      rd_sector_i => to_unsigned(1, 8), rd_seq_i => "01",
+      rd_cancel_tgl_i => '0', rd_done_tgl_o => rd_done2,
+      rd_done_seq_o => open, rd_result_o => rd_result2,
+      rd_crc_err_o => open, rd_rnf_o => rd_rnf2,
       rd_deleted_o => open, rd_c_o => open, rd_h_o => open,
       rd_r_o => open, rd_n_o => open,
-      byte_data_o => open, byte_wr_o => open, byte_ovf_i => '0',
+      byte_data_o => open, byte_wr_o => byte_wr2, byte_ovf_i => '0',
       st_media_ready_o => media_ready2, st_head_settled_o => head_settled2,
       diag_index_edge_o => idx_edge2,
       diag_step_phase_o => step_phase2,
@@ -611,19 +696,50 @@ begin
     end if;
   end process;
 
-  pins2_p : process (f_step2, f_index2)
+  -- the checks of pins1_p for dut2, and the write gate: it never opens in
+  -- part 2 (the read-only model fails the run as well if it did)
+  pins2_p : process (f_step2, f_index2, head_settled2, media_ready2, f_wgate2)
   begin
     if rising_edge(f_step2) then
       last_step_end <= now;
     end if;
+    if falling_edge(f_step2) then
+      assert head_settled2 = '0'
+        report "part 2: head_settled is up at the leading edge of a STEP pulse" severity failure;
+    end if;
     if falling_edge(f_index2) then
       last_idx_fall <= now;
+    end if;
+    if rising_edge(head_settled2) and now > 0 ns and rst = '0' and out_bits2(6) = '1' then
+      assert now - last_step_end = C2_SETTLE * C_CLK
+        report "part 2: head_settled rose " & integer'image((now - last_step_end) / 1 ns) & " ns" &
+               " after the trailing edge of the last STEP pulse" severity failure;
+    end if;
+    if rising_edge(media_ready2) then
+      assert now = last_idx_edge2 + C_CLK
+        report "part 2: READY rose " & integer'image((now - last_idx_edge2) / 1 ns) & " ns" &
+               " after the last index edge, not one clock" severity failure;
+    end if;
+    assert f_wgate2 /= '0'
+      report "part 2: the write gate opened" severity failure;
+  end process;
+
+  idx2_p : process (clk2)
+  begin
+    if rising_edge(clk2) then
+      if idx_edge2 = '1' then
+        last_idx_edge2 <= now;
+      end if;
+      if byte_wr2 = '1' then
+        bytes2 <= bytes2 + 1;
+      end if;
     end if;
   end process;
 
   stim2 : process
     variable dir   : std_logic := '0';   -- the next train goes inward
     variable t_exp : time;
+    variable prev_done : std_logic;
     variable phase : time := 0 ms;
 
     procedure check (cond : boolean; msg : string) is
@@ -656,6 +772,18 @@ begin
       for i in 1 to n loop
         step2(outward, p2(pace));
       end loop;
+    end procedure;
+
+    -- READY is up and has to fall in the clock that ends at t_fall, exactly
+    procedure fall_at2 (t_fall : time; msg : string) is
+    begin
+      expect_ready2 <= '1';
+      wait for t_fall - now - 5 ns;
+      check(media_ready2 = '1', msg & ": READY fell before " & integer'image((t_fall) / 1 ns) & " ns");
+      expect_ready2 <= '0';
+      wait until media_ready2 = '0' for 10 ns;
+      check(media_ready2 = '0' and now = t_fall,
+            msg & ": READY did not fall at " & integer'image((t_fall) / 1 ns) & " ns");
     end procedure;
 
     -- wait for the next index edge the controller accepts
@@ -712,13 +840,34 @@ begin
       step2(dir, p2(6 ms));
     end loop;
     dir := not dir;
-    t_exp := last_step_end + (C2_SETTLE + C2_LIM + 1) * C_CLK;
-    wait for t_exp - 1 us - now;
-    expect_ready2 <= '0';
-    wait until media_ready2 = '0' for 2 us;
-    check(media_ready2 = '0', "a disk taken out during a train left READY up");
-    check(now >= t_exp - 1 us and now <= t_exp + 1 us,
-          "a disk taken out during a train: READY did not fall 500 ms after the head settled");
+    -- the count starts in the clock after head_settled rose, G_SETTLE_CYC
+    -- clocks after the trailing edge (the step engine is idle long before)
+    t_exp := last_step_end + (C2_SETTLE + 1 + C2_LIM) * C_CLK;
+    -- While READY is still up, nothing reaches the drive: a Read Sector ends
+    -- at once with "disk changed" and without a byte (the read engine aborts
+    -- on the level of the change line), and a Write Sector opens no gate (no
+    -- sector header without a disk) and ends when READY falls.
+    wait for last_step_end + (C2_SETTLE + 10) * C_CLK - now;
+    check(media_ready2 = '1' and head_settled2 = '1', "READY not up after the head settled (pull during a train)");
+    prev_done := rd_done2;
+    rd_op2 <= RDOP_READ_SECTOR;
+    wait until rising_edge(clk2);
+    rd_req2 <= not rd_req2;
+    wait until rd_done2 /= prev_done for 10 * C_CLK;
+    check(rd_done2 /= prev_done, "a Read Sector after a pull during a train did not end at once");
+    wait for 1 us;
+    check(rd_result2 = RES_DISK_CHANGED and rd_rnf2 = '1',
+          "a Read Sector after a pull during a train did not end with 'disk changed'");
+    check(bytes2 = 0, "a byte reached the FIFO after a pull during a train");
+    prev_done := rd_done2;
+    rd_op2 <= WROP_WRITE_SECTOR;
+    wait until rising_edge(clk2);
+    rd_req2 <= not rd_req2;
+    fall_at2(t_exp, "a disk taken out during a train, 500 ms after the head settled");
+    wait until rd_done2 /= prev_done for 1 us;
+    check(rd_done2 /= prev_done, "a Write Sector after a pull during a train did not end when READY fell");
+    wait for 100 ns;
+    check(rd_result2 /= RES_OK, "a Write Sector after a pull during a train ended with OK");
     -- the disk comes back: ready with its first index edge
     cfg_present2 <= '1';
     wait_idx2(p2(450 ms), "after the disk came back");
@@ -733,13 +882,9 @@ begin
     wait_idx2(p2(450 ms), "before the pull at rest");
     wait for p2(50 ms);
     cfg_present2 <= '0'; cfg_change2 <= '1';
-    t_exp := last_idx_fall + C_IDX_FILTER + (C2_LIM + 1) * C_CLK;
-    wait for t_exp - 1 us - now;
-    expect_ready2 <= '0';
-    wait until media_ready2 = '0' for 2 us;
-    check(media_ready2 = '0', "a disk taken out at rest left READY up");
-    check(now >= t_exp - 1 us and now <= t_exp + 1 us,
-          "a disk taken out at rest: READY did not fall 500 ms after the last index edge");
+    check(last_idx_edge2 - last_idx_fall >= C_IDX_FILTER and last_idx_edge2 - last_idx_fall < C_IDX_FILTER + 200 ns,
+          "the last index edge was not accepted 200 us after INDEX went low");
+    fall_at2(last_idx_edge2 + (C2_LIM + 1) * C_CLK, "a disk taken out at rest, 500 ms after the last index edge");
 
     -- Steps with the motor on and no disk: READY stays down, also after the
     -- head has settled.

@@ -6,8 +6,9 @@
 #
 # Runs tb_physical_1581_media_contract.vhd against physical_1581_controller.vhd (READY with the
 # first index edge of a motor-on interval, independent of the disk-change latch, falling after
-# 500 ms of settled time without an index edge; the latch itself; Read Address without sector 11),
-# then against 25 mutants of the controller, each of which the bench has to reject:
+# 500 ms of settled time without an index edge; the latch itself; Read Address without sector 11;
+# no read and no write gate after a disk was taken out while READY is still up), then against 31
+# mutants of the controller, each of which the bench has to reject:
 #
 #   READY   gated by the change latch; only after two edges; from an edge that arrived while the
 #           motor was off; at motor-on without an edge (unchanged medium); kept at motor-off (the
@@ -22,7 +23,13 @@
 #           only with the next index edge; a suspension while the step engine works but not in
 #           the settle time; one in the settle time but not while the step engine works; an index
 #           edge ignored during a step; READY that cannot rise while the head moves; the drop held
-#           back until the head rests, with the moving time counted
+#           back until the head rests, with the moving time counted; a suspension also while a
+#           step is deferred or the side settles
+#   inputs  of the rule that the clocked reference of the bench takes from the controller itself:
+#           head_settled left low after reset and disable; the settle time one clock and 40
+#           clocks short
+#   guards  the read engine that does not abort on the level of the disk-change line; the write
+#           engine that does not abort when READY falls
 #
 # The reference runs with nvc and, for comparison, with GHDL (both have to pass, at the same end
 # time); the mutants run with nvc. SIM=ghdl runs everything with GHDL; without nvc that is the
@@ -30,7 +37,7 @@
 #
 # Ends with "RESULT: PASS" (exit status 0) or "RESULT: FAIL ..." (exit status 1).
 # Requirements: GHDL 5.1.1 (/usr/local/bin/ghdl or $GHDL), nvc 1.21 (or $NVC) if present, python3.
-# Runtime with JOBS=1: 52 minutes, 18 of them for the GHDL reference (measured on a busy machine).
+# Runtime with JOBS=1: 40 minutes, 16 of them for the GHDL reference (measured on a busy machine).
 # --------------------------------------------------------------------------------------------------
 
 set -u
@@ -142,6 +149,11 @@ ACK     = "              step_ack_tgl_o <= not step_ack_tgl_o;   -- acknowledge 
 BOUND   = "elsif idx_gap_cnt < to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then"
 SUSP_C  = "          elsif step_st /= SI_IDLE or head_settled = '0' then\n"
 SUSP    = SUSP_C + "            -- the head moves or settles: this time does not count\n            idx_gap_cnt <= (others => '0');\n"
+DIS_HS  = "        head_settled  <= '1';\n        settle_cnt    <= (others => '0');\n"
+SET_EXP = "          if settle_cnt = 1 then\n            head_settled <= '1';\n"
+SET_LD  = "              settle_cnt   <= to_unsigned(G_SETTLE_CYC, 32);   -- (re)start 18 ms settle\n"
+RD_ABRT = "        if rd_st /= RD_IDLE and not is_wr(op_r) and (cancel_edge or change_c = '1') then\n"
+WR_TERM = "          elsif motor_s = '0' or media_ready = '0' or side_changed then\n"
 
 M = [
  ("ready_gated_by_latch", [(A_READY, A_READY.replace("idx_seen = '1' then", "idx_seen = '1' and change_latched = '0' then"))]),
@@ -180,6 +192,14 @@ M = [
  ("moving_index_ignored_during_step", [(EDGE + SUSP, SUSP.replace("          elsif", "          if", 1) + EDGE.replace("          if", "          elsif", 1))]),
  ("moving_rise_blocked", [(A_READY, A_READY.replace("idx_seen = '1' then", "idx_seen = '1' and step_st = SI_IDLE and head_settled = '1' then"))]),
  ("moving_drop_deferred", [(SUSP, "          elsif (step_st /= SI_IDLE or head_settled = '0') and idx_gap_cnt >= to_unsigned(2 * G_PERIOD_MAX_CYC, 32) then\n            null;\n")]),
+ ("moving_suspension_pend_and_side", [(SUSP_C, "          elsif step_st /= SI_IDLE or head_settled = '0' or step_pend = '1' or side_settle /= 0 then\n")]),
+ # the inputs of the rule (the bench's clocked reference takes them from the controller)
+ ("inputs_settled_low_after_enable", [(DIS_HS, DIS_HS.replace("head_settled  <= '1'", "head_settled  <= '0'"))]),
+ ("inputs_settle_one_clock_short", [(SET_EXP, SET_EXP.replace("settle_cnt = 1", "settle_cnt = 2"))]),
+ ("inputs_settle_40_clocks_short", [(SET_LD, SET_LD.replace("to_unsigned(G_SETTLE_CYC, 32)", "to_unsigned(maximum(G_SETTLE_CYC - 40, 1), 32)"))]),
+ # the guards of the data while READY is still up after a disk was taken out
+ ("guards_read_ignores_change", [(RD_ABRT, RD_ABRT.replace("(cancel_edge or change_c = '1')", "(cancel_edge)"))]),
+ ("guards_write_ignores_ready", [(WR_TERM, WR_TERM.replace(" or media_ready = '0'", ""))]),
 ]
 os.makedirs(BUILD + "/mut", exist_ok=True)
 muts = []
