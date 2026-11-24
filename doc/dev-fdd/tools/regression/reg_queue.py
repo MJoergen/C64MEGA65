@@ -5,7 +5,8 @@ of the regression on the tree in <dir>/src for jobq.py.
 Sets (default: all but "sweep", in this order):
   short    unit bench of the read-ahead engine, diagnostic device, mechanism model, FIFO overflow
   units    the eight small unit benches without a runner of their own (units.sh)
-  mutants  the 35 mutants of the read-ahead engine (mutants_rdahead.py)
+  mutants  the 35 mutants of the read-ahead engine (mutants_rdahead.py) and the 59 of the diagnostic
+           device (mutants_diag.py, job mut_diag_runner)
   accept   ten sectors of a track side within 260 ms (tb_physical_1581_rdseq)
   write67  write groups 6 and 7 (the read-ahead next to the write engine)
   loop     tb_physical_1581_rdahead_loop, groups 1 to 5
@@ -42,6 +43,7 @@ for s in sets:
         job("units", "bash %s/units.sh %s/src %s/units" % (HERE, D, D))
     elif s == "mutants":
         job("mut_rdahead", "python3 -I %s/mutants_rdahead.py %s/src %s/mut_rdahead" % (HERE, D, D))
+        job("mut_diag_runner", "python3 -I %s/mutants_diag.py %s/src %s/mut_diag" % (HERE, D, D))
     elif s == "accept":
         sim("rdseq_accept_n10_max260", "tb_physical_1581_rdseq", "-gG_NSEC=10", "-gG_MAX_MS=260")
     elif s == "loop":

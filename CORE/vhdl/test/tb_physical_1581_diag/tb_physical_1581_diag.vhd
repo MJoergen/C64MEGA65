@@ -32,12 +32,19 @@
 --   * map v10 (issue #257 part E): IDX_GAP_MAX_MS (the largest time between
 --     two motor-qualified index edges with the motor-on level high in every
 --     clock between them: truncated milliseconds, the maximum kept, no result
---     across a motor-off clock, saturation at FFFF, both scales),
---     CNT_RDY_STALE (a fall of READY with the motor-on level high counts; a
---     fall together with the motor-on level, as the controller makes it on
---     reset, disable and motor off, does not; saturation), CNT_TOL_HIT
---     (count, saturation), RD_CTRL (bit 0 only, its output, independent of
---     WR_CTRL), and that a reset clears all four words.
+--     across a motor-off clock, saturation at FFFF, both scales, and a
+--     measurement during which READY rises and falls: the word does not
+--     depend on READY), CNT_RDY_STALE (a fall of READY with the motor-on
+--     level high counts; a fall together with the motor-on level, as the
+--     controller makes it on reset, disable and motor off, does not;
+--     saturation; a write to it is ignored), CNT_TOL_HIT (count, saturation;
+--     the strobe changes no other word of the map), RD_CTRL (bit 0 only, its
+--     output, independent of WR_CTRL; its write decode: a read cycle with any
+--     data on the bus does not write it, nor do writes to its neighbours and
+--     to the eight addresses one bit away, and a write to it leaves WR_CTRL
+--     and the precompensation mode alone), the unused words 0xA6 to 0xFF
+--     read 0 while the words of map v10 are not 0, and that a reset clears
+--     all four words.
 --
 -- Purely combinational reads and same-clock counters => no timing subtlety; the
 -- whole run is a few tens of milliseconds of sim time.
@@ -229,8 +236,14 @@ begin
     );
 
   stim : process
+    type word_arr_t is array (0 to 255) of std_logic_vector(15 downto 0);
+    type int_arr_t is array (natural range <>) of integer;
+    -- map v10: the neighbours of RD_CTRL (0xA5) and the addresses one bit away from it (bits 0 to 7)
+    constant C_RD_CTRL_NEAR : int_arr_t := (16#A3#, 16#A4#, 16#A6#, 16#A7#,
+                                            16#A1#, 16#AD#, 16#B5#, 16#85#, 16#E5#, 16#25#);
     variable fails : integer := 0;
     variable got   : std_logic_vector(15 downto 0);
+    variable snap  : word_arr_t;          -- map v10: every word of the map, for "nothing else changed"
 
     procedure rd_reg(addr : integer) is
     begin
@@ -396,7 +409,66 @@ begin
       end if;
     end procedure;
 
+    -- map v10: a QNICE read cycle of n clocks (ce high, we low) with the
+    -- given value on the write data bus
+    procedure q_read_cycle(addr : integer; d : std_logic_vector(15 downto 0); n : natural) is
+    begin
+      q_addr <= std_logic_vector(to_unsigned(addr, 8));
+      q_wdat <= d;
+      q_ce   <= '1';
+      q_we   <= '0';
+      clkw(n);
+    end procedure;
+
+    -- map v10: every word of the map into snap ...
+    procedure take_snap is
+    begin
+      for a in 0 to 255 loop
+        rd_reg(a);
+        snap(a) := got;
+      end loop;
+    end procedure;
+
+    -- ... and every word but one compared with it
+    procedure expect_snap(skip : integer; name : string) is
+      variable bad : integer := 0;
+    begin
+      for a in 0 to 255 loop
+        if a /= skip then
+          rd_reg(a);
+          if got /= snap(a) then
+            report "FAIL " & name & " @0x" & to_hstring(std_logic_vector(to_unsigned(a, 8)))
+                 & ": got " & to_hstring(got) & " exp " & to_hstring(snap(a)) severity error;
+            fails := fails + 1;
+            bad   := bad + 1;
+          end if;
+        end if;
+      end loop;
+      if bad = 0 then
+        report "  OK  " & name & " (255 words)";
+      end if;
+    end procedure;
+
+    -- map v10: every word of an address range reads 0
+    procedure expect_zero(lo, hi : integer; name : string) is
+      variable bad : integer := 0;
+    begin
+      for a in lo to hi loop
+        rd_reg(a);
+        if got /= x"0000" then
+          report "FAIL " & name & " @0x" & to_hstring(std_logic_vector(to_unsigned(a, 8)))
+               & ": got " & to_hstring(got) & " exp 0000" severity error;
+          fails := fails + 1;
+          bad   := bad + 1;
+        end if;
+      end loop;
+      if bad = 0 then
+        report "  OK  " & name;
+      end if;
+    end procedure;
+
     variable v_readop, v_cancel, v_trc, v_chrn : std_logic_vector(15 downto 0);
+    variable v_keep, v_other : std_logic_vector(15 downto 0);
   begin
     -- ---- reset ----------------------------------------------------------
     rst <= '1';
@@ -990,6 +1062,10 @@ begin
     wait until rising_edge(clk);
 
     -- ---- map v10: CNT_TOL_HIT -----------------------------------------------
+    -- the strobe counts here and nowhere else (CNT_IDDEC, CNT_A1_TRAIN and
+    -- CNT_MARK_FE keep their meaning): every other word is compared after
+    -- the saturation run below
+    take_snap;
     for i in 1 to 7 loop pulse1(tol_hit); end loop;
     expect(16#A4#, x"0007", "CNT_TOL_HIT=7");
     expect(16#A3#, x"FFFF", "CNT_RDY_STALE untouched by the tolerance strobe");
@@ -998,6 +1074,7 @@ begin
     tol_hit <= '0';
     wait until rising_edge(clk);
     expect(16#A4#, x"FFFF", "CNT_TOL_HIT saturates at FFFF");
+    expect_snap(16#A4#, "every other word unchanged by 65,547 tolerance strobes");
 
     -- ---- map v10: RD_CTRL, the second writable word ------------------------
     expect(16#A5#, x"0000", "RD_CTRL still 0");
@@ -1014,10 +1091,55 @@ begin
     expect_mode("10", "precomp mode untouched by a write to RD_CTRL");
     q_write(16#A5#, x"0003");
     expect(16#A5#, x"0001", "RD_CTRL=1 again");
+    -- a write to RD_CTRL leaves WR_CTRL and the precompensation mode alone,
+    -- with data whose bits 1:0 differ from WR_CTRL
+    q_write(16#9A#, x"0002");
+    q_write(16#A5#, x"0001");
+    expect(16#A5#, x"0001", "RD_CTRL=1 written with bits 1:0 = 01");
+    expect(16#9A#, x"0002", "WR_CTRL=2 untouched by a write of 0001 to RD_CTRL");
+    expect_mode("10", "precomp mode 10 untouched by a write of 0001 to RD_CTRL");
+    q_write(16#9A#, x"0001");
+    q_write(16#A5#, x"0002");
+    expect(16#A5#, x"0000", "RD_CTRL=0 written with bits 1:0 = 10");
+    expect(16#9A#, x"0001", "WR_CTRL=1 untouched by a write of 0002 to RD_CTRL");
+    expect_mode("01", "precomp mode 01 untouched by a write of 0002 to RD_CTRL");
+    q_write(16#9A#, x"0000");
+    -- a read cycle of RD_CTRL does not write it, whatever is on the data bus
+    q_write(16#A5#, x"0001");
+    q_read_cycle(16#A5#, x"0000", 8);
+    expect(16#A5#, x"0001", "RD_CTRL=1 kept through a read cycle with 0000 on the data bus");
+    expect_tol('1', "decoder tolerance still off after a read cycle of RD_CTRL");
+    q_write(16#A5#, x"0000");
+    q_read_cycle(16#A5#, x"FFFF", 8);
+    expect(16#A5#, x"0000", "RD_CTRL=0 kept through a read cycle with FFFF on the data bus");
+    expect_tol('0', "decoder tolerance still on after a read cycle of RD_CTRL");
+    -- the write decode compares all eight address bits: writes of the other
+    -- value to the neighbours 0xA3 to 0xA7 and to the eight addresses one
+    -- bit away from 0xA5 leave RD_CTRL and WR_CTRL alone
+    for v in 0 to 1 loop                -- RD_CTRL at 1, then at 0; each write carries the other bit 0
+      if v = 0 then
+        v_keep := x"0001"; v_other := x"0000";
+      else
+        v_keep := x"0000"; v_other := x"FFFF";
+      end if;
+      for i in C_RD_CTRL_NEAR'range loop
+        q_write(16#A5#, v_keep);
+        q_write(C_RD_CTRL_NEAR(i), v_other);
+        expect(16#A5#, v_keep, "RD_CTRL=" & to_hstring(v_keep) & " untouched by a write of "
+               & to_hstring(v_other) & " to 0x"
+               & to_hstring(std_logic_vector(to_unsigned(C_RD_CTRL_NEAR(i), 8))));
+      end loop;
+    end loop;
+    expect(16#9A#, x"0000", "WR_CTRL untouched by the writes around RD_CTRL");
+    q_write(16#A5#, x"0001");
     q_write(16#A4#, x"1234");
     expect(16#A4#, x"FFFF", "a write to CNT_TOL_HIT is ignored");
     q_write(16#A2#, x"0000");
     expect(16#A2#, x"FFFF", "a write to IDX_GAP_MAX_MS is ignored");
+    q_write(16#A3#, x"0000");
+    expect(16#A3#, x"FFFF", "a write to CNT_RDY_STALE is ignored");
+    -- the unused words after the map read 0 while the four words are not 0
+    expect_zero(16#A6#, 16#FF#, "unused words 0xA6 to 0xFF read 0 with the words of map v10 at FFFF, FFFF, FFFF, 0001");
     q_write(16#9A#, x"0000");
 
     -- ---- map v10: a reset clears the four words ----------------------------
@@ -1031,6 +1153,24 @@ begin
     expect(16#A5#, x"0000", "RD_CTRL cleared by reset");
     expect_tol('0', "decoder tolerance on after a reset");
     expect2(16#A2#, x"0000", "IDX_GAP_MAX_MS of the second instance cleared by reset");
+
+    -- ---- map v10: the index gap does not depend on READY -------------------
+    -- READY low at the start edge, high from 50 ms, low again from 150 ms
+    -- (the 500 ms rule: the motor stays on), the end edge 2501 clocks after
+    -- the start edge: 250 ms, and the fall counts as a stale READY
+    st_media_ready <= '0';
+    st_motor_on    <= '1';
+    clkw(3);
+    pulse1(diag_index_qual);            -- starts a measurement
+    clkw(500);
+    st_media_ready <= '1';
+    clkw(1000);
+    st_media_ready <= '0';
+    idx_gap(1001);
+    expect(16#A2#, x"00FA", "IDX_GAP_MAX_MS=250 although READY rose and fell during the measurement");
+    expect(16#A3#, x"0001", "CNT_RDY_STALE=1: the fall of READY during the measurement");
+    st_motor_on <= '0';
+    wait until rising_edge(clk);
 
     expect(16#A6#, x"0000", "reserved word 0xA6 reads 0");
 
