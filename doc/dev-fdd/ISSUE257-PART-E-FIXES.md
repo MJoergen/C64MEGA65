@@ -1,13 +1,13 @@
 # Issue #257, part E: the fixes (Internal 1581)
 
-Entry point for anyone, human or coding agent, who picks up this work. paich64 ran part E of the test plan of issue #257 (everyday operation: scratch, rename, copy, validate, copy programs, JiffyDOS) with WIP-V6-A25 on his R3A with the drive mechanism of his R6 and reported in comments 34 and 35. The causes of what did not pass are recorded in `doc/dev-fdd/ISSUE257-PART-E.md` ("the analysis" below), with the evidence, which this file does not repeat. This file records the three changes and the instruments that follow from the analysis: the rule of each change as built, why it is safe, what it does not do, every decision with its reason, the numbers, what each change was verified with, and what the Vivado build and the hardware test still need to show.
+Entry point for anyone, human or coding agent, who picks up this work. paich64 ran part E of the test plan of issue #257 (everyday operation: scratch, rename, copy, validate, copy programs, JiffyDOS) with WIP-V6-A25 on his R3A with the drive mechanism of his R6 and reported in comments 34 and 35. The causes of what did not pass are recorded in `doc/dev-fdd/ISSUE257-PART-E.md` ("the analysis" below), with the evidence, which this file does not repeat. This file records the three changes and the instruments that follow from the analysis: the rule of each change as built, why it is safe, what it does not do, every decision with its reason, the numbers, what each change was verified with, what the Vivado build showed, and what the hardware test still needs to show.
 
 ## 0. State
 
-* **Where:** branch `mh_fix_257_part_e` of the main repository, on top of `develop` at `6171d22`, and branch `mh_fix_257_part_e` of the submodule `CORE/C64_MiSTerMEGA65` (commits `b3cc034` and `91090f1` on top of `8a3c962`). Push the submodule before the main repository.
-* **Version:** `WIP-V6-A28` (D16). The version string stays as it is; A28 also contains the fix of the file browser (MiSTer2MEGA65 issue #84). Nothing of this is released: the internal drive as a 1581 is a feature of the unreleased version 6.
+* **Where:** `develop` of the main repository, 37 commits on top of `6171d22` up to `4badd5c`, and `develop` of the submodule `CORE/C64_MiSTerMEGA65` (commits `b3cc034` and `91090f1` on top of `8a3c962`). Both are pushed.
+* **Version:** `WIP-V6-A28` (D16), built from `4badd5c` on 2026-11-24. The version string stays as it is; A28 also contains the fix of the file browser (MiSTer2MEGA65 issue #84). Nothing of this is released: the internal drive as a 1581 is a feature of the unreleased version 6.
 * **Done in simulation:** READY while the head moves (section 1), the step rate (section 2), the decoder's tolerance for a weak first sync byte (section 3), the diagnostic map v10 (section 4).
-* **Not yet built with Vivado and not yet tested on hardware.** Section 9 lists what the build and the test need to show; the test plan is the part "Internal 1581" of the section `Version WIP-V6-A28` of `tests/README.md`.
+* **Built with Vivado for R3 and R6: timing is met on both, and the build adds no warning (section 9). Not yet tested on hardware.** Section 9 lists what the hardware test needs to show; the test plan is the part "Internal 1581" of the section `Version WIP-V6-A28` of `tests/README.md`.
 
 | # | Change | Where | Commit | Cures |
 |---|---|---|---|---|
@@ -390,7 +390,7 @@ Everything below ran on the tree of the last commit of the branch, or on a tree 
 * **`main.vhd` and `mega65.vhd`** differ from `develop` by the six lines that wire the two ports of the tolerance and by comments. `main_diff_check.sh` against `develop`: the sets of diagnostics are identical (13 on both sides). `CORE/vhdl/test/tb_capslock/run.sh all`, which analyzes `mega65.vhd` differentially and elaborates the four board top files: `RESULT: PASS`.
 * **Markdown:** the lines that the branch adds to Markdown files contain no bare dollar sign, no bare double equals sign and no bare angle bracket outside of code.
 
-No simulation here shows three things: that the design meets timing; what the tester's mechanism does with its index pulses while it steps, and whether it keeps its cylinder at 6 ms per step; and how the decoder's tolerance behaves on disks that other drives wrote, beyond the twelve captures. Section 9 hands them to the build and to the hardware test.
+No simulation here shows three things: that the design meets timing; what the tester's mechanism does with its index pulses while it steps, and whether it keeps its cylinder at 6 ms per step; and how the decoder's tolerance behaves on disks that other drives wrote, beyond the twelve captures. Section 9 has the result of the build and hands the other two to the hardware test.
 
 ### 8.6 Independent reviews
 
@@ -403,12 +403,24 @@ Each change was examined once more by a reviewer that had the specification and 
 | 3, decoder | With the switch off the decoder is the decoder without the change in every clock: no mismatch on the unit stimuli, on the whole A/B harness and on six real track sides (about 230 million clocks); with the tolerance on, real flux differs only by the recovered sector; the timing of a field accepted on a pair is that of a field after three sync bytes | The limit of D18, found by construction; scenarios 17 to 22; the assertion of the A/B harness on the columns of the past; 18 more mutants; the two corrections of the model; the estimate of the residual risk (section 3) |
 | 4, map v10 | No defect in the device and in the wiring; no clock domain crossing on the path of the switch and of the counter; the words of maps v1 to v9 and `WR_CTRL` unchanged | What resets the device; how to read `IDX_GAP_MAX_MS` at 6 ms per step; the checks of the write decode of `RD_CTRL` and of the neighboring words (11 mutants had survived); the map version in the dump decoder |
 
-## 9. What the Vivado build and the hardware test need to show
+## 9. The Vivado build, and what the hardware test needs to show
 
-Vivado (R3 and R6 at least):
+Vivado 2022.2, R3 and R6, built from `4badd5c` with `CORE/build_bitstream.tcl`:
 
-* Timing is met in every clock domain. The changes are in the 50 MHz domain (the QNICE clock: the controller, the decoder, the diagnostic device) and in the core clock domain (`fdc1772.v`: a 20-bit counter and its compare). The read multiplexer of the diagnostic device has four more words; it is on the half-cycle read path of the QNICE devices, which had little slack in earlier builds (0.188 ns on R3 and 0.487 ns on R6 for `qnice_clk` in the builds of WIP-V6-A22X3, `doc/dev-fdd/ISSUE257.md`, section 10).
-* No latch and no new critical warning for `physical_1581_controller.vhd`, `physical_1581_mfm_decoder.vhd`, `physical_1581_diag.vhd`, `fdc1772.v` and `main.vhd`. Block RAM as in the build before: none of the changes adds a memory.
+| | R3 | R6 |
+|---|---|---|
+| Result of the build script | `RESULT R3 OK` | `RESULT R6 OK` |
+| Worst setup slack of the design | 0.091 ns (`hr_clk`) | 0.282 ns |
+| Worst hold slack of the design | 0.044 ns | 0.036 ns |
+| `qnice_clk`, setup and hold slack | 0.344 ns and 0.049 ns | 0.498 ns and 0.036 ns |
+| `hr_clk`, setup and hold slack | 0.091 ns and 0.044 ns | 0.415 ns and 0.038 ns |
+| Bus skew gate (the paddle crossing, requirement 10 ns) | met, slack 9.136 ns | met, slack 9.093 ns |
+| LUTs and flip-flops after synthesis, against WIP-V6-A27 | 47,420 (241 more) and 31,779 (135 more) | 47,275 (252 more) and 31,742 (137 more) |
+| Block RAM | 258 RAMB36 and 33 RAMB18, as in WIP-V6-A27 | the same |
+
+* All timing constraints are met on both boards. The read multiplexer of the diagnostic device, with its four more words, is on the half-cycle read path of the QNICE devices; `qnice_clk` has more slack than in the builds of WIP-V6-A22X3 (0.188 ns on R3 and 0.487 ns on R6, `doc/dev-fdd/ISSUE257.md`, section 10). The thin slack of R3 is in `hr_clk`, as in the builds before.
+* No error, no critical warning and no latch. The warnings of both builds are those of the builds of WIP-V6-A27 (compared without the line numbers of the sources): the changes add none.
+* None of the changes adds a memory.
 * The submodule `CORE/C64_MiSTerMEGA65` is at `91090f1`.
 
 Hardware (the part "Internal 1581" of the section `Version WIP-V6-A28` of `tests/README.md` is the test plan), on R3/R3A and R6, with a dump of the diagnostic device after each block (`MD 7000 703F`, `MD 7040 707F`, `MD 7080 70A5`; decode with `doc/dev-fdd/tools/diag_dump_decode.py`):
